@@ -1,10 +1,9 @@
 import type { DestinationId } from "./inquiry";
 
-export type Trip = {
+/** Fixed design content. raceDate, capacity and prices.cash are the static copy shown on `/`. */
+export type TripContent = {
   slug: string;
   destinationId: DestinationId;
-  name: string;
-  description: string;
   image: string;
   imageAlt: string;
   /** Line breaks with "\n" (rendered with whitespace-pre-line). */
@@ -31,14 +30,14 @@ export type Trip = {
   disclaimer: string;
 };
 
+/** What the trip page renders: fixed content with the catalog fields applied. */
+export type Trip = TripContent & { name: string; description: string };
+
 // Literal texts from the design (index.html). Values are stored as displayed.
-export const TRIPS: readonly Trip[] = [
+export const TRIPS: readonly TripContent[] = [
   {
     slug: "maraton-santiago-2027",
     destinationId: "santiago-2027",
-    name: "Maratón de Santiago 42K 2027",
-    description:
-      "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.",
     image: "/images/santiago.jpg",
     imageAlt: "Vista ilustrativa de Santiago y la cordillera",
     coverLabel: "SANTIAGO 2027\nMARATÓN · 42K",
@@ -106,6 +105,6 @@ export const TRIPS: readonly Trip[] = [
   },
 ];
 
-export function getTrip(slug: string): Trip | undefined {
+export function getTrip(slug: string): TripContent | undefined {
   return TRIPS.find((trip) => trip.slug === slug);
 }
