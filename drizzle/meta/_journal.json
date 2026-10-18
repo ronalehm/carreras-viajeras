@@ -15,6 +15,13 @@
       "when": 1792330697363,
       "tag": "0001_young_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792333575236,
+      "tag": "0002_tough_warpath",
+      "breakpoints": true
     }
   ]
 }
