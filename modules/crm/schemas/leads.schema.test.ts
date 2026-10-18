@@ -7,6 +7,7 @@ import {
   leadListQuerySchema,
   leadSourceSchema,
   leadStageSchema,
+  phoneSchema,
 } from "./leads.schema";
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
@@ -36,6 +37,21 @@ describe("lead enums", () => {
     expect(leadStageSchema.options).toEqual(leadStageEnum.enumValues);
     expect(leadSourceSchema.options).toEqual(leadSourceEnum.enumValues);
     expect(leadActivityTypeSchema.options).toEqual(leadActivityTypeEnum.enumValues);
+  });
+
+  it("include the automation activity type (n8n)", () => {
+    expect(leadActivityTypeSchema.options).toContain("automation");
+    expect(leadActivityTypeEnum.enumValues).toContain("automation");
+  });
+});
+
+describe("phoneSchema", () => {
+  it("normalizes to E.164 and rejects a number without country code", () => {
+    expect(phoneSchema.parse("+51 938-127 170")).toBe("+51938127170");
+    expect(phoneSchema.parse("+56 (9) 1234.5678")).toBe("+56912345678");
+    const result = phoneSchema.safeParse("938 127 170");
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe("Escribe el número con código de país, p. ej. +51 938 127 170.");
   });
 });
 
@@ -85,6 +101,21 @@ describe("createLeadSchema", () => {
       destinationText: "Panamá",
       source: "other",
       note: "Quiere la 21K.",
+    });
+  });
+
+  it("turns missing optional keys into null without errors", () => {
+    const optionalKeys = ["email", "location", "tripId", "destinationText", "note"];
+    const required = Object.fromEntries(Object.entries(validForm).filter(([key]) => !optionalKeys.includes(key)));
+    const result = createLeadSchema.safeParse(required);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      email: null,
+      location: null,
+      tripId: null,
+      destinationText: null,
+      note: null,
     });
   });
 

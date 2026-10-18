@@ -11,6 +11,7 @@ export const leadActivityTypeSchema = z.enum([
   "note",
   "call",
   "message",
+  "automation",
 ]);
 
 // web_form is reserved for the future automatic capture: the manual form never offers it.
@@ -24,16 +25,18 @@ const CONSENT_MESSAGE = "Confirma que el contacto aceptó que guardemos sus dato
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
-// Optional form inputs arrive as "" when left blank: they become null.
+// Optional form inputs arrive as "" when left blank and are missing when the field is not sent:
+// both become null (a missing key never yields a zod message in English).
 const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
   z
     .string()
-    .trim()
-    .transform((value) => (value === "" ? null : value))
+    .optional()
+    .transform((value) => value?.trim() || null)
     .pipe(schema.nullable());
 
 // E.164: drop spaces, parentheses, dashes and dots, then "+" and 8 to 15 digits.
-const phoneSchema = z
+// Shared with the web form schema (same normalization as the manual form).
+export const phoneSchema = z
   .string({ error: PHONE_MESSAGE })
   .transform((value) => value.replace(/[\s().-]/g, ""))
   .pipe(z.string().regex(/^\+[1-9]\d{7,14}$/, PHONE_MESSAGE));

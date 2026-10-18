@@ -5,3 +5,8 @@ NEON_AUTH_COOKIE_SECRET=
 # Production origin: https://carreras-viajeras.mentec.dev
 # Development only: http://localhost:3000 or http://localhost:8787
 APP_ORIGIN=
+# Optional integrations (crm-leads-capture). Leave blank if unused.
+# Bearer token for the private n8n API: Cloudflare Secret and n8n credential, at least 32 random characters.
+N8N_API_TOKEN=
+# Turnstile Secret Key (Cloudflare Secret). Test keys for npm run dev are in the README.
+TURNSTILE_SECRET_KEY=
