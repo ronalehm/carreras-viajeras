@@ -46,8 +46,8 @@ export function PackageSection() {
             aria-label="Beneficios principales"
             className="mb-6 grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs md:max-lg:grid-cols-1"
           >
-            {trip.highlights.map((highlight) => (
-              <li key={highlight}>
+            {trip.highlights.map((highlight, index) => (
+              <li key={highlight} className={index % 2 === 0 ? "text-highlight" : "text-primary"}>
                 <span aria-hidden>✓ </span>
                 {highlight}
               </li>

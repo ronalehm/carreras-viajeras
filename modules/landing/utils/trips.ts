@@ -38,8 +38,8 @@ export const TRIPS: readonly TripContent[] = [
   {
     slug: "maraton-santiago-2027",
     destinationId: "santiago-2027",
-    image: "/images/santiago.jpg",
-    imageAlt: "Vista ilustrativa de Santiago y la cordillera",
+    image: "/images/cover-santiago.jpg",
+    imageAlt: "Corredores de trail corriendo por un paso de montaña con los nevados de fondo",
     coverLabel: "SANTIAGO 2027\nMARATÓN · 42K",
     raceDate: "16 mayo 2027",
     officialUrl: "https://maratondesantiago.cl/",

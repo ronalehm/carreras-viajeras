@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CalendarDays, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TRIPS } from "../utils/trips";
 
@@ -9,30 +9,48 @@ const santiago = TRIPS[0];
 const DESTINATIONS = [
   {
     href: `/viajes/${santiago.slug}`,
-    image: "/images/santiago.jpg",
-    alt: "Vista de Santiago y la cordillera",
-    label: "CHILE · DESTINO PRINCIPAL",
+    image: "/images/destino-santiago.jpg",
+    alt: "Salida de la Maratón de Santiago con los corredores en la línea de partida",
+    flag: "🇨🇱",
+    status: "Preventa abierta",
+    statusTone: "bg-highlight text-white",
+    date: santiago.raceDate,
+    tagline: "Destino principal",
     name: "Santiago",
+    location: "Santiago, Chile",
+    tags: ["42K", "3 noches"],
     note: `Preventa / ${santiago.prices.cash} al contado · ${santiago.prices.installmentsTotal} en cuotas`,
     action: "Quiero información",
     active: true,
   },
   {
-    href: "/contacto?destino=panama",
-    image: "/images/panama.jpg",
-    alt: "Vista de la bahía y los edificios de Ciudad de Panamá",
-    label: "PANAMÁ · EN EXPLORACIÓN",
-    name: "Panamá",
+    href: "/contacto?destino=rio",
+    image: "/images/destino-rio.jpg",
+    alt: "Vista aérea de Río de Janeiro con el Cristo Redentor",
+    flag: "🇧🇷",
+    status: "En exploración",
+    statusTone: "bg-primary text-primary-foreground",
+    date: "Fecha por confirmar",
+    tagline: "Sin cupos asignados",
+    name: "Río",
+    location: "Río de Janeiro, Brasil",
+    tags: [],
     note: "Sin carrera, fecha ni precio confirmados",
     action: "Avísame cuando esté disponible",
     active: false,
   },
   {
-    href: "/contacto?destino=medellin",
-    image: "/images/medellin.jpg",
-    alt: "Vista de Medellín entre montañas",
-    label: "COLOMBIA · EN EXPLORACIÓN",
-    name: "Medellín",
+    href: "/contacto?destino=roma",
+    image: "/images/destino-roma.jpg",
+    alt: "El Coliseo de Roma al atardecer",
+    flag: "🇮🇹",
+    status: "En exploración",
+    statusTone: "bg-primary text-primary-foreground",
+    date: "Fecha por confirmar",
+    tagline: "Sin cupos asignados",
+    name: "Roma",
+    location: "Roma, Italia",
+    tags: [],
     note: "Sin carrera, fecha ni precio confirmados",
     action: "Avísame cuando esté disponible",
     active: false,
@@ -66,35 +84,97 @@ export function DestinationsSection() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        {DESTINATIONS.map(({ href, image, alt, label, name, note, action, active }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex flex-col overflow-hidden rounded-sm border border-primary/25 no-underline transition-shadow hover:border-primary hover:shadow-lg hover:shadow-primary/10",
-              active ? "bg-primary text-primary-foreground" : "bg-background",
-            )}
-          >
-            <Image
-              src={image}
-              alt={alt}
-              width={1000}
-              height={620}
-              sizes="(min-width: 768px) 30vw, 100vw"
-              className="h-55 w-full shrink-0 object-cover md:h-45 lg:h-52"
-            />
-            <span className="flex flex-1 flex-col items-start p-5.5 md:p-4 lg:p-6">
-              <span className="text-xs tracking-widest">{label}</span>
-              <strong className="my-3 flex items-center gap-1 font-heading text-4xl leading-none font-bold lg:text-5xl">
-                {name} <ArrowUpRight aria-hidden className="size-8" />
-              </strong>
-              <small className="text-xs leading-relaxed">{note}</small>
-              <span className="mt-auto flex items-center gap-1 border-b-3 border-highlight pt-5 pb-1.5 text-xs font-bold">
-                {action} <ArrowUpRight aria-hidden className="size-3.5" />
-              </span>
-            </span>
-          </Link>
-        ))}
+        {DESTINATIONS.map(
+          ({
+            href,
+            image,
+            alt,
+            flag,
+            status,
+            statusTone,
+            date,
+            tagline,
+            name,
+            location,
+            tags,
+            note,
+            action,
+            active,
+          }) => (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "group flex flex-col overflow-hidden rounded-2xl border no-underline transition-all hover:-translate-y-1 hover:shadow-xl",
+                active
+                  ? "border-highlight/50 bg-background shadow-sm"
+                  : "border-primary/20 bg-background shadow-sm",
+              )}
+            >
+              <div className="relative aspect-video overflow-hidden border-b border-primary/15 bg-primary/10">
+                <Image
+                  src={image}
+                  alt={alt}
+                  fill
+                  sizes="(min-width: 768px) 30vw, 100vw"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+                <span
+                  aria-hidden
+                  className="absolute top-3 left-3 z-10 rounded-xl bg-white/95 px-2 py-1 text-2xl shadow-sm backdrop-blur-md"
+                >
+                  {flag}
+                </span>
+                <span
+                  className={cn(
+                    "absolute top-3 right-3 z-10 rounded-full px-3 py-1 text-[11px] font-bold tracking-wider text-white uppercase shadow-sm",
+                    statusTone,
+                  )}
+                >
+                  {status}
+                </span>
+              </div>
+
+              <div className="flex grow flex-col p-5 lg:p-6">
+                <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold text-primary/70">
+                  <span className="inline-flex items-center gap-1.5">
+                    <CalendarDays aria-hidden className="size-3.5" />
+                    {date}
+                  </span>
+                  <span className="font-bold text-highlight">{tagline}</span>
+                </div>
+
+                <h3 className="mb-1 font-heading text-2xl leading-tight font-bold tracking-tight lg:text-3xl">
+                  {name}
+                </h3>
+                <p className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary/70">
+                  <MapPin aria-hidden className="size-3.5" />
+                  {location}
+                </p>
+
+                {tags.length > 0 && (
+                  <div className="mb-4 flex flex-wrap gap-1.5">
+                    {tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-lg border border-highlight/30 bg-highlight/10 px-2.5 py-0.5 text-xs font-bold text-highlight"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-auto space-y-3 border-t border-primary/15 pt-4">
+                  <p className="text-xs leading-relaxed">{note}</p>
+                  <span className="inline-flex items-center gap-1 border-b-3 border-highlight pt-1 text-xs font-bold">
+                    {action} <ArrowUpRight aria-hidden className="size-3.5" />
+                  </span>
+                </div>
+              </div>
+            </Link>
+          ),
+        )}
       </div>
     </section>
   );

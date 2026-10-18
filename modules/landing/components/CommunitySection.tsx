@@ -63,9 +63,19 @@ export function CommunitySection() {
       </div>
 
       <div className="mt-8 grid gap-5 sm:grid-cols-3 sm:gap-6">
-        {STEPS.map(({ label, title, text }) => (
-          <div key={label} className="border-t-3 border-highlight pt-5">
-            <span className="text-xs tracking-[0.15em]">{label}</span>
+        {STEPS.map(({ label, title, text }, index) => (
+          <div
+            key={label}
+            className={cn("border-t-3 pt-5", index % 2 === 0 ? "border-highlight" : "border-primary")}
+          >
+            <span
+              className={cn(
+                "text-xs tracking-[0.15em]",
+                index % 2 === 0 ? "text-highlight" : "text-primary",
+              )}
+            >
+              {label}
+            </span>
             <h3 className="mt-3 mb-1 text-lg font-bold">{title}</h3>
             <p className="text-xs leading-relaxed">{text}</p>
           </div>

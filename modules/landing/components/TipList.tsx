@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type TipCategory = "empezar" | "preparar" | "viajar" | "despues";
 
@@ -44,11 +45,14 @@ export function TipList({ tips }: { tips: Tip[] }) {
         ))}
       </div>
       <div className="grid gap-6">
-        {tips.map((tip) => (
+        {tips.map((tip, index) => (
           <article
             key={tip.title}
             hidden={filter !== "todos" && tip.category !== filter}
-            className="overflow-hidden rounded-md border border-primary/20"
+            className={cn(
+              "overflow-hidden rounded-md border",
+              index % 2 === 0 ? "border-highlight/40" : "border-primary/20",
+            )}
           >
             <div className="relative h-56 sm:h-48">
               <Image
@@ -61,7 +65,14 @@ export function TipList({ tips }: { tips: Tip[] }) {
               />
             </div>
             <div className="p-5">
-              <p className="mb-4 text-xs font-bold tracking-widest">{tip.eyebrow}</p>
+              <p
+                className={cn(
+                  "mb-4 text-xs font-bold tracking-widest",
+                  index % 2 === 0 ? "text-highlight" : "text-primary",
+                )}
+              >
+                {tip.eyebrow}
+              </p>
               <h4 className="mb-4 font-heading text-3xl leading-tight font-bold whitespace-pre-line">
                 {tip.title}
               </h4>

@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,23 +12,42 @@ const NAV_LINKS = [
   { href: "/contacto", label: "Contacto" },
 ];
 
-/** Brand mark shared by header and footer; inherits the text color. */
-export function SiteBrand({ className }: { className?: string }) {
+/**
+ * Brand mark shared by header and footer.
+ * `logo` renders the official lockup (blue + green on white), for light backgrounds.
+ * `mark` renders the circular isotipo, for backgrounds where the logo would lose contrast.
+ */
+export function SiteBrand({
+  className,
+  variant = "logo",
+}: {
+  className?: string;
+  variant?: "logo" | "mark";
+}) {
   return (
     <Link
       href="/"
       aria-label="Carreras Viajeras, inicio"
-      className={cn(
-        "flex items-center gap-2 text-sm leading-none font-extrabold tracking-tight no-underline",
-        className,
-      )}
+      className={cn("flex items-center gap-2 no-underline", className)}
     >
-      <ArrowUpRight aria-hidden className="size-9 stroke-[1.5] sm:size-11" />
-      <span>
-        CARRERAS
-        <br />
-        VIAJERAS
-      </span>
+      {variant === "logo" ? (
+        <Image
+          src="/images/logo-cv.png"
+          alt="Carreras Viajeras by MAZ Producciones"
+          width={2172}
+          height={724}
+          priority
+          className="h-8 w-auto sm:h-10 lg:h-11"
+        />
+      ) : (
+        <Image
+          src="/images/isotipo-cv.png"
+          alt="Carreras Viajeras"
+          width={1254}
+          height={1254}
+          className="size-11 sm:size-14"
+        />
+      )}
     </Link>
   );
 }

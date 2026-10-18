@@ -53,7 +53,7 @@ Sustituye el template "Hello world".
    | "Contacto", "Quiero correr", "Hablemos de tu próxima carrera" | `/contacto` |
    | Hero 1 "Quiero vivir esta carrera", CTA móvil | `/contacto?destino=santiago-2027` |
    | Paquete "Quiero correr Santiago" y "Ver más: paquete completo"; tarjeta de destino Santiago | `/viajes/maraton-santiago-2027` |
-   | Tarjetas de destino Panamá / Medellín | `/contacto?destino=panama` / `?destino=medellin` |
+   | Tarjetas de destino Río / Roma | `/contacto?destino=rio` / `?destino=roma` |
    | Cabecera `#paquete`, `#comunidad`, `#blog` | `/#paquete`, `/#comunidad`, `/#blog` (la cabecera se usa en todas las páginas) |
    | `pasion-por-correr.html` ("Descubre el viaje") | `/viajes/maraton-santiago-2027` |
    | `cuenta.html`, `cuenta.html#registro` ("Ingresar / Registrarse") | `/cuenta` |
@@ -102,7 +102,7 @@ Sustituye el template "Hello world".
 | 6 | `#comunidad` | `CommunitySection` | F3 | — | Bloque hero (imagen, título, texto) con CTA "Ingresar / Registrarse" → `/cuenta`, los 3 pasos y la nota "Participar + compartir = sumar." con "SIN DESCUENTOS ACTIVOS TODAVÍA", visibles sin desplegable. Sin demo. Sin eyebrow (el CSS del diseño lo oculta) |
 | 7 | `#por-que-viajar` | `WhyUsSection` | F2 | `<details>` "Ver más" y "Ver detalle" | Iconos SVG → `lucide-react`. Sin eyebrow. "Hablemos de tu próxima carrera" → `/contacto` |
 | 8 | `#blog` | `BlogSection` + `TipList` (client) | F2 | `<details>` y filtro de tips con `aria-pressed` | Referentes publicados con nombre (Daniela Zarfati, Karla Medina) y los avisos del diseño ("PARTICIPACIÓN POR CONFIRMAR", "FOTO ILUSTRATIVA · NO ES …") |
-| 9 | `#destinos` | `DestinationsSection` | F2 | — | Tarjetas como enlaces: Santiago → página del viaje; Panamá y Medellín → `/contacto?destino=<id>` |
+| 9 | `#destinos` | `DestinationsSection` | F2 | — | Tarjetas como enlaces: Santiago → página del viaje; Río y Roma → `/contacto?destino=<id>` |
 | 10 | `#preguntas` | `FaqSection` | F2 | `<details>` | 9 preguntas literales |
 | 11 | `aside.maz-support` | dentro de `SiteFooter` | F1 | — | Se integra como franja superior del pie en todas las páginas. Sin "Conoce al operador" |
 | 12 | `footer#pie` | `SiteFooter` | F1; F3 añade "Tu comunidad" | — | Marca, "Corre. Viaja. Conecta.", Facebook e Instagram, "Información del proveedor" (dl literal, con "Pendientes de completar"), "Atención al consumidor" (Libro de Reclamaciones como texto con "Pendiente de habilitación") y pie inferior literal. F3: "Tu comunidad" → "Ingresar / Registrarse" → `/cuenta`. Sin enlaces legales ni botón de cookies |
@@ -131,7 +131,7 @@ Sustituye el template "Hello world".
   - `<meta name="theme-color" content="#0144ae">`;
   - `robots` `noindex, nofollow`.
 - [ ] (F1) Dado el pie, cuando pulso Facebook o Instagram, entonces se abre en otra pestaña la URL exacta `https://www.facebook.com/p/Carreas-Viajeras-by-MAZ-Producciones-61594941239310/` o `https://www.instagram.com/carrerasviajeras/`. No hay TikTok, enlaces legales ni botón de cookies.
-- [ ] (F1) Dado `/contacto?destino=panama`, cuando cargo la página, entonces el selector muestra "Panamá · Quiero novedades". Con `?destino=xyz` o sin parámetro, muestra la opción de Santiago 2027.
+- [ ] (F1) Dado `/contacto?destino=rio`, cuando cargo la página, entonces el selector muestra "Río de Janeiro · Quiero novedades". Con `?destino=xyz` o sin parámetro, muestra la opción de Santiago 2027.
 - [ ] (F1) Dado el formulario de `/contacto` con campos vacíos o solo espacios, email inválido, teléfono fuera de `[+0-9 ()-]{8,24}` o sin consentimiento, cuando pulso "Preparar mi consulta", entonces no se prepara la consulta.
 - [ ] (F1) Dado el formulario válido con destino Santiago, cuando pulso "Preparar mi consulta", entonces:
   - veo "Tu consulta está preparada. Aún no se ha enviado." y el texto de la plantilla de `app.js` (cubierto por un unit test);
@@ -161,7 +161,7 @@ Sustituye el template "Hello world".
   - "Ver anuncio oficial ↗" y el CTA "Quiero correr Santiago ↗" → `/contacto?destino=santiago-2027`;
   - `<title>` "Maratón de Santiago 42K 2027 | Carreras Viajeras".
 - [ ] (F2) Dado `/viajes/otro-slug`, cuando lo abro, entonces responde 404. Dado `npm run build`, entonces la ruta `/viajes/maraton-santiago-2027` aparece como prerenderizada (SSG).
-- [ ] (F2) Dada la sección `#paquete`, cuando pulso "Quiero correr Santiago" o "Ver más: paquete completo", entonces navego a `/viajes/maraton-santiago-2027`. La tarjeta de destino Santiago y "Descubre el viaje" llevan a la misma página, y la tarjeta de Panamá a `/contacto?destino=panama`.
+- [ ] (F2) Dada la sección `#paquete`, cuando pulso "Quiero correr Santiago" o "Ver más: paquete completo", entonces navego a `/viajes/maraton-santiago-2027`. La tarjeta de destino Santiago y "Descubre el viaje" llevan a la misma página, y la tarjeta de Río a `/contacto?destino=rio`.
 - [ ] (F2) Dada la sección `#experiencia`, cuando la veo, entonces la imagen tiene el `alt` "Runners compartiendo después de correr en Santiago, imagen ilustrativa generada con IA".
 - [ ] (F2) Dados los referentes, cuando abro "Conocer referentes", entonces veo los nombres Daniela Zarfati y Karla Medina con "PARTICIPACIÓN POR CONFIRMAR", "FOTO ILUSTRATIVA · NO ES …" y la nota de imágenes ilustrativas.
 - [ ] (F2) Dados los tips, cuando pulso "Viajar", entonces solo se ve la tarjeta `viajar` y ese botón tiene `aria-pressed="true"` (los demás `false`). "Todas" muestra las 6.
@@ -254,7 +254,7 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
 | Carrusel shadcn | descartado | — | Requiere `embla-carousel-react` (dependencia nueva), y el diseño es de fundido, no de desplazamiento |
 | Accordion shadcn | descartado | — | `<details>` nativo funciona sin JS y en Server Components |
 | `SiteHeader` | nuevo | F1 (mod. F2, F3) | Server. `<header className="sticky top-0 z-40 bg-background shadow-sm">`. Marca (`ArrowUpRight` + "CARRERAS / VIAJERAS") → `/`. `<nav aria-label="Principal">` oculto < `md`, con array local de enlaces. CTA "Quiero correr" → `/contacto`; F3 añade "Ingresar / Registrarse" → `/cuenta` (variante outline). Estático: no lee la sesión |
-| `SiteFooter` | nuevo | F1 (mod. F3) | Server. Franja MAZ: logo `maz-producciones.webp`, "Una unidad de MAZ PRODUCCIONES.", razón social, RUC, métricas "+15" y "+500" con "Datos de trayectoria 2025 proporcionados por MAZ Producciones.". Después, contenido del inventario. Constante local `SOCIAL_LINKS` con Facebook e Instagram (URLs exactas; glifos del diseño `aria-hidden` + nombre). `max-sm:pb-28` para dejar sitio a la barra móvil |
+| `SiteFooter` | nuevo | F1 (mod. F3) | Server. Franja MAZ: logo `maz-producciones.webp`, "Una unidad de MAZ PRODUCCIONES.", razón social, RUC, métricas "+25 Años", "+70", "+500" y "+15 Maratones internacionales" (4 tarjetas con icono, acentos alternos verde/azul) con "Datos de trayectoria 2025 proporcionados por MAZ Producciones.". Después, contenido del inventario. Constante local `SOCIAL_LINKS` con Facebook e Instagram (URLs exactas; glifos del diseño `aria-hidden` + nombre). `max-sm:pb-28` para dejar sitio a la barra móvil |
 | `HeroCarousel` | nuevo | F1 (mod. F2, F3) | Detalle en la subsección siguiente |
 | `MobileCta` | nuevo | F1 | Server. `<Link className="fixed inset-x-0 bottom-0 z-30 sm:hidden ...">` con `pb-[calc(1rem+env(safe-area-inset-bottom))]`. Texto: "US$1,499 al contado · Quiero información ↗" |
 | `ContactSection` | nuevo | F1 | Server. Props `{ destination?: string \| string[] }`. Columna de texto (eyebrow, `h1`, párrafo, nota "VISTA DE DEMOSTRACIÓN") + `<ContactForm defaultDestination={parseDestinationId(destination)} />` |
@@ -304,14 +304,14 @@ Todos son de un único dominio (landing) y van en `modules/landing/components/`.
 ### Utils de `modules/landing/utils/`
 - **`inquiry.ts`** (F1):
   ```ts
-  export const DESTINATION_IDS = ["santiago-2027", "panama", "medellin"] as const;
+  export const DESTINATION_IDS = ["santiago-2027", "rio", "roma"] as const;
   export type DestinationId = (typeof DESTINATION_IDS)[number];
   export const WHATSAPP_NUMBER = "51938127170"; // dato público del canal comercial (+51 938 127 170)
   export function parseDestinationId(value: unknown): DestinationId; // ?destino= → id válido o "santiago-2027"
   export function buildInquiryMessage(input: { name: string; email: string; phone: string; destination: DestinationId }): string;
   export function buildWhatsAppUrl(number: string, text: string): string | null;
   ```
-  Plantilla literal de `app.js`. Nombres: `santiago-2027` → "Maratón de Santiago 42K 2027", `panama` → "Panamá", `medellin` → "Medellín".
+  Plantilla literal de `app.js`. Nombres: `santiago-2027` → "Maratón de Santiago 42K 2027", `rio` → "Río de Janeiro", `roma` → "Roma".
   ```
   Hola, soy {name}. Me interesa {nombre}{cláusula}. Quisiera conocer disponibilidad, inclusiones y condiciones finales.
   Correo: {email}
@@ -486,9 +486,11 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
 - `ContactForm` y `TipList` son internos.
 
 ### Assets de `public/images/` (F1)
-- Copia directa: `santiago.jpg`, `panama.jpg`, `medellin.jpg`, `running-road.jpg`, `running-team.jpg`, `running-training.jpg`.
-- Conversión a WebP: `story-runners.webp` (ancho 1536, calidad 80) y `maz-producciones.webp` (ancho 480, calidad 90).
-- Se copian todos en F1 para que F2 y F3 no toquen `public/`.
+- Copia directa: `running-road.jpg`, `running-team.jpg`, `running-training.jpg`, `story-runners.webp`, `maz-producciones.webp`.
+- Fotografía de marca (archivos fuente del cliente, recortados/recodificados): `hero-santiago.jpg` (salida de la Maratón de Santiago), `hero-patagonia.jpg` (trail), `hero-meta.jpg` (meta), `cover-santiago.jpg` (trail de montaña), `destino-santiago.jpg`, `destino-rio.jpg`, `destino-roma.jpg`. Calidad 84, sin marcado de agua.
+- `brand/logo-horizontal.jpg`: lockup oficial recortado a 600×155, calidad 92. Sin canal alfa (fondo blanco), por eso es JPEG y no PNG.
+- `app/icon.svg`: isotipo trazado desde `isotipo-cv.png` (Moore boundary tracing + Douglas-Peucker, verde `#58B11B` / azul `#0045AF`), 0,9 KB.
+- Los originales del cliente se conservan en `public/images/` sin usar; no borrar hasta confirmar el descarte.
 
 ## Reutilización
 - shadcn ya instalados: `Button`/`buttonVariants`, `Input`, `Label`. Nuevo: `native-select`, sin dependencias npm.
@@ -501,14 +503,14 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
 - **`modules/landing/utils/inquiry.test.ts`** (F1):
   - `buildInquiryMessage`:
     - Santiago devuelve exactamente la plantilla con la cláusula de precios;
-    - Panamá y Medellín usan su nombre y " cuando haya una propuesta confirmada", sin precios;
+    - Río y Roma usan su nombre y " cuando haya una propuesta confirmada", sin precios;
     - siempre incluye las líneas `Correo:` y `WhatsApp:` y el aviso final.
   - `buildWhatsAppUrl`:
     - `WHATSAPP_NUMBER` → `https://wa.me/51938127170?text=…`;
     - `"+51 938 127 170"` → los mismos dígitos;
     - el texto va codificado, con acentos y saltos de línea;
     - `""`, 9 dígitos o 16 dígitos → `null`.
-  - `parseDestinationId`: `"panama"` → `"panama"`; `undefined`, `"xyz"` o `["panama"]` → `"santiago-2027"`.
+  - `parseDestinationId`: `"rio"` → `"rio"`; `undefined`, `"xyz"` o `["rio"]` → `"santiago-2027"`.
 - F3 no añade tests en la landing: la lógica de acceso y sus tests (`AccessPanel.test.tsx`, `RunnerAccount.test.tsx`) son de `accounts-auth-ui.md` F4.
 - **`modules/landing/utils/catalogTrip.test.ts`** (F4). Mock de `@/modules/trips`: `getPublishedTripBySlug: vi.fn()` y los formateadores reales, tomados en la factoría de `@/modules/trips/utils/tripDisplay` (archivo puro, sin `server-only`; es la única importación interna, y solo en el test). Fixture `PublicTrip` con los datos de la precondición. Casos:
   - slug sin contenido fijo (`"otro-viaje"`) → `null` y el service no se llama;

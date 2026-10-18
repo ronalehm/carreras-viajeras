@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { type Tip, TipList } from "./TipList";
 
 const REFERENTS = [
@@ -136,10 +137,13 @@ export function BlogSection() {
           </p>
           <Fold closed="Conocer referentes" open="Cerrar referentes">
             <div className="grid gap-4">
-              {REFERENTS.map(({ name, image, alt, disclaimer }) => (
+              {REFERENTS.map(({ name, image, alt, disclaimer }, index) => (
                 <article
                   key={name}
-                  className="relative isolate min-h-85 overflow-hidden rounded-sm bg-primary text-primary-foreground"
+                  className={cn(
+                    "relative isolate min-h-85 overflow-hidden rounded-sm text-primary-foreground",
+                    index % 2 === 0 ? "bg-primary" : "bg-highlight",
+                  )}
                 >
                   <Image
                     src={image}
@@ -149,18 +153,38 @@ export function BlogSection() {
                     loading="lazy"
                     className="-z-20 object-cover"
                   />
-                  <div className="absolute inset-0 -z-10 bg-linear-to-b from-primary/10 from-35% to-primary/90" />
-                  <span className="absolute top-4 left-4 rounded-sm border border-primary-foreground/50 bg-primary/45 px-2.5 py-1.5 text-xs tracking-widest">
+                  <div
+                    className={cn(
+                      "absolute inset-0 -z-10 bg-linear-to-b from-35%",
+                      index % 2 === 0 ? "from-primary/10 to-primary/90" : "from-highlight/10 to-highlight/90",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "absolute top-4 left-4 rounded-sm border border-primary-foreground/50 px-2.5 py-1.5 text-xs tracking-widest",
+                      index % 2 === 0 ? "bg-primary/45" : "bg-highlight/45",
+                    )}
+                  >
                     PARTICIPACIÓN POR CONFIRMAR
                   </span>
                   <div className="absolute inset-x-5 bottom-6">
-                    <span className="text-xs tracking-widest text-highlight">{disclaimer}</span>
+                    <span
+                      className={cn(
+                        "text-xs tracking-widest",
+                        index % 2 === 0 ? "text-highlight" : "text-primary-foreground",
+                      )}
+                    >
+                      {disclaimer}
+                    </span>
                     <h4 className="mt-3 mr-9 font-heading text-5xl leading-none font-bold tracking-tight whitespace-pre-line">
                       {name}
                     </h4>
                     <ArrowUpRight
                       aria-hidden
-                      className="absolute right-0 bottom-0 size-8 text-highlight"
+                      className={cn(
+                        "absolute right-0 bottom-0 size-8",
+                        index % 2 === 0 ? "text-highlight" : "text-primary-foreground",
+                      )}
                     />
                   </div>
                 </article>
