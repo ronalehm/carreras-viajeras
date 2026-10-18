@@ -611,11 +611,11 @@ Requisitos previos: Fase 1 cerrada, migraciones `0001` y `0002` aplicadas, y `tr
 - [x] T5 — UI del seguimiento (`ActivityForm`, `LeadTimeline`), integración en la ficha y exports; medir el Worker · archivos: `modules/crm/components/ActivityForm.tsx`, `modules/crm/components/LeadTimeline.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 5: próxima acción y pendientes (5 tareas, 16 archivos)
-- [ ] T1 — `nextActionSchema`, filtro `seguimiento` (schema, tipos y mapa `followUp → seguimiento` de la query), con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: Fase 4 · secuencial
-- [ ] T2 — Service: `setNextAction`, y filtro y orden de seguimiento en `getLeadList` (con `today`), con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — `setNextActionAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — UI: `NextActionForm`, columna "Próxima acción" en `LeadTable` y filtro "Seguimiento" en `LeadFilters` · archivos: `modules/crm/components/NextActionForm.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadFilters.tsx` · depende de: T3 · secuencial
-- [ ] T5 — Enlace "Mis pendientes", API pública y páginas con `today`; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — `nextActionSchema`, filtro `seguimiento` (schema, tipos y mapa `followUp → seguimiento` de la query), con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: Fase 4 · secuencial
+- [x] T2 — Service: `setNextAction`, y filtro y orden de seguimiento en `getLeadList` (con `today`), con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — `setNextActionAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — UI: `NextActionForm`, columna "Próxima acción" en `LeadTable` y filtro "Seguimiento" en `LeadFilters` · archivos: `modules/crm/components/NextActionForm.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadFilters.tsx` · depende de: T3 · secuencial
+- [x] T5 — Enlace "Mis pendientes", API pública y páginas con `today`; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 6: archivo (4 tareas, 13 archivos)
 Requisito previo: `trips-catalog` F2-T2 cerrada (`components/shared/ConfirmActionButton.tsx`).
