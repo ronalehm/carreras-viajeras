@@ -1,7 +1,7 @@
 # Leads: alta manual, embudo, ficha, responsable y seguimiento (R3 · CRM comercial)
 
 - Módulo: crm
-- Estado: borrador
+- Estado: aprobado
 - Enmienda (2026-10-18), pendiente de aprobación: adapta F2–F4 a los leads de `crm-leads-capture.md` (formulario web sin responsable ni autor, actividades de n8n) e incorpora las sugerencias de la revisión de F1. La F1 está implementada y aprobada por el reviewer (`ff28b28`); sus criterios y tareas no cambian. Los cambios están marcados con "(enmienda)".
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, `db.batch` atómico, sin transacciones interactivas), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano.
