@@ -1,5 +1,17 @@
+export { AccountSection } from "./components/AccountSection";
+export { BlogSection } from "./components/BlogSection";
+export { CommunitySection } from "./components/CommunitySection";
 export { ContactSection } from "./components/ContactSection";
+export { DestinationsSection } from "./components/DestinationsSection";
+export { FaqSection } from "./components/FaqSection";
 export { HeroCarousel } from "./components/HeroCarousel";
 export { MobileCta } from "./components/MobileCta";
+export { PackageSection } from "./components/PackageSection";
 export { SiteFooter } from "./components/SiteFooter";
 export { SiteHeader } from "./components/SiteHeader";
+export { StorySection } from "./components/StorySection";
+export { TripDetail } from "./components/TripDetail";
+export { TripFacts } from "./components/TripFacts";
+export { WhyUsSection } from "./components/WhyUsSection";
+export { getTrip, TRIPS } from "./utils/trips";
+export type { Trip } from "./utils/trips";

@@ -8,10 +8,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import { signInSchema } from "../schemas/auth.schema";
-import type { FieldErrors, SignInInput } from "../types/auth.types";
+import type { AuthDestination, FieldErrors, SignInInput } from "../types/auth.types";
 import { authErrorMessage } from "../utils/authErrorMessage";
 
 type SignInFormProps = {
+  destination: AuthDestination;
+  signUpLabel: string;
   defaultEmail?: string;
   notice?: string;
   onUnverified: (email: string) => void;
@@ -20,6 +22,8 @@ type SignInFormProps = {
 };
 
 export function SignInForm({
+  destination,
+  signUpLabel,
   defaultEmail,
   notice,
   onUnverified,
@@ -79,7 +83,7 @@ export function SignInForm({
       return;
     }
 
-    router.replace("/crm");
+    router.replace(destination);
     router.refresh();
   }
 
@@ -142,7 +146,7 @@ export function SignInForm({
         ¿Olvidaste tu contraseña?
       </Button>
       <Button type="button" variant="link" onClick={onSignUp}>
-        ¿Te invitaron? Crea tu cuenta
+        {signUpLabel}
       </Button>
     </form>
   );

@@ -13,12 +13,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import type { StaffActionState } from "../types/staff.types";
 
-type StaffAction = (prev: StaffActionState, formData: FormData) => Promise<StaffActionState>;
+export type ConfirmActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | { status: "error"; message: string };
 
-type ConfirmActionButtonProps = {
-  action: StaffAction;
+type ConfirmActionButtonProps<State extends ConfirmActionState> = {
+  action: (prev: State | { status: "idle" }, formData: FormData) => Promise<State | { status: "idle" }>;
   fields: Record<string, string>;
   label: string;
   title: string;
@@ -27,9 +29,7 @@ type ConfirmActionButtonProps = {
   variant: "outline" | "destructive";
 };
 
-const INITIAL_STATE: StaffActionState = { status: "idle" };
-
-export function ConfirmActionButton({
+export function ConfirmActionButton<State extends ConfirmActionState>({
   action,
   fields,
   label,
@@ -37,7 +37,7 @@ export function ConfirmActionButton({
   description,
   confirmLabel,
   variant,
-}: ConfirmActionButtonProps) {
+}: ConfirmActionButtonProps<State>) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -59,15 +59,15 @@ export function ConfirmActionButton({
   );
 }
 
-type ConfirmActionFormProps = Pick<
-  ConfirmActionButtonProps,
+type ConfirmActionFormProps<State extends ConfirmActionState> = Pick<
+  ConfirmActionButtonProps<State>,
   "action" | "fields" | "title" | "description" | "confirmLabel"
 > & {
   confirmVariant: "default" | "destructive";
   onSuccess: () => void;
 };
 
-function ConfirmActionForm({
+function ConfirmActionForm<State extends ConfirmActionState>({
   action,
   fields,
   title,
@@ -75,14 +75,14 @@ function ConfirmActionForm({
   confirmLabel,
   confirmVariant,
   onSuccess,
-}: ConfirmActionFormProps) {
-  const [state, formAction, pending] = useActionState(
-    async (prev: StaffActionState, formData: FormData) => {
+}: ConfirmActionFormProps<State>) {
+  const [state, formAction, pending] = useActionState<State | { status: "idle" }, FormData>(
+    async (prev, formData) => {
       const next = await action(prev, formData);
       if (next.status === "success") onSuccess();
       return next;
     },
-    INITIAL_STATE,
+    { status: "idle" },
   );
 
   return (

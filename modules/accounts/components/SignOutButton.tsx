@@ -4,8 +4,13 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth/client";
+import type { SignOutDestination } from "../types/auth.types";
 
-export function SignOutButton() {
+type SignOutButtonProps = {
+  redirectTo?: SignOutDestination;
+};
+
+export function SignOutButton({ redirectTo = "/crm/acceso" }: SignOutButtonProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -19,7 +24,7 @@ export function SignOutButton() {
         setFailed(true);
         return;
       }
-      router.replace("/crm/acceso");
+      router.replace(redirectTo);
       router.refresh();
     } catch {
       setFailed(true);

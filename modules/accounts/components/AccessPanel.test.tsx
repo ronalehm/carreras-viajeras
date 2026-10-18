@@ -492,3 +492,95 @@ describe("AccessPanel · reset password", () => {
     expect(screen.getByRole("heading", { name: "Recupera tu contraseña" })).toBeTruthy();
   });
 });
+
+describe("AccessPanel · audience", () => {
+  const INVITATION_NOTICE = "Solo para personas invitadas por un administrador.";
+  const RUNNER_NOTICE =
+    "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.";
+
+  it("keeps the staff sign-up link and invitation notice without a prop", () => {
+    fireEvent.click(button("¿Te invitaron? Crea tu cuenta"));
+
+    expect(screen.getByText(INVITATION_NOTICE)).toBeTruthy();
+    expect(screen.queryByText(RUNNER_NOTICE)).toBeNull();
+  });
+
+  describe("runner", () => {
+    beforeEach(() => {
+      // The outer beforeEach renders the staff panel; swap it for the runner one.
+      cleanup();
+      render(<AccessPanel audience="runner" />);
+    });
+
+    it("goes to /cuenta after a successful sign in", async () => {
+      authClient.signIn.email.mockResolvedValue(OK);
+
+      await signIn();
+
+      expect(router.replace).toHaveBeenCalledWith("/cuenta");
+      expect(router.replace).not.toHaveBeenCalledWith("/crm");
+      expect(router.refresh).toHaveBeenCalled();
+    });
+
+    it("shows the runner sign-up link and notice, not the invitation one", () => {
+      expect(screen.queryByRole("button", { name: "¿Te invitaron? Crea tu cuenta" })).toBeNull();
+
+      fireEvent.click(button("Registrarse"));
+
+      expect(screen.getByRole("heading", { name: "Crea tu cuenta" })).toBeTruthy();
+      expect(screen.getByText(RUNNER_NOTICE)).toBeTruthy();
+      expect(screen.queryByText(INVITATION_NOTICE)).toBeNull();
+    });
+
+    it("goes to /cuenta when the code is correct and there is a session", async () => {
+      authClient.signUp.email.mockResolvedValue(OK);
+      fireEvent.click(button("Registrarse"));
+      type("Nombre", "Ana");
+      type("Correo", "ana@example.com");
+      type("Contraseña", "12345678");
+      type("Confirma la contraseña", "12345678");
+      fireEvent.click(button("Crear cuenta"));
+      await flush();
+
+      authClient.emailOtp.verifyEmail.mockResolvedValue(OK);
+      authClient.getSession.mockResolvedValue({ data: { session: {}, user: {} }, error: null });
+      await verify();
+
+      expect(router.replace).toHaveBeenCalledWith("/cuenta");
+      expect(router.refresh).toHaveBeenCalled();
+    });
+
+    it("sends a new code and moves to verification on EMAIL_NOT_VERIFIED, as for staff", async () => {
+      authClient.signIn.email.mockResolvedValue(failure(403, "EMAIL_NOT_VERIFIED"));
+      authClient.emailOtp.sendVerificationOtp.mockResolvedValue(OK);
+
+      await signIn("pending@example.com", "12345678");
+
+      expect(authClient.emailOtp.sendVerificationOtp).toHaveBeenCalledWith({
+        email: "pending@example.com",
+        type: "email-verification",
+      });
+      expect(screen.getByRole("heading", { name: "Verifica tu correo" })).toBeTruthy();
+      expect(
+        screen.getByText("Tu correo aún no está verificado. Te enviamos un código."),
+      ).toBeTruthy();
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+
+    it("recovers the password with the same neutral message and flow as staff", async () => {
+      await goToResetStep();
+      expect(screen.getByText(RECOVERY_CODE_SENT)).toBeTruthy();
+      authClient.emailOtp.resetPassword.mockResolvedValue({ data: { success: true }, error: null });
+
+      await resetPassword();
+
+      expect(authClient.emailOtp.resetPassword).toHaveBeenCalledWith({
+        email: "ana@example.com",
+        otp: "123456",
+        password: "nueva-clave",
+      });
+      expect(screen.getByText("Contraseña actualizada. Inicia sesión.")).toBeTruthy();
+      expect(router.replace).not.toHaveBeenCalled();
+    });
+  });
+});
