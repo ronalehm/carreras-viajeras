@@ -373,35 +373,56 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
 
 Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
 
-Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (paso 3).
+Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (apartado 3, paso 4).
 
 #### 3. El workflow, paso a paso
 
-1. **Schedule Trigger**: cada minuto.
-2. **HTTP Request** `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/claim` con la credencial *Header Auth* y cuerpo `{ "limit": 10 }`.
-3. **Split Out** sobre el campo `events`: un item por evento. Si la lista viene vacía, el workflow termina ahí.
-4. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `id`. Busca en ella el `id` del evento: si ya está, el correo ya se envió antes, así que solo haz el **ack** (paso 12) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
-5. **HTTP Request** `GET …/api/integrations/n8n/leads/{{ $json.leadId }}`. Si responde 404, ve a la rama de error con `lead_not_found`.
-6. **¿Sigue vigente?** Si `archived` es `true`, o si la etapa actual del lead (`stage`) ya no es la del evento (`new` para `lead.created`), haz el ack y termina sin preparar nada: el evento quedó viejo.
-7. **Switch** por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`) para elegir el prompt y la plantilla de respaldo de esa etapa. Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
-8. **Nodo de Gemini** con el prompt de la etapa (apartado 4). En **Settings** del nodo: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
-9. **¿Sirve el borrador?** Si Gemini falló, tardó más de 20 s o devolvió un texto vacío o de más de 1000 caracteres, usa la **plantilla de respaldo** de la etapa (apartado 5). Guarda el texto elegido (de Gemini o de la plantilla) en un campo `borrador`. Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
-10. **Enlace de WhatsApp** (nodo *Set*): `https://wa.me/{{ $json.phone.replace('+', '') }}?text={{ encodeURIComponent($json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo.
-11. **Send Email** (credencial SMTP) **a ti** (apartado 6). Después, añade el `id` del evento a la tabla `eventos_procesados`.
-12. **HTTP Request** `POST …/api/integrations/n8n/events/{{ $json.id }}/ack` con `{ "leaseToken": "{{ $json.leaseToken }}" }`. Si responde 409 (`lease_lost`), no te preocupes: el evento volverá a llegar y el paso 4 evitará un segundo correo.
+En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian de un paso a otro. Por eso esta guía pone **nombre** a los nodos (el texto entre comillas: haz clic en el título del nodo y escríbelo igual) y toma cada dato del nodo que lo tiene, con `$('Nombre del nodo').item.json.<campo>`. Así el ack siempre usa el `id` y el `leaseToken` del **evento**, y nunca el id del lead.
 
-**Rama de error:** si el correo no se pudo enviar o el lead no existe, llama a `POST …/api/integrations/n8n/events/{{ $json.id }}/fail` con `{ "leaseToken": "…", "errorCode": "<código>" }`. Códigos sugeridos: `smtp_error` (no se pudo enviar el correo), `lead_not_found` (el lead no existe), `lead_read_error` (la lectura del lead falló) y `unexpected_error` (cualquier otro). Usa solo códigos cortos: nunca copies el texto del error del proveedor.
+1. **Schedule Trigger**: cada minuto.
+2. **HTTP Request** "Reclamar eventos": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/claim` con la credencial *Header Auth* y cuerpo `{ "limit": 10 }`.
+3. **Split Out** "Split Out" sobre el campo `events`: un item por evento. Si la lista viene vacía, el workflow termina ahí. A partir de aquí, el evento es siempre `$('Split Out').item.json` (`id`, `leadId`, `leaseToken`, `type`, `payload`).
+4. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `event_id` (no la llames `id`: la tabla ya tiene una columna `id` propia).
+   - Nodo **Data table** "Buscar procesado": obtener filas donde `event_id` es igual a `{{ $('Split Out').item.json.id }}`. En **Settings**, activa *Always Output Data* para que el workflow siga aunque no encuentre nada.
+   - Nodo **If** "¿Ya procesado?": si `{{ $('Buscar procesado').item.json.event_id }}` no está vacío, el correo ya se envió antes: ve directo al nodo "Ack" (paso 13) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
+5. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Split Out').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`).
+6. **Edit Fields (Set)** "Datos para Gemini", con *Include Other Input Fields* **desactivado** para que solo salgan estos tres campos:
+   - `etapa`: `{{ $('Split Out').item.json.type === 'lead.created' ? 'new' : $('Split Out').item.json.payload.stageTo }}` (la etapa del evento);
+   - `firstName`: `{{ $('Leer lead').item.json.firstName }}`;
+   - `viaje`: `{{ $('Leer lead').item.json.trip ? $('Leer lead').item.json.trip.title : ($('Leer lead').item.json.destinationText || 'nuestros viajes') }}`.
+7. **If** "¿Sigue vigente?": si `{{ $('Leer lead').item.json.archived }}` es verdadero, o si `{{ $('Leer lead').item.json.stage }}` es distinto de `{{ $('Datos para Gemini').item.json.etapa }}`, el evento quedó viejo: ve al nodo "Ack" sin preparar nada.
+8. **Switch** "Etapa" sobre `{{ $('Datos para Gemini').item.json.etapa }}`, con una salida por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`). Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
+9. **Nodo de Gemini** en cada salida del Switch (crea uno y duplícalo; solo cambia el objetivo de la etapa, apartado 4). En **Settings** de cada uno: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
+10. **Code** "Borrador" (modo *Run Once for Each Item*). Conecta aquí la salida correcta **y** la de error de los seis nodos de Gemini. Elige el texto de Gemini si sirve y, si no, la plantilla de respaldo (apartado 5). Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
+
+    ```js
+    const datos = $('Datos para Gemini').item.json;
+    // Aquí $json es la salida del nodo de Gemini que llegó (correcta o de error).
+    // Cambia "text" por el campo donde tu nodo de Gemini deja la respuesta (míralo en su salida).
+    const texto = String($json.text ?? '').trim();
+    const plantillas = {
+      new: 'Hola {firstName}, gracias por escribirnos por {viaje}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan?',
+      // …pega aquí las otras cinco plantillas del apartado 5, con su etapa.
+    };
+    const respaldo = plantillas[datos.etapa].replace('{firstName}', datos.firstName).replace('{viaje}', datos.viaje);
+    return { json: { borrador: texto && texto.length <= 1000 ? texto : respaldo } };
+    ```
+11. **Edit Fields (Set)** "Enlace WhatsApp", con un campo `enlace`: `https://wa.me/{{ $('Leer lead').item.json.phone.replace('+', '') }}?text={{ encodeURIComponent($('Borrador').item.json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo.
+12. **Send Email** "Enviar correo" (credencial SMTP) **a ti** (apartado 6). En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`. Después del envío correcto, nodo **Data table** "Guardar procesado": insertar una fila con `event_id` = `{{ $('Split Out').item.json.id }}`.
+13. **HTTP Request** "Ack": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Split Out').item.json.id }}/ack` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Split Out').item.json.leaseToken }}" }`. En **Settings** → *On Error* → *Continue*: si responde 409 (`lease_lost`), no te preocupes; el evento volverá a llegar y el paso 4 evitará un segundo correo.
+
+**Rama de error**, nodo **HTTP Request** "Fail": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Split Out').item.json.id }}/fail` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Split Out').item.json.leaseToken }}", "errorCode": "<código>" }`. Usa un nodo "Fail" por código (o escribe el código en un campo antes de llegar a él). Códigos sugeridos: `smtp_error` (no se pudo enviar el correo), `lead_not_found` (no se pudo leer el lead), `lead_read_error` (si separas la lectura fallida del 404) y `unexpected_error` (cualquier otro). Usa solo códigos cortos: nunca copies el texto del error del proveedor.
 
 Con 10 eventos por minuto y hasta 20 s de Gemini por evento, el lote cabe holgado en los 5 minutos de reserva.
 
 #### 4. Qué datos recibe Gemini y prompt por etapa
 
-**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe con una expresión que solo toma esos campos, por ejemplo:
+**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe solo con los tres campos del nodo "Datos para Gemini" (paso 6):
 
 ```text
-Etapa: {{ $json.etapa }}
-Nombre de pila: {{ $json.firstName }}
-Viaje o destino: {{ $json.trip ? $json.trip.title : $json.destinationText }}
+Etapa: {{ $('Datos para Gemini').item.json.etapa }}
+Nombre de pila: {{ $('Datos para Gemini').item.json.firstName }}
+Viaje o destino: {{ $('Datos para Gemini').item.json.viaje }}
 ```
 
 Ampliar esta lista exige tu decisión explícita y un cambio de la spec. Ten en cuenta que, en el plan gratuito de la API de Gemini, Google puede usar lo que le envías para mejorar sus productos.
@@ -437,7 +458,8 @@ Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `
 #### 6. El correo que recibes
 
 - **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
-- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 10), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
+- **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead del formulario web: `$('Split Out').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form`.
+- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 11), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
 - El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa.
 - El correo es el **único** canal de aviso. El mensaje al runner siempre lo revisa y lo envía una persona desde WhatsApp Business App.
 
