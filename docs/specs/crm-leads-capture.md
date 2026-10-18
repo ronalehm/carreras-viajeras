@@ -4,7 +4,7 @@
 - Estado: borrador
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): contrato de la sección "Leads y procesamiento posterior" (Turnstile en servidor, lead y evento en una transacción, idempotencia, outbox con lease, claim/ack para n8n local, máximo 8 intentos). Esta spec lo concreta y no lo contradice.
-  - `crm-leads-pipeline.md` (aprobada; F1 en curso): tablas `leads` y `lead_activities` (migración `0002`), `createLead`, `getLeadList`, `changeLeadStage` (su F3) y el permiso `leads.manage`. Esta spec **no duplica** ese modelo: lo amplía con la migración `0003` y toca su service solo donde se indica. Hay que enmendarla (ver "Relación con otras specs").
+  - `crm-leads-pipeline.md` (F1 implementada en `ff28b28`; enmendada para esta captura y de vuelta en borrador hasta su nueva aprobación): tablas `leads` y `lead_activities` (migración `0002`), `createLead`, `getLeadList`, `changeLeadStage` (su F3) y el permiso `leads.manage`. Esta spec **no duplica** ese modelo: lo amplía con la migración `0003` y toca su service solo donde se indica (ver "Relación con otras specs").
   - `trips-catalog.md` (aprobada): slug `maraton-santiago-2027` y `trips.status = 'published'`.
   - `landing-public-site.md` (aprobada; F1 en `main`): `/contacto`, `ContactSection`, `ContactForm` y `modules/landing/utils/inquiry.ts`.
 
@@ -12,30 +12,32 @@
 Hoy el formulario de `/contacto` solo prepara un texto para WhatsApp y no guarda nada, así que el equipo comercial no se entera de las consultas que no llegan a enviarse por WhatsApp. Esta spec hace que:
 - cada envío válido del formulario de la landing cree un **lead** en el CRM (origen "Formulario web", etapa "Nuevo", sin responsable), de forma protegida contra spam y doble envío;
 - cada alta de lead y cada cambio de etapa dejen un **evento durable** en un outbox de Neon;
-- **n8n**, que corre en la computadora del usuario sin IP pública, recoja esos eventos por una **API privada** del Worker (modelo *pull*), avise al usuario por correo y WhatsApp y le **prepare** el mensaje predefinido según la etapa del lead, sin enviarlo automáticamente al runner.
+- **n8n**, que corre en la computadora del usuario sin IP pública, recoja esos eventos por una **API privada** del Worker (modelo *pull*), avise al usuario **por correo** y le **prepare** el mensaje para el runner según la etapa del lead (borrador redactado por Gemini desde n8n, con plantilla fija de respaldo), siempre con revisión humana y sin envío automático al runner.
 
 Usuarios: personas que consultan en la landing (anónimas), el equipo comercial (ve los leads en el CRM) y el usuario dueño del negocio (recibe los avisos de n8n).
 
 ## Alcance
 - Incluye:
-  - (F1) Migración `0003`: tabla `outbox_events` y sus enums; `leads` admite leads sin responsable ni autor (formulario web) y guarda la clave de idempotencia; `lead_activities` admite actividades de sistema (`automation`, autor nulo) y el primer responsable. Variables de entorno opcionales (`N8N_API_TOKEN`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) validadas de forma perezosa. El alta manual (`createLead`) emite `lead.created`. README: migración y secretos.
-  - (F2) API privada para n8n bajo `/api/integrations/n8n/`: reclamar un lote de eventos con lease, confirmar (ack), marcar fallo con backoff, y leer los datos mínimos de un lead. Guía de n8n en el README.
+  - (F1) Migración `0003`: tabla `outbox_events` y sus enums; `leads` admite leads sin responsable ni autor (formulario web) y guarda la clave de idempotencia; `lead_activities` admite actividades de sistema (`automation`, autor nulo) y el primer responsable. Variables de entorno opcionales (`N8N_API_TOKEN`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) validadas de forma perezosa. Adaptación del código ya implementado de `crm-leads-pipeline` F1: el alta manual (`createLead`) emite `lead.created`, la lista admite leads sin responsable y el filtro "Sin asignar" en datos (ver "Cambios en `crm-leads-pipeline`"). README: migración y secretos, con una guía paso a paso de Turnstile para una persona sin experiencia técnica.
+  - (F2) API privada para n8n bajo `/api/integrations/n8n/`: reclamar un lote de eventos con lease, confirmar (ack), marcar fallo con backoff, y leer los datos mínimos de un lead. Guía de n8n en el README (aviso por correo, borrador con Gemini y plantillas de respaldo).
   - (F3) Captura en servidor: schema del formulario web, verificación de Turnstile, `createWebLead` atómico e idempotente (lead + actividad + evento) y la Server Action pública. Lista de destinos de consulta compartida en `lib/`.
   - (F4) Formulario de `/contacto` conectado: envío real, widget de Turnstile, honeypot, consentimiento `web-form-v1`, textos sin "demostración" y destinos con el slug del catálogo. WhatsApp sigue disponible tras enviar.
   - (F5) Evento `lead.stage_changed` en el cambio de etapa del CRM y registro, desde n8n, de una actividad `automation` en el historial del lead.
   - Medición del tamaño del Worker al cerrar cada fase (umbral de consulta: 2 MiB gzip).
 - No incluye:
   - Cualquier llamada del Worker a n8n (webhook *push*), colas de Cloudflare, `waitUntil` como cola o Cron Triggers.
-  - El workflow de n8n como código del repo: se documenta en el README como guía; las plantillas de mensajes, las credenciales SMTP y de WhatsApp viven en n8n.
-  - Envío automático de mensajes al runner por WhatsApp (WhatsApp Business App sigue manual), automatización de WhatsApp Web o scraping.
+  - El workflow de n8n como código del repo: se documenta en el README como guía; las plantillas de respaldo, los prompts de Gemini, la credencial SMTP y la API key de Gemini viven solo en n8n.
+  - Avisos al usuario por cualquier canal distinto del correo.
+  - Cualquier llamada del Worker a Gemini: Gemini solo se usa desde n8n y su API key nunca llega al Worker ni al repo.
+  - Envío automático de mensajes al runner por cualquier canal (WhatsApp Business App sigue manual), automatización de WhatsApp Web o scraping.
   - Asignación automática de responsable: el comercial asigna a mano en el CRM (`changeLeadOwner` de `crm-leads-pipeline`).
-  - Lead al registrarse un runner en `/cuenta` (F3 de la landing): queda para una spec posterior (Pregunta abierta 6).
-  - Reenvío de eventos `dead` desde el CRM (pantalla o acción administrativa): spec posterior (Pregunta abierta 7).
+  - Lead al registrarse un runner en `/cuenta` (F3 de la landing): queda para una spec posterior (decisión provisional P1).
+  - Reenvío de eventos `dead` desde el CRM (pantalla o acción administrativa): spec posterior (decisión provisional P2).
   - Editar plantillas de mensajes desde el CRM (tabla `message_templates`): spec posterior si se necesita.
-  - Cambios en la UI del CRM (lista, ficha, historial) para mostrar "Sin asignar", "Formulario web" o "Automatización": van en la enmienda de `crm-leads-pipeline` (ver "Relación con otras specs").
+  - Cambios en la UI del CRM (lista, ficha, historial) para mostrar "Sin asignar", "Formulario web" o "Automatización (n8n)": van en las fases F2–F4 de `crm-leads-pipeline`, ya enmendada (ver "Relación con otras specs").
   - Rate limiting por IP en código o con bindings: Turnstile + honeypot + ventana de duplicados bastan en el MVP. Una regla WAF opcional se documenta en el README, sin código.
-  - PostHog, analítica o métricas del formulario; Gemini.
-  - Página de privacidad o términos (sigue fuera de la landing); el texto legal definitivo lo aporta el usuario (Pregunta abierta 1).
+  - PostHog, analítica o métricas del formulario.
+  - Página de privacidad o términos (sigue fuera de la landing); el texto legal definitivo lo aporta el usuario antes de publicar la F4 (requisito previo de F4).
   - Detección o fusión de duplicados más allá de la idempotencia y la ventana de 10 minutos por teléfono.
   - GRANT de base de datos, migraciones remotas automáticas o scripts que las ejecuten.
 
@@ -68,14 +70,14 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
 6. **Consentimiento (Ley 29733):** casilla obligatoria (`required` en el navegador y `z.literal("on")` en el servidor). Texto provisional de la versión `web-form-v1`:
    > "Acepto que Carreras Viajeras guarde mis datos (nombre, correo, WhatsApp y destino) para responder a mi consulta y contactarme sobre este viaje."
 
-   Se guardan `consent_version = 'web-form-v1'` y `consented_at`. El texto legal definitivo queda pendiente del usuario (Pregunta abierta 1); cambiarlo exige una nueva versión (`web-form-v2`), no editar la `v1`.
+   Se guardan `consent_version = 'web-form-v1'` y `consented_at`. El usuario confirmó el planteamiento y dará el texto legal definitivo **antes de publicar la F4** (requisito previo de esa fase). El texto definitivo debe cubrir también los encargados que tratan los datos: n8n en la computadora del usuario, su proveedor de correo y Gemini (Google), que solo recibe el nombre de pila y el destino (Requisito 12). Si el texto definitivo difiere del provisional antes del primer envío real, se ajusta en la F4 manteniendo `web-form-v1`; una vez publicado, cambiarlo exige una nueva versión (`web-form-v2`), no editar la `v1`.
 7. **Después del envío:** con éxito, la persona ve "¡Listo! Recibimos tu consulta. Te escribiremos por WhatsApp." y, como hoy, la consulta preparada con "Copiar consulta" y "Abrir WhatsApp ↗". Con un error que no sea de validación, ve el mensaje del error y también la consulta preparada con WhatsApp como alternativa.
 8. **Mensajes sin datos:** ningún mensaje, log ni respuesta de error incluye datos personales, el token de Turnstile, la IP, el secreto ni el mensaje original de la base o de Cloudflare. Los logs son de texto fijo (`"web lead: capture failed"`, `"turnstile: verification unavailable"`, `"integrations: request failed"`).
 9. **Outbox (`outbox_events`):** contrato de `platform-neon-foundation.md`. Columnas: `id` (también es el `event_id` para deduplicar en n8n), `type`, `lead_id`, `payload_version`, `payload` (mínimo, sin datos personales), `status` (`pending` | `processing` | `succeeded` | `dead`), `attempts`, `available_at`, `lease_until`, `lease_token`, `created_at`, `processed_at` y `last_error_code` (código corto, sin texto de proveedor). `available_at` y `lease_until` son los `next_attempt_at` y `locked_until` del pedido.
    - Tipos y payload (versión 1): `lead.created` → `{ "source": "web_form" | "whatsapp" | "other" }`; `lead.stage_changed` → `{ "stageFrom": LeadStage, "stageTo": LeadStage }`.
-   - Entrega **al menos una vez**: n8n deduplica por `id` de evento. No se promete *exactly-once* ante efectos externos (correos o WhatsApp ya enviados).
+   - Entrega **al menos una vez**: n8n deduplica por `id` de evento. No se promete *exactly-once* ante efectos externos (correos ya enviados).
 10. **Eventos emitidos:**
-    - `lead.created`: alta web (F3) y alta manual del CRM (F1), en la misma sentencia o `db.batch` que el lead. n8n decide qué hacer según `source` (Pregunta abierta 4).
+    - `lead.created`: alta web (F3) y alta manual del CRM (F1), en la misma sentencia o `db.batch` que el lead. n8n decide qué hacer según `source`: el aviso de "nuevo lead" solo para `web_form`; el borrador del mensaje para todos (resuelto por el usuario).
     - `lead.stage_changed` (F5): cada cambio de etapa efectivo del CRM, en la misma sentencia que el cambio y su actividad. `no_change` y `not_found` no emiten evento.
 11. **API privada para n8n (F2, F5):**
     - Autenticación: cabecera `Authorization: Bearer <N8N_API_TOKEN>`, comparada en tiempo constante (SHA-256 de ambos valores + comparación sin cortocircuito). El token es un Secret de Cloudflare (≥ 32 caracteres) y una credencial de n8n; nunca `DATABASE_URL`.
@@ -84,16 +86,19 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
     - **Claim:** reclama hasta N eventos listos (`pending` con `available_at <= now()`, o `processing` con lease vencida) en una sola sentencia con `FOR UPDATE SKIP LOCKED`. Cada evento reclamado pasa a `processing`, suma 1 a `attempts` y recibe un `lease_token` nuevo y `lease_until = now() + 5 min`. Lote por defecto 10, máximo 25. Los eventos con lease vencida y `attempts >= 8` pasan a `dead` (`last_error_code = 'lease_expired'`) en el mismo `db.batch`, antes del claim.
     - **Ack:** solo con el `lease_token` vigente (`status = 'processing'` y `lease_until > now()`) → `succeeded`, `processed_at = now()`, lease borrada. Si no, 409 `lease_lost`.
     - **Fail:** solo con el `lease_token` vigente. Si `attempts >= 8` → `dead` y `processed_at = now()`; si no → `pending` con `available_at = now() + least(3600, 30 · 2^(attempts−1)) s × aleatorio [0,8; 1,2]` (30 s, 1 min, 2 min… con jitter). Guarda `last_error_code`.
-    - **Lectura del lead:** solo los campos que n8n necesita para componer el aviso y el mensaje: id, nombre, teléfono, etapa, origen, viaje (slug y título) o destino, email del responsable (o `null`), archivado y fecha de alta. **No** expone email del lead, ciudad, notas, historial, consentimiento ni ids de usuarios.
+    - **Lectura del lead:** solo los campos que n8n necesita para el aviso por correo y el borrador: id, nombre completo, nombre de pila (`firstName`, primera palabra del nombre, calculada en el servidor para facilitar la minimización hacia Gemini), email del lead (solo para el aviso al usuario; nunca va a Gemini), teléfono, etapa, origen, viaje (slug y título) o destino, email del responsable (o `null`), archivado y fecha de alta. **No** expone ciudad, notas, historial, consentimiento ni ids de usuarios.
     - **(F5) Actividad de automatización:** n8n registra en el historial del lead que preparó un mensaje (`type = 'automation'`, autor nulo, texto ≤ 500), vinculada al evento que la originó. Idempotente por evento.
 12. **Qué hace n8n (guía en el README, fuera del código):**
     - Cada minuto: claim → por cada evento: deduplicar por `id` → leer el lead → si está archivado, ack y fin.
-    - **Aviso al usuario** por correo y WhatsApp cuando entra un lead (`lead.created` con `source = "web_form"`).
-    - **Preparar el mensaje predefinido** según la etapa (`new` para `lead.created`, `stageTo` para `lead.stage_changed`). Si la etapa actual del lead ya no coincide con la del evento, el evento está obsoleto: ack sin preparar nada.
-    - "Preparar" = n8n compone el texto con la plantilla de la etapa y construye un enlace `https://wa.me/<teléfono>?text=<texto>` que envía **al usuario o al comercial** (correo y WhatsApp propio). El comercial lo abre y lo envía a mano desde WhatsApp Business App. Nunca se envía automáticamente al runner.
-    - **Plantillas en n8n** (decisión recomendada para el MVP; Pregunta abierta 5): un nodo por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`), editable sin desplegar el Worker.
-    - (F5, opcional) Registrar la actividad `automation` ("Mensaje de etapa Cotizado preparado y enviado al comercial."), sin copiar el texto del mensaje.
-    - Éxito → ack. Error → fail con un código corto (`smtp_error`, `whatsapp_error`, `lead_not_found`…).
+    - **Aviso al usuario solo por correo** cuando entra un lead (`lead.created` con `source = "web_form"`). Las altas manuales emiten `lead.created`, pero no generan este aviso (resuelto por el usuario). El correo incluye nombre, email y teléfono del lead, el viaje o destino, y el borrador del mensaje con su enlace `wa.me`.
+    - **Preparar el mensaje para el runner** según la etapa (`new` para `lead.created`, `stageTo` para `lead.stage_changed`). Si la etapa actual del lead ya no coincide con la del evento, el evento está obsoleto: ack sin preparar nada.
+    - **Borrador con Gemini desde n8n** (resuelto por el usuario; encaja con `platform-neon-foundation.md`, donde Gemini es opcional):
+      - un nodo de Gemini en n8n con un **prompt base por etapa** (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`), en español y con el tono de la marca; la API key de Gemini se guarda **solo** como credencial de n8n;
+      - **minimización de datos:** a Gemini solo se envían `firstName` (nombre de pila), la etapa, el viaje (`trip.title`) o el destino (`destinationText`) y un contexto mínimo fijo del prompt (marca, tipo de viaje). **Nunca** se envían teléfono, email, apellidos, notas, historial ni ids. Ampliar estos datos exige una decisión explícita del usuario y un cambio de esta spec. Motivo adicional: en el plan gratuito de la API de Gemini, Google puede usar el contenido enviado para mejorar sus productos;
+      - **plantilla fija de respaldo por etapa** en n8n: si Gemini falla, tarda más de 20 s o devuelve un texto vacío o de más de 1000 caracteres, n8n usa la plantilla de respaldo de esa etapa, con `firstName` y el viaje o destino. El fallo de Gemini **no** marca el evento como fallido;
+      - **revisión humana obligatoria:** el texto (de Gemini o de respaldo) va en el correo al usuario como borrador, con el enlace `https://wa.me/<teléfono sin +>?text=<texto>`. El usuario o el comercial lo revisan, lo editan si hace falta en WhatsApp y lo envían a mano desde WhatsApp Business App. Nada se envía automáticamente al runner.
+    - (F5, opcional) Registrar la actividad `automation` ("Borrador para la etapa Cotizado enviado por correo al usuario."), sin copiar el texto del mensaje.
+    - Éxito → ack. Error → fail con un código corto (`smtp_error`, `lead_not_found`…).
     - La asignación de responsable no la hace n8n: es manual en el CRM.
 13. **Seguridad del CRM sin cambios:** la API de integración no usa sesiones ni `requirePermission`; el CRM sigue protegido por `leads.manage`. Un token de n8n no da acceso al CRM y una sesión del CRM no da acceso a la API de integración.
 
@@ -115,9 +120,13 @@ Fase 1 (modelo, outbox, entorno y alta manual con evento):
   - `getEnv()` no cambia: no exige `N8N_API_TOKEN` ni `TURNSTILE_SECRET_KEY`, y sus tests existentes pasan;
   - `getIntegrationEnv()` devuelve `null` sin token, lanza `"Invalid environment fields: N8N_API_TOKEN"` con un token de 31 caracteres (sin el valor) y devuelve el token válido;
   - `getTurnstileEnv()` devuelve `null` sin secreto y rechaza las claves de prueba documentadas por Cloudflare fuera de `NODE_ENV=development`.
-- [ ] (F1) Dado `createLead` (alta manual de `crm-leads-pipeline`), entonces en la misma escritura atómica inserta además un evento `lead.created` `pending` con payload `{ "source": <origen> }` (unit test). `getLeadList` devuelve los leads sin responsable con `owner: null` (LEFT JOIN) en lugar de omitirlos (unit test).
+- [ ] (F1) Dado `createLead` (alta manual de `crm-leads-pipeline`), entonces en la misma escritura atómica inserta además un evento `lead.created` `pending` con payload `{ "source": <origen> }` (unit test). `getLeadList` devuelve los leads sin responsable con `owner: null` (LEFT JOIN) en lugar de omitirlos, y con el filtro `owner: "unassigned"` devuelve solo los de `owner_user_id IS NULL` (también en los contadores del embudo) (unit test). `parseLeadListQuery` convierte `responsable=sin-asignar` en `owner: "unassigned"` y `leadListHref` hace lo inverso (unit test).
+- [ ] (F1) Correcciones de la revisión de `crm-leads-pipeline` F1, hechas aquí porque esta fase ya modifica esos archivos (las verifica también la F2 del pipeline) (unit test):
+  - en `parseLeadListQuery`, solo `responsable=mios` produce `owner: "mine"` y solo `responsable=sin-asignar` produce `owner: "unassigned"`; los literales `mine` y `unassigned` en la URL son inválidos y equivalen a "sin filtro";
+  - `blankToNull` de `leads.schema.ts` trata una clave ausente como `""` (→ `null`), así que un opcional que falta nunca produce un mensaje de zod en inglés;
+  - el README sustituye la frase "Aún no hay tablas de leads, organizaciones de colaboradores ni captura durable de leads…" por el estado real (tablas de leads en `0002`, captura y outbox en `0003` según esta spec; organizaciones pendientes).
 - [ ] (F1) Dado `leadActivityTypeSchema`, entonces incluye `automation` y sigue coincidiendo con `leadActivityTypeEnum.enumValues` (unit test). `phoneSchema` se exporta sin cambiar su comportamiento.
-- [ ] (F1) Dado el README, entonces documenta: aplicar `0003` después de `0002` en **dos bloques** (primero `ALTER TYPE … ADD VALUE 'automation'` solo y confirmado; después el resto entre `BEGIN;` y `COMMIT;`), sin GRANT ni reaplicar migraciones; y cómo crear los Secrets `N8N_API_TOKEN` y `TURNSTILE_SECRET_KEY` (`npx wrangler secret put`) y la variable de build `NEXT_PUBLIC_TURNSTILE_SITE_KEY`.
+- [ ] (F1) Dado el README, entonces documenta: aplicar `0003` después de `0002` en **dos bloques** (primero `ALTER TYPE … ADD VALUE 'automation'` solo y confirmado; después el resto entre `BEGIN;` y `COMMIT;`), sin GRANT ni reaplicar migraciones; y cómo crear los Secrets `N8N_API_TOKEN` y `TURNSTILE_SECRET_KEY` y la variable de build `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. La parte de Turnstile es una **guía paso a paso para una persona sin experiencia técnica** (ver Diseño técnico, "Guía de Turnstile en el README"): crear el widget en el panel de Cloudflare, copiar las dos claves, dónde pegar cada una (`.env.local`, `.dev.vars`, Secrets del Worker y variables de build) y cómo comprobar que funciona, sin que el README contenga ningún valor real.
 - [ ] (F1) `npm run lint`, `npx vitest run` y `npm run build` sin errores. Tamaño del Worker medido y registrado.
 
 Fase 2 (API privada para n8n):
@@ -126,10 +135,10 @@ Fase 2 (API privada para n8n):
 - [ ] (F2) Dado un evento reclamado, cuando hago `POST …/events/<id>/ack` con su `leaseToken`, entonces queda `succeeded` con `processed_at`. Con un token anterior, otro id o la lease vencida → 409 `{ "error": "lease_lost" }`.
 - [ ] (F2) Dado un evento reclamado con `attempts = 1`, cuando hago `POST …/events/<id>/fail` con `{ "leaseToken", "errorCode": "smtp_error" }`, entonces vuelve a `pending` con `available_at` entre 24 y 36 s en el futuro y `last_error_code = 'smtp_error'`. Con `attempts = 8` queda `dead`. `errorCode` con espacios o mayúsculas → 400.
 - [ ] (F2) Dado un evento `processing` con la lease vencida, cuando otro claim se ejecuta, entonces se reclama de nuevo con un `leaseToken` distinto y el ack con el token viejo devuelve 409. Si ya tenía `attempts = 8`, pasa a `dead` con `last_error_code = 'lease_expired'` y no se entrega.
-- [ ] (F2) Dado `GET /api/integrations/n8n/leads/<id>`, entonces devuelve exactamente `{ id, fullName, phone, stage, source, trip, destinationText, owner, archived, createdAt }` (contrato de API). Un UUID inexistente → 404 `{ "error": "not_found" }`; `abc` → 400. La respuesta no incluye email del lead, ciudad, consentimiento, ids de usuario ni actividades (unit test).
+- [ ] (F2) Dado `GET /api/integrations/n8n/leads/<id>`, entonces devuelve exactamente `{ id, fullName, firstName, email, phone, stage, source, trip, destinationText, owner, archived, createdAt }` (contrato de API). `firstName` es la primera palabra de `fullName` (`"Ana María Pérez"` → `"Ana"`). Un UUID inexistente → 404 `{ "error": "not_found" }`; `abc` → 400. La respuesta no incluye ciudad, consentimiento, notas, ids de usuario ni actividades (unit test).
 - [ ] (F2) Dado un error de base de datos en cualquier ruta, entonces responde 500 `{ "error": "internal_error" }`, registra solo `"integrations: request failed"` y no incluye el mensaje original (unit test).
 - [ ] (F2, manual del usuario, en una rama de desarrollo de Neon con `npm run dev`) Dos claims lanzados a la vez con `curl` no devuelven el mismo evento; reiniciar n8n con eventos `processing` no los pierde (se recuperan al vencer la lease).
-- [ ] (F2) Dado el README, entonces la sección "Automatizaciones con n8n" describe: credencial Bearer en n8n, workflow (Schedule cada minuto → claim → deduplicar por `id` → leer lead → aviso y mensaje preparado → ack o fail), plantillas por etapa en n8n, enlace `wa.me`, códigos de error sugeridos y que con n8n apagado los eventos esperan en Neon.
+- [ ] (F2) Dado el README, entonces la sección "Automatizaciones con n8n" describe: credencial Bearer en n8n, workflow (Schedule cada minuto → claim → deduplicar por `id` → leer lead → borrador con Gemini o plantilla de respaldo → correo al usuario → ack o fail), el nodo de Gemini con un prompt base por etapa en español, la lista cerrada de datos que se envían a Gemini (`firstName`, etapa, viaje o destino), las 6 plantillas fijas de respaldo, la revisión humana antes de enviar al runner, el enlace `wa.me` dentro del correo, códigos de error sugeridos y que con n8n apagado los eventos esperan en Neon. No menciona otros canales de aviso que no sean el correo.
 - [ ] (F2) Lint, tests y build sin errores. Worker medido.
 
 Fase 3 (captura en servidor):
@@ -156,7 +165,7 @@ Fase 3 (captura en servidor):
 - [ ] (F3, manual del usuario, en una rama de desarrollo de Neon) Dada la sentencia de `createWebLead` ejecutada con un payload de outbox inválido (forzado en el SQL Editor), entonces no queda ni el lead ni la actividad: la escritura es atómica.
 - [ ] (F3) Lint, tests y build sin errores. Worker medido.
 
-Fase 4 (formulario de la landing conectado):
+Fase 4 (formulario de la landing conectado). Requisito previo: el usuario ha confirmado el texto legal definitivo del consentimiento y de la nota de uso de datos (o mantiene expresamente el provisional):
 - [ ] (F4) Dado `/contacto` en `npm run dev` con las claves de prueba de Turnstile, cuando completo el formulario con destino Santiago, marco el consentimiento y pulso "Enviar mi consulta", entonces el botón pasa a "Enviando…", veo "¡Listo! Recibimos tu consulta. Te escribiremos por WhatsApp." con la consulta preparada, "Copiar consulta" y "Abrir WhatsApp ↗", y en la base hay un lead `web_form` en `new` sin responsable, su actividad `created` y un evento `lead.created` `pending`.
 - [ ] (F4) Dado el mismo envío repetido (doble clic o reenvío sin editar), entonces solo existe un lead. Si edito un campo tras el éxito y vuelvo a enviar, se crea un lead nuevo con otro `submissionId` (salvo la ventana de 10 minutos por teléfono).
 - [ ] (F4) Dado el destino "Panamá · Quiero novedades", entonces el lead queda con `trip_id` nulo y `destination_text = 'Panamá'`. Con Santiago y el viaje `maraton-santiago-2027` publicado, queda con su `trip_id`.
@@ -164,7 +173,7 @@ Fase 4 (formulario de la landing conectado):
 - [ ] (F4) Dados errores de validación del servidor, entonces cada campo muestra su mensaje debajo con `aria-invalid`, y lo escrito se conserva.
 - [ ] (F4) Dado `/contacto`, entonces ya no aparecen "VISTA DE DEMOSTRACIÓN", "Los datos no se envían ni se guardan", "Entiendo que es una demostración…" ni "La consulta no se envía desde esta demostración."; aparecen el consentimiento `web-form-v1` del Requisito 6 y la nota de uso de datos del Diseño técnico.
 - [ ] (F4) Dado el HTML de `/contacto`, entonces el campo `website` está dentro de un contenedor `aria-hidden="true"` fuera de pantalla, con `tabIndex={-1}` y `autoComplete="off"`.
-- [ ] (F4) Dado `?destino=santiago-2027` (enlaces antiguos), entonces el selector muestra Santiago (valor por defecto). `MobileCta` y `HeroCarousel` enlazan a `/contacto?destino=maraton-santiago-2027`. `buildInquiryMessage` mantiene el texto exacto de cada destino (unit test).
+- [ ] (F4) Dado `?destino=santiago-2027` (enlaces antiguos), entonces el selector muestra Santiago (valor por defecto). `MobileCta`, `HeroCarousel` y el CTA de `TripDetail` enlazan a `/contacto?destino=maraton-santiago-2027`. `buildInquiryMessage` mantiene el texto exacto de cada destino (unit test).
 - [ ] (F4) Dada la pestaña Red al enviar, entonces hay una única petición POST a `/contacto` (Server Action) más las de `challenges.cloudflare.com`; ninguna a n8n ni a otros dominios.
 - [ ] (F4) Sin `NEXT_PUBLIC_TURNSTILE_SITE_KEY` en el build, entonces el widget no se renderiza, el envío devuelve `verification_failed` y se ofrece WhatsApp.
 - [ ] (F4) Lint, tests y build sin errores. Worker medido.
@@ -176,7 +185,7 @@ Fase 5 (cambio de etapa y actividad de n8n):
   - el mismo `eventId` otra vez → 200 `{ "status": "duplicate" }` sin insertar;
   - lead archivado o inexistente, o evento de otro lead → 404 `{ "error": "not_found" }`;
   - `body` vacío o de más de 500 caracteres → 400 (unit test).
-- [ ] (F5) Dado el README, entonces la guía de n8n incluye las plantillas por etapa, cómo descartar eventos obsoletos (etapa actual distinta de `stageTo`) y la llamada opcional de actividad.
+- [ ] (F5) Dado el README, entonces la guía de n8n incluye el borrador para `lead.stage_changed` (prompt y respaldo de la etapa `stageTo`), cómo descartar eventos obsoletos (etapa actual distinta de `stageTo`) y la llamada opcional de actividad.
 - [ ] (F5) Lint, tests y build sin errores. Worker medido.
 
 ## Diseño técnico
@@ -192,7 +201,8 @@ Fase 5 (cambio de etapa y actividad de n8n):
 - **Turnstile con site key `NEXT_PUBLIC_TURNSTILE_SITE_KEY`:** es pública y Next la incrusta en el build. Hay que definirla en `.env.local` (desarrollo y `npm run deploy` local) y como variable de build en Workers Builds. `scripts/strip-env-secrets.mjs` ya conserva las `NEXT_PUBLIC_*`. El secreto `TURNSTILE_SECRET_KEY` es un Secret de Cloudflare. En desarrollo se usan las claves de prueba documentadas por Cloudflare (site key `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`); como su respuesta no trae el `hostname` ni la `action` reales, con `NODE_ENV=development` y el secreto de prueba solo se exige `success` (el developer verifica la respuesta real de la clave de prueba). Las claves de prueba se rechazan fuera de desarrollo.
 - **Widget sin dependencias:** no hay componente de Turnstile en shadcn (`npx shadcn@latest search @shadcn -q turnstile` y `-q captcha`: sin resultados). Se carga el script oficial con `next/script` en modo explícito; no se añade ningún paquete npm.
 - **Comparación del token en tiempo constante sin dependencias:** `crypto.subtle.digest("SHA-256")` de ambos valores y comparación byte a byte con acumulador XOR. Funciona igual en Node (`next dev`) y en Workers, y no filtra la longitud.
-- **Plantillas en n8n** (recomendado para el MVP): cambiar un texto no exige desplegar. Si más adelante el comercial debe editarlas, se crea una tabla en otra spec (Pregunta abierta 5).
+- **Borradores con Gemini en n8n y plantillas de respaldo en n8n** (resuelto por el usuario): cambiar un prompt o una plantilla no exige desplegar, y la API key de Gemini nunca toca el Worker. `firstName` se calcula en el servidor para que el nodo de Gemini no tenga que recortar el nombre completo y la minimización sea explícita en el contrato. Una tabla de plantillas editable desde el CRM iría en otra spec, si se necesita.
+- **Aviso solo por correo** (resuelto por el usuario): el enlace `wa.me` con el borrador va dentro del correo; no hay otros canales de aviso.
 - **Claim por `POST`** (cambia el estado); lectura del lead por `GET`.
 - **Tamaño del Worker:** F1 no añade rutas; F2 añade 4 route handlers; F5 añade 1. La última tarea de cada fase ejecuta, en Linux/WSL y sin desplegar, `npm run build:worker` y `npx wrangler deploy --dry-run --outdir <scratch>`. Registra el gzip frente a la última medición y al umbral de consulta de 2 MiB (límite Free: 3 MiB). Si se supera, se detiene y se consulta.
 
@@ -309,8 +319,9 @@ export function getTurnstileEnv(): { TURNSTILE_SECRET_KEY: string; isTestSecret:
 |---|---|---|
 | `button`, `input`, `label`, `native-select` | shadcn (instalado) | Sin cambios; los usa `ContactForm` |
 | `checkbox` de shadcn | descartado | La landing ya usa `<input type="checkbox">` nativo con `required` (validación del navegador); se mantiene |
-| `utils/inquiry.ts` | existente | Usa `INQUIRY_DESTINATIONS` de `@/lib/inquiryDestinations`; elimina `DESTINATION_IDS`/`DESTINATION_NAMES`; la cláusula de precios se aplica a `maraton-santiago-2027`; `parseDestinationId` cae a `maraton-santiago-2027` |
-| `components/ContactSection.tsx` | existente (Server) | Importa `submitWebLeadAction` de `@/modules/crm` y lo pasa como `action`. Sustituye la nota "VISTA DE DEMOSTRACIÓN" por "CÓMO USAMOS TUS DATOS" + "Guardamos tu consulta para que un asesor te contacte por WhatsApp o correo. Sin pagos ni compromiso de reserva." (provisional, Pregunta abierta 1) |
+| `utils/inquiry.ts` | existente | Usa `INQUIRY_DESTINATIONS` de `@/lib/inquiryDestinations`; elimina `DESTINATION_IDS`/`DESTINATION_NAMES`; `DestinationId` pasa a ser un alias de `InquiryDestinationId`; la cláusula de precios se aplica a `maraton-santiago-2027`; `parseDestinationId` cae a `maraton-santiago-2027` |
+| `utils/trips.ts` | existente (landing F2) | `destinationId: "maraton-santiago-2027"` (así `TripDetail` enlaza con el slug sin cambiar su código) |
+| `components/ContactSection.tsx` | existente (Server) | Importa `submitWebLeadAction` de `@/modules/crm` y lo pasa como `action`. Sustituye la nota "VISTA DE DEMOSTRACIÓN" por "CÓMO USAMOS TUS DATOS" + "Guardamos tu consulta para que un asesor te contacte por WhatsApp o correo. Sin pagos ni compromiso de reserva." (provisional hasta que el usuario confirme el texto legal, requisito previo de F4) |
 | `components/ContactForm.tsx` | existente (`"use client"`) | Props `{ defaultDestination, action }`. `onSubmit` + `startTransition` (conserva lo escrito): añade `submissionId` (ref; se genera al enviar si no existe y se borra tras un éxito o al editar después de un éxito) y llama a `action`. Botón "Enviar mi consulta" / "Enviando…" (deshabilitado). Errores por campo con `aria-invalid`, mensaje general en `role="alert"`, resultado en `role="status"` (Requisito 7). Consentimiento `web-form-v1`. Honeypot `website`. Opciones del selector desde `INQUIRY_DESTINATIONS`, con los mismos textos visibles. Renderiza `TurnstileWidget` si hay site key |
 | `components/TurnstileWidget.tsx` | nuevo (`"use client"`; no existe en shadcn ni en el proyecto; un solo dominio, se sube a `components/shared` si el registro de runners lo necesita) | Props `{ siteKey: string; action: string; resetSignal: number }`. `next/script` con `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit`; `turnstile.render(ref, { sitekey, action, language: "es", theme: "light" })` dentro del `<form>` (inyecta el campo oculto `cf-turnstile-response`); `turnstile.reset()` cuando cambia `resetSignal`; `turnstile.remove()` al desmontar. Tipado mínimo local de `window.turnstile`, sin `@types` |
 | `components/MobileCta.tsx`, `components/HeroCarousel.tsx` | existente | `href` → `/contacto?destino=maraton-santiago-2027` |
@@ -390,8 +401,10 @@ type FailRequest = { leaseToken: string; errorCode: string };  // /^[a-z0-9_]{1,
 // GET /api/integrations/n8n/leads/{id}
 type IntegrationLead = {
   id: string;
-  fullName: string;
-  phone: string;                                        // E.164, ready for wa.me (without "+")
+  fullName: string;                                     // for the email to the user; never sent to Gemini
+  firstName: string;                                    // first word of fullName: the only name sent to Gemini
+  email: string | null;                                 // lead email, for the email to the user; never sent to Gemini
+  phone: string;                                        // E.164, ready for wa.me (without "+"); never sent to Gemini
   stage: "new" | "contacted" | "quoted" | "reserved" | "paid" | "lost";
   source: "whatsapp" | "web_form" | "other";
   trip: { slug: string; title: string } | null;
@@ -411,28 +424,49 @@ type ActivityRequest = { eventId: string; body: string };      // body 1–500, 
 - **F1 de esta spec** (requiere `crm-leads-pipeline` F1 cerrada):
   - `createLead` añade el `INSERT` en `outbox_events` (`lead.created`, `{ source }`) a su misma escritura atómica.
   - `getLeadList` usa `LEFT JOIN profiles` para el responsable; `LeadListItem.owner` pasa a `{ userId; email; active } | null`.
+  - Filtro "Sin asignar" en datos: `LeadListFilters.owner` admite `"unassigned"`; `parseLeadListQuery`/`leadListHref` lo traducen desde y hacia `responsable=sin-asignar` (como `mios` ↔ `mine`); `getLeadList` filtra `owner_user_id IS NULL`, también en los contadores del embudo.
   - `leads.schema.ts` exporta `phoneSchema` y añade `automation` a `leadActivityTypeSchema` (el formulario de actividades de su F4 sigue limitado a `note`/`call`/`message`).
+  - **Por qué aquí y no en una tarea previa de la F2 del pipeline:** al hacer nullable `owner_user_id` en `0003`, los tipos que infiere Drizzle cambian y `leads.service.ts` debe adaptarse en la misma fase para que el build siga en verde. Además, la F2 del pipeline ya tiene 15 archivos. La enmienda de `crm-leads-pipeline` solo recoge lo que se construye en sus F2–F4 (UI y servicios que aún no existen).
 - **F5 de esta spec** (requiere `crm-leads-pipeline` F3 cerrada): `changeLeadStage` añade a su misma sentencia el `INSERT` del evento `lead.stage_changed`, solo cuando el cambio es efectivo.
 
 ### Guía de n8n (README, F2 y F5)
 Sección "Automatizaciones con n8n", sin secretos ni datos reales:
-1. Credencial "Header Auth" en n8n con `Authorization: Bearer <token>`; el mismo valor se guarda como Secret `N8N_API_TOKEN` en Cloudflare.
-2. Workflow: *Schedule Trigger* (cada minuto) → *HTTP Request* `POST …/events/claim` → *Split Out* `events` → deduplicar por `id` (*Remove Duplicates* entre ejecuciones o una tabla de n8n) → `GET …/leads/{leadId}` → si `archived` o la etapa actual ≠ la del evento, ack → *Switch* por tipo y etapa → plantilla (*Set*/*Code*) → enlace `https://wa.me/<phone sin +>?text=<encodeURIComponent(texto)>` → *Send Email* (SMTP del usuario) y aviso por WhatsApp al usuario (proveedor en n8n, Pregunta abierta 3) → (F5) `POST …/leads/{id}/activities` → `POST …/events/{id}/ack`. Rama de error → `POST …/events/{id}/fail` con un código corto.
-3. El aviso de "nuevo lead" solo para `source = "web_form"`; el mensaje preparado, para todas las etapas que tengan plantilla.
-4. n8n apagado: los eventos esperan; al volver, se recogen. Tras 8 intentos fallidos, quedan `dead` (consultables en el SQL Editor; reenvío en una spec futura).
-5. Regla WAF opcional (plan Free, sin código): limitar `POST /contacto` por IP desde el panel de Cloudflare.
+1. Credencial "Header Auth" en n8n con `Authorization: Bearer <token>`; el mismo valor se guarda como Secret `N8N_API_TOKEN` en Cloudflare. Credencial SMTP del correo del usuario y credencial de Gemini (API key de Google AI Studio), ambas solo en n8n.
+2. Workflow: *Schedule Trigger* (cada minuto) → *HTTP Request* `POST …/events/claim` → *Split Out* `events` → deduplicar por `id` (*Remove Duplicates* entre ejecuciones o una tabla de n8n) → `GET …/leads/{leadId}` → si `archived` o la etapa actual ≠ la del evento, ack → *Switch* por etapa (`new` para `lead.created`, `stageTo` para `lead.stage_changed`) → **nodo de Gemini** con el prompt de la etapa → si falla, plantilla de respaldo → enlace `https://wa.me/<phone sin +>?text=<encodeURIComponent(borrador)>` → *Send Email* al usuario → (F5) `POST …/leads/{id}/activities` → `POST …/events/{id}/ack`. Rama de error (correo no enviado, lead no encontrado) → `POST …/events/{id}/fail` con un código corto.
+3. **Datos hacia Gemini (lista cerrada):** solo `firstName`, la etapa y `trip.title` o `destinationText`, más el contexto fijo del prompt. El nodo de Gemini no recibe el item completo del lead: se construye su entrada con una expresión que solo toma esos campos. Nunca se envían teléfono, email, apellidos, notas ni historial.
+4. **Prompt base por etapa** (en español; el usuario ajusta el tono): instrucciones comunes ("Eres el asistente comercial de Carreras Viajeras, una agencia peruana de viajes para runners. Escribe un mensaje de WhatsApp breve (máximo 600 caracteres), cálido y en español neutro de Perú, tuteando, sin inventar precios, fechas, cupos ni condiciones que no te doy. Firma como «Equipo Carreras Viajeras». Devuelve solo el texto del mensaje.") más el objetivo de cada etapa:
+   - `new`: dar la bienvenida, agradecer el interés en el viaje o destino y preguntar qué distancia y fechas le interesan;
+   - `contacted`: retomar la conversación y ofrecer resolver dudas;
+   - `quoted`: recordar que tiene una cotización y ofrecer ayuda para reservar;
+   - `reserved`: confirmar la reserva y anunciar los próximos pasos sin detallar pagos;
+   - `paid`: agradecer y dar la bienvenida al viaje;
+   - `lost`: despedirse con cordialidad y dejar la puerta abierta a próximos viajes.
+5. **Plantillas fijas de respaldo** (una por etapa, en un nodo *Set* o *Code*), p. ej. `new`: "Hola {firstName}, gracias por escribirnos por {viaje o destino}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan?". Se usan si Gemini falla, tarda más de 20 s o devuelve un texto vacío o de más de 1000 caracteres; ese fallo no marca el evento como fallido.
+6. **Correo al usuario:** asunto "Nuevo lead: {fullName} · {viaje o destino}" (`lead.created` web) o "Lead {fullName}: etapa {etapa}" (cambio de etapa y altas manuales), con nombre, email y teléfono del lead, el borrador y el botón o enlace `wa.me`, y el aviso "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.". El aviso de "nuevo lead" solo se envía para `source = "web_form"`; para las altas manuales, el correo solo lleva el borrador de la etapa.
+7. n8n apagado: los eventos esperan; al volver, se recogen. Tras 8 intentos fallidos quedan `dead`, consultables en el SQL Editor (decisión provisional P2).
+8. Regla WAF opcional (plan Free, sin código): limitar `POST /contacto` por IP desde el panel de Cloudflare.
+
+### Guía de Turnstile en el README (F1)
+Subsección "Activar la protección antispam (Turnstile)", escrita para una persona sin experiencia técnica, con pasos numerados y sin valores reales:
+1. Entrar en el panel de Cloudflare con la cuenta del dominio → menú **Turnstile** → **Add widget**.
+2. Nombre: "Carreras Viajeras – formulario de contacto"; hostname: `carreras-viajeras.mentec.dev`; modo: **Managed**; sin preclearance. Guardar.
+3. Cloudflare muestra dos claves: la **Site Key** (pública) y la **Secret Key** (privada). Copiarlas a un lugar seguro y no compartir nunca la Secret Key por chat ni correo.
+4. **En tu computadora:** abrir `.env.local` y pegar `NEXT_PUBLIC_TURNSTILE_SITE_KEY=<Site Key>` y `TURNSTILE_SECRET_KEY=<Secret Key>`; en `.dev.vars`, solo `TURNSTILE_SECRET_KEY`. Para probar en local sin el widget real, usar las claves de prueba de Cloudflare indicadas en el README (solo funcionan con `npm run dev`).
+5. **En Cloudflare (producción):** Workers & Pages → `carreras-viajeras` → Settings → **Variables and Secrets** → Add → tipo **Secret**, nombre `TURNSTILE_SECRET_KEY`, valor la Secret Key. Repetir con `N8N_API_TOKEN`. Como alternativa para quien use la terminal: `npx wrangler secret put TURNSTILE_SECRET_KEY`.
+6. **Variable de build:** Settings → **Build** → *Variables and secrets* → añadir `NEXT_PUBLIC_TURNSTILE_SITE_KEY` con la Site Key (es pública y se incrusta al compilar). Si se despliega desde la computadora con `npm run deploy`, basta con que esté en `.env.local`.
+7. **Comprobar:** tras el siguiente despliegue (lo autoriza el usuario), abrir `/contacto`; debe verse la casilla de verificación de Cloudflare y, al enviar una consulta de prueba, el mensaje "¡Listo! Recibimos tu consulta…". Si aparece "No pudimos verificar el envío", revisar que el hostname del widget y las dos claves sean correctos.
+8. Qué hacer si una clave se filtra: en Turnstile → el widget → **Rotate secret key**, y actualizar el Secret del Worker.
 
 ### Relación con otras specs
-- **`crm-leads-pipeline.md` necesita una enmienda** (la hace el agente Spec en esa spec, con nueva aprobación; esta spec no la edita), **antes de su F2**, para que su UI muestre los leads de esta captura:
-  1. `owner` opcional en `LeadListItem`/`LeadDetail`; "Sin asignar" en `LeadTable` y `LeadDetails`, y opción de filtro "Sin asignar" (`responsable=sin-asignar`) para la bandeja de entrada.
-  2. `changeLeadOwner` acepta un lead sin responsable (`owner_user_id IS DISTINCT FROM $nuevo`) y registra `owner_changed` con `owner_from` nulo ("Sin asignar → b@…").
-  3. `getLeadById` con `LEFT JOIN` para responsable y autor; "Registrado por: Formulario web" si `created_by` es nulo.
-  4. `LeadTimeline` y `LEAD_ACTIVITY_LABELS`: etiqueta `automation` "Automatización (n8n)" y autor nulo mostrado como "Formulario web" (`created`) o "n8n" (`automation`).
-  5. Su Requisito 3 y su "Preparación para la captura automática" pasan a remitir a esta spec.
+- **`crm-leads-pipeline.md` enmendada** (vuelve a `Estado: borrador` y necesita nueva aprobación; su F1 está implementada en `ff28b28`). La enmienda añade a sus F2–F4, sin tocar los criterios de su F1:
+  1. (F2) "Sin asignar" en `LeadTable` y opción "Sin asignar" en el filtro "Responsable" (`responsable=sin-asignar`), con el backend que aporta la F1 de esta spec.
+  2. (F3) `getLeadById` con `LEFT JOIN` para responsable y autor; `LeadDetails` muestra "Sin asignar" y "Registrado por: Formulario web" si `created_by` es nulo; `LeadOwnerForm` sin preselección para un lead sin responsable; `changeLeadOwner` acepta asignar el primer responsable (`owner_user_id IS DISTINCT FROM $nuevo`) y registra `owner_changed` con `owner_from` nulo.
+  3. (F4) `LeadTimeline` y `LEAD_ACTIVITY_LABELS`: etiqueta `automation` "Automatización (n8n)", autor nulo mostrado como "Formulario web" (`created`) o "n8n" (`automation`), y "Sin asignar → b@…" en el primer `owner_changed`.
+  4. Su Requisito 3, "No incluye" y "Preparación para la captura automática" remiten a esta spec.
 
-  Orden recomendado: `crm-leads-pipeline` F1 → enmienda aprobada → F1 de esta spec → `crm-leads-pipeline` F2… Las demás fases de esta spec no tocan la UI del CRM.
+  **Orden:** `crm-leads-pipeline` F1 (hecha) → aprobación de esta spec y de la enmienda → F1 de esta spec → `crm-leads-pipeline` F2 (requisito previo añadido en esa spec) → … Las demás fases de esta spec no tocan la UI del CRM.
 - **No se ejecutan en paralelo** con esta spec: `crm-leads-pipeline` F1 (comparte `lib/db-schema.ts`, `drizzle/` y `modules/crm/services/leads.service.ts`) ni su F3 respecto a nuestra F5 (`changeLeadStage`). Tampoco las fases de `landing-public-site` que tocan `HeroCarousel` o `ContactForm` en paralelo con nuestra F4.
-- **`landing-public-site.md`:** sus criterios de F1 "no se crea un schema zod" y "la pestaña Red no registra ninguna petición al enviar" quedan superados por la F4 de esta spec. Su F2 (`TripDetail`, `DestinationsSection`) debe enlazar con `?destino=maraton-santiago-2027` (o `INQUIRY_DESTINATIONS`). Su F3 (`/cuenta`) no cambia.
+- **`landing-public-site.md`:** sus criterios de F1 "no se crea un schema zod" y "la pestaña Red no registra ninguna petición al enviar" quedan superados por la F4 de esta spec. Su F2 ya está en `main`: `modules/landing/utils/trips.ts` usa `destinationId: "santiago-2027"` (lo cambia la F4 de esta spec) y `DestinationsSection` enlaza `?destino=panama`/`medellin`, que no cambian. Su F3 (`/cuenta`) no cambia.
 - **`platform-neon-foundation.md`:** esta spec es su "Fase 3: captura durable mínima". El reenvío administrativo auditado de eventos `dead` queda para una spec posterior.
 
 ## Reutilización
@@ -448,11 +482,13 @@ Sección "Automatizaciones con n8n", sin secretos ni datos reales:
 ## Tests
 - `lib/env.test.ts` (F1, ampliar): `getIntegrationEnv` (ausente → `null`; 31 caracteres → error con solo el nombre del campo; válido) y `getTurnstileEnv` (ausente → `null`; secreto de prueba en `development` → `isTestSecret: true`; en `production` → error). Los casos existentes de `getEnv` no cambian.
 - `modules/crm/schemas/leads.schema.test.ts` (F1, ampliar): el enum de actividades incluye `automation` y coincide con la base.
-- `modules/crm/services/leads.service.test.ts` (F1 y F5, ampliar): `createLead` envía el `INSERT` en `outbox_events` con `lead.created` y `{ source }` dentro de la misma sentencia o batch; `getLeadList` usa `left join` y mapea `owner: null`; (F5) `changeLeadStage` incluye el evento `lead.stage_changed` con `stageFrom`/`stageTo` y no lo emite en `no_change`/`not_found`.
+- `modules/crm/services/leads.service.test.ts` (F1 y F5, ampliar): `createLead` envía el `INSERT` en `outbox_events` con `lead.created` y `{ source }` dentro de la misma sentencia o batch; `getLeadList` usa `left join`, mapea `owner: null` y con `owner: "unassigned"` filtra `owner_user_id is null` en la lista y en los contadores; (F5) `changeLeadStage` incluye el evento `lead.stage_changed` con `stageFrom`/`stageTo` y no lo emite en `no_change`/`not_found`.
+- `modules/crm/schemas/leads.schema.test.ts` (F1, ampliar también): `createLeadSchema` sin las claves `email`, `location`, `tripId`, `destinationText` y `note` → todas `null`, sin errores.
+- `modules/crm/utils/leadListQuery.test.ts` (F1, ampliar): `responsable=sin-asignar` → `owner: "unassigned"`; `responsable=mine` y `responsable=unassigned` → sin filtro de responsable; `leadListHref({ owner: "unassigned" }, 1)` → `/crm/leads?responsable=sin-asignar`; los casos existentes no cambian.
 - `modules/integrations/utils/integrationRequest.test.ts` (F2): `tokensMatch` (igual, distinto, distinta longitud, vacío); `handleIntegrationRequest` (sin token configurado → 503; sin cabecera, `Basic …` o token incorrecto → 401 sin llamar al handler; correcto → handler; handler lanza → 500 con log fijo; siempre `no-store` y sin CORS); `readJsonBody` (> 4 KiB, JSON inválido o schema inválido → `null`).
 - `modules/integrations/schemas/integrations.schema.test.ts` (F2; F5 amplía): `limit` por defecto y límites; `errorCode` válido e inválido; UUID inválidos; (F5) `body` vacío o de 501.
 - `modules/integrations/services/outbox.service.test.ts` (F2): `claimEvents` hace un único batch con el paso a `dead` antes del claim, con `for update skip locked`, `limit` y `attempts + 1`; `ackEvent` filtra por `lease_token` y `lease_until > now()` y devuelve `lease_lost` sin filas; `failEvent` con `attempts < 8` → `pending` con backoff, con `8` → `dead`, sin filas → `lease_lost`.
-- `modules/integrations/services/integrationLeads.service.test.ts` (F2; F5 amplía): `getIntegrationLead` selecciona solo las columnas del contrato, mapea `owner`/`trip` nulos y `archived`; sin filas → `null`; (F5) `recordAutomationActivity` con sus tres resultados y `actor_user_id` nulo.
+- `modules/integrations/services/integrationLeads.service.test.ts` (F2; F5 amplía): `getIntegrationLead` selecciona solo las columnas del contrato, calcula `firstName` (nombre de una palabra, de varias y con espacios extra), mapea `email`/`owner`/`trip` nulos y `archived`; sin filas → `null`; (F5) `recordAutomationActivity` con sus tres resultados y `actor_user_id` nulo.
 - `modules/crm/schemas/webLeads.schema.test.ts` (F3): los casos del criterio de F3.
 - `modules/crm/services/turnstile.service.test.ts` (F3): los casos del criterio de F3, con `fetch` y entorno simulados.
 - `modules/crm/services/webLeads.service.test.ts` (F3): una sola llamada `execute`; parámetros (`web_form`, `web-form-v1`, sin `stage`, slug o nombre visible, hash hex de 64); mapeo de `created`/`duplicate`/`conflict`; el hash es estable para los mismos datos y cambia si cambia un campo.
@@ -463,12 +499,12 @@ Sección "Automatizaciones con n8n", sin secretos ni datos reales:
 ## Plan de tareas
 Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los ejecuta el reviewer) y con la medición del Worker en su última tarea.
 
-### Fase 1: modelo, outbox, entorno y alta manual con evento (4 tareas, 14 archivos: 2 generados por drizzle-kit)
-Requisitos previos: `crm-leads-pipeline` F1 cerrada (migración `0002` en el journal) y su enmienda aprobada.
+### Fase 1: modelo, outbox, entorno y alta manual con evento (4 tareas, 16 archivos: 2 generados por drizzle-kit)
+Requisitos previos: `crm-leads-pipeline` F1 cerrada (hecha, `ff28b28`) y su enmienda aprobada. Se ejecuta antes que la F2 del pipeline.
 - [ ] T1 — Schema y migración `0003`: enums, `outbox_events` y cambios en `leads`/`lead_activities`; `npm run db:generate` y revisión del SQL (`grep -inE 'neon_auth|create schema|drop (table|type|column|schema)'`) · archivos: `lib/db-schema.ts`, `drizzle/0003_*.sql` (generado), `drizzle/meta/0003_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
 - [ ] T2 — Entorno opcional (`getIntegrationEnv`, `getTurnstileEnv`) con tests y plantillas · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (base, `lib/`)
-- [ ] T3 — `createLead` con evento `lead.created`, `getLeadList` con responsable opcional, `phoneSchema` exportado y `automation` en el enum, con tests; medir el Worker · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — README: "Migración de captura y outbox" (dos bloques, orden `0001` → `0002` → `0003`, pruebas manuales del criterio de F1 en una rama de desarrollo) y "Secretos de integraciones" (`wrangler secret put`, variable de build, claves de prueba) · archivos: `README.md` · depende de: T2 · paralelo (con T3)
+- [ ] T3 — Código de `crm-leads-pipeline` F1: `createLead` con evento `lead.created`; `getLeadList` con responsable opcional y filtro `unassigned`; `responsable=sin-asignar` en la query; `phoneSchema` exportado y `automation` en el enum; correcciones de la revisión de la F1 del pipeline (`mine`/`unassigned` literales inválidos en la URL, `blankToNull` con clave ausente); con tests; medir el Worker · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T2 · paralelo (con T4)
+- [ ] T4 — README: "Migración de captura y outbox" (dos bloques, orden `0001` → `0002` → `0003`, pruebas manuales del criterio de F1 en una rama de desarrollo) y "Activar la protección antispam (Turnstile)" y secretos de integraciones, como guía paso a paso para una persona sin experiencia técnica (Diseño técnico, "Guía de Turnstile en el README"); actualizar la frase "Aún no hay tablas de leads…" de "Stack y alcance" · archivos: `README.md` · depende de: T2 · paralelo (con T3)
 
 ### Fase 2: API privada para n8n (5 tareas, 15 archivos)
 Requisitos previos: Fase 1 cerrada y `0003` aplicada en la rama de pruebas.
@@ -485,9 +521,9 @@ Requisitos previos: Fase 1 cerrada (la Fase 2 puede ir antes o después; los arc
 - [ ] T3 — `createWebLead` (CTE única, idempotencia, ventana de duplicados, slug) con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T1 · paralelo (con T2)
 - [ ] T4 — `submitWebLeadAction` con tests y export en la API pública; medir el Worker · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts`, `modules/crm/index.ts` · depende de: T2, T3 · secuencial
 
-### Fase 4: formulario de la landing conectado (3 tareas, 7 archivos)
-Requisitos previos: Fase 3 cerrada; ninguna fase de `landing-public-site` en curso sobre `HeroCarousel` o `ContactForm`.
-- [ ] T1 — `inquiry.ts` sobre `INQUIRY_DESTINATIONS` (ids con slug) y enlaces actualizados, con tests · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/components/MobileCta.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 3 · paralelo (con T2)
+### Fase 4: formulario de la landing conectado (3 tareas, 8 archivos)
+Requisitos previos: Fase 3 cerrada; **texto legal definitivo del consentimiento y de la nota de uso de datos confirmado por el usuario** (o el provisional aceptado expresamente); ninguna fase de `landing-public-site` en curso sobre `HeroCarousel`, `ContactForm` o `utils/trips.ts`.
+- [ ] T1 — `inquiry.ts` sobre `INQUIRY_DESTINATIONS` (ids con slug), `destinationId` del viaje y enlaces actualizados, con tests · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/components/MobileCta.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 3 · paralelo (con T2)
 - [ ] T2 — `TurnstileWidget` · archivos: `modules/landing/components/TurnstileWidget.tsx` · depende de: Fase 3 · paralelo (con T1)
 - [ ] T3 — `ContactForm` con envío, honeypot, consentimiento y estados, y `ContactSection` con la acción y los textos nuevos; medir el Worker · archivos: `modules/landing/components/ContactForm.tsx`, `modules/landing/components/ContactSection.tsx` · depende de: T1, T2 · secuencial
 
@@ -501,18 +537,17 @@ Requisitos previos: Fases 2 y 4 cerradas y `crm-leads-pipeline` F3 cerrada (`cha
 ## Preguntas abiertas
 Resueltas por el usuario (2026-10-18):
 - **Dónde corre n8n:** en su computadora, sin IP pública → modelo *pull*: n8n consulta la API privada del Worker por HTTPS y el Worker nunca llama a n8n. Se descarta el webhook *push*.
-- **Qué hace n8n con cada lead:** avisar al usuario por correo y WhatsApp cuando entra un lead, y preparar el mensaje predefinido según la etapa del CRM (por eso existe `lead.stage_changed`). Preparar ≠ enviar al runner.
+- **Qué hace n8n con cada lead:** avisar al usuario y preparar el mensaje para el runner según la etapa del CRM (por eso existe `lead.stage_changed`). Preparar ≠ enviar al runner.
 - **Asignación:** manual en el CRM; n8n no asigna.
-- **Canal del aviso:** correo + WhatsApp al propio usuario; las credenciales viven en n8n, no en el Worker.
+- **Canal del aviso:** **solo correo**. El enlace `wa.me` con el borrador para el runner va dentro del correo. Las credenciales viven en n8n, no en el Worker.
+- **Turnstile:** confirmado. El usuario crea el widget y carga `NEXT_PUBLIC_TURNSTILE_SITE_KEY` y `TURNSTILE_SECRET_KEY`; el README incluye una guía paso a paso para una persona sin experiencia técnica.
+- **Plantillas por etapa:** borradores redactados por **Gemini desde n8n** (API key solo en n8n), con minimización de datos (`firstName`, etapa, viaje o destino), revisión humana obligatoria antes de enviar al runner y plantilla fija de respaldo por etapa si Gemini falla. Guía en el README.
+- **Altas manuales:** emiten `lead.created`, sin el aviso de "nuevo lead".
+- **Consentimiento:** planteamiento conforme. Se mantienen el texto provisional y `web-form-v1`; el usuario dará el texto legal definitivo antes de publicar la F4 (requisito previo de esa fase). Ese texto debe mencionar también a los encargados (proveedor de correo y Gemini/Google).
 
-Pendientes:
-1. **Texto legal del consentimiento y aviso de datos (Ley 29733).** Se usan textos provisionales (`web-form-v1` y la nota "CÓMO USAMOS TUS DATOS"). Los datos del lead pasan también por n8n y por los proveedores de correo y WhatsApp del usuario. ¿Nos das el texto definitivo y, si hace falta, la política de privacidad? No bloquea la implementación, pero sí recomendamos no publicar la F4 en producción sin él.
-2. **Turnstile:** el contrato aprobado de `platform-neon-foundation.md` lo exige y es gratuito. ¿Confirmas que crearás el widget en Cloudflare (hostname `carreras-viajeras.mentec.dev`, modo *Managed*) y cargarás `TURNSTILE_SECRET_KEY` y `NEXT_PUBLIC_TURNSTILE_SITE_KEY`? Crear recursos en Cloudflare lo haces tú.
-3. **Proveedor del aviso por WhatsApp en n8n:** la automatización de WhatsApp Web está descartada. Las opciones son la API oficial de WhatsApp Cloud (requiere un número distinto del de WhatsApp Business App), otro canal como Telegram, o solo correo al inicio. ¿Cuál prefieres? No afecta al código del repo, solo a la guía.
-4. **Alta manual y `lead.created`:** recomendamos emitir el evento también para los leads que registra el comercial, para que n8n le prepare el mensaje de la etapa "Nuevo", pero sin el aviso de "nuevo lead" (solo para `web_form`). ¿De acuerdo?
-5. **Plantillas de mensajes:** recomendamos que vivan en n8n para el MVP (se editan sin desplegar). Una tabla editable desde el CRM iría en otra spec. ¿De acuerdo? ¿Nos pasas los textos por etapa o los redactas tú en n8n?
-6. **Registro de runner → lead** (F3 de la landing): el registro en `/cuenta` solo pide el correo y `leads.phone` es obligatorio, así que no puede crear un lead completo. Propuesta para una spec posterior: tras verificar el correo, enlazar la cuenta al lead existente con ese email (columna `runner_user_id`), sin crear leads nuevos. ¿Lo quieres y en qué momento?
-7. **Eventos `dead`** (tras 8 intentos fallidos): el contrato pide un reenvío administrativo auditado. Mientras tanto, propuesta: consultarlos en el SQL Editor y, más adelante, una acción "Reintentar" para `admin` en el CRM. ¿Te sirve?
-8. **Ventana de duplicados:** 10 minutos por teléfono para el formulario web. ¿Te parece bien el plazo?
-9. **Datos del lead para n8n:** la lectura no incluye el correo del lead (no lo pediste para el aviso). ¿Quieres que el aviso al usuario incluya también el correo del runner?
-10. **Enmienda y orden con `crm-leads-pipeline`:** para que los leads web se vean en el CRM, hay que enmendar esa spec antes de su F2 (owner opcional, "Sin asignar", autor "Formulario web"/"n8n"; ver "Relación con otras specs"). ¿Autorizas al orquestador a pedir esa enmienda y a seguir el orden recomendado?
+Decisiones provisionales (recomendación aceptada por defecto; el usuario puede cambiarlas antes de aprobar):
+- **P1. Registro de runner → lead** (F3 de la landing): el registro solo pide el correo y `leads.phone` es obligatorio, así que no crea leads. En una spec posterior: tras verificar el correo, enlazar la cuenta al lead existente con ese email (columna `runner_user_id`), sin crear leads nuevos.
+- **P2. Eventos `dead`** (tras 8 intentos): de momento se consultan en el SQL Editor; el reenvío administrativo auditado (acción "Reintentar" para `admin` en el CRM) irá en una spec posterior.
+- **P3. Ventana de duplicados:** 10 minutos por teléfono para el formulario web.
+- **P4. Email del lead hacia n8n:** sí, en la lectura del lead, porque el aviso por correo al usuario lo necesita. **Nunca** se envía a Gemini.
+- **P5. Orden de fases:** `crm-leads-pipeline` F1 (hecha) → aprobación de esta spec y de la enmienda del pipeline → F1 de esta spec → F2 del pipeline → F2, F3 y F4 de esta spec → F3 del pipeline → F5 de esta spec (requiere `changeLeadStage`).
