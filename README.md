@@ -17,7 +17,7 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Operación posterior | Outbox persistente en Neon y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0003` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)); ambas están pendientes de aplicar (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0004` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)); ambas están pendientes de aplicar (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
 
 ## Preparación local
 
@@ -76,7 +76,7 @@ Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión
 4. El CRM exige correo verificado y una asignación de staff activa por ID de usuario, con denegación por defecto (ver [Acceso al CRM](#acceso-al-crm)); Access puede ser una defensa adicional.
 5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
-Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya escribe el evento `lead.created` en el outbox (`outbox_events`, migración `0004`). n8n local los procesará con reintentos mediante una API privada que llega en la Fase 2 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md); el formulario web conectado llega en sus Fases 3 y 4. No hay integración con la API de WhatsApp.
+Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya escribe el evento `lead.created` en el outbox (`outbox_events`, migración `0004`). n8n local los recoge con reintentos mediante una API privada (ver [Automatizaciones con n8n](#automatizaciones-con-n8n)); el formulario web conectado llega en las Fases 3 y 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md). No hay integración con la API de WhatsApp.
 
 ## Acceso al CRM
 
@@ -330,14 +330,143 @@ Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de 
 
 ### Secretos de integraciones
 
-`N8N_API_TOKEN` protege la API privada que usará n8n (Fase 2 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)). No es `DATABASE_URL`: n8n nunca recibe credenciales de la base.
+`N8N_API_TOKEN` protege la API privada que usa n8n (ver [Automatizaciones con n8n](#automatizaciones-con-n8n)). No es `DATABASE_URL`: n8n nunca recibe credenciales de la base.
 
 1. Genera un valor aleatorio de al menos 32 caracteres en tu computadora, por ejemplo con `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
 2. Guárdalo como **Secret** del Worker con el nombre `N8N_API_TOKEN` (igual que en el paso 5 de Turnstile, o con `npx wrangler secret put N8N_API_TOKEN`).
 3. Para pruebas locales, pégalo en `.env.local` y en `.dev.vars` como `N8N_API_TOKEN=<valor>`.
-4. En n8n, el mismo valor va en una credencial de cabecera (`Authorization: Bearer <valor>`); la guía de n8n llega con la Fase 2.
+4. En n8n, el mismo valor va en una credencial de cabecera (`Authorization: Bearer <valor>`); ver [Automatizaciones con n8n](#automatizaciones-con-n8n).
 
 Si falta, la API de n8n responderá que no está configurada y el resto de la aplicación sigue funcionando. Si se filtra, genera otro valor y actualiza el Secret, tus archivos locales y la credencial de n8n.
+
+### Automatizaciones con n8n
+
+n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
+
+Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada.
+
+#### 1. Credenciales (solo dentro de n8n)
+
+En n8n → **Credentials** → **Add credential**:
+
+1. **Header Auth** (para hablar con la web): nombre `Authorization`, valor `Bearer <tu N8N_API_TOKEN>` (la palabra `Bearer`, un espacio y el mismo valor que guardaste como Secret, ver [Secretos de integraciones](#secretos-de-integraciones)).
+2. **SMTP** (para enviarte los correos): los datos del servidor de correo de tu cuenta.
+3. **Google Gemini** (para redactar los borradores): la API key que creas en Google AI Studio.
+
+Estas tres credenciales viven **solo en n8n**. Nunca se copian al repositorio, a `.env.local`, a `.dev.vars` ni al Worker. La API key de Gemini nunca llega a la web.
+
+#### 2. La API privada (qué puede pedir n8n)
+
+Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Content-Type: application/json` (como máximo 4 KiB). Las respuestas no se guardan en caché.
+
+| Petición | Cuerpo | Respuesta correcta |
+|---|---|---|
+| `POST /api/integrations/n8n/events/claim` | `{ "limit": 10 }` (de 1 a 25; sin cuerpo, 10) | `200 { "events": [...] }` (lista vacía si no hay nada) |
+| `POST /api/integrations/n8n/events/{id}/ack` | `{ "leaseToken": "..." }` | `200 { "status": "succeeded" }` |
+| `POST /api/integrations/n8n/events/{id}/fail` | `{ "leaseToken": "...", "errorCode": "smtp_error" }` | `200 { "status": "pending", "availableAt": "..." }` o `200 { "status": "dead" }` |
+| `GET /api/integrations/n8n/leads/{id}` | — | `200` con los datos del lead (abajo) |
+
+- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" }`), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
+- **ack** ("listo"): confirma que el evento está procesado. Hay que enviar el `leaseToken` que llegó con ese evento.
+- **fail** ("falló"): devuelve el evento a la cola para reintentarlo más tarde (30 s, 1 min, 2 min, 4 min… con algo de variación, hasta 1 hora). `errorCode` es un código corto en minúsculas, números y `_` (máximo 40). Al octavo intento fallido el evento queda `dead` (muerto) y no se vuelve a entregar.
+- **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived` y `createdAt`. No incluye ciudad, notas, historial ni consentimiento.
+
+Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
+
+Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (paso 3).
+
+#### 3. El workflow, paso a paso
+
+1. **Schedule Trigger**: cada minuto.
+2. **HTTP Request** `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/claim` con la credencial *Header Auth* y cuerpo `{ "limit": 10 }`.
+3. **Split Out** sobre el campo `events`: un item por evento. Si la lista viene vacía, el workflow termina ahí.
+4. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `id`. Busca en ella el `id` del evento: si ya está, el correo ya se envió antes, así que solo haz el **ack** (paso 12) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
+5. **HTTP Request** `GET …/api/integrations/n8n/leads/{{ $json.leadId }}`. Si responde 404, ve a la rama de error con `lead_not_found`.
+6. **¿Sigue vigente?** Si `archived` es `true`, o si la etapa actual del lead (`stage`) ya no es la del evento (`new` para `lead.created`), haz el ack y termina sin preparar nada: el evento quedó viejo.
+7. **Switch** por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`) para elegir el prompt y la plantilla de respaldo de esa etapa. Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
+8. **Nodo de Gemini** con el prompt de la etapa (apartado 4). En **Settings** del nodo: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
+9. **¿Sirve el borrador?** Si Gemini falló, tardó más de 20 s o devolvió un texto vacío o de más de 1000 caracteres, usa la **plantilla de respaldo** de la etapa (apartado 5). Guarda el texto elegido (de Gemini o de la plantilla) en un campo `borrador`. Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
+10. **Enlace de WhatsApp** (nodo *Set*): `https://wa.me/{{ $json.phone.replace('+', '') }}?text={{ encodeURIComponent($json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo.
+11. **Send Email** (credencial SMTP) **a ti** (apartado 6). Después, añade el `id` del evento a la tabla `eventos_procesados`.
+12. **HTTP Request** `POST …/api/integrations/n8n/events/{{ $json.id }}/ack` con `{ "leaseToken": "{{ $json.leaseToken }}" }`. Si responde 409 (`lease_lost`), no te preocupes: el evento volverá a llegar y el paso 4 evitará un segundo correo.
+
+**Rama de error:** si el correo no se pudo enviar o el lead no existe, llama a `POST …/api/integrations/n8n/events/{{ $json.id }}/fail` con `{ "leaseToken": "…", "errorCode": "<código>" }`. Códigos sugeridos: `smtp_error` (no se pudo enviar el correo), `lead_not_found` (el lead no existe), `lead_read_error` (la lectura del lead falló) y `unexpected_error` (cualquier otro). Usa solo códigos cortos: nunca copies el texto del error del proveedor.
+
+Con 10 eventos por minuto y hasta 20 s de Gemini por evento, el lote cabe holgado en los 5 minutos de reserva.
+
+#### 4. Qué datos recibe Gemini y prompt por etapa
+
+**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe con una expresión que solo toma esos campos, por ejemplo:
+
+```text
+Etapa: {{ $json.etapa }}
+Nombre de pila: {{ $json.firstName }}
+Viaje o destino: {{ $json.trip ? $json.trip.title : $json.destinationText }}
+```
+
+Ampliar esta lista exige tu decisión explícita y un cambio de la spec. Ten en cuenta que, en el plan gratuito de la API de Gemini, Google puede usar lo que le envías para mejorar sus productos.
+
+**Instrucciones comunes** (en todas las etapas; ajusta el tono si quieres):
+
+> Eres el asistente comercial de Carreras Viajeras, una agencia peruana de viajes para runners. Escribe un mensaje de WhatsApp breve (máximo 600 caracteres), cálido y en español neutro de Perú, tuteando, sin inventar precios, fechas, cupos ni condiciones que no te doy. Firma como «Equipo Carreras Viajeras». Devuelve solo el texto del mensaje.
+
+**Objetivo de cada etapa** (se añade a las instrucciones comunes):
+
+| Etapa | Objetivo del mensaje |
+|---|---|
+| `new` (Nuevo) | Dar la bienvenida, agradecer el interés en el viaje o destino y preguntar qué distancia y fechas le interesan. |
+| `contacted` (Contactado) | Retomar la conversación y ofrecer resolver dudas. |
+| `quoted` (Cotizado) | Recordar que tiene una cotización y ofrecer ayuda para reservar. |
+| `reserved` (Reservado) | Confirmar la reserva y anunciar los próximos pasos, sin detallar pagos. |
+| `paid` (Pagado) | Agradecer y dar la bienvenida al viaje. |
+| `lost` (Perdido) | Despedirse con cordialidad y dejar la puerta abierta a próximos viajes. |
+
+#### 5. Plantillas fijas de respaldo
+
+Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `{viaje}` el título del viaje o, si no hay viaje, el destino:
+
+| Etapa | Plantilla |
+|---|---|
+| `new` | Hola {firstName}, gracias por escribirnos por {viaje}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan? |
+| `contacted` | Hola {firstName}, te escribimos de Carreras Viajeras para retomar tu consulta sobre {viaje}. ¿Tienes alguna duda en la que te podamos ayudar? |
+| `quoted` | Hola {firstName}, ¿pudiste revisar la cotización de {viaje}? Si quieres, te ayudamos con los pasos para reservar. Equipo Carreras Viajeras |
+| `reserved` | Hola {firstName}, ¡tu reserva para {viaje} ya está registrada! Muy pronto te contamos los próximos pasos. Equipo Carreras Viajeras |
+| `paid` | Hola {firstName}, ¡gracias por confiar en nosotros! Te damos la bienvenida a {viaje}. Equipo Carreras Viajeras |
+| `lost` | Hola {firstName}, gracias por tu interés en {viaje}. Si más adelante quieres correr con nosotros, aquí estaremos. Equipo Carreras Viajeras |
+
+#### 6. El correo que recibes
+
+- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
+- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 10), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
+- El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa.
+- El correo es el **único** canal de aviso. El mensaje al runner siempre lo revisa y lo envía una persona desde WhatsApp Business App.
+
+#### 7. Eventos muertos (`dead`)
+
+Tras 8 intentos fallidos, un evento queda `dead` y n8n ya no lo recibe. Por ahora se consultan en el SQL Editor de Neon:
+
+```sql
+SELECT id, type, lead_id, attempts, last_error_code, created_at
+FROM outbox_events WHERE status = 'dead' ORDER BY created_at DESC;
+```
+
+Reenviarlos desde el CRM queda para una spec posterior.
+
+#### 8. Prueba manual de la API (rama de desarrollo de Neon)
+
+Con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0004` aplicada y `N8N_API_TOKEN` cargado:
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/api/integrations/n8n/events/claim
+```
+
+- Sin la cabecera, o con otro token, responde `401`.
+- Crea dos leads de prueba en el CRM y lanza dos `claim` a la vez (dos terminales, o `& wait`): ningún evento aparece en las dos respuestas.
+- Reclama un evento y no lo confirmes: a los 5 minutos vuelve a aparecer en otro `claim` con otro `leaseToken` y `attempts` sube en 1.
+
+#### 9. Regla WAF opcional contra abusos
+
+En el plan Free de Cloudflare, sin tocar código: panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → crear una regla para las peticiones `POST` a la ruta `/contacto` que bloquee una IP cuando supere unas pocas peticiones cada 10 segundos. Es una defensa adicional a Turnstile, que protegerá el formulario cuando se conecte (Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)).
 
 ## Reservas y portal del runner
 
