@@ -1,14 +1,18 @@
 // Application schema (public only). Never model or manage the neon_auth schema here.
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   date,
+  foreignKey,
   index,
   integer,
   pgEnum,
   pgTable,
   text,
+  time,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -264,5 +268,198 @@ export const leadActivities = pgTable(
       sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerFrom} IS NOT NULL AND ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} <> ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
     ),
     index("lead_activities_lead_created_idx").on(table.leadId, table.createdAt),
+  ],
+);
+
+export const bookingStatusEnum = pgEnum("booking_status", ["pending", "confirmed", "cancelled"]);
+export const itineraryKindEnum = pgEnum("itinerary_kind", [
+  "document",
+  "registration",
+  "flight",
+  "transfer",
+  "hotel",
+  "activity",
+  "race",
+  "return",
+]);
+export const itineraryStatusEnum = pgEnum("itinerary_status", [
+  "pending",
+  "provisional",
+  "confirmed",
+  "completed",
+  "cancelled",
+]);
+
+// One booking = one participant on one trip. Cancelled, never deleted.
+// runner_user_id is the Neon Auth id (no cross-schema FK), linked once by verified email;
+// after that, authorization uses only runner_user_id. Amounts are integer USD.
+export const bookings = pgTable(
+  "bookings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "restrict" }),
+    participantName: text("participant_name").notNull(),
+    participantEmail: text("participant_email").notNull(),
+    runnerUserId: text("runner_user_id"),
+    status: bookingStatusEnum("status").notNull().default("pending"),
+    packageLabel: text("package_label").notNull(),
+    distance: text("distance"),
+    totalUsd: integer("total_usd").notNull(),
+    balanceDueOn: date("balance_due_on", { mode: "string" }),
+    internalNote: text("internal_note"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Target of the itinerary_items (booking_id, trip_id) composite FK.
+    unique("bookings_id_trip_uq").on(table.id, table.tripId),
+    uniqueIndex("bookings_trip_email_active_uq")
+      .on(table.tripId, table.participantEmail)
+      .where(sql`${table.status} <> 'cancelled'`),
+    index("bookings_runner_user_idx").on(table.runnerUserId),
+    index("bookings_unlinked_email_idx")
+      .on(table.participantEmail)
+      .where(sql`${table.runnerUserId} IS NULL`),
+    check(
+      "bookings_participant_name_chk",
+      sql`char_length(${table.participantName}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "bookings_participant_email_chk",
+      sql`${table.participantEmail} = lower(${table.participantEmail}) AND char_length(${table.participantEmail}) <= 254`,
+    ),
+    check("bookings_package_label_chk", sql`char_length(${table.packageLabel}) BETWEEN 1 AND 80`),
+    check("bookings_distance_chk", sql`${table.distance} IS NULL OR char_length(${table.distance}) <= 20`),
+    check("bookings_total_usd_chk", sql`${table.totalUsd} >= 0`),
+    check(
+      "bookings_internal_note_chk",
+      sql`${table.internalNote} IS NULL OR char_length(${table.internalNote}) <= 2000`,
+    ),
+  ],
+);
+
+// Confirmed manual payments. Voided, never deleted; voided ones do not count toward the balance.
+export const bookingPayments = pgTable(
+  "booking_payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id")
+      .notNull()
+      .references(() => bookings.id, { onDelete: "restrict" }),
+    amountUsd: integer("amount_usd").notNull(),
+    paidOn: date("paid_on", { mode: "string" }).notNull(),
+    concept: text("concept").notNull(),
+    recordedBy: text("recorded_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: text("voided_by").references(() => profiles.userId, { onDelete: "restrict" }),
+  },
+  (table) => [
+    index("booking_payments_booking_idx").on(table.bookingId),
+    check("booking_payments_amount_usd_chk", sql`${table.amountUsd} > 0`),
+    check("booking_payments_concept_chk", sql`char_length(${table.concept}) BETWEEN 1 AND 80`),
+    check(
+      "booking_payments_voided_chk",
+      sql`(${table.voidedAt} IS NULL) = (${table.voidedBy} IS NULL)`,
+    ),
+  ],
+);
+
+// booking_id NULL = trip-wide item (every participant sees it). Times are local wall-clock
+// at the item's place, each edge with its own IANA zone; dates without time carry no zone.
+export const itineraryItems = pgTable(
+  "itinerary_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "restrict" }),
+    bookingId: uuid("booking_id"),
+    kind: itineraryKindEnum("kind").notNull(),
+    status: itineraryStatusEnum("status").notNull().default("pending"),
+    title: text("title").notNull(),
+    details: text("details"),
+    location: text("location"),
+    startDate: date("start_date", { mode: "string" }),
+    startTime: time("start_time"),
+    startTimeZone: text("start_time_zone"),
+    endDate: date("end_date", { mode: "string" }),
+    endTime: time("end_time"),
+    endTimeZone: text("end_time_zone"),
+    runnerVisible: boolean("runner_visible").notNull().default(true),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // A booking item belongs to the booking's trip (MATCH SIMPLE: skipped when booking_id is NULL).
+    foreignKey({
+      name: "itinerary_items_booking_trip_fk",
+      columns: [table.bookingId, table.tripId],
+      foreignColumns: [bookings.id, bookings.tripId],
+    }).onDelete("restrict"),
+    index("itinerary_items_trip_idx").on(table.tripId),
+    index("itinerary_items_booking_idx").on(table.bookingId),
+    check("itinerary_items_title_chk", sql`char_length(${table.title}) BETWEEN 1 AND 120`),
+    check(
+      "itinerary_items_details_chk",
+      sql`${table.details} IS NULL OR char_length(${table.details}) <= 1000`,
+    ),
+    check(
+      "itinerary_items_location_chk",
+      sql`${table.location} IS NULL OR char_length(${table.location}) <= 160`,
+    ),
+    check(
+      "itinerary_items_start_time_zone_chk",
+      sql`${table.startTimeZone} IS NULL OR (${table.startTimeZone} ~ '^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$' AND char_length(${table.startTimeZone}) <= 64)`,
+    ),
+    check(
+      "itinerary_items_end_time_zone_chk",
+      sql`${table.endTimeZone} IS NULL OR (${table.endTimeZone} ~ '^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$' AND char_length(${table.endTimeZone}) <= 64)`,
+    ),
+    check(
+      "itinerary_items_schedule_chk",
+      sql`(${table.startTime} IS NULL OR ${table.startDate} IS NOT NULL) AND (${table.endTime} IS NULL OR ${table.endDate} IS NOT NULL) AND (${table.startTime} IS NULL) = (${table.startTimeZone} IS NULL) AND (${table.endTime} IS NULL) = (${table.endTimeZone} IS NULL) AND (${table.endDate} IS NULL OR (${table.startDate} IS NOT NULL AND ${table.endDate} >= ${table.startDate}))`,
+    ),
+  ],
+);
+
+// Team announcements to every participant of a trip. Published and deleted, never edited.
+export const tripUpdates = pgTable(
+  "trip_updates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "restrict" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    publishedAt: timestamp("published_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("trip_updates_trip_published_idx").on(table.tripId, table.publishedAt),
+    check("trip_updates_title_chk", sql`char_length(${table.title}) BETWEEN 3 AND 120`),
+    check("trip_updates_body_chk", sql`char_length(${table.body}) BETWEEN 1 AND 2000`),
   ],
 );
