@@ -7,15 +7,15 @@ import { type Tip, TipList } from "./TipList";
 const REFERENTS = [
   {
     name: "Daniela\nZarfati",
-    image: "/images/running-road.jpg",
-    alt: "Escena de running ilustrativa; no representa un influencer confirmado",
-    disclaimer: "FOTO ILUSTRATIVA · NO ES DANIELA",
+    image: "/images/daniela-zafarti.jpg",
+    alt: "Daniela Zarfati",
+    disclaimer: "FOTO REAL DE DANIELA",
   },
   {
     name: "Karla\nMedina",
-    image: "/images/running-training.jpg",
-    alt: "Escena deportiva ilustrativa; no representa un influencer confirmado",
-    disclaimer: "FOTO ILUSTRATIVA · NO ES KARLA",
+    image: "/images/carla-medina.jpg",
+    alt: "Karla Medina",
+    disclaimer: "FOTO REAL DE KARLA",
   },
 ];
 
@@ -191,8 +191,8 @@ export function BlogSection() {
               ))}
             </div>
             <p className="mt-5 max-w-xl text-xs">
-              Imágenes ilustrativas. Daniela Zarfati y Karla Medina son los perfiles propuestos.
-              Participación, fotografías reales y redes pendientes de confirmar.
+              Las fotos de Daniela Zarfati y Karla Medina son reales.
+              Redes sociales pendientes de confirmar.
             </p>
           </Fold>
         </div>
