@@ -1,20 +1,9 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
-import { Client, type QueryResultRow } from "pg";
+import "server-only";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
+import { getEnv } from "@/lib/env";
 
-// Workers can't reuse sockets across requests, so each query opens its own
-// client; Hyperdrive keeps the real pool of connections to Neon.
-export async function query<T extends QueryResultRow>(
-  text: string,
-  values?: unknown[],
-) {
-  const { env } = await getCloudflareContext({ async: true });
-  const client = new Client({
-    connectionString: env.HYPERDRIVE.connectionString,
-  });
-  await client.connect();
-  try {
-    return await client.query<T>(text, values);
-  } finally {
-    await client.end();
-  }
+// HTTPS only: no connection sockets or database access during import/build.
+export function getDb() {
+  return drizzle(neon(getEnv().DATABASE_URL));
 }

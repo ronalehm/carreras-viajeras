@@ -1,19 +1,18 @@
+import "server-only";
 import { createNeonAuth, type NeonAuth } from "@neondatabase/auth/next/server";
+import { getEnv } from "@/lib/env";
 
 let auth: NeonAuth | undefined;
 
-function requireEnv(name: string) {
-  const value = process.env[name];
-  if (!value) throw new Error(`Falta la variable de entorno ${name}`);
-  return value;
-}
-
-// Lazy: createNeonAuth throws without env vars, and `next build` imports
-// route modules before any request (and before Workers populate process.env).
+// Workers populate runtime secrets after build; initialize on first request.
 export function getAuth() {
-  auth ??= createNeonAuth({
-    baseUrl: requireEnv("NEON_AUTH_BASE_URL"),
-    cookies: { secret: requireEnv("NEON_AUTH_COOKIE_SECRET") },
-  });
+  if (!auth) {
+    const env = getEnv();
+    auth = createNeonAuth({
+      baseUrl: env.NEON_AUTH_BASE_URL,
+      cookies: { secret: env.NEON_AUTH_COOKIE_SECRET },
+      logLevel: "silent",
+    });
+  }
   return auth;
 }

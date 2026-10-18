@@ -2,6 +2,8 @@
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"main": ".open-next/worker.js",
 	"name": "carreras-viajeras",
+	"workers_dev": false,
+	"preview_urls": false,
 	"compatibility_date": "2026-10-01",
 	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
 	"assets": {
@@ -14,16 +16,6 @@
 			// see https://opennext.js.org/cloudflare/caching
 			"binding": "WORKER_SELF_REFERENCE",
 			"service": "carreras-viajeras"
-		}
-	],
-	"hyperdrive": [
-		{
-			// Pool de conexiones hacia Neon Postgres.
-			// Reemplazar por el id real tras `wrangler hyperdrive create carreras-viajeras --connection-string=<DATABASE_URL>`.
-			// En local, CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE (ver .env.local) reemplaza localConnectionString.
-			"binding": "HYPERDRIVE",
-			"id": "00000000000000000000000000000000",
-			"localConnectionString": "postgresql://postgres:postgres@localhost:5432/postgres"
 		}
 	],
 	"routes": [
