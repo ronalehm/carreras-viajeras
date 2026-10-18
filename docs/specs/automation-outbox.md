@@ -1,7 +1,7 @@
 # Eventos, outbox persistente y API privada para n8n
 
 - Módulo: automation
-- Estado: aprobado
+- Estado: borrador
 - Rama: `feat/automation-outbox` (roadmap 3 · Captura y n8n)
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), `lib/env.ts` con validación diferida, migraciones generadas con `npm run db:generate` y aplicadas a mano. Esta spec es la "Fase 3: captura durable mínima" que esa spec deja a una spec separada, salvo el formulario protegido (ver Alcance).
@@ -42,12 +42,12 @@ Que ningún aviso de un lead nuevo se pierda aunque n8n esté apagado, se reinic
 6. **Ack (`POST /api/automation/events/{id}/ack`).** Body `{ leaseToken }`. Solo pasa a `succeeded` si el evento está `processing`, el token coincide y el lease no venció; guarda `processed_at`. Repetir el ack con el mismo token sobre un evento ya `succeeded` responde éxito (idempotente). Token antiguo, lease vencida o evento inexistente → `409`.
 7. **Fail (`POST /api/automation/events/{id}/fail`).** Body `{ leaseToken, errorCode }`, con `errorCode` `^[a-z0-9_]{1,64}$` (código propio, nunca texto del proveedor). Con token vigente: si `attempts < 8`, vuelve a `pending` con `available_at = now() + retryDelay(attempts)`; si `attempts >= 8`, pasa a `dead`. Guarda `last_error_code` y limpia el lease. Token antiguo o vencido → `409`.
 8. **Backoff con jitter.** `retryDelaySeconds(attempt, random)` = `min(30 · 2^(attempt−1), 3600) · (0.5 + 0.5 · random)`, redondeado a segundos (intento 1 → 15–30 s; intento 8 → 30–60 min).
-9. **Autenticación de la API.** `Authorization: Bearer <AUTOMATION_API_TOKEN>`, comparado en tiempo constante (digest SHA-256 de ambos lados). Falta o no coincide → `401`. Sin secreto configurado o inválido (< 32 caracteres) → `503`, sin indicar qué falta. El secreto se valida de forma diferida solo en estas rutas: su ausencia no afecta al resto de la aplicación ni al build.
+9. **Autenticación de la API.** `Authorization: Bearer <AUTOMATION_API_TOKEN>`, con el esquema `Bearer ` exacto (sensible a mayúsculas, un solo espacio), comparado en tiempo constante (digest SHA-256 de ambos lados). Falta o no coincide → `401`. Sin secreto configurado o inválido (< 32 caracteres) → `503`, sin indicar qué falta. El secreto se valida de forma diferida solo en estas rutas: su ausencia no afecta al resto de la aplicación ni al build.
 10. **Fronteras de entrada y salida.** Bodies validados con zod (estrictos, JSON ≤ 4 KiB; mayor → `413`); `id` UUID (otro valor → `404`). Respuestas JSON con `Cache-Control: no-store`. Errores `{ error: "<código>" }` sin detalles de SQL, entrada ni entorno. Error de base → `503` y log de texto fijo.
-11. **Reenvío auditado.** `scripts/sql/redrive-automation-event.sql` recibe `event_id`, `performed_by` (ID de staff) y `reason`; en una sola sentencia inserta la fila en `automation_event_redrives` y devuelve el evento `dead` a `pending` con `attempts = 0` y lease vacío. Si el evento no está `dead`, no cambia nada.
-12. **n8n.** Workflow con Schedule Trigger (cada minuto) que reclama en bucle hasta recibir un lote vacío, deduplica por `eventId` entre ejecuciones, valida `type` y `payloadVersion`, envía un correo al equipo por cada `lead.created` v1 y llama a `ack` solo si el envío tuvo éxito; ante error llama a `fail` con un `errorCode` propio (p. ej. `email_send_failed`). El bearer (Header Auth) y la cuenta de correo (credencial SMTP de n8n) viven en credenciales de n8n, nunca en el JSON exportado. Un evento desconocido se marca `fail` con `unsupported_event`.
+11. **Reenvío auditado.** `scripts/sql/redrive-automation-event.sql` recibe `event_id` (id del evento, no del lead), `performed_by` (user_id con una asignación de staff activa en `staff_assignments`) y `reason`; en una sola sentencia inserta la fila en `automation_event_redrives` y devuelve el evento `dead` a `pending` con `attempts = 0`, `available_at = now()`, lease y `last_error_code` vacíos. Si el evento no está `dead` o `performed_by` no es staff activo, no cambia nada. Siempre devuelve una fila que indica si se aplicó.
+12. **n8n.** Workflow con Schedule Trigger (cada minuto) que reclama lotes de 25 y vuelve a reclamar mientras el lote venga lleno, deduplica por `eventId` entre ejecuciones registrando solo los eventos cuyo correo se envió bien, valida `type` y `payloadVersion`, envía un correo al equipo por cada `lead.created` v1 y llama a `ack` solo si el envío tuvo éxito; ante error llama a `fail` con un `errorCode` propio (p. ej. `email_send_failed`). El bearer (Header Auth) y la cuenta de correo (credencial SMTP de n8n) viven en credenciales de n8n, nunca en el JSON exportado. Un evento desconocido se marca `fail` con `unsupported_event`.
 13. **Correo al equipo.** Destinatarios en una variable del workflow (`TEAM_EMAILS`, separada por comas). Asunto `Nuevo lead para <tripSlug>` (o `Nuevo lead sin viaje` si es `null`); cuerpo en texto con el viaje, la fecha del evento y el enlace `<APP_BASE_URL>/crm/leads/<leadId>`, y la indicación de que los datos de contacto solo se ven en el CRM. Sin nombre, correo ni WhatsApp del interesado. Como la entrega es al menos una vez, un fallo tras enviar y antes del `ack` puede duplicar un correo; la deduplicación por `eventId` lo evita salvo que n8n pierda su historial.
-14. **Datos ficticios.** `scripts/sql/seed-automation-demo.sql` inserta eventos `lead.created` con UUID y slugs ficticios fijos, solo en una rama Neon de desarrollo, más una sentencia de limpieza. Nunca se ejecuta en `production`.
+14. **Datos ficticios.** `scripts/sql/seed-automation-demo.sql` inserta eventos `lead.created` con UUID y slugs ficticios fijos, solo en una rama Neon de desarrollo, idempotente, con un modo de limpieza (`-v cleanup=on`) que borra solo esos eventos y sus reenvíos. Nunca se ejecuta en `production`.
 
 ## Criterios de aceptación
 ### Fase 1 — Outbox y eventos
@@ -66,7 +66,7 @@ Que ningún aviso de un lead nuevo se pierda aunque n8n esté apagado, se reinic
 - [ ] `lib/env.test.ts` cubre el getter del token (válido, ausente, corto) y el test de la utilidad de bearer cubre coincidencia, longitud distinta, esquema distinto y cabecera ausente.
 
 ### Fase 3 — Workflow n8n con aviso por correo, datos ficticios y reenvío
-- [ ] Dado el JSON de `n8n/workflows/`, cuando se importa en n8n Community, entonces no contiene secretos ni direcciones reales, usa una credencial Header Auth y una credencial SMTP, y la URL base y los destinatarios como variables del workflow.
+- [ ] Dado el JSON de `n8n/workflows/`, cuando se importa en n8n Community, entonces no contiene secretos ni direcciones reales, usa una credencial Header Auth y una credencial SMTP, y la URL base, el remitente y los destinatarios en un nodo `Config` del workflow (las Variables de n8n no existen en Community); la URL base viene con `http://localhost:3000` para que una prueba no apunte a producción por olvido.
 - [ ] Dado un evento ficticio `lead.created` con `tripSlug = 'maraton-demo-2027'`, cuando n8n lo procesa, entonces llega un correo a la dirección de prueba con asunto `Nuevo lead para maraton-demo-2027` y el enlace al CRM, sin datos personales, y el evento queda `succeeded`.
 - [ ] Dada una credencial SMTP inválida, cuando n8n procesa un evento, entonces llama a `fail` con `email_send_failed` y el evento vuelve a `pending` con backoff.
 - [ ] Checklist manual en una rama Neon de desarrollo (la ejecuta el usuario, con permiso; los agentes no tienen acceso a Neon): con la migración y el seed aplicados y `npm run dev` apuntando a esa rama,
@@ -102,15 +102,18 @@ Que ningún aviso de un lead nuevo se pierda aunque n8n esté apagado, se reinic
 
   Checks: `status = 'processing'` ⇒ `lease_token` y `lease_until` no nulos; `status = 'succeeded'` ⇔ `processed_at` no nulo. Índices: único `(type, lead_id)`; parcial `(available_at, id) WHERE status = 'pending'`; parcial `(lease_until) WHERE status = 'processing'`.
 - `automation_event_redrives`: `id` uuid PK, `event_id` uuid FK → `automation_events.id` (`restrict`), `performed_by` text FK → `profiles.user_id` (`restrict`), `reason` text not null (check 1–500 caracteres), `created_at` timestamptz default now().
-- Migración generada `drizzle/0002_*.sql` (+ `meta/0002_snapshot.json`, `meta/_journal.json`), aplicada a mano por el usuario, primero en una rama de desarrollo. El rol de `DATABASE_URL` necesita `SELECT, INSERT, UPDATE` en `automation_events`; `automation_event_redrives` solo la escribe el script manual con `DATABASE_MIGRATION_URL`.
+- Migración generada `drizzle/0002_*.sql` (+ `meta/0002_snapshot.json`, `meta/_journal.json`), aplicada a mano por el usuario, primero en una rama de desarrollo. Si `DATABASE_URL` usa un rol distinto del owner, necesita `SELECT, INSERT, UPDATE` en `automation_events`; `automation_event_redrives` solo la escribe el script manual con `DATABASE_MIGRATION_URL`.
 
 ### Módulo `modules/automation/` (server-only salvo tipos)
 - `schemas/automation.schema.ts`: `leadCreatedPayloadSchema` (estricto, reutiliza `tripSlugSchema`, que pasa a exportarse desde la API pública `@/modules/trips`), `claimRequestSchema`, `ackRequestSchema`, `failRequestSchema`, `eventIdSchema`; constantes `MAX_ATTEMPTS = 8`, `LEASE_SECONDS = 300`, `MAX_CLAIM_LIMIT = 25`, `DEFAULT_CLAIM_LIMIT = 10`.
 - `types/automation.types.ts`: `LeadCreatedPayload`, `ClaimedEvent`, `AckResult = "ok" | "conflict"`, `FailResult = { status: "retry"; retryAt: string } | { status: "dead" } | { status: "conflict" }` (`retryAt` en ISO 8601, lo devuelve la ruta `fail` de F2; derivados de zod donde aplique).
 - `utils/retryDelay.ts`: `retryDelaySeconds(attempt, random = Math.random)`.
-- `utils/automationAuth.ts` (F2): `isAuthorizedAutomationRequest(request, token)` con comparación en tiempo constante.
+- `utils/automationAuth.ts` (F2, server-only porque importa `@/lib/env`):
+  - `isAuthorizedAutomationRequest(request, token)` con comparación en tiempo constante;
+  - `handleAutomationRequest(request, { schema, eventId? }, handle)`: cadena común de las tres rutas en el orden del Requisito 10 (secreto → 503, bearer → 401, `id` → 404, body leído en streaming hasta 4096 bytes → 413, JSON/schema → 400, error → 503 con log fijo); un body vacío equivale a `{}`;
+  - `automationResponse(body, status)`: JSON con `Cache-Control: no-store`.
 - `services/automation.service.ts`: `leadCreatedEventInsert(db, payload)`, `claimEvents(limit)`, `ackEvent(id, leaseToken)`, `failEvent(id, leaseToken, errorCode)`. SQL con `sql` de Drizzle donde el query builder no exprese `FOR UPDATE SKIP LOCKED` dentro de un CTE de `UPDATE`; parámetros siempre ligados.
-- `index.ts`: exporta los cuatro servicios, `isAuthorizedAutomationRequest` (F2), los schemas de request y los tipos.
+- `index.ts`: exporta los cuatro servicios, `isAuthorizedAutomationRequest`, `handleAutomationRequest` y `automationResponse` (F2), los schemas de request y los tipos.
 
 ### Contrato de la API privada (F2)
 Rutas delgadas en `app/api/automation/events/claim/route.ts`, `app/api/automation/events/[id]/ack/route.ts` y `app/api/automation/events/[id]/fail/route.ts` (solo `POST`): autentican, validan con los schemas del módulo, llaman al servicio y traducen el resultado.
@@ -147,8 +150,9 @@ type FailRequest = { leaseToken: string; errorCode: string }; // ^[a-z0-9_]{1,64
 - `lib/env.ts`: nuevo getter `getAutomationApiToken()` separado de `getEnv()` para que su ausencia solo afecte a la API privada. Se añade vacío a `.env.example` y `.dev.vars.example`.
 
 ### n8n (F3, fuera de `modules/` porque no es código de la app)
-- `n8n/workflows/automation-outbox-poller.json`: Schedule Trigger 1 min → HTTP Request `claim` → Split Out `events` → Remove Duplicates (entre ejecuciones, clave `eventId`) → Switch por `type`/`payloadVersion` → rama `lead.created` v1: nodo Send Email (SMTP) con el asunto y cuerpo del requisito 13 → HTTP Request `ack`; error de la rama → HTTP Request `fail` con `email_send_failed`. Se repite mientras el lote venga lleno.
-- `n8n/README.md`: importar, crear las credenciales (Header Auth y SMTP), fijar `TEAM_EMAILS` (una dirección de prueba al usar datos ficticios), fijar la URL base (`http://localhost:3000` solo para la prueba con `npm run dev`; `https://carreras-viajeras.mentec.dev` en producción), ejecutar la checklist.
+- `n8n/workflows/automation-outbox-poller.json`: Schedule Trigger 1 min → HTTP Request `claim` → Split Out `events` → IF `type`/`payloadVersion` (lo demás → `fail` con `unsupported_event`) → nodo Code que consulta `$getWorkflowStaticData('global').sentEventIds` (ya enviado → directo a `ack`) → Send Email (SMTP) con el asunto y cuerpo del requisito 13 → nodo Code que registra el `eventId` (y poda entradas de más de 30 días) → HTTP Request `ack`; error del correo → HTTP Request `fail` con `email_send_failed`. Una segunda salida del claim (`¿Lote lleno?`, con `executionOrder v1`) vuelve a reclamar cuando llegan 25 eventos.
+  - No se usa el nodo Remove Duplicates: marcaría como visto un evento cuyo correo falló y en el reintento se descartaría sin enviarse. La static data solo persiste en ejecuciones de producción (workflow activo).
+- `n8n/README.md`: importar, crear las credenciales (Header Auth `Bearer <token>` y SMTP), rellenar el nodo `Config` (`APP_BASE_URL`, `FROM_EMAIL`, `TEAM_EMAILS`), fijar `TEAM_EMAILS` (una dirección de prueba al usar datos ficticios), fijar la URL base (`http://localhost:3000` solo para la prueba con `npm run dev`; `https://carreras-viajeras.mentec.dev` en producción), ejecutar la checklist.
 - `scripts/sql/seed-automation-demo.sql` y `scripts/sql/redrive-automation-event.sql`, con el mismo estilo que `scripts/sql/bootstrap-admin.sql`.
 
 ## Reutilización
@@ -163,7 +167,7 @@ type FailRequest = { leaseToken: string; errorCode: string }; // ^[a-z0-9_]{1,64
 - `modules/automation/schemas/automation.schema.test.ts`: payload válido; `leadId` inválido; `tripSlug` con mayúsculas o `null`; `source` distinto; campos extra; `limit` 0, 26, decimal y ausente (→ 10); `errorCode` con espacios, mayúsculas o > 64.
 - `modules/automation/utils/retryDelay.test.ts`: límites por intento con `random` 0 y 1, tope 3600, redondeo.
 - `modules/automation/services/automation.service.test.ts` (cliente Neon falso): sentencia de `leadCreatedEventInsert` y rechazo de payload inválido; SQL y parámetros de `claimEvents` (incluye `SKIP LOCKED`, `limit`, `MAX_ATTEMPTS`, lease) y mapeo de filas; `ackEvent`/`failEvent` con y sin fila devuelta; `failEvent` en el intento 8 → `dead`.
-- `modules/automation/utils/automationAuth.test.ts` (F2) y `lib/env.test.ts` ampliado (F2).
+- `modules/automation/utils/automationAuth.test.ts` (F2): bearer (coincidencia, longitud o esquema distintos, cabecera ausente o vacía) y la cadena completa de `handleAutomationRequest` (503, 401, 404, 413 en bytes, 400, body vacío, error → 503 con log fijo). `lib/env.test.ts` ampliado (F2).
 - Rutas de `app/` no requieren unit tests (solo componen); su comportamiento se verifica con los criterios de F2.
 - Atomicidad real, `SKIP LOCKED` entre consumidores y reinicio de n8n: checklist manual de F3 en rama Neon de desarrollo.
 
@@ -179,7 +183,7 @@ Entregable: tablas y migración revisable, contrato del evento y servicios proba
 Entregable: claim/ack/fail operativos con bearer. Total: 10 archivos. Requiere F1.
 - [x] T1 — Secreto de la API · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: Fase 1 · secuencial (base, `lib/`)
 - [x] T2 — Verificación del bearer con test · archivos: `modules/automation/utils/automationAuth.ts`, `modules/automation/utils/automationAuth.test.ts` · depende de: Fase 1 · paralelo con T1
-- [x] T3 — Rutas y export · archivos: `app/api/automation/events/claim/route.ts`, `app/api/automation/events/[id]/ack/route.ts`, `app/api/automation/events/[id]/fail/route.ts`, `modules/automation/index.ts` · depende de: T1, T2 · secuencial
+- [x] T3 — Rutas y export · archivos: `app/api/automation/events/claim/route.ts`, `app/api/automation/events/[id]/ack/route.ts`, `app/api/automation/events/[id]/fail/route.ts`, `modules/automation/index.ts`, y la cadena común en `modules/automation/utils/automationAuth.ts` (+ test) para no triplicarla en las rutas · depende de: T1, T2 · secuencial
 
 ### Fase 3 — Workflow n8n con aviso por correo, datos ficticios y reenvío
 Entregable: workflow importable que avisa al equipo por correo, datos ficticios, reenvío auditado y guía de prueba. Total: 5 archivos. Requiere F2.
