@@ -5,7 +5,12 @@ const { authClient, router } = vi.hoisted(() => ({
   authClient: {
     signIn: { email: vi.fn() },
     signUp: { email: vi.fn() },
-    emailOtp: { sendVerificationOtp: vi.fn(), verifyEmail: vi.fn() },
+    emailOtp: {
+      sendVerificationOtp: vi.fn(),
+      verifyEmail: vi.fn(),
+      requestPasswordReset: vi.fn(),
+      resetPassword: vi.fn(),
+    },
     getSession: vi.fn(),
   },
   router: { replace: vi.fn(), refresh: vi.fn() },
@@ -22,6 +27,7 @@ const TOO_MANY_REQUESTS = "Demasiados intentos. Espera un momento y vuelve a int
 const SERVICE_UNAVAILABLE =
   "No pudimos conectar con el servicio de acceso. Inténtalo de nuevo.";
 const INVALID_CODE = "Código incorrecto o caducado. Pide uno nuevo.";
+const RECOVERY_CODE_SENT = "Si existe una cuenta con ese correo, te enviamos un código.";
 
 function failure(status: number, code?: string) {
   return { data: null, error: { status, statusText: "", code, message: "English text" } };
@@ -64,6 +70,34 @@ async function goToVerifyStep() {
   authClient.signUp.email.mockResolvedValue(OK);
   await signUp();
   expect(screen.getByRole("heading", { name: "Verifica tu correo" })).toBeTruthy();
+}
+
+async function requestRecoveryCode(email = " Ana@Example.com ") {
+  fireEvent.click(button("¿Olvidaste tu contraseña?"));
+  type("Correo", email);
+  fireEvent.click(button("Enviar código"));
+  await flush();
+}
+
+async function goToResetStep() {
+  authClient.emailOtp.requestPasswordReset.mockResolvedValue({
+    data: { success: true },
+    error: null,
+  });
+  await requestRecoveryCode();
+  expect(screen.getByRole("heading", { name: "Nueva contraseña" })).toBeTruthy();
+}
+
+async function resetPassword(overrides: Partial<Record<string, string>> = {}) {
+  const values = {
+    Código: "123456",
+    "Nueva contraseña": "nueva-clave",
+    "Confirma la contraseña": "nueva-clave",
+    ...overrides,
+  };
+  for (const [label, value] of Object.entries(values)) type(label, value);
+  fireEvent.click(button("Guardar contraseña"));
+  await flush();
 }
 
 async function verify(otp = "123456") {
@@ -132,6 +166,32 @@ describe("AccessPanel · sign in", () => {
     });
     expect(screen.getByRole("heading", { name: "Verifica tu correo" })).toBeTruthy();
     expect(screen.getByText("pending@example.com")).toBeTruthy();
+    expect(
+      screen.getByText("Tu correo aún no está verificado. Te enviamos un código."),
+    ).toBeTruthy();
+  });
+
+  it.each([400, 500])(
+    "shows the service message, not the credentials one, when sending the code fails with %i",
+    async (status) => {
+      authClient.signIn.email.mockResolvedValue(failure(403, "EMAIL_NOT_VERIFIED"));
+      authClient.emailOtp.sendVerificationOtp.mockResolvedValue(failure(status));
+
+      await signIn("pending@example.com", "12345678");
+
+      expect(screen.getByText(SERVICE_UNAVAILABLE)).toBeTruthy();
+      expect(screen.queryByText(INVALID_CREDENTIALS)).toBeNull();
+      expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeTruthy();
+    },
+  );
+
+  it("shows the rate-limit message when sending the code hits 429", async () => {
+    authClient.signIn.email.mockResolvedValue(failure(403, "EMAIL_NOT_VERIFIED"));
+    authClient.emailOtp.sendVerificationOtp.mockResolvedValue(failure(429));
+
+    await signIn("pending@example.com", "12345678");
+
+    expect(screen.getByText(TOO_MANY_REQUESTS)).toBeTruthy();
   });
 
   it("shows the rate-limit message on 429", async () => {
@@ -293,5 +353,142 @@ describe("AccessPanel · verify email", () => {
 
     act(() => vi.advanceTimersByTime(1));
     expect(button("Reenviar código").disabled).toBe(false);
+  });
+});
+
+describe("AccessPanel · forgot password", () => {
+  it("shows the recovery form", () => {
+    fireEvent.click(button("¿Olvidaste tu contraseña?"));
+
+    expect(screen.getByRole("heading", { name: "Recupera tu contraseña" })).toBeTruthy();
+    expect(screen.getByLabelText("Correo")).toBeTruthy();
+  });
+
+  it("rejects an invalid email without calling Neon Auth", async () => {
+    await requestRecoveryCode("ana");
+
+    expect(screen.getByText("Introduce un correo válido.")).toBeTruthy();
+    expect(authClient.emailOtp.requestPasswordReset).not.toHaveBeenCalled();
+  });
+
+  it("requests the code and shows the neutral message on success", async () => {
+    await goToResetStep();
+
+    expect(authClient.emailOtp.requestPasswordReset).toHaveBeenCalledWith({
+      email: "ana@example.com",
+    });
+    expect(screen.getByText(RECOVERY_CODE_SENT)).toBeTruthy();
+    expect(screen.getByText("ana@example.com")).toBeTruthy();
+  });
+
+  it.each([
+    [404, "USER_NOT_FOUND"],
+    [400, "INVALID_EMAIL"],
+    [403, undefined],
+  ])("shows the same neutral message on %i", async (status, code) => {
+    authClient.emailOtp.requestPasswordReset.mockResolvedValue(failure(status, code));
+
+    await requestRecoveryCode();
+
+    expect(screen.getByRole("heading", { name: "Nueva contraseña" })).toBeTruthy();
+    expect(screen.getByText(RECOVERY_CODE_SENT)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("disables the button while waiting and shows the rate-limit message on 429", async () => {
+    let resolve!: (value: unknown) => void;
+    authClient.emailOtp.requestPasswordReset.mockReturnValue(new Promise((r) => (resolve = r)));
+
+    await requestRecoveryCode();
+
+    expect(button("Enviando…").disabled).toBe(true);
+
+    resolve(failure(429));
+    await flush();
+
+    expect(screen.getByText(TOO_MANY_REQUESTS)).toBeTruthy();
+    expect(screen.queryByText(RECOVERY_CODE_SENT)).toBeNull();
+    expect(button("Enviar código").disabled).toBe(false);
+  });
+
+  it.each([
+    ["a 5xx response", () => authClient.emailOtp.requestPasswordReset.mockResolvedValue(failure(503))],
+    [
+      "a network error",
+      () => authClient.emailOtp.requestPasswordReset.mockRejectedValue(new TypeError("Failed to fetch")),
+    ],
+  ])("shows the connection message on %s", async (_, arrange) => {
+    arrange();
+
+    await requestRecoveryCode();
+
+    expect(screen.getByText(SERVICE_UNAVAILABLE)).toBeTruthy();
+    expect(screen.queryByText(RECOVERY_CODE_SENT)).toBeNull();
+  });
+});
+
+describe("AccessPanel · reset password", () => {
+  it("resets the password and returns to sign in with the email and a notice", async () => {
+    await goToResetStep();
+    authClient.emailOtp.resetPassword.mockResolvedValue({ data: { success: true }, error: null });
+
+    await resetPassword({ Código: " 123456 " });
+
+    expect(authClient.emailOtp.resetPassword).toHaveBeenCalledWith({
+      email: "ana@example.com",
+      otp: "123456",
+      password: "nueva-clave",
+    });
+    expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeTruthy();
+    expect(screen.getByText("Contraseña actualizada. Inicia sesión.")).toBeTruthy();
+    expect(screen.getByLabelText<HTMLInputElement>("Correo").value).toBe("ana@example.com");
+    expect(router.replace).not.toHaveBeenCalled();
+  });
+
+  it("does not call resetPassword when the passwords differ or are too short", async () => {
+    await goToResetStep();
+
+    await resetPassword({ "Confirma la contraseña": "otra-clave" });
+    expect(screen.getByText("Las contraseñas no coinciden.")).toBeTruthy();
+
+    await resetPassword({ "Nueva contraseña": "corta", "Confirma la contraseña": "corta" });
+    expect(screen.getByText("La contraseña debe tener al menos 8 caracteres.")).toBeTruthy();
+
+    await resetPassword({ Código: "12ab" });
+    expect(screen.getByText("Introduce el código de 6 dígitos.")).toBeTruthy();
+
+    expect(authClient.emailOtp.resetPassword).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["INVALID_OTP", 400],
+    ["OTP_EXPIRED", 400],
+    ["TOO_MANY_ATTEMPTS", 403],
+  ])("shows the invalid-code message for %s", async (code, status) => {
+    await goToResetStep();
+    authClient.emailOtp.resetPassword.mockResolvedValue(failure(status, code));
+
+    await resetPassword();
+
+    expect(screen.getByText(INVALID_CODE)).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Nueva contraseña" })).toBeTruthy();
+    expect(button("Guardar contraseña").disabled).toBe(false);
+  });
+
+  it("shows the rate-limit message on 429", async () => {
+    await goToResetStep();
+    authClient.emailOtp.resetPassword.mockResolvedValue(failure(429));
+
+    await resetPassword();
+
+    expect(screen.getByText(TOO_MANY_REQUESTS)).toBeTruthy();
+  });
+
+  it("goes back to request a new code", async () => {
+    await goToResetStep();
+
+    fireEvent.click(button("Pedir un código nuevo"));
+
+    expect(screen.getByRole("heading", { name: "Recupera tu contraseña" })).toBeTruthy();
   });
 });

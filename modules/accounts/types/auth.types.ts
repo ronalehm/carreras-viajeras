@@ -1,5 +1,7 @@
 import type { z } from "zod";
 import type {
+  forgotPasswordSchema,
+  resetPasswordSchema,
   signInSchema,
   signUpSchema,
   verifyEmailSchema,
@@ -8,6 +10,8 @@ import type {
 export type SignInInput = z.infer<typeof signInSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type VerifyEmailInput = z.infer<typeof verifyEmailSchema>;
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 
 export type AccessStep =
   | "sign-in"

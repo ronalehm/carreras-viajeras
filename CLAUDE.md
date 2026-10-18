@@ -12,7 +12,7 @@ Carreras Viajeras hackathon MVP. The current web app is the `Hello world` templa
 
 ```sh
 npm run dev      # dev server (Turbopack) on http://localhost:3000
-npm run build    # production build — the only full type check available
+npm run build    # production build with webpack (smaller Worker than Turbopack) — the only full type check available
 npm run lint     # ESLint (flat config, eslint.config.mjs)
 npm test         # Vitest watch mode
 npx vitest run path/to/file.test.ts  # single test file, one run
