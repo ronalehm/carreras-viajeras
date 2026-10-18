@@ -587,14 +587,14 @@ Cada fase cierra con `npm run lint`, `npx vitest run`, `npm run build` (lo ejecu
 
 ### Fase 2: alta manual y lista (4 tareas, 16 archivos: hasta 3 generados por el CLI de shadcn)
 Requisitos previos: Fase 1 cerrada, migraciones `0001` y `0002` aplicadas, y `trips-catalog` F2 sin ejecutarse en paralelo (comparten `CrmShell` y `components/ui/`). (enmienda) `crm-leads-capture` F1 cerrada (responsable opcional, filtro `unassigned` y correcciones de la revisión de F1) y su migración `0003` aplicada en la rama de pruebas.
-- [ ] T1 — Base compartida:
+- [x] T1 — Base compartida:
   - `npx shadcn@latest add textarea checkbox pagination`, sin sobrescribir archivos existentes (`textarea` se omite si ya está);
   - enlace "Leads" en `CrmShell`.
 
   Archivos: `components/ui/textarea.tsx`, `components/ui/checkbox.tsx`, `components/ui/pagination.tsx`, `modules/accounts/components/CrmShell.tsx` · depende de: Fase 1 · secuencial (base)
-- [ ] T2 — `LeadActionState` y `createLeadAction`, con tests de llamada directa ((enmienda) incluido el error con forma de Drizzle que no se propaga ni se registra) · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — Componentes de la lista ((enmienda) con "Sin asignar" en la tabla y en el filtro) · archivos: `modules/crm/utils/leadDisplay.ts` ((enmienda) `UNASSIGNED_OWNER_LABEL`), `modules/crm/components/LeadStageSummary.tsx`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadPagination.tsx` · depende de: T1 · paralelo (con T2)
-- [ ] T4 — `LeadForm`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadForm.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/nuevo/page.tsx` · depende de: T2, T3 · secuencial
+- [x] T2 — `LeadActionState` y `createLeadAction`, con tests de llamada directa ((enmienda) incluido el error con forma de Drizzle que no se propaga ni se registra) · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T1 · paralelo (con T3)
+- [x] T3 — Componentes de la lista ((enmienda) con "Sin asignar" en la tabla y en el filtro) · archivos: `modules/crm/utils/leadDisplay.ts` ((enmienda) `UNASSIGNED_OWNER_LABEL`), `modules/crm/components/LeadStageSummary.tsx`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadPagination.tsx` · depende de: T1 · paralelo (con T2)
+- [x] T4 — `LeadForm`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadForm.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/nuevo/page.tsx` · depende de: T2, T3 · secuencial
 
 ### Fase 3: ficha, edición, etapa y responsable (5 tareas, 15 archivos)
 - [ ] T1 — Schemas y tipos de edición, etapa y responsable, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts` · depende de: Fase 2 · secuencial
