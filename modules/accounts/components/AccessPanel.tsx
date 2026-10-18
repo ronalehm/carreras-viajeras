@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { AccessStep } from "../types/auth.types";
+import type { AccessAudience, AccessStep, AuthDestination } from "../types/auth.types";
 import { ForgotPasswordForm } from "./ForgotPasswordForm";
 import { ResetPasswordForm } from "./ResetPasswordForm";
 import { SignInForm } from "./SignInForm";
@@ -15,7 +15,29 @@ type AccessState = { step: AccessStep; email: string; notice?: string };
 const UNVERIFIED_NOTICE = "Tu correo aún no está verificado. Te enviamos un código.";
 const RECOVERY_CODE_NOTICE = "Si existe una cuenta con ese correo, te enviamos un código.";
 
-export function AccessPanel() {
+const AUDIENCE_CONFIG: Record<
+  AccessAudience,
+  { destination: AuthDestination; signUpLabel: string; signUpNotice: string }
+> = {
+  staff: {
+    destination: "/crm",
+    signUpLabel: "¿Te invitaron? Crea tu cuenta",
+    signUpNotice: "Solo para personas invitadas por un administrador.",
+  },
+  runner: {
+    destination: "/cuenta",
+    signUpLabel: "Registrarse",
+    signUpNotice:
+      "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.",
+  },
+};
+
+type AccessPanelProps = {
+  audience?: AccessAudience;
+};
+
+export function AccessPanel({ audience = "staff" }: AccessPanelProps) {
+  const { destination, signUpLabel, signUpNotice } = AUDIENCE_CONFIG[audience];
   const [state, setState] = useState<AccessState>({ step: "sign-in", email: "" });
 
   const goToSignIn = (email = state.email, notice?: string) =>
@@ -29,6 +51,8 @@ export function AccessPanel() {
       <CardContent className="flex flex-col gap-2">
         {state.step === "sign-in" && (
           <SignInForm
+            destination={destination}
+            signUpLabel={signUpLabel}
             defaultEmail={state.email}
             notice={state.notice}
             onUnverified={(email) => goToVerifyEmail(email, UNVERIFIED_NOTICE)}
@@ -37,7 +61,9 @@ export function AccessPanel() {
           />
         )}
 
-        {state.step === "sign-up" && <SignUpForm onRegistered={(email) => goToVerifyEmail(email)} />}
+        {state.step === "sign-up" && (
+          <SignUpForm notice={signUpNotice} onRegistered={(email) => goToVerifyEmail(email)} />
+        )}
 
         {state.step === "verify-email" && (
           <>
@@ -48,6 +74,7 @@ export function AccessPanel() {
             )}
             <VerifyEmailForm
               email={state.email}
+              destination={destination}
               onVerifiedWithoutSession={(email) =>
                 goToSignIn(email, "Correo verificado. Inicia sesión.")
               }

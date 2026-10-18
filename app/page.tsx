@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   BlogSection,
+  CommunitySection,
   DestinationsSection,
   FaqSection,
   HeroCarousel,
@@ -28,6 +29,7 @@ export default function HomePage() {
         <TripFacts trip={TRIPS[0]} />
         <StorySection />
         <PackageSection />
+        <CommunitySection />
         <WhyUsSection />
         <BlogSection />
         <DestinationsSection />

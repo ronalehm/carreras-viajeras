@@ -8,17 +8,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import { verifyEmailSchema } from "../schemas/auth.schema";
-import type { FieldErrors, VerifyEmailInput } from "../types/auth.types";
+import type { AuthDestination, FieldErrors, VerifyEmailInput } from "../types/auth.types";
 import { authErrorMessage } from "../utils/authErrorMessage";
 
 const RESEND_COOLDOWN_MS = 30_000;
 
 type VerifyEmailFormProps = {
   email: string;
+  destination: AuthDestination;
   onVerifiedWithoutSession: (email: string) => void;
 };
 
-export function VerifyEmailForm({ email, onVerifiedWithoutSession }: VerifyEmailFormProps) {
+export function VerifyEmailForm({
+  email,
+  destination,
+  onVerifiedWithoutSession,
+}: VerifyEmailFormProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [resendCoolingDown, setResendCoolingDown] = useState(false);
@@ -72,7 +77,7 @@ export function VerifyEmailForm({ email, onVerifiedWithoutSession }: VerifyEmail
       return;
     }
 
-    router.replace("/crm");
+    router.replace(destination);
     router.refresh();
   }
 

@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
   { href: "/#paquete", label: "Próxima maratón" },
+  { href: "/#comunidad", label: "Comunidad" },
   { href: "/#blog", label: "Blog" },
   { href: "/contacto", label: "Contacto" },
 ];
@@ -32,24 +33,39 @@ export function SiteBrand({ className }: { className?: string }) {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 flex h-20 items-center justify-between gap-4 bg-background px-[5%] text-primary shadow-sm md:h-24 md:px-[6%]">
+    <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-background px-[5%] py-3 text-primary shadow-sm md:px-[6%] lg:h-24 lg:flex-nowrap lg:py-0">
       <SiteBrand />
-      <nav aria-label="Principal" className="hidden gap-8 text-sm md:flex">
+      {/* md–lg: the nav takes its own row so it never collides with the actions. */}
+      <nav
+        aria-label="Principal"
+        className="order-last hidden w-full gap-6 text-sm md:flex lg:order-none lg:w-auto lg:gap-8"
+      >
         {NAV_LINKS.map(({ href, label }) => (
           <Link key={href} href={href} className="no-underline hover:underline">
             {label}
           </Link>
         ))}
       </nav>
-      <Link
-        href="/contacto"
-        className={cn(
-          buttonVariants(),
-          "h-auto gap-1.5 rounded-sm px-4 py-3 text-xs font-bold sm:text-sm",
-        )}
-      >
-        Quiero correr <ArrowUpRight aria-hidden />
-      </Link>
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+        <Link
+          href="/cuenta"
+          className={cn(
+            buttonVariants({ variant: "outline" }),
+            "h-auto gap-1.5 rounded-sm border-primary px-3 py-2.5 text-xs font-bold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-3.5 sm:py-3",
+          )}
+        >
+          Ingresar / Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
+        </Link>
+        <Link
+          href="/contacto"
+          className={cn(
+            buttonVariants(),
+            "h-auto gap-1.5 rounded-sm px-3 py-2.5 text-xs font-bold sm:px-4 sm:py-3 sm:text-sm",
+          )}
+        >
+          Quiero correr <ArrowUpRight aria-hidden />
+        </Link>
+      </div>
     </header>
   );
 }

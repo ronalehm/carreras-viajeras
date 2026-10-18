@@ -77,8 +77,8 @@ Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los pr
 
 ### Modelo de acceso
 
-- **Runners:** visitantes anónimos, sin cuenta ni perfil.
-- **Staff** (`commercial`, `admin`): entra solo por invitación. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. Se invita desde `/crm/admin/usuarios` (solo admin), que muestra el enlace para copiarlo.
+- **Runners:** pueden crear una cuenta de Neon Auth desde la landing (`/cuenta`) con el mismo flujo que el staff: registro, verificación del correo con código, login y recuperación de la contraseña. Es una cuenta sin roles de staff: no crea filas en `profiles` ni `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). Todavía no hay perfil de runner, datos en la base ni recursos protegidos para runners; cada recurso futuro necesitará su propia guarda en el servidor.
+- **Staff** (`commercial`, `admin`): entra solo por invitación. La invitación no controla quién crea una cuenta (el registro es público); controla los **roles**, que se aceptan en el servidor por correo verificado y quedan ligados al `user_id` estable. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. Se invita desde `/crm/admin/usuarios` (solo admin), que muestra el enlace para copiarlo.
 - **Aceptación automática:** la primera petición autenticada con el correo **verificado** que coincide (sin distinguir mayúsculas) con una invitación pendiente y vigente la acepta en una sola sentencia: crea el perfil y la asignación. Después, la autorización usa solo el `user.id` estable de Neon Auth, no el correo.
 - **Denegación por defecto:** sin sesión → 401; correo sin verificar, cuenta sin rol, invitación caducada o revocada, o error de Neon Auth o de la base → 403. Los roles se leen de la base en cada petición, así que una revocación se aplica en la siguiente. Body, query, cookies propias y `user.role` de Neon Auth nunca conceden permisos.
 - **Último admin:** el CRM no permite revocar el rol `admin` del último admin activo. El primer admin se asigna solo con el script de bootstrap, nunca por ser el primer registro.
@@ -87,10 +87,10 @@ Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los pr
 
 ### Ajustes de Neon Auth
 
-Requisitos previos manuales: los configura y verifica el usuario en la consola de Neon (Auth). La UI de `/crm/acceso` depende de ellos.
+Requisitos previos manuales: los configura y verifica el usuario en la consola de Neon (Auth). La UI de `/crm/acceso` y la de `/cuenta` dependen de ellos.
 
 - **Dominio de confianza** `https://carreras-viajeras.mentec.dev` (configurado). Localhost viene preaprobado para desarrollo.
-- **Sign-up with Email ON** (y Sign-in ON). Los invitados necesitan crear su cuenta. **Riesgo aceptado:** cualquiera puede registrarse en Neon Auth, pero sin invitación no obtiene permisos (403) ni filas en `public`.
+- **Sign-up with Email ON** (y Sign-in ON). Los invitados y los runners necesitan crear su cuenta. **Riesgo aceptado:** cualquiera puede registrarse en Neon Auth, pero sin invitación no obtiene permisos (403) ni filas en `public`.
 - **Verificación del correo al registrarse ON, con código (OTP).** El SMTP compartido de Neon envía códigos de 6 dígitos; los enlaces requerirían SMTP propio. Sin correo verificado nadie pasa las guardas. La cookie de sesión cachea `emailVerified` hasta 5 minutos.
 - **Recuperación de la contraseña por código.** `/crm/acceso` → "¿Olvidaste tu contraseña?" usa `POST /api/auth/email-otp/request-password-reset` y `/api/auth/email-otp/reset-password`; ambos se probaron en producción. La recuperación por enlace no se usa (requiere SMTP propio).
 
@@ -98,7 +98,7 @@ La solicitud de recuperación responde siempre "Si existe una cuenta con ese cor
 
 ### Checklist manual en producción
 
-Lo ejecuta el usuario, con su autorización (los agentes no tienen acceso a Neon desde su entorno), en `https://carreras-viajeras.mentec.dev/crm/acceso`:
+Lo ejecuta el usuario, con su autorización (los agentes no tienen acceso a Neon desde su entorno), en `https://carreras-viajeras.mentec.dev/crm/acceso` y, para los runners, en `https://carreras-viajeras.mentec.dev/cuenta`:
 
 - [ ] Login de admin (tras el bootstrap) → `/crm` muestra "Admin".
 - [ ] Una cuenta sin rol ve la pantalla sin acceso.
@@ -106,6 +106,8 @@ Lo ejecuta el usuario, con su autorización (los agentes no tienen acceso a Neon
 - [ ] El admin invita a un correo desde `/crm/admin/usuarios` → la persona crea su cuenta → recibe el código → verifica → `/crm` muestra "Comercial".
 - [ ] Recuperar la contraseña con código y volver a iniciar sesión.
 - [ ] Comprobar que llega el código de 6 dígitos y que la sesión persiste al recargar.
+- [ ] (Runners) Un correo nuevo se registra en `/cuenta`, verifica el código y queda en `/cuenta` con sesión. Al abrir `/crm` ve la pantalla "sin acceso", `GET /api/crm/me` responde 403 y no aparecen filas nuevas en `profiles` ni `staff_assignments`.
+- [ ] (Runners) "Cerrar sesión" en `/cuenta` vuelve a `/cuenta` sin sesión, y el login de admin en `/crm/acceso` sigue llevando a `/crm`.
 
 ### Migración de las tablas de staff
 
@@ -154,7 +156,7 @@ Especificado en [`trips-catalog.md`](docs/specs/trips-catalog.md). Cada viaje ti
 ### Cómo se cargan los datos
 
 - El equipo crea y mantiene los viajes desde **`/crm/viajes`** (crear, editar, publicar, despublicar y archivar). Esa página llega en la Fase 2 de la spec; hoy no existe.
-- Lo pueden hacer `commercial` y `admin` (permiso `trips.manage`). Una cuenta sin rol de staff, incluidas las futuras cuentas de runner de la landing, no tiene acceso.
+- Lo pueden hacer `commercial` y `admin` (permiso `trips.manage`). Una cuenta sin rol de staff, incluidas las cuentas de runner de la landing (`/cuenta`), no tiene acceso.
 - Un viaje nace en borrador y no aparece en la web hasta que se publica. El `slug` solo se puede cambiar mientras está en borrador.
 - No hay seeds ni `INSERT` manuales: "Maratón de Santiago 2027" se creará desde el CRM con el slug exacto `maraton-santiago-2027` y 100 cupos, copiando los datos que hoy tiene la landing.
 - **Precio:** un único precio "desde", siempre en dólares estadounidenses, entero y sin decimales (`priceUsd`). No hay campo de moneda. Se muestra como `US$ 1,990` (`US$ 12,500`, `US$ 0`); sin precio, "Precio a consultar".

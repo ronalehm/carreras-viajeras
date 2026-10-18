@@ -1,9 +1,9 @@
 # Landing pública de Carreras Viajeras (port del diseño HTML/CSS/JS)
 
-- Módulo: landing (F3 modifica también `accounts`)
+- Módulo: landing
 - Estado: aprobado
-- Base: `platform-neon-foundation.md` (aprobada). F1 y F2 no usan base de datos, auth, D1, Hyperdrive, Access ni Turnstile. F3 reutiliza Neon Auth y los componentes de `accounts-auth-ui.md` (aprobada) y **no cambia** el control de acceso del CRM (`accounts-roles-permissions.md`, aprobada).
-- Depende de: F3 requiere `accounts-auth-ui.md` **Fase 2 implementada** (`SignUpForm`, `VerifyEmailForm`, `AccessPanel`).
+- Base: `platform-neon-foundation.md` (aprobada). F1 y F2 no usan base de datos, auth, D1, Hyperdrive, Access ni Turnstile. F3 usa Neon Auth solo a través de la API pública de `modules/accounts` y **no cambia** el control de acceso del CRM (`accounts-roles-permissions.md`, aprobada).
+- Depende de: F3 requiere `accounts-auth-ui.md` **Fase 4 (audiencia runner) aprobada e implementada**: `RunnerAccount` exportado desde `@/modules/accounts`. F3 no modifica archivos de `modules/accounts`.
 - Fuente de diseño (solo local, excluida en `.git/info/exclude`; no se importa ni se versiona): `docs/Rediseño de Landing/Carreras-Viajeras-Web-HTML-CSS-JS/`: `index.html` (landing), `contacto.html` (formulario), `cuenta.html` (acceso), CSS/JS asociados, `LEEME.txt` y capturas en `docs/Rediseño de Landing/*.png`. El developer copia de ahí los **textos literales** de cada sección; esta spec solo enumera las adaptaciones y omisiones.
 
 ## Objetivo
@@ -75,15 +75,13 @@ Sustituye el template "Hello world".
 8. **Viajes:**
    - `/viajes/[slug]` se genera en build con `generateStaticParams` desde la constante `TRIPS`. Con `dynamicParams = false` y `notFound()`, un slug desconocido devuelve 404.
    - Todo el contenido sale del diseño. Lo que el diseño declara pendiente (aerolínea, horarios, hotel, ocupación, seguro, saldo de la tarjeta de metro, merchandising) se muestra como pendiente con sus textos; no se inventan itinerario, hotel ni condiciones.
-9. **Cuenta de runner (F3):**
-   - **Identidad:** un runner es una cuenta de Neon Auth sin roles de staff. Se registra en `/cuenta` con el mismo cliente (`authClient`) y los mismos formularios que `/crm/acceso`.
-   - **Acceso al CRM sin cambios:** lo sigue decidiendo `requireCrmUser()` (correo verificado más rol activo por `user_id`, denegado por defecto). Si un runner abre `/crm`, ve "Tu cuenta no tiene acceso al CRM…".
-   - **Base de datos:** no se crean filas en `profiles` ni `staff_*` (lo garantiza `accounts-roles-permissions.md` F1: un registro libre no crea perfil).
-   - **Navegación:** tras ingresar o verificar en `/cuenta`, la persona se queda en `/cuenta`, también si es staff. Tras cerrar sesión vuelve a `/cuenta`.
-   - **Destinos fijos:** son una unión cerrada (`"/crm" | "/cuenta"`) que se pasa por prop. Nunca se leen de la URL, así que no hay redirección abierta.
-   - **Estado de sesión:** `/cuenta` lo muestra con `authClient.useSession()` en el cliente. Es solo presentación: la página no protege ningún recurso ni consulta la base de datos.
-   - **Sin regresiones:** `/crm/acceso` se comporta exactamente igual (audiencia `staff` por defecto) y sus tests existentes siguen pasando sin cambios.
-   - **Tamaño del Worker:** como en `accounts-auth-ui.md`, se mide sin desplegar y debe seguir < 3 MiB gzip.
+9. **Cuenta de runner (F3):** la landing aporta la ruta, el diseño y los enlaces. Toda la lógica de acceso es de `accounts-auth-ui.md` F4 (Requisito 12), consumida solo a través de `RunnerAccount`.
+   - **Identidad y acceso al CRM:** un runner es una cuenta de Neon Auth sin roles de staff. El CRM sigue denegado por defecto (`requireCrmUser()`: correo verificado + rol activo por `user_id`). Un runner que abre `/crm` ve "Tu cuenta no tiene acceso al CRM…" y no se crean filas en `profiles` ni `staff_*`.
+   - **Navegación:** tras ingresar o verificar en `/cuenta`, la persona se queda en `/cuenta`, también si es staff. Tras cerrar sesión vuelve a `/cuenta`. Los destinos los fija `accounts` como uniones cerradas; la landing no pasa ni lee destinos.
+   - **Página estática:** `app/cuenta/page.tsx` no llama a `getCrmAccess()`, a guardas ni a la base de datos. El estado de sesión lo muestra `RunnerAccount` en el cliente, solo como presentación.
+   - **Comunidad sin persistencia:** `#comunidad` es contenido estático con un CTA a `/cuenta`. No hay experiencias, fotos, estrellas ni datos de runner.
+   - **Sin regresiones:** `/crm/acceso` no cambia. Esta fase no modifica `modules/accounts`, `lib/auth/*`, `app/crm/*`, `app/api/*` ni `drizzle/`.
+   - **Tamaño del Worker:** se mide sin desplegar y debe seguir < 3 MiB gzip.
 
 ### Inventario de secciones (orden de `index.html`)
 | # | id / elemento | Componente | Fase | Interacción | Adaptaciones respecto al diseño |
@@ -103,7 +101,7 @@ Sustituye el template "Hello world".
 | 13 | `.mobile-cta` | `MobileCta` | F1 | CSS `fixed` < `sm` | → `/contacto?destino=santiago-2027` |
 | — | `/contacto` | `ContactSection` + `ContactForm` (client) | F1 | Preparar, copiar, WhatsApp | Sin "Ver privacidad"; queda "La consulta no se envía desde esta demostración." |
 | — | `/viajes/maraton-santiago-2027` | `TripDetail` (+ `TripFacts`) | F2 | — | Nueva página (no existe en el diseño) compuesta solo con contenido del diseño |
-| — | `/cuenta` | `RunnerAccount` (client, `modules/accounts`) | F3 | Ingresar, registrarse, verificar, cerrar sesión | Textos de `cuenta.html`, sin los avisos de "Acceso próximamente" / "Servicio de cuentas pendiente" (ya está conectado) |
+| — | `/cuenta` | `AccountSection` (server, landing) + `RunnerAccount` (client, `modules/accounts` F4) | F3 | Ingresar, registrarse, verificar, recuperar contraseña, cerrar sesión | Columna de `cuenta.html` con sus textos; sin los avisos "Acceso próximamente" / "Servicio de cuentas pendiente" (ya está conectado); sin pestañas: el cambio entre ingreso y alta lo hace el panel de `accounts` |
 
 ## Criterios de aceptación
 ### Fase 1 — Base, cabecera, carrusel, pie, CTA móvil y `/contacto`
@@ -165,18 +163,12 @@ Sustituye el template "Hello world".
 
 ### Fase 3 — Cuenta del runner y comunidad
 - [ ] (F3) Dado `/`, cuando lo recorro, entonces la sección `#comunidad` aparece entre paquete y por qué viajar. La cabecera añade "Comunidad" (`/#comunidad`) y "Ingresar / Registrarse" (`/cuenta`), la lámina 3 enlaza a `#comunidad` y el pie muestra "Tu comunidad" → `/cuenta`. No hay demo de experiencias ni enlaces a `/crm`.
-- [ ] (F3) Dado `/cuenta` sin sesión, cuando lo abro, entonces veo los textos de `cuenta.html` (sin "Acceso próximamente") y el panel de acceso en modo runner:
-  - el enlace al alta dice "Registrarse";
-  - el alta muestra "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.";
-  - no aparece "Solo para personas invitadas por un administrador".
-- [ ] (F3) Dado un alta válida en `/cuenta`, cuando verifico el código, entonces:
-  - con sesión, me quedo en `/cuenta` y veo "Qué bueno verte de nuevo.", mi correo y "Cerrar sesión";
-  - sin sesión, paso a "Iniciar sesión" con el aviso de `accounts-auth-ui`, y al iniciar sesión me quedo en `/cuenta`.
-- [ ] (F3) Dada una sesión de runner sin roles, cuando abro `/crm`, entonces veo "Tu cuenta no tiene acceso al CRM. Pide una invitación a un administrador.". `GET /api/crm/me` responde 403 y no se crean filas en `profiles` ni `staff_*` (comprobación manual en producción, con autorización del usuario).
-- [ ] (F3) Dada una sesión en `/cuenta`, cuando pulso "Cerrar sesión", entonces se llama a `signOut()` y vuelvo a `/cuenta` sin sesión.
-- [ ] (F3) Dado `/crm/acceso`, cuando inicio sesión o creo una cuenta, entonces el comportamiento es idéntico al de `accounts-auth-ui.md`: destino `/crm`, aviso de invitación y cierre de sesión hacia `/crm/acceso`. Sus tests existentes pasan sin modificarse.
-- [ ] (F3) Dado `AccessPanel` con `audience="runner"`, cuando el login o la verificación tienen éxito, entonces se llama a `router.replace("/cuenta")`; con el valor por defecto, a `router.replace("/crm")` (unit test). Ninguna prop de destino acepta valores fuera de `"/crm" | "/cuenta"` ni se lee de la URL.
-- [ ] (F3) Dado el diff de la fase, entonces no modifica `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, `drizzle/` ni añade variables `NEXT_PUBLIC_*`.
+- [ ] (F3) Dado `/cuenta` sin sesión, cuando lo abro, entonces veo la cabecera y el pie de la landing y la columna de `cuenta.html`. Los textos son "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." (texto display, no encabezado), "Participa. Comparte. Conecta.", "★ ESTRELLAS POR CORRER Y COMPARTIR" y la nota "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay perfiles persistentes ni descuentos activos.". Sin "Acceso próximamente". Junto a la columna aparece el panel de runner de `accounts`: "Iniciar sesión" con el enlace "Registrarse". La página tiene un único `h1`, el del panel.
+- [ ] (F3) Dado un alta en `/cuenta`, cuando verifico el código, entonces me quedo en `/cuenta` con sesión y veo "Qué bueno verte de nuevo." y mi correo. "Cerrar sesión" me deja en `/cuenta` sin sesión.
+- [ ] (F3) Dada una sesión de runner sin roles, cuando abro `/crm`, entonces veo "Tu cuenta no tiene acceso al CRM. Pide una invitación a un administrador.". `GET /api/crm/me` responde 403 y no se crean filas en `profiles` ni `staff_*` (comprobación manual en producción, con autorización del usuario; la misma de `accounts-auth-ui.md` F4).
+- [ ] (F3) Dado `/crm/acceso`, cuando lo uso, entonces se comporta igual que antes de esta fase.
+- [ ] (F3) Dado el HTML de `/cuenta`, entonces el `<title>` es "Ingresar o registrarse | Carreras Viajeras" (segmento hijo: aplica el template del layout) y `robots` es `noindex, nofollow`.
+- [ ] (F3) Dado el diff de la fase, entonces solo toca los archivos del plan de F3. No modifica `modules/accounts/*`, `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, `drizzle/`, `package.json`, ni añade variables `NEXT_PUBLIC_*`. La landing importa de `@/modules/accounts` solo `RunnerAccount`.
 - [ ] (F3) Dado `npm run build:worker` seguido de `npx wrangler deploy --dry-run --outdir <scratch>` (sin desplegar), entonces el tamaño gzip del Worker se registra y es < 3 MiB.
 - [ ] (F3) `npm run lint`, `npx vitest run` y `npm run build` sin errores.
 
@@ -209,7 +201,7 @@ Sustituye el template "Hello world".
     return <><SiteHeader /><main><TripDetail trip={trip} /></main><SiteFooter /></>;
   }
   ```
-- **`app/cuenta/page.tsx`** (F3, nuevo): Server Component estático. `metadata = { title: "Ingresar o registrarse" }`; renderiza `<SiteHeader /><main><RunnerAccount /></main><SiteFooter />`. No llama a `getCrmAccess()` ni a la base de datos.
+- **`app/cuenta/page.tsx`** (F3, nuevo): Server Component estático. `metadata = { title: "Ingresar o registrarse" }` (segmento hijo, así que el template del layout aplica); renderiza `<SiteHeader /><main><AccountSection /></main><SiteFooter />`. No llama a `getCrmAccess()`, a guardas ni a la base de datos. Sin `MobileCta`, igual que en `/contacto`.
 - **Sin route group `(public)`:** cada página compone `SiteHeader` y `SiteFooter` en una línea. El layout compartido se introducirá con las páginas legales (trabajo futuro), si la repetición crece.
 
 ### Tema (`app/globals.css`, F1)
@@ -251,7 +243,8 @@ Sustituye el template "Hello world".
 | `TipList` | nuevo | F2 | `"use client"`. Props `{ tips }`. Estado `filter`; 5 botones con `aria-pressed` en un `role="group" aria-label="Filtrar consejos"`; las tarjetas que no coinciden llevan `hidden` |
 | `DestinationsSection` | nuevo | F2 | Server. 3 `Link` (array local); Santiago, con estilo activo, → `/viajes/maraton-santiago-2027` |
 | `FaqSection` | nuevo | F2 | Server. `<section id="preguntas">`; 9 `<details>` (array local) |
-| `CommunitySection` | nuevo | F3 | Server. `<section id="comunidad" aria-labelledby="community-title">`: imagen `running-team.jpg`, título, texto, CTA "Ingresar / Registrarse" → `/cuenta`, 3 pasos y nota de recompensas |
+| `CommunitySection` | nuevo | F3 | Server. `<section id="comunidad" aria-labelledby="community-title">`: imagen `running-team.jpg`, título, texto, CTA "Ingresar / Registrarse" → `/cuenta`, 3 pasos y nota de recompensas. Estático, sin persistencia |
+| `AccountSection` | nuevo | F3 | Server. Rejilla de dos columnas de `cuenta.html`: (1) imagen `running-team.jpg` (alt "Corredores juntos, imagen ilustrativa") con eyebrow "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." como párrafo con estilo display (`font-heading`, no encabezado), "Participa. Comparte. Conecta." y "★ ESTRELLAS POR CORRER Y COMPARTIR"; (2) eyebrow "COMUNIDAD CARRERAS VIAJERAS", `<RunnerAccount />` y la nota de demostración. No pasa props a `RunnerAccount` |
 
 Todos son de un único dominio (landing) y van en `modules/landing/components/`. No existe nada equivalente en el proyecto ni en shadcn más allá de lo indicado.
 
@@ -324,22 +317,10 @@ Todos son de un único dominio (landing) y van en `modules/landing/components/`.
   - `TRIPS` es la única fuente de datos del paquete: la usan `TripFacts`, `PackageSection`, `TripDetail` y la ruta.
 - Sin hooks, services, stores, schemas zod, TanStack Query, axios ni zustand en el módulo landing.
 
-### Cuenta del runner: cambios en `modules/accounts` (F3)
-Sobre lo que implementa `accounts-auth-ui.md` F2. Todos los cambios son compatibles hacia atrás: los valores por defecto reproducen el comportamiento actual de `/crm/acceso`.
-
-| Archivo | Cambio |
-|---|---|
-| `components/AccessPanel.tsx` | Nueva prop `audience?: "staff" \| "runner"` (por defecto `"staff"`), exportada como tipo `AccessAudience`. Se traduce a una configuración local: destino (`"/crm"` o `"/cuenta"`), texto del enlace al alta ("¿Te invitaron? Crea tu cuenta" o "Registrarse") y aviso del alta ("Solo para personas invitadas por un administrador" o el texto de `cuenta.html`). Pasa `destination` y `notice` a los formularios |
-| `components/SignInForm.tsx` | Prop `destination?: "/crm" \| "/cuenta"` (por defecto `"/crm"`) en lugar del literal en `router.replace` |
-| `components/VerifyEmailForm.tsx` | La misma prop `destination` |
-| `components/SignUpForm.tsx` | Prop `notice?: string` (por defecto, el aviso de invitación actual) |
-| `components/SignOutButton.tsx` | Prop `redirectTo?: "/crm/acceso" \| "/cuenta"` (por defecto `"/crm/acceso"`) |
-| `components/AccessPanel.test.tsx` | Casos runner: login correcto → `/cuenta`; verificación con sesión → `/cuenta`; aviso del alta de runner; sin `audience` → `/crm` (los casos existentes no cambian) |
-| `components/RunnerAccount.tsx` (nuevo) | `"use client"`. Columna de `cuenta.html` (imagen `running-team.jpg`, eyebrow, "El próximo viaje empieza contigo." como texto display, "Participa. Comparte. Conecta.", "★ ESTRELLAS POR CORRER Y COMPARTIR") y panel. El panel usa `authClient.useSession()`: mientras carga, `role="status"` "Cargando…"; con sesión, `h1` "Qué bueno verte de nuevo.", el correo, la nota de `cuenta.html` "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay perfiles persistentes ni descuentos activos." y `<SignOutButton redirectTo="/cuenta" />`; sin sesión, `<AccessPanel audience="runner" />`. El `h1` sin sesión lo aporta el formulario del panel. La columna estática va en este componente cliente para no añadir otro archivo; es texto sin lógica |
-| `index.ts` | Exporta `RunnerAccount` |
-
-- **Qué se reutiliza sin cambios:** `authClient` (`lib/auth/client.ts`), el proxy `/api/auth/[...path]`, los schemas de `auth.schema.ts`, `authErrorMessage` y los mensajes sin enumeración de cuentas, el flujo `EMAIL_NOT_VERIFIED` y la recuperación por código, si está implementada.
-- **Qué no se toca:** `requireCrmUser()`, `getCrmAccess()`, `CrmShell`, `NoCrmAccess`, `lib/auth/*`, las tablas y las páginas del CRM.
+### Cuenta del runner: qué se usa de `modules/accounts` (F3)
+- **Único import:** `RunnerAccount` desde `@/modules/accounts`. Lo crea `accounts-auth-ui.md` F4: `AccessPanel audience="runner"` con alta, verificación por código, `EMAIL_NOT_VERIFIED`, recuperación de contraseña y mensajes sin enumeración, más `SignOutButton redirectTo="/cuenta"` y los estados de sesión con `authClient.useSession()`.
+- **La landing no toca** `AccessPanel`, los formularios, `authClient`, `getCrmAccess()`, `CrmShell`, `NoCrmAccess`, `lib/auth/*`, las tablas ni las páginas del CRM.
+- **Encabezados:** el único `h1` de `/cuenta` lo aporta `RunnerAccount`: el título del formulario activo ("Iniciar sesión", "Crea tu cuenta"…) o, con sesión, "Qué bueno verte de nuevo.". Por eso `AccountSection` muestra "El próximo viaje empieza contigo." como texto display, no como encabezado.
 
 ### Contrato de API
 No se añaden APIs.
@@ -354,7 +335,7 @@ No se añaden APIs.
 ### API pública de `modules/landing/index.ts`
 - F1: `SiteHeader`, `SiteFooter`, `HeroCarousel`, `MobileCta`, `ContactSection`.
 - F2: añade `TripFacts`, `PackageSection`, `TripDetail`, `StorySection`, `WhyUsSection`, `BlogSection`, `DestinationsSection`, `FaqSection`, `TRIPS`, `getTrip` y `type Trip`.
-- F3: añade `CommunitySection`.
+- F3: añade `CommunitySection` y `AccountSection`.
 - `ContactForm` y `TipList` son internos.
 
 ### Assets de `public/images/` (F1)
@@ -366,7 +347,7 @@ No se añaden APIs.
 - shadcn ya instalados: `Button`/`buttonVariants`, `Input`, `Label`. Nuevo: `native-select`, sin dependencias npm.
 - `cn` de `@/lib/utils`, `lucide-react`, `next/image`, `next/link`, `next/font/google`, `notFound` de `next/navigation`.
 - `sharp` (transitivo de `next`), solo para la conversión puntual de las dos imágenes.
-- F3: `authClient`, `AccessPanel` con sus formularios, `SignOutButton`, schemas y `authErrorMessage` de `modules/accounts`. No hay un segundo sistema de auth.
+- F3: `RunnerAccount` de `@/modules/accounts` (`accounts-auth-ui.md` F4), que encapsula `AccessPanel`, sus formularios, `SignOutButton` y `authClient`. No hay un segundo sistema de auth.
 
 ## Tests
 - **`modules/landing/utils/inquiry.test.ts`** (F1):
@@ -380,10 +361,10 @@ No se añaden APIs.
     - el texto va codificado, con acentos y saltos de línea;
     - `""`, 9 dígitos o 16 dígitos → `null`.
   - `parseDestinationId`: `"panama"` → `"panama"`; `undefined`, `"xyz"` o `["panama"]` → `"santiago-2027"`.
-- **`modules/accounts/components/AccessPanel.test.tsx`** (F3, ampliado): los casos de la tabla de F3. Los casos existentes siguen intactos y prueban que el valor por defecto no cambia.
+- F3 no añade tests en la landing: la lógica de acceso y sus tests (`AccessPanel.test.tsx`, `RunnerAccount.test.tsx`) son de `accounts-auth-ui.md` F4.
 - **Sin unit tests**, según `docs/SETUP.md`:
-  - las secciones presentacionales;
-  - `HeroCarousel`, `ContactForm`, `TipList` y `RunnerAccount`, por ser componentes de módulo y no de `components/shared`;
+  - las secciones presentacionales, incluidas `CommunitySection` y `AccountSection`;
+  - `HeroCarousel`, `ContactForm` y `TipList`, por ser componentes de módulo y no de `components/shared`;
   - `trips.ts`: `TRIPS` es dato y `getTrip` un `find` trivial;
   - `native-select`, las páginas y el layout.
 
@@ -406,12 +387,11 @@ Entregable: `/` con todas las secciones salvo comunidad, y `/viajes/maraton-sant
 - [x] T4 — Ruta del viaje, exports, composición de `/`, nav ("Próxima maratón", "Blog") y CTA de la lámina 2 · archivos: `app/viajes/[slug]/page.tsx`, `modules/landing/index.ts`, `app/page.tsx`, `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: T1, T2, T3 · secuencial
 
 ### Fase 3 — Cuenta del runner y comunidad
-Entregable: `/cuenta` con alta, ingreso, verificación y cierre de sesión con Neon Auth, y la sección `#comunidad` con sus enlaces. Total: 15 archivos.
-Requisito previo: `accounts-auth-ui.md` F2 implementada y revisada; la recuperación de su F3 es opcional y se reutiliza si existe. Si al implementar falta alguno de sus componentes, la fase se detiene.
-- [ ] T1 — Parametrizar los componentes de acceso (audiencia, destino, aviso, redirección al cerrar sesión) con test · archivos: `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/SignInForm.tsx`, `modules/accounts/components/SignUpForm.tsx`, `modules/accounts/components/VerifyEmailForm.tsx`, `modules/accounts/components/SignOutButton.tsx`, `modules/accounts/components/AccessPanel.test.tsx` · depende de: Fase 2 y el requisito previo · secuencial · paralelo con T3
-- [ ] T2 — `RunnerAccount` y su export · archivos: `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/index.ts` · depende de: T1 · secuencial
-- [ ] T3 — Comunidad y enlaces de cuenta en cabecera, pie y lámina 3 · archivos: `modules/landing/components/CommunitySection.tsx`, `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/SiteFooter.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 2 · paralelo con T1 y T2 (archivos disjuntos)
-- [ ] T4 — Ruta `/cuenta`, export y composición de `/`; medir el Worker sin desplegar · archivos: `app/cuenta/page.tsx`, `modules/landing/index.ts`, `app/page.tsx` · depende de: T2, T3 · secuencial
+Entregable: `/cuenta` con alta, ingreso, verificación, recuperación y cierre de sesión con Neon Auth, la sección `#comunidad` y los enlaces "Ingresar / Registrarse". Total: 8 archivos, todos de la landing o de `app/`.
+Requisito previo: `accounts-auth-ui.md` F4 aprobada; T2 y T3 requieren además su F4-T2 implementada (`RunnerAccount` exportado). Si falta, esas tareas se detienen; T1 no depende de ella.
+- [x] T1 — Comunidad estática y enlaces de cuenta: nav "Comunidad" (`/#comunidad`) e "Ingresar / Registrarse" (`/cuenta`, variante outline) en la cabecera, "Tu comunidad" en el pie y CTA de la lámina 3 (`#comunidad`) · archivos: `modules/landing/components/CommunitySection.tsx`, `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/SiteFooter.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 2 · paralelo (con `accounts-auth-ui` F4-T1, F4-T2 y F4-T3; archivos disjuntos)
+- [x] T2 — Sección de cuenta con la columna de `cuenta.html` y `RunnerAccount` · archivos: `modules/landing/components/AccountSection.tsx` · depende de: `accounts-auth-ui` F4-T2 · paralelo con T1
+- [x] T3 — Exports, `#comunidad` en `/` (entre paquete y por qué viajar) y ruta `/cuenta`; medir el Worker sin desplegar · archivos: `modules/landing/index.ts`, `app/page.tsx`, `app/cuenta/page.tsx` · depende de: T1, T2 · secuencial (final)
 
 ### Trabajo futuro (fuera de esta spec, cada uno con su spec)
 - **Catálogo de maratones en Neon:** reescribir `trips-catalog.md` sobre Neon. `/viajes/[slug]` pasará a leer del catálogo con el mismo slug y la misma ruta. `TRIPS` se sustituye por el servicio del catálogo, y `generateStaticParams`/`dynamicParams` se revisarán (ISR o render por petición).
@@ -420,6 +400,5 @@ Requisito previo: `accounts-auth-ui.md` F2 implementada y revisada; la recuperac
 - **Páginas legales y secundarias:** `/pasion-por-correr`, `/terminos`, `/privacidad`, `/cookies`, `/libro-de-reclamaciones`, `/informacion-comercial`. Al llegar se reactivan los enlaces omitidos del pie, "Conoce al operador", "Ver privacidad" y TikTok, y se revisa `noindex`. Requiere domicilio, correos, textos legales y Libro de Reclamaciones habilitado.
 
 ## Preguntas abiertas
-1. **(Bloquea solo F3) Coherencia con las specs aprobadas de cuentas.** `accounts-roles-permissions.md` y `accounts-auth-ui.md` dicen que los runners son visitantes anónimos sin cuenta, y `accounts-auth-ui.md` fija el destino del login en `/crm`. F3 cambia esa decisión de producto sin tocar el control de acceso: cuentas de runner solo en Neon Auth, sin filas de staff, y destino por prop con `/crm` por defecto. Además, F3 necesita implementada la F2 de `accounts-auth-ui.md`. Antes de F3:
-   - ¿Prefieres actualizar esas dos specs (volverán a `borrador` y requerirán tu aprobación) o basta con que esta spec documente la excepción?
-   - ¿Confirmas que la F2 de `accounts-auth-ui.md` se implementa antes que la F3 de esta?
+1. **(Resuelta)** La audiencia runner se especifica en `accounts-auth-ui.md` F4, no como excepción de esta spec. F3 depende de esa fase.
+2. **(No bloqueante) Texto desactualizado en `accounts-roles-permissions.md`.** Sus apartados de objetivo y alcance dicen que los runners son "visitantes anónimos, sin cuenta ni perfil". Su mecánica sigue siendo válida (registro libre → 403, sin perfil). El README se corrige en `accounts-auth-ui.md` F4-T3. ¿Quieres actualizar también esa spec? Volvería a `borrador` y necesitaría tu aprobación.
