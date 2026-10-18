@@ -1,7 +1,7 @@
 # Eventos, outbox persistente y API privada para n8n
 
 - Módulo: automation
-- Estado: borrador
+- Estado: aprobado
 - Rama: `feat/automation-outbox` (roadmap 3 · Captura y n8n)
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), `lib/env.ts` con validación diferida, migraciones generadas con `npm run db:generate` y aplicadas a mano. Esta spec es la "Fase 3: captura durable mínima" que esa spec deja a una spec separada, salvo el formulario protegido (ver Alcance).
