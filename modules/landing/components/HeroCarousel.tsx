@@ -49,6 +49,7 @@ const SLIDES: Slide[] = [
         El viaje, {em("juntos.")}
       </>
     ),
+    cta: { href: "#paquete", label: "Descubrir el paquete" },
   },
   {
     image: "/images/running-team.jpg",
