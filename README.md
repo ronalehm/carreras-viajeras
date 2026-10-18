@@ -29,7 +29,7 @@ cd carreras-viajeras
 npm ci
 ```
 
-Esta preparación pertenece a la rama `claude/determined-cannon-bxoqo1` del PR #1 y aún no está fusionada en `main`. Tras clonar, cambiar a esa rama antes de seguir esta configuración.
+Esta preparación ya está fusionada en `main` (PR #1).
 
 Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo en tu equipo**. Para la ejecución local de Wrangler/OpenNext, copiar `.dev.vars.example` a `.dev.vars`. Son archivos distintos: mantener coherentes sus valores; nunca subirlos ni pegar secretos en un chat. Las plantillas no contienen credenciales.
 
