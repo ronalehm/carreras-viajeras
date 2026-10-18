@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
 import { getLeadById, getLeadFormOptions, LeadForm } from "@/modules/crm";
 
@@ -28,7 +30,14 @@ export default async function EditLeadPage({ params }: PageProps<"/crm/leads/[id
     <section className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Editar lead</h1>
       {lead.archivedAt ? (
-        <p className="text-muted-foreground">Lead archivado: solo lectura.</p>
+        <>
+          <p className="text-muted-foreground">Lead archivado: solo lectura.</p>
+          <div>
+            <Link href={`/crm/leads/${lead.id}`} className={buttonVariants({ variant: "ghost" })}>
+              Volver a la ficha
+            </Link>
+          </div>
+        </>
       ) : (
         <LeadForm
           lead={{ id: lead.id, fullName, phone, email, location, trip, destinationText }}

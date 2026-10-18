@@ -619,10 +619,10 @@ Requisitos previos: Fase 1 cerrada, migraciones `0001` y `0002` aplicadas, y `tr
 
 ### Fase 6: archivo (4 tareas, 13 archivos)
 Requisito previo: `trips-catalog` F2-T2 cerrada (`components/shared/ConfirmActionButton.tsx`).
-- [ ] T1 — Filtro `archivados` (schema, tipo y query de la lista) y `archiveLead`, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: Fase 5 · secuencial
-- [ ] T2 — `archiveLeadAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Opción "Archivados" en `LeadFilters` · archivos: `modules/crm/components/LeadFilters.tsx` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — Ficha y edición en solo lectura si está archivado, botón "Archivar" y API pública; medir el Worker al terminar T3 y T4 · archivos: `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T2 · paralelo (con T3)
+- [x] T1 — Filtro `archivados` (schema, tipo y query de la lista) y `archiveLead`, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: Fase 5 · secuencial
+- [x] T2 — `archiveLeadAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Opción "Archivados" en `LeadFilters` · archivos: `modules/crm/components/LeadFilters.tsx` · depende de: T2 · paralelo (con T4)
+- [x] T4 — Ficha y edición en solo lectura si está archivado, botón "Archivar" y API pública; medir el Worker al terminar T3 y T4 · archivos: `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T2 · paralelo (con T3)
 
 ## Preguntas abiertas
 (enmienda, 2026-10-18) Sin preguntas nuevas: la enmienda aplica decisiones ya tomadas por el usuario en `crm-leads-capture.md` (leads web sin responsable, asignación manual en el CRM, actividades de n8n) y las sugerencias de la revisión de F1. Requiere nueva aprobación ("apruebo docs/specs/crm-leads-pipeline.md").
