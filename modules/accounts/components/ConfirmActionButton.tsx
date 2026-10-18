@@ -103,7 +103,7 @@ function ConfirmActionForm({
       )}
 
       <AlertDialogFooter>
-        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+        <AlertDialogCancel disabled={pending}>Cancelar</AlertDialogCancel>
         <AlertDialogAction type="submit" variant={confirmVariant} disabled={pending}>
           {pending ? "Procesando…" : confirmLabel}
         </AlertDialogAction>

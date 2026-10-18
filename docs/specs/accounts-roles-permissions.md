@@ -585,16 +585,16 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
 
 ### Fase 3: página de administración en el CRM (5 tareas, 17 archivos: 4 generados por el CLI de shadcn y 13 escritos a mano)
 Coordinación: F3-T2 modifica `modules/accounts/schemas/auth.schema.ts`, que también toca `accounts-auth-ui.md` F3-T1. No se ejecutan en la misma sesión ni en paralelo.
-- [ ] T1 — Instalar shadcn: `npx shadcn@latest add table badge native-select alert-dialog` (sin sobrescribir `button.tsx`) · archivos: `components/ui/table.tsx`, `components/ui/badge.tsx`, `components/ui/native-select.tsx`, `components/ui/alert-dialog.tsx` · depende de: Fase 2 · secuencial (base, `components/ui/`)
-- [ ] T2 — Base del módulo:
+- [x] T1 — Instalar shadcn: `npx shadcn@latest add table badge native-select alert-dialog` (sin sobrescribir `button.tsx`) · archivos: `components/ui/table.tsx`, `components/ui/badge.tsx`, `components/ui/native-select.tsx`, `components/ui/alert-dialog.tsx` · depende de: Fase 2 · secuencial (base, `components/ui/`)
+- [x] T2 — Base del módulo:
   - exportar `emailSchema` y reutilizarlo en `inviteStaffSchema`;
   - `getCrmAccess(permission)` con su test;
   - `staffDisplay` (etiquetas de rol y `formatStaffDateTime`) con su test.
 
   Archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/utils/crmAccess.ts`, `modules/accounts/utils/crmAccess.test.ts`, `modules/accounts/utils/staffDisplay.ts`, `modules/accounts/utils/staffDisplay.test.ts` · depende de: F3-T1 · paralelo (con F3-T3; archivos disjuntos)
-- [ ] T3 — `ConfirmActionButton` (cliente, `AlertDialog` + `useActionState`) · archivos: `modules/accounts/components/ConfirmActionButton.tsx` · depende de: F3-T1 · paralelo (con F3-T2; archivos disjuntos y sin dependencia entre ellas)
-- [ ] T4 — `InviteStaffForm` (cliente, con el enlace para copiar) y tablas Server `StaffTable` e `InvitationsTable` · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx` · depende de: F3-T2, F3-T3 · secuencial
-- [ ] T5 — Navegación, API pública y página:
+- [x] T3 — `ConfirmActionButton` (cliente, `AlertDialog` + `useActionState`) · archivos: `modules/accounts/components/ConfirmActionButton.tsx` · depende de: F3-T1 · paralelo (con F3-T2; archivos disjuntos y sin dependencia entre ellas)
+- [x] T4 — `InviteStaffForm` (cliente, con el enlace para copiar) y tablas Server `StaffTable` e `InvitationsTable` · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx` · depende de: F3-T2, F3-T3 · secuencial
+- [x] T5 — Navegación, API pública y página:
   - `CrmShell` con el enlace "Usuarios" y `STAFF_ROLE_LABELS`;
   - exports en `index.ts`;
   - `app/crm/(protected)/admin/usuarios/page.tsx`;
