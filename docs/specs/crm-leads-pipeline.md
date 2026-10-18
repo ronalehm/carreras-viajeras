@@ -1,7 +1,7 @@
 # Leads: alta manual, embudo, ficha, responsable y seguimiento (R3 · CRM comercial)
 
 - Módulo: crm
-- Estado: borrador
+- Estado: aprobado
 - Estado de la implementación (2026-10-18): F1–F6 implementadas y aprobadas por el reviewer. Esta revisión del documento solo sincroniza el texto con `main` (destinos Río/Roma de la landing, migración de captura renumerada a `0004`) y con lo implementado; no cambia criterios ni tareas.
 - Enmienda (2026-10-18), aprobada: adapta F2–F4 a los leads de `crm-leads-capture.md` (formulario web sin responsable ni autor, actividades de n8n) e incorpora las sugerencias de la revisión de F1. La F1 está implementada y aprobada por el reviewer (`ff28b28`); sus criterios y tareas no cambian. Los cambios están marcados con "(enmienda)".
 - Depende de:
