@@ -13,6 +13,7 @@ Stack: Next.js 16 (App Router) · React 19 · TypeScript strict · Tailwind CSS 
 1. **Modular por dominio.** Todo el código de negocio vive en `modules/<dominio>/`. Un dominio es un concepto del negocio (`users`, `orders`, `auth`), no un tipo técnico.
 2. **`app/` solo enruta.** Las rutas del App Router (`page.tsx`, `layout.tsx`, `loading.tsx`, `error.tsx`, `route.ts`) son delgadas: leen params, componen componentes del módulo y nada más. Sin lógica de negocio, sin llamadas HTTP directas.
 3. **Nombres en inglés** para carpetas, archivos, variables, funciones, tipos y componentes. El contenido visible al usuario puede estar en español.
+   - **Excepción:** los segmentos de ruta de `app/` que aparecen en la URL van en español (`/crm/acceso`, `/crm/admin/usuarios`). Lo que no aparece en la URL sigue en inglés: carpetas de módulos, archivos, componentes, route groups (`(protected)`), variables y tipos.
 4. **Cada módulo expone una API pública** mediante `index.ts`. Fuera del módulo se importa solo desde `@/modules/<dominio>`, nunca desde sus archivos internos.
 5. **Un módulo no importa internals de otro módulo.** Si dos módulos necesitan lo mismo, se sube a `components/shared`, `hooks/` o `lib/`.
 6. **Solo se crean las subcarpetas que el módulo necesita.** No se crean carpetas vacías "por si acaso".

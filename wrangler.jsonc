@@ -18,6 +18,10 @@
 			"service": "carreras-viajeras"
 		}
 	],
+	// Public, non-secret config. Declared here because each deploy replaces dashboard text vars.
+	"vars": {
+		"APP_ORIGIN": "https://carreras-viajeras.mentec.dev"
+	},
 	"routes": [
 		{
 			"pattern": "carreras-viajeras.mentec.dev",
