@@ -1,7 +1,7 @@
 # Catálogo de viajes (datos, lectura pública y gestión en el CRM)
 
 - Módulo: trips
-- Estado: aprobado
+- Estado: borrador
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), migraciones generadas con `npm run db:generate` y aplicadas a mano.
   - `accounts-roles-permissions.md`: guardas de `lib/auth/guards.ts` y matriz `can()`. Fases 1, 2 y 3 cerradas (PR #5: `/crm/admin/usuarios`, `StaffTable`, `InvitationsTable` y enlace "Usuarios" en `CrmShell`); la Fase 2 de esta spec modifica esos archivos.
@@ -73,7 +73,7 @@ Fase 1 (datos, permiso y lectura pública):
 - [ ] (F1) Dado `getPublishedTripBySlug("Maraton Santiago")` (formato inválido), entonces devuelve `null` sin consultar la base; dado un slug válido de un viaje en `draft` o `archived` (la consulta no devuelve filas), entonces devuelve `null` (unit test).
 - [ ] (F1) Dado `tripFormSchema`, cuando recibe los strings de un `FormData` válido, entonces devuelve las listas ya separadas y limpias, `priceUsd` y `capacity` como enteros y los opcionales vacíos como `null`; y rechaza cada regla del Requisito 1 con el error en su campo (unit test).
 - [ ] (F1) Dado `createTrip` con un slug ya usado, entonces devuelve `"slug_taken"`; dado `updateTrip`, entonces devuelve `"not_found"`, `"archived"`, `"slug_locked"`, `"slug_taken"` o `"updated"` según el caso, en un solo round-trip; dado `setTripStatus` con una transición no permitida o un id inexistente, entonces devuelve `"invalid_transition"` (unit test).
-- [ ] (F1) Dado `formatTripDate("2027-04-25")`, entonces devuelve "25 de abril de 2027" con cualquier zona horaria del proceso; `formatTripPrice(null)` devuelve "Precio a consultar"; `formatTripPrice(1990)` devuelve "1990 US$" y `formatTripPrice(0)` devuelve "0 US$" (con espacio de no separación, igual que `Intl.NumberFormat("es", { style: "currency", currency: "USD", maximumFractionDigits: 0 })`), no "Precio a consultar" (unit test).
+- [ ] (F1) Dado `formatTripDate("2027-04-25")`, entonces devuelve "25 de abril de 2027" con cualquier zona horaria del proceso; `formatTripPrice(null)` devuelve "Precio a consultar"; `formatTripPrice(1990)` devuelve "US$ 1,990", `formatTripPrice(12500)` devuelve "US$ 12,500" y `formatTripPrice(0)` devuelve "US$ 0", no "Precio a consultar" (unit test; formato elegido por el usuario).
 - [ ] (F1) Dado `modules/trips/index.ts`, entonces exporta exactamente el contrato público de F1 (`listPublishedTrips`, `getPublishedTripBySlug`, `formatTripDate`, `formatTripDateRange`, `formatTripPrice` y `type PublicTrip`) y ninguna ruta de `app/` cambia.
 - [ ] (F1) Dado el README, entonces documenta cómo revisar y aplicar a mano la migración de `trips` (sin GRANT: `DATABASE_URL` usa el rol owner) y resume el contrato de lectura para la landing (slug `maraton-santiago-2027`, `getPublishedTripBySlug`, `null` → 404).
 - [ ] (F1) `npm run lint`, `npx vitest run` y `npm run build` sin errores.
@@ -188,11 +188,11 @@ export async function getPublishedTripBySlug(slug: string): Promise<PublicTrip |
 // modules/trips/utils/tripDisplay.ts (puro, sin server-only)
 export function formatTripDate(date: string): string;                     // "25 de abril de 2027"
 export function formatTripDateRange(start: string, end: string): string;  // Intl formatRange, p. ej. "23–27 de abril de 2027"
-export function formatTripPrice(priceUsd: number | null): string;          // "1990 US$"; null → "Precio a consultar"
+export function formatTripPrice(priceUsd: number | null): string;          // "US$ 1,990"; null → "Precio a consultar"
 ```
 - Los errores de la base se propagan (la página de la landing decide su `error.tsx`); en producción Next no muestra el mensaje original.
 - `formatTripDate` y `formatTripDateRange` usan `Intl.DateTimeFormat("es", { dateStyle: "long", timeZone: "UTC" })` sobre `new Date(\`${date}T00:00:00Z\`)`.
-- `formatTripPrice` usa `Intl.NumberFormat("es", { style: "currency", currency: "USD", maximumFractionDigits: 0 })` (p. ej. `1990` → "1990 US$", `12500` → "12.500 US$", con espacio de no separación).
+- `formatTripPrice` devuelve `"US$ " + new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(priceUsd)` (p. ej. `1990` → "US$ 1,990", `12500` → "US$ 12,500"), con espacio normal. Se arma así porque ningún locale de `Intl` produce exactamente "US$ 1,990" (`es-PE` da "USD 1,990") y el resultado no depende de los datos ICU del runtime (Node o Workers).
 
 ### Integración con la landing (`/viajes/<slug>`)
 La spec de la landing (otra rama, en curso) tiene: F1 landing base y `/contacto`; F2 secciones y página del viaje `/viajes/maraton-santiago-2027` con contenido fijo; F3 cuenta de runner (registro, ingreso y cierre de sesión) con `modules/accounts` y Neon Auth, sin acceso al CRM. Esta spec no crea ni modifica rutas públicas; define cómo la landing pasa del contenido fijo al catálogo:
@@ -338,7 +338,7 @@ Las tres bajo `app/crm/(protected)/`, heredan el layout protegido (`getCrmAccess
   - `createTrip`: no envía `status`; `ON CONFLICT DO NOTHING` sobre `slug`; sin filas → `"slug_taken"`;
   - `updateTrip`: un único batch de 2 sentencias; los cinco resultados según las filas simuladas; fija `updated_at`;
   - `setTripStatus`: estados de origen correctos para cada destino; sin filas → `"invalid_transition"`.
-- `modules/trips/utils/tripDisplay.test.ts` (F1): `formatTripDate("2027-04-25")` → "25 de abril de 2027" y `"2027-01-01"` → "1 de enero de 2027" con `TZ` distinto de UTC (p. ej. `vi.stubEnv("TZ", "America/Lima")` o comparando con la salida esperada fija); `formatTripDateRange` con el mismo mes y con meses distintos; `formatTripPrice(null)` → "Precio a consultar"; `1990` → "1990 US$", `12500` → "12.500 US$" y `0` → "0 US$" (comparando con espacio de no separación `\u00a0`).
+- `modules/trips/utils/tripDisplay.test.ts` (F1): `formatTripDate("2027-04-25")` → "25 de abril de 2027" y `"2027-01-01"` → "1 de enero de 2027" con `TZ` distinto de UTC (p. ej. `vi.stubEnv("TZ", "America/Lima")` o comparando con la salida esperada fija); `formatTripDateRange` con el mismo mes y con meses distintos; `formatTripPrice(null)` → "Precio a consultar"; `1990` → "US$ 1,990", `12500` → "US$ 12,500" y `0` → "US$ 0".
 - `components/shared/ConfirmActionButton.test.tsx` (F2; jsdom + Testing Library, acción simulada): abre el diálogo con el título y la descripción; al confirmar envía los `fields` como `FormData`; con `success` se cierra; con `error` muestra el mensaje con `role="alert"` y sigue abierto; "Cancelar" cierra sin llamar a la acción.
 - `modules/trips/actions/trips.actions.test.ts` (F2; llamada directa con `FormData`; mocks de `server-only`, `@/lib/auth/guards`, del service, `next/cache` y `next/navigation`):
   - sin sesión / sin permiso (incluida una cuenta sin rol de staff: `requirePermission` lanza `ForbiddenError`) → `unauthorized` / `forbidden` y el service no se llama (las tres acciones);
