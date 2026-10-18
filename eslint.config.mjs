@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "cloudflare-env.d.ts",
     ".open-next/**",
     ".wrangler/**",
+    // Local design material (excluded from git)
+    "docs/Rediseño de Landing/**",
   ]),
 ]);
 

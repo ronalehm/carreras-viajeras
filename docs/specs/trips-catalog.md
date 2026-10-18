@@ -358,9 +358,9 @@ Las tres bajo `app/crm/(protected)/`, heredan el layout protegido (`getCrmAccess
 
   Archivos: `lib/db-schema.ts`, `drizzle/0001_*.sql` (generado), `drizzle/meta/0001_snapshot.json` (generado), `drizzle/meta/_journal.json`, `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: — · secuencial (base, `lib/`)
 - [x] T2 — Schemas zod y tipos de viajes con su test · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts` · depende de: T1 · secuencial
-- [ ] T3 — Service (lecturas públicas con `connection()`, lecturas del CRM, alta, edición y cambio de estado) con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo (con T4; archivos disjuntos)
-- [ ] T4 — Utilidades de formato públicas (precio en USD) con test · archivos: `modules/trips/utils/tripDisplay.ts`, `modules/trips/utils/tripDisplay.test.ts` · depende de: T2 · paralelo (con T3)
-- [ ] T5 — API pública del módulo y README:
+- [x] T3 — Service (lecturas públicas con `connection()`, lecturas del CRM, alta, edición y cambio de estado) con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo (con T4; archivos disjuntos)
+- [x] T4 — Utilidades de formato públicas (precio en USD) con test · archivos: `modules/trips/utils/tripDisplay.ts`, `modules/trips/utils/tripDisplay.test.ts` · depende de: T2 · paralelo (con T3)
+- [x] T5 — API pública del módulo y README:
   - `index.ts` con el contrato de F1;
   - README: migración de `trips` (revisión y aplicación manual entre `BEGIN`/`COMMIT`; sin GRANT, rol owner) y resumen del contrato para la landing (slug `maraton-santiago-2027`, `getPublishedTripBySlug`, `null` → 404, cambiar al catálogo tras F2).
   - Ejecutar sobre el `README.md` que deje el developer que trabaja hoy en él.
