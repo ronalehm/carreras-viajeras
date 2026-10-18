@@ -21,6 +21,11 @@ export const signInSchema = z.object({
   password: z.string().min(1, { error: "Introduce tu contraseña." }),
 });
 
+const passwordsMatch = (data: { password: string; confirmPassword: string }) =>
+  data.password === data.confirmPassword;
+
+const passwordMismatch = { error: "Las contraseñas no coinciden.", path: ["confirmPassword"] };
+
 export const signUpSchema = z
   .object({
     name: z
@@ -32,11 +37,20 @@ export const signUpSchema = z
     password: newPasswordSchema,
     confirmPassword: z.string(),
   })
-  .refine((data) => data.password === data.confirmPassword, {
-    error: "Las contraseñas no coinciden.",
-    path: ["confirmPassword"],
-  });
+  .refine(passwordsMatch, passwordMismatch);
 
 export const verifyEmailSchema = z.object({
   otp: otpSchema,
 });
+
+export const forgotPasswordSchema = z.object({
+  email: emailSchema,
+});
+
+export const resetPasswordSchema = z
+  .object({
+    otp: otpSchema,
+    password: newPasswordSchema,
+    confirmPassword: z.string(),
+  })
+  .refine(passwordsMatch, passwordMismatch);

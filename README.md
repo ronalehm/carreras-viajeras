@@ -17,7 +17,7 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Operación posterior | Outbox persistente en Neon y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` con inicio de sesión, `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). Aún no hay tablas de leads ni de viajes, organizaciones de colaboradores ni captura durable de leads: requieren sus specs.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). Aún no hay tablas de leads ni de viajes, organizaciones de colaboradores ni captura durable de leads: requieren sus specs.
 
 ## Preparación local
 
@@ -29,7 +29,7 @@ cd carreras-viajeras
 npm ci
 ```
 
-La preparación (PR #1), los roles del equipo (PR #2) y el acceso al CRM (PR #3) están fusionados en `main`.
+La preparación (PR #1), los roles del equipo (PR #2), el acceso al CRM (PR #3), el alta de invitados (PR #4) y la página de usuarios (PR #5) están fusionados en `main`.
 
 Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo en tu equipo**. Para la ejecución local de Wrangler/OpenNext, copiar `.dev.vars.example` a `.dev.vars`. Son archivos distintos: mantener coherentes sus valores; nunca subirlos ni pegar secretos en un chat. Las plantillas no contienen credenciales.
 
@@ -78,7 +78,7 @@ Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los pr
 ### Modelo de acceso
 
 - **Runners:** visitantes anónimos, sin cuenta ni perfil.
-- **Staff** (`commercial`, `admin`): entra solo por invitación. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. La página de administración `/crm/admin/usuarios` llega en la Fase 3 de la spec; hasta entonces la invitación se crea por SQL en el SQL Editor de Neon (`INSERT INTO staff_invitations (email, role, invited_by) VALUES (lower('<correo>'), 'commercial', '<user_id del admin>')`).
+- **Staff** (`commercial`, `admin`): entra solo por invitación. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. Se invita desde `/crm/admin/usuarios` (solo admin), que muestra el enlace para copiarlo.
 - **Aceptación automática:** la primera petición autenticada con el correo **verificado** que coincide (sin distinguir mayúsculas) con una invitación pendiente y vigente la acepta en una sola sentencia: crea el perfil y la asignación. Después, la autorización usa solo el `user.id` estable de Neon Auth, no el correo.
 - **Denegación por defecto:** sin sesión → 401; correo sin verificar, cuenta sin rol, invitación caducada o revocada, o error de Neon Auth o de la base → 403. Los roles se leen de la base en cada petición, así que una revocación se aplica en la siguiente. Body, query, cookies propias y `user.role` de Neon Auth nunca conceden permisos.
 - **Último admin:** el CRM no permite revocar el rol `admin` del último admin activo. El primer admin se asigna solo con el script de bootstrap, nunca por ser el primer registro.
@@ -87,29 +87,25 @@ Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los pr
 
 ### Ajustes de Neon Auth
 
-Los verifica el usuario en la consola de Neon (Auth):
+Requisitos previos manuales: los configura y verifica el usuario en la consola de Neon (Auth). La UI de `/crm/acceso` depende de ellos.
 
-- **Sign-up with Email ON** y **Sign-in ON.** Los invitados necesitan crear su cuenta. **Riesgo aceptado:** cualquiera puede registrarse en Neon Auth, pero sin invitación no obtiene permisos (403) ni filas en `public`.
-- **Verificación del correo al registrarse ON, con código (OTP).** El SMTP compartido de Neon envía códigos; los enlaces requerirían SMTP propio. Sin correo verificado nadie pasa las guardas. La cookie de sesión cachea `emailVerified` hasta 5 minutos.
-- **Trusted origin** `https://carreras-viajeras.mentec.dev` (configurado). Localhost viene preconfigurado.
+- **Dominio de confianza** `https://carreras-viajeras.mentec.dev` (configurado). Localhost viene preaprobado para desarrollo.
+- **Sign-up with Email ON** (y Sign-in ON). Los invitados necesitan crear su cuenta. **Riesgo aceptado:** cualquiera puede registrarse en Neon Auth, pero sin invitación no obtiene permisos (403) ni filas en `public`.
+- **Verificación del correo al registrarse ON, con código (OTP).** El SMTP compartido de Neon envía códigos de 6 dígitos; los enlaces requerirían SMTP propio. Sin correo verificado nadie pasa las guardas. La cookie de sesión cachea `emailVerified` hasta 5 minutos.
+- **Recuperación de la contraseña por código.** `/crm/acceso` → "¿Olvidaste tu contraseña?" usa `POST /api/auth/email-otp/request-password-reset` y `/api/auth/email-otp/reset-password`; ambos se probaron en producción. La recuperación por enlace no se usa (requiere SMTP propio).
 
-**Recuperar la contraseña** mientras no exista la UI (Fase 3 de `accounts-auth-ui.md`): pedir el código y luego restablecer, enviando la cabecera `Origin` con el origen de confianza. Ambos pasos se probaron en producción.
+La solicitud de recuperación responde siempre "Si existe una cuenta con ese correo, te enviamos un código." para no revelar qué cuentas existen.
 
-```sh
-curl -X POST https://carreras-viajeras.mentec.dev/api/auth/email-otp/request-password-reset \
-  -H "Origin: https://carreras-viajeras.mentec.dev" -H "Content-Type: application/json" \
-  -d '{"email":"<correo>"}'
+### Checklist manual en producción
 
-# La contraseña se lee sin eco y no queda en el historial
-read -rsp "Nueva contraseña: " NEW_PASSWORD; echo
-printf '{"email":"%s","otp":"%s","password":"%s"}' "<correo>" "<código>" "$NEW_PASSWORD" |
-  curl -X POST https://carreras-viajeras.mentec.dev/api/auth/email-otp/reset-password \
-    -H "Origin: https://carreras-viajeras.mentec.dev" -H "Content-Type: application/json" \
-    --data @-
-unset NEW_PASSWORD
-```
+Lo ejecuta el usuario, con su autorización (los agentes no tienen acceso a Neon desde su entorno), en `https://carreras-viajeras.mentec.dev/crm/acceso`:
 
-No pegar la contraseña ni el código en un chat. La contraseña no debe contener `"` ni `\`.
+- [ ] Login de admin (tras el bootstrap) → `/crm` muestra "Admin".
+- [ ] Una cuenta sin rol ve la pantalla sin acceso.
+- [ ] "Cerrar sesión" lleva a `/crm/acceso`.
+- [ ] El admin invita a un correo desde `/crm/admin/usuarios` → la persona crea su cuenta → recibe el código → verifica → `/crm` muestra "Comercial".
+- [ ] Recuperar la contraseña con código y volver a iniciar sesión.
+- [ ] Comprobar que llega el código de 6 dígitos y que la sesión persiste al recargar.
 
 ### Migración de las tablas de staff
 
