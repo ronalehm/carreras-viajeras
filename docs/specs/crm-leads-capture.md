@@ -1,7 +1,7 @@
 # Captura automática de leads (formulario web → CRM) y outbox para n8n
 
 - Módulo: crm (también `integrations`, nuevo, y `landing`)
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): contrato de la sección "Leads y procesamiento posterior" (Turnstile en servidor, lead y evento en una transacción, idempotencia, outbox con lease, claim/ack para n8n local, máximo 8 intentos). Esta spec lo concreta y no lo contradice.
   - `crm-leads-pipeline.md` (F1 implementada en `ff28b28`; enmendada para esta captura y de vuelta en borrador hasta su nueva aprobación): tablas `leads` y `lead_activities` (migración `0002`), `createLead`, `getLeadList`, `changeLeadStage` (su F3) y el permiso `leads.manage`. Esta spec **no duplica** ese modelo: lo amplía con la migración `0003` y toca su service solo donde se indica (ver "Relación con otras specs").
