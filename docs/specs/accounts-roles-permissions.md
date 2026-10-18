@@ -1,7 +1,7 @@
 # Roles, invitaciones y permisos del equipo (RBAC del CRM)
 
 - Módulo: accounts
-- Estado: borrador
+- Estado: aprobado
 - Depende de: platform-neon-foundation.md (Fase 1 aprobada); accounts-auth-ui.md (Fases 1 y 2 implementadas: `/crm/acceso`, layout protegido `app/crm/(protected)/`, `CrmShell`, `getCrmAccess`), necesaria para la Fase 3
 
 ## Objetivo
