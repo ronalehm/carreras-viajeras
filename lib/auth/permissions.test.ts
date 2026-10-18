@@ -20,12 +20,16 @@ describe("can", () => {
     [["admin"], "trips.manage", true],
     [["commercial", "admin"], "trips.manage", true],
     [[], "trips.manage", false],
+    [["commercial"], "leads.manage", true],
+    [["admin"], "leads.manage", true],
+    [["commercial", "admin"], "leads.manage", true],
+    [[], "leads.manage", false],
   ])("roles %j with %s → %s", (roles, permission, expected) => {
     expect(can(roles, permission)).toBe(expected);
   });
 
   it("grants admin every permission", () => {
-    for (const permission of ["crm.access", "staff.manage", "trips.manage"] as const) {
+    for (const permission of ["crm.access", "staff.manage", "trips.manage", "leads.manage"] as const) {
       expect(can(["admin"], permission)).toBe(true);
     }
   });
@@ -34,6 +38,7 @@ describe("can", () => {
     expect(can([], "crm.access")).toBe(false);
     expect(can([], "staff.manage")).toBe(false);
     expect(can([], "trips.manage")).toBe(false);
+    expect(can([], "leads.manage")).toBe(false);
   });
 
   it.each(["unknown.permission", "toString", "constructor", "__proto__"])(
