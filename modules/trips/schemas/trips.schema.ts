@@ -1,12 +1,15 @@
 import { z } from "zod";
 
 // Same values as the trip_status enum in lib/db-schema.ts (kept in sync by trips.schema.test.ts).
-export const tripStatusSchema = z.enum(["draft", "published", "archived"]);
+export const tripStatusSchema = z.enum(["draft", "published", "archived"], {
+  error: "El estado no es válido.",
+});
 
 const SLUG_MESSAGE = "Usa minúsculas, números y guiones (p. ej. maraton-santiago-2027).";
 const PRICE_MESSAGE = "Indica un precio en dólares, sin decimales.";
-const CAPACITY_MESSAGE = "Indica un número entero de cupos entre 1 y 10.000.";
+const CAPACITY_MESSAGE = "Indica un número entero de cupos entre 1 y 10,000.";
 const DATE_MESSAGE = "Indica una fecha válida.";
+const TRIP_ID_MESSAGE = "El viaje no es válido.";
 
 export const tripSlugSchema = z
   .string({ error: SLUG_MESSAGE })
@@ -19,22 +22,26 @@ export const tripSlugSchema = z
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
-// Optional form inputs arrive as "" when left blank: they become null.
+// Optional form inputs arrive as "" when left blank: they become null. A missing key (an action
+// called without that field) counts as blank, so it never yields zod's English type error.
 const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
   z
     .string()
-    .trim()
-    .transform((value) => (value === "" ? null : value))
+    .optional()
+    .transform((value = "") => value.trim() || null)
     .pipe(schema.nullable());
 
-// Free-text list: split, trim and drop empty items before validating.
+// Free-text list: split, trim and drop empty items before validating. A missing key is an empty list.
 const textList = (separator: RegExp | string) =>
-  z.string().transform((value) =>
-    value
-      .split(separator)
-      .map((item) => item.trim())
-      .filter((item) => item !== ""),
-  );
+  z
+    .string()
+    .optional()
+    .transform((value = "") =>
+      value
+        .split(separator)
+        .map((item) => item.trim())
+        .filter((item) => item !== ""),
+    );
 
 const wholeNumber = (message: string) =>
   z.string().regex(/^\d+$/, message).transform(Number);
@@ -65,7 +72,7 @@ export const tripFormSchema = z
     ),
     priceUsd: blankToNull(
       wholeNumber(PRICE_MESSAGE).pipe(
-        z.number().int().max(1_000_000, "El precio no puede superar 1.000.000 USD."),
+        z.number().int().max(1_000_000, "El precio no puede superar 1,000,000 USD."),
       ),
     ),
     capacity: blankToNull(
@@ -122,10 +129,10 @@ export const tripFormSchema = z
 
 // safeExtend keeps the travel-date refinement of tripFormSchema.
 export const updateTripSchema = tripFormSchema.safeExtend({
-  id: z.uuid(),
+  id: z.uuid({ error: TRIP_ID_MESSAGE }),
 });
 
 export const tripStatusChangeSchema = z.object({
-  id: z.uuid(),
+  id: z.uuid({ error: TRIP_ID_MESSAGE }),
   status: tripStatusSchema,
 });

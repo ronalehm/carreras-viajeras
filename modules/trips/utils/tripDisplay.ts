@@ -1,4 +1,5 @@
-// Pure formatting for the public trip contract. No server-only: the landing may format in any component.
+// Pure formatting for the trip contract, with no server-only code of its own. Outside the module it is
+// imported only from Server Components through @/modules/trips, whose index also re-exports server-only code.
 
 // Trip dates are calendar dates (YYYY-MM-DD) without time zone; formatting in UTC keeps the day fixed.
 const tripDateFormat = new Intl.DateTimeFormat("es", { dateStyle: "long", timeZone: "UTC" });

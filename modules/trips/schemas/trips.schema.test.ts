@@ -89,6 +89,35 @@ describe("tripFormSchema", () => {
     });
   });
 
+  it("treats missing optional keys as blank, without English type errors", () => {
+    const required: Partial<typeof validForm> = { ...validForm };
+    for (const key of ["startDate", "endDate", "includes", "priceUsd", "capacity", "imageUrl"] as const) {
+      delete required[key];
+    }
+    const result = tripFormSchema.safeParse(required);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      startDate: null,
+      endDate: null,
+      includes: [],
+      priceUsd: null,
+      capacity: null,
+      imageUrl: null,
+    });
+  });
+
+  it("answers in Spanish when every key is missing", () => {
+    const result = tripFormSchema.safeParse({});
+
+    expect(issueFields(result).sort()).toEqual(
+      ["city", "country", "distances", "raceDate", "slug", "summary", "title"].sort(),
+    );
+    expect(result.error?.issues.map((issue) => issue.message)).not.toContainEqual(
+      expect.stringMatching(/Invalid|expected/),
+    );
+  });
+
   it("drops extra keys such as status and priceCurrency", () => {
     const result = tripFormSchema.safeParse({
       ...validForm,
@@ -175,6 +204,12 @@ describe("tripFormSchema", () => {
       expectErrorOn({ priceUsd }, "priceUsd");
     });
 
+    it("writes the limit with the price number style", () => {
+      expect(parse({ priceUsd: "1000001" }).error?.issues[0]?.message).toBe(
+        "El precio no puede superar 1,000,000 USD.",
+      );
+    });
+
     it("uses the price message for decimals", () => {
       expect(parse({ priceUsd: "12.5" }).error?.issues[0]?.message).toBe(
         "Indica un precio en dólares, sin decimales.",
@@ -196,6 +231,12 @@ describe("tripFormSchema", () => {
 
     it("accepts 1", () => {
       expect(parse({ capacity: "1" }).data?.capacity).toBe(1);
+    });
+
+    it("writes the limit with the price number style", () => {
+      expect(parse({ capacity: "10001" }).error?.issues[0]?.message).toBe(
+        "Indica un número entero de cupos entre 1 y 10,000.",
+      );
     });
   });
 
@@ -259,9 +300,10 @@ describe("updateTripSchema", () => {
     expect(updateTripSchema.safeParse({ ...validForm, id: TRIP_ID }).data?.id).toBe(TRIP_ID);
   });
 
-  it("rejects an id that is not a UUID", () => {
+  it("rejects an id that is not a UUID in Spanish", () => {
     const result = updateTripSchema.safeParse({ ...validForm, id: "abc" });
     expect(issueFields(result)).toEqual(["id"]);
+    expect(result.error?.issues[0]?.message).toBe("El viaje no es válido.");
   });
 
   it("keeps the travel date rules", () => {
@@ -286,5 +328,6 @@ describe("tripStatusChangeSchema", () => {
   it.each(["deleted", "PUBLISHED", ""])("rejects the status %j", (status) => {
     const result = tripStatusChangeSchema.safeParse({ id: TRIP_ID, status });
     expect(issueFields(result)).toEqual(["status"]);
+    expect(result.error?.issues[0]?.message).toBe("El estado no es válido.");
   });
 });
