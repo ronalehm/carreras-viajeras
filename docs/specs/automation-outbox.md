@@ -183,9 +183,9 @@ Entregable: claim/ack/fail operativos con bearer. Total: 10 archivos. Requiere F
 
 ### Fase 3 — Workflow n8n con aviso por correo, datos ficticios y reenvío
 Entregable: workflow importable que avisa al equipo por correo, datos ficticios, reenvío auditado y guía de prueba. Total: 5 archivos. Requiere F2.
-- [ ] T1 — Scripts SQL · archivos: `scripts/sql/seed-automation-demo.sql`, `scripts/sql/redrive-automation-event.sql` · depende de: Fase 2 · paralelo con T2
-- [ ] T2 — Workflow con aviso por correo y guía n8n · archivos: `n8n/workflows/automation-outbox-poller.json`, `n8n/README.md` · depende de: Fase 2 · paralelo con T1
-- [ ] T3 — Documentación operativa (secreto, migración, GRANT, checklist) · archivos: `README.md` · depende de: T1, T2 · secuencial
+- [x] T1 — Scripts SQL · archivos: `scripts/sql/seed-automation-demo.sql`, `scripts/sql/redrive-automation-event.sql` · depende de: Fase 2 · paralelo con T2
+- [x] T2 — Workflow con aviso por correo y guía n8n · archivos: `n8n/workflows/automation-outbox-poller.json`, `n8n/README.md` · depende de: Fase 2 · paralelo con T1
+- [x] T3 — Documentación operativa (secreto, migración, GRANT, checklist) · archivos: `README.md` · depende de: T1, T2 · secuencial
 
 ## Preguntas abiertas
 Resueltas: el aviso es un correo al equipo comercial, sin datos personales, con enlace al CRM (requisito 13).
