@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
-import { signInSchema } from "@/modules/accounts/schemas/auth.schema";
+import { signInSchema } from "../schemas/auth.schema";
 
 const INVALID_CREDENTIALS = "Correo o contraseña incorrectos.";
 

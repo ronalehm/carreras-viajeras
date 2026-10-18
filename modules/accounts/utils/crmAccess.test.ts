@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/server", () => ({ connection: vi.fn() }));
 vi.mock("@/lib/auth/guards", () => ({ requireCrmUser: vi.fn() }));
 
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";

@@ -263,11 +263,11 @@ Vitest. Los de servidor llevan `// @vitest-environment node` y `vi.mock("server-
 
 ## Plan de tareas
 ### Fase 1: iniciar sesión y shell protegido (5 tareas, 16 archivos)
-- [ ] T1 — Instalar shadcn (`npx shadcn@latest add input label card`) y registrar en `docs/SETUP.md` §1 la excepción de rutas en español · archivos: `components/ui/input.tsx`, `components/ui/label.tsx`, `components/ui/card.tsx`, `docs/SETUP.md` · depende de: — · secuencial (base)
-- [ ] T2 — Cliente de auth y schema de login con test · archivos: `lib/auth/client.ts`, `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts` · depende de: T1 · secuencial (`lib/`)
-- [ ] T3 — `getCrmAccess`, shell, pantalla sin acceso y cerrar sesión · archivos: `modules/accounts/utils/crmAccess.ts`, `modules/accounts/utils/crmAccess.test.ts`, `modules/accounts/components/CrmShell.tsx`, `modules/accounts/components/NoCrmAccess.tsx`, `modules/accounts/components/SignOutButton.tsx` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — Formulario de login · archivos: `modules/accounts/components/SignInForm.tsx` · depende de: T2 · paralelo (con T3)
-- [ ] T5 — API pública del módulo y rutas (`/crm/acceso`, layout protegido, `/crm`); medir el Worker con `build:worker` + `wrangler deploy --dry-run` sin desplegar · archivos: `modules/accounts/index.ts`, `app/crm/acceso/page.tsx`, `app/crm/(protected)/layout.tsx`, `app/crm/(protected)/page.tsx` · depende de: T3, T4 · secuencial
+- [x] T1 — Instalar shadcn (`npx shadcn@latest add input label card`) y registrar en `docs/SETUP.md` §1 la excepción de rutas en español · archivos: `components/ui/input.tsx`, `components/ui/label.tsx`, `components/ui/card.tsx`, `docs/SETUP.md` · depende de: — · secuencial (base)
+- [x] T2 — Cliente de auth y schema de login con test · archivos: `lib/auth/client.ts`, `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts` · depende de: T1 · secuencial (`lib/`)
+- [x] T3 — `getCrmAccess`, shell, pantalla sin acceso y cerrar sesión · archivos: `modules/accounts/utils/crmAccess.ts`, `modules/accounts/utils/crmAccess.test.ts`, `modules/accounts/components/CrmShell.tsx`, `modules/accounts/components/NoCrmAccess.tsx`, `modules/accounts/components/SignOutButton.tsx` · depende de: T2 · paralelo (con T4)
+- [x] T4 — Formulario de login · archivos: `modules/accounts/components/SignInForm.tsx` · depende de: T2 · paralelo (con T3)
+- [x] T5 — API pública del módulo y rutas (`/crm/acceso`, layout protegido, `/crm`); medir el Worker con `build:worker` + `wrangler deploy --dry-run` sin desplegar · archivos: `modules/accounts/index.ts`, `app/crm/acceso/page.tsx`, `app/crm/(protected)/layout.tsx`, `app/crm/(protected)/page.tsx` · depende de: T3, T4 · secuencial
 
 ### Fase 2: crear cuenta (invitados) y verificar con código (3 tareas, 10 archivos)
 - [ ] T1 — Schemas de alta y código, tipos, mapeo de errores y sus tests · archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts`, `modules/accounts/types/auth.types.ts`, `modules/accounts/utils/authErrorMessage.ts`, `modules/accounts/utils/authErrorMessage.test.ts` · depende de: Fase 1 · secuencial

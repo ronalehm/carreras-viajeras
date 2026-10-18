@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { connection } from "next/server";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCrmAccess, SignInForm } from "@/modules/accounts";
 
@@ -10,8 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function CrmAccessPage() {
-  // Per request: at build the guard fails closed before reading cookies(), which would prerender this.
-  await connection();
   const access = await getCrmAccess();
   if (access.status !== "unauthenticated") redirect("/crm");
 

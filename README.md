@@ -67,7 +67,7 @@ Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión
 
 1. Neon ya tiene proyecto `carreras-viajeras`, rama `production`, región AWS São Paulo y base `neondb`. El usuario confirmó **Sign-up with Email ON** y **Sign-in ON**; esta preparación no verificó la consola.
 2. Comprobar en Neon Auth el trusted origin exacto `https://carreras-viajeras.mentec.dev`. Su estado sigue pendiente de verificación. La cuenta existente no recibe permisos CRM automáticamente.
-3. Antes de publicar, preparar secretos del Worker mediante el mecanismo de secretos de Cloudflare y revisar `APP_ORIGIN`; nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
+3. `DATABASE_URL`, `NEON_AUTH_BASE_URL` y `NEON_AUTH_COOKIE_SECRET` se cargan en Cloudflare como **Secret** (nunca como texto). `APP_ORIGIN` no es secreto y vive en `vars` de `wrangler.jsonc`: cada despliegue automático ejecuta `wrangler deploy`, que borra las variables de texto creadas en el panel y no declaradas ahí. No crear `APP_ORIGIN` también en el panel (ni como texto ni como Secret). Nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
 4. Validar sesión y cookies en runtime Workers. Una futura fase CRM exigirá correo verificado y asignación administrativa activa por ID de usuario, con denegación por defecto; Access puede ser una defensa adicional.
 5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
