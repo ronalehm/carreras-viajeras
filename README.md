@@ -1,115 +1,78 @@
-# next-js-template
+# Carreras Viajeras
 
-Plantilla base para los proyectos de Ronald: Next.js 16 con una estructura modular por dominio y un flujo de desarrollo con agentes de Claude Code basado en **SDD (Spec Driven Development)**, con aprobación humana obligatoria.
+MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello world`), sin construir todavía landing, catálogo, pagos, comunidad ni CRM completo. La landing anterior está en otra carpeta y no forma parte de este repositorio.
 
-## Stack
+> **Precedencia:** la fase 1 aprobada de [`platform-neon-foundation.md`](docs/specs/platform-neon-foundation.md) define esta preparación. Los borradores anteriores que indican D1, Hyperdrive provisional o Access como sustituto de RBAC están obsoletos y no son instrucciones ejecutables. No seguir sus pasos de infraestructura.
 
-| Área | Tecnología |
+## Stack y alcance
+
+| Área | Decisión |
 |---|---|
-| Framework | Next.js 16 (App Router, Turbopack), React 19, TypeScript strict |
-| Estilos | Tailwind CSS v4 (tema en `app/globals.css`, sin `tailwind.config`) |
-| UI | shadcn/ui (estilo `base-nova`, sobre Base UI) + `lucide-react` |
-| Datos | axios, TanStack Query, TanStack Table |
-| Validación y estado | zod, zustand |
-| Tests | Vitest + Testing Library (jsdom) |
+| Aplicación | Next.js + React + TypeScript strict |
+| Interfaz | Tailwind CSS + shadcn/ui sobre Base UI |
+| Ejecución prevista | Cloudflare Workers Free mediante OpenNext |
+| Datos | Neon PostgreSQL Free + Drizzle con driver HTTPS `neon-http` |
+| Identidad | Neon Auth gestionado, basado en Better Auth; un solo proveedor |
+| Validación | Zod; Turnstile para futuros formularios |
+| Operación posterior | Outbox persistente en Neon y n8n Community local |
+| Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-Requisitos: Node 22 o superior y npm.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. La fase 1 no añade frontend ni tablas de negocio. RBAC de CRM/organizaciones y captura durable de leads requieren sus fases y specs posteriores.
 
-## Inicio rápido
+## Preparación local
+
+Requisitos: Node.js 22 o superior y npm. Para verificar el paquete OpenNext, usar Linux o WSL: un build Next correcto por sí solo no valida Workers.
 
 ```sh
-git clone https://github.com/ronalehm/next-js-template.git mi-proyecto
-cd mi-proyecto
-npm install
-npm run dev        # http://localhost:3000
+git clone https://github.com/ronalehm/carreras-viajeras.git
+cd carreras-viajeras
+npm ci
 ```
 
-## Comandos
+Esta preparación pertenece a la rama `claude/determined-cannon-bxoqo1` del PR #1 y aún no está fusionada en `main`. Tras clonar, cambiar a esa rama antes de seguir esta configuración.
 
-| Comando | Qué hace |
+Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo en tu equipo**. Para la ejecución local de Wrangler/OpenNext, copiar `.dev.vars.example` a `.dev.vars`. Son archivos distintos: mantener coherentes sus valores; nunca subirlos ni pegar secretos en un chat. Las plantillas no contienen credenciales.
+
+| Variable | Uso |
 |---|---|
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Build de producción (también hace la comprobación de tipos completa) |
-| `npm run start` | Sirve el build de producción |
-| `npm run lint` | ESLint |
-| `npm test` | Vitest en modo watch |
-| `npx vitest run [ruta]` | Ejecuta los tests una vez (todo, un módulo o un archivo) |
-| `npx shadcn@latest add <componente>` | Añade un componente de shadcn/ui a `components/ui/` |
+| `APP_ORIGIN` | Origen exacto de la aplicación, sin ruta ni slash final; debe coincidir con el trusted origin de Neon Auth |
+| `DATABASE_URL` | Conexión PostgreSQL con TLS de un rol de aplicación con permisos mínimos |
+| `NEON_AUTH_BASE_URL` | Endpoint HTTPS de Neon Auth, no el dominio de la aplicación |
+| `NEON_AUTH_COOKIE_SECRET` | Secreto aleatorio de al menos 32 caracteres, solo servidor |
 
-## Estructura
-
-```
-app/              # solo rutas (App Router)
-components/
-  ui/             # componentes de shadcn/ui
-  shared/         # componentes reutilizables entre dominios
-hooks/            # hooks reutilizables entre dominios
-lib/              # utilidades globales (cliente axios, utils)
-modules/<dominio>/  # código de negocio: components, hooks, services, schemas, stores, types
-docs/
-  SETUP.md        # reglas del proyecto
-  specs/          # especificaciones SDD
-.claude/
-  agents/         # agentes orchestrator, spec, developer, reviewer
-  hooks/          # hooks de aprobación de specs
-```
-
-Las reglas completas (estructura, nombres, SOLID/DRY/KISS/YAGNI, qué lleva tests) están en [`docs/SETUP.md`](docs/SETUP.md). Léelo antes de escribir código.
-
-## Flujo de trabajo con Claude Code
-
-El proyecto incluye 4 agentes en `.claude/agents/`:
-
-| Agente | Rol |
-|---|---|
-| `orchestrator` | Decide si el pedido es **build** (cambio pequeño y claro) o **SDD**, planifica y coordina a los demás, en paralelo cuando las tareas no comparten archivos |
-| `spec` | Escribe la spec en `docs/specs/<module>-<feature>.md`, con un plan de tareas que cabe en una sesión |
-| `developer` | Implementa una spec aprobada o un cambio en modo build, con sus tests |
-| `reviewer` | Revisa contra la spec y `docs/SETUP.md`; devuelve observaciones hasta aprobar |
-
-Para usarlo:
+El origen previsto de producción es `https://carreras-viajeras.mentec.dev`. Para desarrollo, usar el origen local. Neon Auth incluye localhost preconfigurado; comprobar el callback y el origen local si aparece un problema de autenticación. La configuración se valida al usarla en una petición; compilar no debe conectarse a Neon ni exigir secretos.
 
 ```sh
-claude --agent orchestrator
+npm run dev
+npm run lint
+npx vitest run
+npm run build
 ```
 
-y describe la funcionalidad que quieres.
+`/api/health` es liveness pública: confirma que responde la aplicación, sin consultar la base ni revelar detalles de conexión. No acredita readiness de Neon.
 
-### Aprobación de specs
+## Workers y migraciones
 
-Ninguna spec se implementa sin tu aprobación. Cuando el orquestador te muestre la spec, apruébala escribiendo en el chat:
+En Linux/WSL, después de instalar las dependencias allí, verificar el empaquetado sin desplegar:
 
+```sh
+npm run build:worker
 ```
-apruebo docs/specs/<slug>.md
-```
 
-Un hook cambia la spec de `Estado: borrador` a `Estado: aprobado`, registra quién aprobó en `docs/specs/approvals.jsonl` (con una firma cuya clave se guarda en `~/.claude/spec-approval.key`) y Claude continúa con la implementación.
+`npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Bloqueos técnicos (`.claude/settings.json` y `.claude/hooks/spec-approval.mjs`):
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. El schema inicial está vacío: aún no hay tablas de negocio que migrar. `DATABASE_MIGRATION_URL` se reserva para una operación administrativa futura; es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
-- Solo tu mensaje en el chat puede aprobar una spec; Claude solo puede escribirlas con `Estado: borrador`.
-- El agente `developer` no se lanza si la spec no está aprobada o cambió después de aprobarse.
-- El `developer` no puede modificar nada en `docs/specs/`.
-- Las aprobaciones son por equipo: una spec aprobada en otra máquina hay que aprobarla de nuevo en la tuya.
+## Continuar desde Neon y Cloudflare
 
-Tests de los hooks: `npx vitest run .claude/hooks`.
+1. Neon ya tiene proyecto `carreras-viajeras`, rama `production`, región AWS São Paulo y base `neondb`. El usuario confirmó **Sign-up with Email ON** y **Sign-in ON**; esta preparación no verificó la consola.
+2. Comprobar en Neon Auth el trusted origin exacto `https://carreras-viajeras.mentec.dev`. Su estado sigue pendiente de verificación. La cuenta existente no recibe permisos CRM automáticamente.
+3. Antes de publicar, preparar secretos del Worker mediante el mecanismo de secretos de Cloudflare y revisar `APP_ORIGIN`; nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
+4. Validar sesión y cookies en runtime Workers. Una futura fase CRM exigirá correo verificado y asignación administrativa activa por ID de usuario, con denegación por defecto; Access puede ser una defensa adicional.
+5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
-## Skills recomendadas
+Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los procesará con reintentos mediante API privada. No hay formulario, outbox ni integración WhatsApp API implementados en esta fase.
 
-Plugins y skills de Claude Code que complementan esta plantilla. Los comandos con `/plugin` se escriben dentro de Claude Code; reinicia la sesión después de instalar.
+## Reglas de colaboración
 
-| Skill | Para qué | Instalación |
-|---|---|---|
-| [**frontend-design**](https://github.com/anthropics/claude-plugins-official) (Anthropic) | Interfaces con diseño cuidado en vez del aspecto genérico de IA. Se activa sola al pedir pantallas o componentes. | `/plugin install frontend-design@claude-plugins-official` |
-| [**ui-ux-pro-max**](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) | Base de datos de estilos, paletas, tipografías y guías de UX para elegir el diseño de un producto. | `/plugin marketplace add nextlevelbuilder/ui-ux-pro-max-skill`<br>`/plugin install ui-ux-pro-max@ui-ux-pro-max-skill` |
-| [**vercel-labs/agent-skills**](https://github.com/vercel-labs/agent-skills) | Buenas prácticas de React y Next.js de Vercel (rendimiento, waterfalls, bundle, re-renders). Encaja con el stack de la plantilla. | `npx skills add vercel-labs/agent-skills` |
-| [**ponytail**](https://github.com/dietrichgebert/ponytail) | Fuerza la solución más simple que funcione: YAGNI, librería estándar antes que dependencias, menos código. Refuerza KISS/YAGNI de `SETUP.md`. | `/plugin marketplace add dietrichgebert/ponytail`<br>`/plugin install ponytail@ponytail` |
-| [**caveman**](https://github.com/JuliusBrussee/caveman) | Respuestas ultracompactas de Claude: menos tokens de salida sin perder precisión técnica. | `/plugin marketplace add JuliusBrussee/caveman`<br>`/plugin install caveman@caveman` |
-| [**superpowers**](https://github.com/obra/superpowers) | Biblioteca de skills de ingeniería: brainstorming, planificación, TDD, depuración sistemática y revisión de código. | `/plugin marketplace add obra/superpowers-marketplace`<br>`/plugin install superpowers@superpowers-marketplace` |
-
-Cómo combinarlas:
-
-- **Diseño:** `ui-ux-pro-max` para decidir el estilo y `frontend-design` para construir la interfaz, siempre usando los componentes de shadcn/ui y los tokens del tema de `app/globals.css`.
-- **Código:** `vercel-labs/agent-skills` para el rendimiento de React/Next y `ponytail` para no sobrediseñar.
-- **superpowers** trae su propio flujo de planificación y ejecución. En este proyecto manda el flujo SDD (spec aprobada → developer → reviewer); usa sus skills de TDD y depuración dentro de ese flujo, no como sustituto.
-- **caveman** es opcional: reduce el coste, pero las respuestas son muy telegráficas. Desactívalo cuando necesites explicaciones detalladas.
+Leer [`docs/SETUP.md`](docs/SETUP.md) antes de modificar código. El negocio vive en `modules/<domain>/` y `app/` compone rutas. Reutilizar componentes y validar fronteras con Zod. El flujo SDD requiere spec aprobada, implementación y revisión; solo el usuario puede aprobar y ningún agente modifica el registro de aprobaciones.
