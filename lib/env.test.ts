@@ -66,3 +66,33 @@ describe("runtime environment", () => {
     expect(() => getEnv()).toThrow("Invalid environment fields: DATABASE_URL");
   });
 });
+
+describe("automation API token", () => {
+  const token = "synthetic-automation-token-at-least-32-chars";
+
+  it("returns a token of at least 32 characters", async () => {
+    setEnv({ AUTOMATION_API_TOKEN: token });
+    const { getAutomationApiToken } = await import("@/lib/env");
+    expect(getAutomationApiToken()).toBe(token);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["shorter than 32 characters", "synthetic-short-token-31-chars!"],
+  ])("rejects a %s token without exposing its value", async (_case, value) => {
+    setEnv({ AUTOMATION_API_TOKEN: value });
+    const { getAutomationApiToken } = await import("@/lib/env");
+    let error: unknown;
+    try { getAutomationApiToken(); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Invalid environment fields: AUTOMATION_API_TOKEN");
+    if (value) expect(JSON.stringify(error) + (error as Error).message).not.toContain(value);
+    expect((error as Error).cause).toBeUndefined();
+  });
+
+  it("does not affect getEnv() when the token is missing", async () => {
+    setEnv({ ...valid, AUTOMATION_API_TOKEN: undefined });
+    const { getEnv } = await import("@/lib/env");
+    expect(getEnv()).toEqual(valid);
+  });
+});

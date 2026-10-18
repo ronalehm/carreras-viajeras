@@ -5,3 +5,6 @@ NEON_AUTH_COOKIE_SECRET=
 # Production origin: https://carreras-viajeras.mentec.dev
 # Development only: http://localhost:3000 or http://localhost:8787
 APP_ORIGIN=
+# Private automation API bearer: random secret of at least 32 characters.
+# Cloudflare Secret in the Worker and Header Auth credential in n8n; never NEXT_PUBLIC_*.
+AUTOMATION_API_TOKEN=

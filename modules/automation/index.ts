@@ -11,6 +11,11 @@ export {
   eventIdSchema,
   failRequestSchema,
 } from "./schemas/automation.schema";
+export {
+  automationResponse,
+  handleAutomationRequest,
+  isAuthorizedAutomationRequest,
+} from "./utils/automationAuth";
 export type {
   AckResult,
   ClaimedEvent,

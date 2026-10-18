@@ -40,3 +40,12 @@ export function getEnv() {
   }
   return result.data;
 }
+
+const automationApiTokenSchema = z.string().min(32);
+
+// Separate from getEnv() so a missing token only affects the private automation API.
+export function getAutomationApiToken() {
+  const result = automationApiTokenSchema.safeParse(process.env.AUTOMATION_API_TOKEN);
+  if (!result.success) throw new Error("Invalid environment fields: AUTOMATION_API_TOKEN");
+  return result.data;
+}

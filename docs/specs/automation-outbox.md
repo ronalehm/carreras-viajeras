@@ -177,9 +177,9 @@ Entregable: tablas y migración revisable, contrato del evento y servicios proba
 
 ### Fase 2 — API privada
 Entregable: claim/ack/fail operativos con bearer. Total: 10 archivos. Requiere F1.
-- [ ] T1 — Secreto de la API · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: Fase 1 · secuencial (base, `lib/`)
-- [ ] T2 — Verificación del bearer con test · archivos: `modules/automation/utils/automationAuth.ts`, `modules/automation/utils/automationAuth.test.ts` · depende de: Fase 1 · paralelo con T1
-- [ ] T3 — Rutas y export · archivos: `app/api/automation/events/claim/route.ts`, `app/api/automation/events/[id]/ack/route.ts`, `app/api/automation/events/[id]/fail/route.ts`, `modules/automation/index.ts` · depende de: T1, T2 · secuencial
+- [x] T1 — Secreto de la API · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: Fase 1 · secuencial (base, `lib/`)
+- [x] T2 — Verificación del bearer con test · archivos: `modules/automation/utils/automationAuth.ts`, `modules/automation/utils/automationAuth.test.ts` · depende de: Fase 1 · paralelo con T1
+- [x] T3 — Rutas y export · archivos: `app/api/automation/events/claim/route.ts`, `app/api/automation/events/[id]/ack/route.ts`, `app/api/automation/events/[id]/fail/route.ts`, `modules/automation/index.ts` · depende de: T1, T2 · secuencial
 
 ### Fase 3 — Workflow n8n con aviso por correo, datos ficticios y reenvío
 Entregable: workflow importable que avisa al equipo por correo, datos ficticios, reenvío auditado y guía de prueba. Total: 5 archivos. Requiere F2.
