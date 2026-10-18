@@ -41,3 +41,16 @@ export type LeadList = {
   stageCounts: Record<LeadStage, number>;
   ownerOptions: LeadOwnerOption[];
 };
+
+// Compatible with useActionState. values only echoes the action's known form fields, to restore
+// the same user's form; messages never repeat what was typed.
+export type LeadActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | {
+      status: "error";
+      code: "unauthorized" | "forbidden" | "invalid_input" | "invalid_owner" | "invalid_trip";
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+      values?: Record<string, string>;
+    };

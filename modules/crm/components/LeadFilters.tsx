@@ -1,0 +1,53 @@
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import { leadStageSchema } from "../schemas/leads.schema";
+import type { LeadListFilters, LeadOwnerOption } from "../types/leads.types";
+import { LEAD_STAGE_LABELS, UNASSIGNED_OWNER_LABEL } from "../utils/leadDisplay";
+import { LEAD_LIST_PATH, OWNER_PARAMS, QUERY_KEYS, ownerToParam } from "../utils/leadListQuery";
+
+type LeadFiltersProps = {
+  filters: LeadListFilters;
+  ownerOptions: LeadOwnerOption[];
+};
+
+// Native GET form, no client JavaScript: the filters travel in the URL and a new filter starts at page 1.
+export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
+  return (
+    <form method="get" action={LEAD_LIST_PATH} className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="lead-filter-stage">Etapa</Label>
+        <NativeSelect id="lead-filter-stage" name={QUERY_KEYS.stage} defaultValue={filters.stage ?? ""}>
+          <NativeSelectOption value="">Todas</NativeSelectOption>
+          {leadStageSchema.options.map((stage) => (
+            <NativeSelectOption key={stage} value={stage}>
+              {LEAD_STAGE_LABELS[stage]}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="lead-filter-owner">Responsable</Label>
+        <NativeSelect
+          id="lead-filter-owner"
+          name={QUERY_KEYS.owner}
+          defaultValue={filters.owner ? ownerToParam(filters.owner) : ""}
+        >
+          <NativeSelectOption value="">Todos</NativeSelectOption>
+          <NativeSelectOption value={OWNER_PARAMS.mine}>Mis leads</NativeSelectOption>
+          <NativeSelectOption value={OWNER_PARAMS.unassigned}>{UNASSIGNED_OWNER_LABEL}</NativeSelectOption>
+          {ownerOptions.map((owner) => (
+            <NativeSelectOption key={owner.userId} value={owner.userId}>
+              {owner.email}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>
+      </div>
+      <div className="flex gap-2">
+        <Button type="submit" variant="outline">Filtrar</Button>
+        <Link href={LEAD_LIST_PATH} className={buttonVariants({ variant: "ghost" })}>Limpiar</Link>
+      </div>
+    </form>
+  );
+}

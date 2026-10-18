@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadListHref, parseLeadListQuery } from "./leadListQuery";
+import { leadListHref, ownerToParam, parseLeadListQuery } from "./leadListQuery";
 
 describe("parseLeadListQuery", () => {
   it("returns the defaults without filters", () => {
@@ -65,5 +65,13 @@ describe("leadListHref", () => {
     const filters = { stage: "lost", owner, page: 4 } as const;
     const params = Object.fromEntries(new URL(leadListHref(filters, 4), "https://x.test").searchParams);
     expect(parseLeadListQuery(params)).toEqual(filters);
+  });
+});
+
+describe("ownerToParam", () => {
+  it("maps the owner keywords to their URL values and keeps a member id", () => {
+    expect(ownerToParam("mine")).toBe("mios");
+    expect(ownerToParam("unassigned")).toBe("sin-asignar");
+    expect(ownerToParam("user-7")).toBe("user-7");
   });
 });

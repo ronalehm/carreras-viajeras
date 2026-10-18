@@ -32,3 +32,6 @@ export const LEAD_STAGE_BADGE_VARIANTS: Record<LeadStage, BadgeVariant> = {
 
 // Closed stages: no next action. Every other stage is open.
 export const CLOSED_LEAD_STAGES: readonly LeadStage[] = ["paid", "lost"];
+
+// Owner of a lead without owner (web form): list, filter, detail and history.
+export const UNASSIGNED_OWNER_LABEL = "Sin asignar";
