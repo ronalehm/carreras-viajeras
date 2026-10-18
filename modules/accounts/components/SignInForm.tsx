@@ -8,15 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import { signInSchema } from "../schemas/auth.schema";
+import type { FieldErrors, SignInInput } from "../types/auth.types";
+import { authErrorMessage } from "../utils/authErrorMessage";
 
-const INVALID_CREDENTIALS = "Correo o contraseña incorrectos.";
+type SignInFormProps = {
+  defaultEmail?: string;
+  notice?: string;
+  onUnverified: (email: string) => void;
+  onSignUp: () => void;
+};
 
-type FieldErrors = { email?: string; password?: string };
-
-export function SignInForm() {
+export function SignInForm({ defaultEmail, notice, onUnverified, onSignUp }: SignInFormProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors<SignInInput>>({});
   const [formError, setFormError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -30,11 +35,7 @@ export function SignInForm() {
     });
 
     if (!result.success) {
-      const errors = z.flattenError(result.error).fieldErrors;
-      setFieldErrors({
-        email: errors.email ? "Introduce un correo válido." : undefined,
-        password: errors.password ? "Introduce tu contraseña." : undefined,
-      });
+      setFieldErrors(z.flattenError(result.error).fieldErrors);
       return;
     }
 
@@ -42,14 +43,30 @@ export function SignInForm() {
     setPending(true);
 
     try {
+      const { email } = result.data;
       const { error } = await authClient.signIn.email(result.data);
+
+      if (error?.code === "EMAIL_NOT_VERIFIED") {
+        const { error: sendError } = await authClient.emailOtp.sendVerificationOtp({
+          email,
+          type: "email-verification",
+        });
+        if (!sendError) {
+          onUnverified(email);
+          return;
+        }
+        setFormError(authErrorMessage(sendError, "sign-in"));
+        setPending(false);
+        return;
+      }
+
       if (error) {
-        setFormError(INVALID_CREDENTIALS);
+        setFormError(authErrorMessage(error, "sign-in"));
         setPending(false);
         return;
       }
     } catch {
-      setFormError(INVALID_CREDENTIALS);
+      setFormError(authErrorMessage(null, "sign-in"));
       setPending(false);
       return;
     }
@@ -59,12 +76,14 @@ export function SignInForm() {
   }
 
   return (
-    <form
-      noValidate
-      onSubmit={handleSubmit}
-      className="flex w-full max-w-sm flex-col gap-4"
-    >
+    <form noValidate onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <h1 className="text-xl font-semibold">Iniciar sesión</h1>
+
+      {notice && (
+        <p role="status" className="text-sm text-muted-foreground">
+          {notice}
+        </p>
+      )}
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="sign-in-email">Correo</Label>
@@ -73,12 +92,13 @@ export function SignInForm() {
           name="email"
           type="email"
           autoComplete="email"
+          defaultValue={defaultEmail}
           aria-invalid={fieldErrors.email ? true : undefined}
           aria-describedby={fieldErrors.email ? "sign-in-email-error" : undefined}
         />
         {fieldErrors.email && (
           <p id="sign-in-email-error" role="alert" className="text-sm text-destructive">
-            {fieldErrors.email}
+            {fieldErrors.email[0]}
           </p>
         )}
       </div>
@@ -91,13 +111,11 @@ export function SignInForm() {
           type="password"
           autoComplete="current-password"
           aria-invalid={fieldErrors.password ? true : undefined}
-          aria-describedby={
-            fieldErrors.password ? "sign-in-password-error" : undefined
-          }
+          aria-describedby={fieldErrors.password ? "sign-in-password-error" : undefined}
         />
         {fieldErrors.password && (
           <p id="sign-in-password-error" role="alert" className="text-sm text-destructive">
-            {fieldErrors.password}
+            {fieldErrors.password[0]}
           </p>
         )}
       </div>
@@ -110,6 +128,10 @@ export function SignInForm() {
 
       <Button type="submit" disabled={pending}>
         {pending ? "Entrando…" : "Iniciar sesión"}
+      </Button>
+
+      <Button type="button" variant="link" onClick={onSignUp}>
+        ¿Te invitaron? Crea tu cuenta
       </Button>
     </form>
   );
