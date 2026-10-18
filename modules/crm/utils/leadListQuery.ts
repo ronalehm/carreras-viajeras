@@ -12,14 +12,25 @@ const QUERY_KEYS = {
   owner: "responsable",
   page: "pagina",
 } as const satisfies Record<keyof LeadListFilters, keyof z.output<typeof leadListQuerySchema>>;
-const MINE = { filter: "mine", param: "mios" } as const;
+// Owner filters with their own URL value; any other value is a staff user id.
+const OWNER_PARAMS = { mine: "mios", unassigned: "sin-asignar" } as const;
+type OwnerKeyword = keyof typeof OWNER_PARAMS;
+
+const isOwnerKeyword = (value: string): value is OwnerKeyword => Object.hasOwn(OWNER_PARAMS, value);
+
+// Only the Spanish URL values select a keyword filter. The filter names themselves
+// ("mine", "unassigned") are invalid in the URL and mean "no owner filter".
+function ownerFromParam(param: string | undefined): LeadListFilters["owner"] {
+  if (param === undefined || isOwnerKeyword(param)) return undefined;
+  const keyword = (Object.keys(OWNER_PARAMS) as OwnerKeyword[]).find((key) => OWNER_PARAMS[key] === param);
+  return keyword ?? param;
+}
 
 export function parseLeadListQuery(searchParams: SearchParams): LeadListFilters {
   const query = leadListQuerySchema.parse(searchParams);
-  const owner = query[QUERY_KEYS.owner];
   return {
     stage: query[QUERY_KEYS.stage],
-    owner: owner === MINE.param ? MINE.filter : owner,
+    owner: ownerFromParam(query[QUERY_KEYS.owner]),
     page: query[QUERY_KEYS.page],
   };
 }
@@ -29,7 +40,7 @@ export function leadListHref(filters: LeadListFilters, page: number): string {
   const params = new URLSearchParams();
   if (filters.stage) params.set(QUERY_KEYS.stage, filters.stage);
   if (filters.owner) {
-    params.set(QUERY_KEYS.owner, filters.owner === MINE.filter ? MINE.param : filters.owner);
+    params.set(QUERY_KEYS.owner, isOwnerKeyword(filters.owner) ? OWNER_PARAMS[filters.owner] : filters.owner);
   }
   if (page > 1) params.set(QUERY_KEYS.page, String(page));
   const query = params.toString();

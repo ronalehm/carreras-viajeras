@@ -45,15 +45,19 @@ function ownerOptionsQuery(db: Db) {
     .orderBy(asc(profiles.email), asc(profiles.userId));
 }
 
+// "mine" is the session user and "unassigned" the leads without owner (web form).
+function ownerCondition(owner: LeadListFilters["owner"], currentUserId: string) {
+  if (owner === undefined) return undefined;
+  if (owner === "unassigned") return isNull(leads.ownerUserId);
+  return eq(leads.ownerUserId, owner === "mine" ? currentUserId : owner);
+}
+
 // One batch (one round-trip): the page plus one extra row (hasNextPage, no COUNT),
 // the funnel counts (every filter but the stage) and the owner options.
+// LEFT JOIN profiles: a lead without owner is listed with owner = null.
 export async function getLeadList(filters: LeadListFilters, currentUserId: string): Promise<LeadList> {
   const db = getDb();
-  const ownerUserId = filters.owner === "mine" ? currentUserId : filters.owner;
-  const visible = and(
-    isNull(leads.archivedAt),
-    ownerUserId === undefined ? undefined : eq(leads.ownerUserId, ownerUserId),
-  );
+  const visible = and(isNull(leads.archivedAt), ownerCondition(filters.owner, currentUserId));
 
   const [rows, counts, ownerOptions] = await db.batch([
     db
@@ -72,7 +76,7 @@ export async function getLeadList(filters: LeadListFilters, currentUserId: strin
         },
       })
       .from(leads)
-      .innerJoin(profiles, eq(profiles.userId, leads.ownerUserId))
+      .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
       .leftJoin(trips, eq(trips.id, leads.tripId))
       .where(and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage)))
       .orderBy(desc(leads.createdAt), desc(leads.id))
@@ -118,8 +122,9 @@ export async function getLeadFormOptions(): Promise<{
 }
 
 // One statement: the lead is inserted only if the owner is active and the trip (if any) is not
-// archived, and its 'created' activity is inserted from the same RETURNING. stage takes the
-// column default ('new'); the author and the consent version never come from the input.
+// archived; its 'created' activity and its 'lead.created' outbox event (payload { source }, for
+// n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
+// and the consent version never come from the input.
 export async function createLead(
   input: CreateLeadInput,
   actorUserId: string,
@@ -144,11 +149,15 @@ export async function createLead(
         ${MANUAL_CONSENT_VERSION}, ${actorUserId}
       FROM checks
       WHERE owner_ok AND trip_ok
-      RETURNING id
+      RETURNING id, source
     ),
     activity AS (
       INSERT INTO lead_activities (lead_id, type, body, actor_user_id)
       SELECT id, 'created', ${input.note}, ${actorUserId} FROM inserted
+    ),
+    event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted
     )
     SELECT (SELECT id FROM inserted) AS id, owner_ok, trip_ok FROM checks
   `);

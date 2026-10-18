@@ -6,10 +6,11 @@ export type LeadStage = z.infer<typeof leadStageSchema>;
 export type LeadSource = z.infer<typeof leadSourceSchema>;
 export type CreateLeadInput = z.output<typeof createLeadSchema>;
 
-// owner: "mine" is the session user; any other value is a staff user id.
+// owner: "mine" is the session user, "unassigned" the leads without owner;
+// any other value is a staff user id.
 export type LeadListFilters = {
   stage?: LeadStage;
-  owner?: "mine" | string;
+  owner?: "mine" | "unassigned" | string;
   page: number;
 };
 
@@ -29,8 +30,9 @@ export type LeadListItem = {
   source: LeadSource;
   trip: { id: string; title: string } | null;
   destinationText: string | null;
-  // active = false: the owner lost every role with leads.manage ("(sin acceso)").
-  owner: { userId: string; email: string; active: boolean };
+  // null: unassigned (web form leads). active = false: the owner lost every role with
+  // leads.manage ("(sin acceso)").
+  owner: { userId: string; email: string; active: boolean } | null;
 };
 
 export type LeadList = {

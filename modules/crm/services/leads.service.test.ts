@@ -64,7 +64,7 @@ describe("getLeadList", () => {
     const [list, counts, owners] = fake.queries.map((query) => normalize(query.sql));
 
     expect(list).toMatch(
-      /^select "leads"\."id", .* from "leads" inner join "profiles" on "profiles"\."user_id" = "leads"\."owner_user_id" left join "trips" on "trips"\."id" = "leads"\."trip_id"/,
+      /^select "leads"\."id", .* from "leads" left join "profiles" on "profiles"\."user_id" = "leads"\."owner_user_id" left join "trips" on "trips"\."id" = "leads"\."trip_id"/,
     );
     expect(list).toContain(
       `exists (select 1 from "staff_assignments" where ("staff_assignments"."user_id" = "leads"."owner_user_id" and (${ACTIVE_OWNER_ROLES})))`,
@@ -104,6 +104,21 @@ describe("getLeadList", () => {
     expect(fake.queries[1].params).toEqual(["user-7"]);
   });
 
+  it("filters unassigned leads (owner_user_id is null) in the list and in the funnel counts", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "new", owner: "unassigned", page: 1 }, "user-1");
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null) and "leads"."stage" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "new", 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual([]);
+  });
+
   it("returns 25 leads and hasNextPage when the database returns 26 rows", async () => {
     const rows = Array.from({ length: 26 }, (_, index) => listRow(index));
     useFakeDb({ responses: [rows, [], []] });
@@ -120,6 +135,8 @@ describe("getLeadList", () => {
         [
           listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", TRIP_ID, "Maratón de Santiago 2027", "Panamá"]),
           listRow(2, [undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "user-9", "ex@example.com", false]),
+          // Web form lead without owner: the LEFT JOIN returns NULL owner columns.
+          listRow(3, [undefined, "Bea Web", undefined, undefined, "web_form", undefined, undefined, "Panamá", null, null, false]),
         ],
         [
           ["quoted", 1],
@@ -150,6 +167,16 @@ describe("getLeadList", () => {
           trip: null,
           destinationText: null,
           owner: { userId: "user-9", email: "ex@example.com", active: false },
+        },
+        {
+          id: "lead-3",
+          fullName: "Bea Web",
+          phone: "+51938127170",
+          stage: "new",
+          source: "web_form",
+          trip: null,
+          destinationText: "Panamá",
+          owner: null,
         },
       ],
       hasNextPage: false,
@@ -204,7 +231,7 @@ describe("createLead", () => {
     consent: "on",
   };
 
-  it("inserts the lead and its created activity in a single statement", async () => {
+  it("inserts the lead, its created activity and its lead.created event in a single statement", async () => {
     const fake = useFakeDb({ responses: [[{ id: "lead-1", owner_ok: true, trip_ok: true }]] });
 
     await expect(createLead(input, "user-1")).resolves.toEqual({ id: "lead-1" });
@@ -217,10 +244,15 @@ describe("createLead", () => {
       /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok, \(\$4::uuid IS NULL OR EXISTS \( SELECT 1 FROM trips WHERE trips\.id = \$5::uuid AND trips\.status <> 'archived' \)\) AS trip_ok \)/,
     );
     expect(statement).toContain(
-      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15 FROM checks WHERE owner_ok AND trip_ok RETURNING id",
+      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15 FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
     );
     expect(statement).toContain(
       "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $16, $17 FROM inserted",
+    );
+    // status, attempts and available_at take their defaults (pending, 0, now()); payload { source }
+    // is built from the inserted lead (no personal data).
+    expect(statement).toContain(
+      "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted )",
     );
     expect(statement).toMatch(/SELECT \(SELECT id FROM inserted\) AS id, owner_ok, trip_ok FROM checks$/);
     expect(fake.queries[0].params).toEqual([
