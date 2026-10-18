@@ -1,7 +1,7 @@
 # Catálogo de viajes (datos, lectura pública y gestión en el CRM)
 
 - Módulo: trips
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), migraciones generadas con `npm run db:generate` y aplicadas a mano.
   - `accounts-roles-permissions.md`: guardas de `lib/auth/guards.ts` y matriz `can()`. Fases 1, 2 y 3 cerradas (PR #5: `/crm/admin/usuarios`, `StaffTable`, `InvitationsTable` y enlace "Usuarios" en `CrmShell`); la Fase 2 de esta spec modifica esos archivos.
