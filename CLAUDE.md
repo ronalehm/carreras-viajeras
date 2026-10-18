@@ -17,7 +17,12 @@ npm run lint     # ESLint (flat config, eslint.config.mjs)
 npm test         # Vitest watch mode
 npx vitest run path/to/file.test.ts  # single test file, one run
 npx shadcn@latest add <component>   # add shadcn/ui components into components/ui/
+npm run preview     # OpenNext build + run the Worker locally (wrangler)
+npm run deploy      # OpenNext build + deploy to Cloudflare (ask the user first)
+npm run cf-typegen  # regenerate cloudflare-env.d.ts after editing wrangler.jsonc
 ```
+
+Deploys to Cloudflare Workers via `@opennextjs/cloudflare` (requires `next` >= 16.4.1). Config: `wrangler.jsonc` (D1 binding `DB`, custom domain `carreras-viajeras.mentec.dev`) and `open-next.config.ts` (no R2 cache: R2 needs a payment method). Read bindings with `getCloudflareContext()`. This project has a Wrangler config, so use `wrangler`, not the `cf` CLI.
 
 Vitest runs in jsdom with Testing Library; `@/` alias resolved natively via `resolve.tsconfigPaths` (no vite-tsconfig-paths, no @vitejs/plugin-react — its latest version requires Babel 8 and conflicts with shadcn's Babel 7). Async Server Components can't be unit tested.
 
