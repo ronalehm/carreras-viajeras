@@ -8,6 +8,7 @@ import { requirePermission, type CurrentUser } from "@/lib/auth/guards";
 import {
   createLeadSchema,
   leadActivityFormSchema,
+  leadIdSchema,
   leadOwnerChangeSchema,
   leadStageChangeSchema,
   nextActionSchema,
@@ -15,6 +16,7 @@ import {
 } from "../schemas/leads.schema";
 import { addLeadActivity } from "../services/activities.service";
 import {
+  archiveLead,
   changeLeadOwner,
   changeLeadStage,
   createLead,
@@ -45,6 +47,7 @@ const STAGE_CHANGE_FIELDS = Object.keys(leadStageChangeSchema.in.shape);
 const OWNER_CHANGE_FIELDS = Object.keys(leadOwnerChangeSchema.shape);
 const ACTIVITY_FIELDS = Object.keys(leadActivityFormSchema.shape);
 const NEXT_ACTION_FIELDS = Object.keys(nextActionSchema.shape);
+const LEAD_ID_FIELDS = Object.keys(leadIdSchema.shape);
 
 function failure(
   code: LeadActionErrorCode,
@@ -234,4 +237,24 @@ export async function setNextActionAction(
     status: "success",
     message: parsed.data.nextActionDate ? "Próxima acción guardada." : "Próxima acción quitada.",
   };
+}
+
+// Archiving is final (no restore in the MVP): the list hides the lead and its detail page becomes
+// read-only. The archiver is the session user. Its state fits ConfirmActionState.
+export async function archiveLeadAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, LEAD_ID_FIELDS);
+  const parsed = leadIdSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => archiveLead(parsed.data.leadId, actor.id));
+  if (result === "not_found") return failure(result, values);
+
+  revalidateLead(parsed.data.leadId);
+  return { status: "success", message: "Lead archivado." };
 }

@@ -5,6 +5,7 @@ import {
   createLeadSchema,
   leadActivityFormSchema,
   leadActivityTypeSchema,
+  leadIdSchema,
   leadListQuerySchema,
   leadOwnerChangeSchema,
   leadSourceSchema,
@@ -228,6 +229,36 @@ describe("leadListQuerySchema", () => {
       });
     },
   );
+});
+
+describe("leadListQuerySchema: archivados", () => {
+  it("accepts etapa=archivados (archived leads)", () => {
+    expect(leadListQuerySchema.parse({ etapa: "archivados", responsable: "mios" })).toEqual({
+      etapa: "archivados",
+      responsable: "mios",
+      seguimiento: undefined,
+      pagina: 1,
+    });
+  });
+
+  it.each([["archived"], ["Archivados"], [["archivados", "archivados"]]])(
+    "treats etapa=%j as no stage filter",
+    (etapa) => {
+      expect(leadListQuerySchema.parse({ etapa }).etapa).toBeUndefined();
+    },
+  );
+});
+
+describe("leadIdSchema", () => {
+  it("keeps only the lead id", () => {
+    expect(leadIdSchema.parse({ leadId: LEAD_ID, archivedBy: "intruder", stage: "paid" })).toEqual({
+      leadId: LEAD_ID,
+    });
+  });
+
+  it.each([[{ leadId: "abc" }], [{}]])("rejects %j with «El lead no es válido.»", (input) => {
+    expect(fieldErrors(input, leadIdSchema).leadId).toEqual(["El lead no es válido."]);
+  });
 });
 
 describe("updateLeadSchema", () => {

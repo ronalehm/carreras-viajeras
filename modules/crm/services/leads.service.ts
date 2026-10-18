@@ -7,6 +7,7 @@ import {
   eq,
   exists,
   inArray,
+  isNotNull,
   isNull,
   lt,
   lte,
@@ -85,7 +86,8 @@ function followUpCondition(followUp: LeadListFilters["followUp"], today: string)
 }
 
 // One batch (one round-trip): the page plus one extra row (hasNextPage, no COUNT),
-// the funnel counts (every filter but the stage) and the owner options.
+// the funnel counts (every filter but the stage; never archived leads) and the owner options.
+// The "archived" stage filter lists only archived leads, of any stage.
 // LEFT JOIN profiles: a lead without owner is listed with owner = null.
 // With a follow-up filter the most urgent next action comes first.
 export async function getLeadList(
@@ -94,11 +96,13 @@ export async function getLeadList(
   today: string,
 ): Promise<LeadList> {
   const db = getDb();
-  const visible = and(
-    isNull(leads.archivedAt),
-    ownerCondition(filters.owner, currentUserId),
-    followUpCondition(filters.followUp, today),
-  );
+  const byOwner = ownerCondition(filters.owner, currentUserId);
+  const byFollowUp = followUpCondition(filters.followUp, today);
+  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp);
+  const listed =
+    filters.stage === "archived"
+      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp)
+      : and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage));
   const newestFirst = [desc(leads.createdAt), desc(leads.id)];
   const order = filters.followUp ? [asc(leads.nextActionDate), ...newestFirst] : newestFirst;
 
@@ -123,7 +127,7 @@ export async function getLeadList(
       .from(leads)
       .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
       .leftJoin(trips, eq(trips.id, leads.tripId))
-      .where(and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage)))
+      .where(listed)
       .orderBy(...order)
       .limit(LEAD_PAGE_SIZE + 1)
       .offset((filters.page - 1) * LEAD_PAGE_SIZE),
@@ -403,4 +407,30 @@ export async function setNextAction(input: NextActionInput): Promise<"saved" | "
 function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {
   if (!row?.found) return "not_found";
   return row.changed ? "changed" : "no_change";
+}
+
+// One statement, same locking as changeLeadStage. Archiving is final: it records who and when,
+// clears the next action (only non-archived leads have one) and inserts the 'archived' activity
+// (no body, the session user as author). A missing or already archived lead is "not_found".
+export async function archiveLead(leadId: string, actorUserId: string): Promise<"archived" | "not_found"> {
+  const result = await getDb().execute<{ archived: boolean }>(sql`
+    WITH target AS (
+      SELECT id FROM leads
+      WHERE id = ${leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET archived_at = now(), archived_by = ${actorUserId}, next_action_date = NULL, next_action_note = NULL, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id
+      RETURNING leads.id
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, actor_user_id)
+      SELECT id, 'archived', ${actorUserId} FROM updated
+    )
+    SELECT EXISTS (SELECT 1 FROM updated) AS archived
+  `);
+  return result.rows[0]?.archived ? "archived" : "not_found";
 }

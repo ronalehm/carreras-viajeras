@@ -66,7 +66,7 @@ export const createLeadSchema = z.object({
   consent: z.literal("on", { error: CONSENT_MESSAGE }),
 });
 
-const leadIdSchema = z.uuid({ error: "El lead no es válido." });
+const leadUuidSchema = z.uuid({ error: "El lead no es válido." });
 
 // Contact data edit: the contact fields of the manual form plus the lead id. Source, owner,
 // note and consent are not editable; any other key (stage, actorUserId…) is dropped.
@@ -79,7 +79,10 @@ export const updateLeadSchema = createLeadSchema
     tripId: true,
     destinationText: true,
   })
-  .extend({ leadId: leadIdSchema });
+  .extend({ leadId: leadUuidSchema });
+
+// Actions on the lead as a whole (archive): only its id; any other submitted key is dropped.
+export const leadIdSchema = z.object({ leadId: leadUuidSchema });
 
 const LOST_REASON_REQUIRED = "Indica el motivo de la pérdida.";
 const LOST_REASON_LENGTH = "El motivo debe tener entre 3 y 200 caracteres.";
@@ -88,7 +91,7 @@ const LOST_REASON_LENGTH = "El motivo debe tener entre 3 y 200 caracteres.";
 // (leaving "lost" clears it).
 export const leadStageChangeSchema = z
   .object({
-    leadId: leadIdSchema,
+    leadId: leadUuidSchema,
     stage: z.enum(leadStageSchema.options, { error: "Elige una etapa." }),
     lostReason: z
       .string()
@@ -110,7 +113,7 @@ export const leadStageChangeSchema = z
 
 // The CRM never leaves a lead without owner: an owner id is always required.
 export const leadOwnerChangeSchema = z.object({
-  leadId: leadIdSchema,
+  leadId: leadUuidSchema,
   ownerUserId: ownerUserIdSchema,
 });
 
@@ -120,7 +123,7 @@ const ACTIVITY_BODY_LENGTH = "El texto puede tener hasta 2000 caracteres.";
 // Manual follow-up only: system types (created, stage_changed, owner_changed, archived and the
 // n8n automation) are never accepted from the form. The author is always the session user.
 export const leadActivityFormSchema = z.object({
-  leadId: leadIdSchema,
+  leadId: leadUuidSchema,
   type: z.enum(["note", "call", "message"], { error: "Elige el tipo de seguimiento." }),
   body: z
     .string({ error: ACTIVITY_BODY_REQUIRED })
@@ -135,7 +138,7 @@ const NEXT_ACTION_DATE_REQUIRED = "Indica la fecha.";
 // a note always needs a date.
 export const nextActionSchema = z
   .object({
-    leadId: leadIdSchema,
+    leadId: leadUuidSchema,
     nextActionDate: blankToNull(z.iso.date({ error: "Indica una fecha válida." })),
     nextActionNote: blankToNull(z.string().max(200, "La nota puede tener hasta 200 caracteres.")),
   })
@@ -147,10 +150,13 @@ export const nextActionSchema = z
 // URL values of the follow-up filter (overdue, pending).
 export const followUpParamSchema = z.enum(["vencidos", "pendientes"]);
 
+// URL values of the stage filter: each lead stage plus "archivados" (archived leads only).
+const stageParamSchema = z.enum([...leadStageSchema.options, "archivados"]);
+
 // List filters from the URL. Each key falls back to its default on any invalid value,
 // including a repeated parameter (an array), so parsing never throws.
 export const leadListQuerySchema = z.object({
-  etapa: leadStageSchema.optional().catch(undefined),
+  etapa: stageParamSchema.optional().catch(undefined),
   responsable: z.string().min(1).max(255).optional().catch(undefined),
   seguimiento: followUpParamSchema.optional().catch(undefined),
   pagina: z

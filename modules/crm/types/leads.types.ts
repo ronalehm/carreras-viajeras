@@ -22,11 +22,12 @@ export type LeadActivityType = z.infer<typeof leadActivityTypeSchema>;
 export type LeadActivityInput = z.output<typeof leadActivityFormSchema>;
 export type NextActionInput = z.output<typeof nextActionSchema>;
 
+// stage: a lead stage (non-archived leads in it) or "archived" (archived leads only, any stage).
 // owner: "mine" is the session user, "unassigned" the leads without owner;
 // any other value is a staff user id. followUp: open leads with a next action before today
 // ("overdue") or up to today ("pending").
 export type LeadListFilters = {
-  stage?: LeadStage;
+  stage?: LeadStage | "archived";
   owner?: "mine" | "unassigned" | string;
   followUp?: "overdue" | "pending";
   page: number;

@@ -7,6 +7,7 @@ export { leadListHref, parseLeadListQuery } from "./utils/leadListQuery";
 // drizzle, the Neon driver and zod (~250 KiB gzip more in the Worker).
 export {
   addLeadActivityAction,
+  archiveLeadAction,
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,

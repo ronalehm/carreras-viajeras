@@ -8,6 +8,7 @@ vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 import { getDb } from "@/lib/db";
 import type { CreateLeadInput, UpdateLeadInput } from "../types/leads.types";
 import {
+  archiveLead,
   changeLeadOwner,
   changeLeadStage,
   createLead,
@@ -175,6 +176,35 @@ describe("getLeadList", () => {
     expect(normalize(fake.queries[0].sql)).not.toContain('"next_action_date" <');
     expect(normalize(fake.queries[0].sql)).toContain('order by "leads"."created_at" desc, "leads"."id" desc');
     expect(fake.queries[0].params).not.toContain(TODAY);
+  });
+
+  it("archived: lists only archived leads of any stage; the funnel still counts non-archived leads", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "archived", owner: "mine", page: 2 }, "user-1", TODAY);
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where ("leads"."archived_at" is not null and "leads"."owner_user_id" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4 offset $5',
+    );
+    expect(normalize(list.sql)).not.toContain('"leads"."stage" =');
+    expect(list.params).toEqual(["commercial", "admin", "user-1", 26, 25]);
+    expect(list.params).not.toContain("archived");
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" = $1) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["user-1"]);
+  });
+
+  it("archived without other filters: archived_at is not null only", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "archived", page: 1 }, "user-1", TODAY);
+
+    expect(normalize(fake.queries[0].sql)).toContain(
+      'where "leads"."archived_at" is not null order by "leads"."created_at" desc, "leads"."id" desc limit $3',
+    );
+    expect(normalize(fake.queries[1].sql)).toBe(
+      'select "stage", count(*) from "leads" where "leads"."archived_at" is null group by "leads"."stage"',
+    );
   });
 
   it("returns 25 leads and hasNextPage when the database returns 26 rows", async () => {
@@ -650,5 +680,61 @@ describe("setNextAction", () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
     await expect(setNextAction(input)).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+describe("archiveLead", () => {
+  it("archives the lead, clears the next action and inserts the archived activity in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ archived: true }]] });
+
+    await expect(archiveLead(LEAD_ID, "user-1")).resolves.toBe("archived");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      "WITH target AS ( SELECT id FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
+        "updated AS ( UPDATE leads SET archived_at = now(), archived_by = $2, next_action_date = NULL, next_action_note = NULL, updated_at = now() FROM target WHERE leads.id = target.id RETURNING leads.id ), " +
+        "activity AS ( INSERT INTO lead_activities (lead_id, type, actor_user_id) SELECT id, 'archived', $3 FROM updated ) " +
+        "SELECT EXISTS (SELECT 1 FROM updated) AS archived",
+    );
+    // The session user is both archived_by and the author of the activity.
+    expect(fake.queries[0].params).toEqual([LEAD_ID, "user-1", "user-1"]);
+  });
+
+  it.each([[[{ archived: false }]], [[]]])("returns not_found for a missing or already archived lead (rows %j)", async (rows) => {
+    useFakeDb({ responses: [rows] });
+    await expect(archiveLead(LEAD_ID, "user-1")).resolves.toBe("not_found");
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(archiveLead(LEAD_ID, "user-1")).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+describe("writes on an archived lead", () => {
+  // The database answers as for an archived lead: the archived_at IS NULL condition matches no row.
+  const edit: UpdateLeadInput = {
+    leadId: LEAD_ID,
+    fullName: "Ana Pérez",
+    phone: "+51999888777",
+    email: null,
+    location: null,
+    tripId: null,
+    destinationText: null,
+  };
+
+  it.each([
+    ["updateLead", () => updateLead(edit), [[], []]],
+    ["changeLeadStage", () => changeLeadStage({ leadId: LEAD_ID, stage: "quoted", lostReason: null }, "user-1"), [[{ found: false, changed: false }]]],
+    ["changeLeadOwner", () => changeLeadOwner({ leadId: LEAD_ID, ownerUserId: "user-2" }, "user-1"), [[{ found: false, changed: false, owner_ok: true }]]],
+    ["setNextAction", () => setNextAction({ leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: null }), [[{ found: false, saved: false }]]],
+    ["archiveLead", () => archiveLead(LEAD_ID, "user-1"), [[{ archived: false }]]],
+  ] as const)("%s filters archived_at is null and returns not_found", async (_, write, responses) => {
+    const fake = useFakeDb({ responses: responses as unknown as unknown[][] });
+
+    await expect(write()).resolves.toBe("not_found");
+    for (const query of fake.queries) expect(query.sql.toLowerCase()).toMatch(/"?archived_at"? is null/);
   });
 });

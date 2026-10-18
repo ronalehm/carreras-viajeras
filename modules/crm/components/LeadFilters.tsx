@@ -10,7 +10,9 @@ import {
   LEAD_LIST_PATH,
   OWNER_PARAMS,
   QUERY_KEYS,
+  STAGE_PARAMS,
   ownerToParam,
+  stageToParam,
 } from "../utils/leadListQuery";
 
 type LeadFiltersProps = {
@@ -24,13 +26,18 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
     <form method="get" action={LEAD_LIST_PATH} className="flex flex-wrap items-end gap-4">
       <div className="flex flex-col gap-2">
         <Label htmlFor="lead-filter-stage">Etapa</Label>
-        <NativeSelect id="lead-filter-stage" name={QUERY_KEYS.stage} defaultValue={filters.stage ?? ""}>
+        <NativeSelect
+          id="lead-filter-stage"
+          name={QUERY_KEYS.stage}
+          defaultValue={filters.stage ? stageToParam(filters.stage) : ""}
+        >
           <NativeSelectOption value="">Todas</NativeSelectOption>
           {leadStageSchema.options.map((stage) => (
             <NativeSelectOption key={stage} value={stage}>
               {LEAD_STAGE_LABELS[stage]}
             </NativeSelectOption>
           ))}
+          <NativeSelectOption value={STAGE_PARAMS.archived}>Archivados</NativeSelectOption>
         </NativeSelect>
       </div>
       <div className="flex flex-col gap-2">

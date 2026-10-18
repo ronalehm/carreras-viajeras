@@ -7,6 +7,7 @@ vi.mock("@/lib/auth/guards", () => ({ requirePermission: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("../services/leads.service", () => ({
+  archiveLead: vi.fn(),
   createLead: vi.fn(),
   updateLead: vi.fn(),
   changeLeadStage: vi.fn(),
@@ -17,11 +18,13 @@ vi.mock("../services/activities.service", () => ({ addLeadActivity: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import type { ConfirmActionState } from "@/components/shared/ConfirmActionButton";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import { createLeadSchema } from "../schemas/leads.schema";
 import { addLeadActivity } from "../services/activities.service";
 import {
+  archiveLead,
   changeLeadOwner,
   changeLeadStage,
   createLead,
@@ -31,6 +34,7 @@ import {
 import type { LeadActionState } from "../types/leads.types";
 import {
   addLeadActivityAction,
+  archiveLeadAction,
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
@@ -238,6 +242,7 @@ const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
 const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
 const NEXT_ACTION = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
+const ARCHIVE = { leadId: LEAD_ID };
 
 type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
 
@@ -247,6 +252,7 @@ const DETAIL_ACTIONS = [
   ["changeLeadOwnerAction", changeLeadOwnerAction, OWNER, changeLeadOwner],
   ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
   ["setNextActionAction", setNextActionAction, NEXT_ACTION, setNextAction],
+  ["archiveLeadAction", archiveLeadAction, ARCHIVE, archiveLead],
 ] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
 
 describe("acciones de la ficha: permisos y errores del service", () => {
@@ -544,5 +550,32 @@ describe("setNextActionAction", () => {
       values: NEXT_ACTION,
     });
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("archiveLeadAction", () => {
+  it("archiva con el usuario de la sesión, ignora campos extra y revalida la lista y la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(archiveLead).mockResolvedValue("archived");
+    const data = form({ ...ARCHIVE, actorUserId: "intruder", archivedBy: "intruder" });
+
+    expect(await archiveLeadAction(IDLE, data)).toEqual({ status: "success", message: "Lead archivado." });
+    expect(archiveLead).toHaveBeenCalledExactlyOnceWith(LEAD_ID, "session-user");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("su resultado encaja en ConfirmActionState (status y message)", async () => {
+    vi.mocked(archiveLead).mockResolvedValue("archived");
+    const success: ConfirmActionState = await archiveLeadAction(IDLE, form(ARCHIVE));
+    expect(success).toEqual({ status: "success", message: "Lead archivado." });
+
+    vi.mocked(archiveLead).mockResolvedValue("not_found");
+    const error: ConfirmActionState = await archiveLeadAction(IDLE, form(ARCHIVE));
+    expect(error).toMatchObject({
+      status: "error",
+      message: "El lead ya no existe o está archivado. Recarga la página.",
+    });
   });
 });

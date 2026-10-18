@@ -27,10 +27,14 @@ export default async function EditLeadPage({ params }: PageProps<"/crm/leads/[id
   return (
     <section className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Editar lead</h1>
-      <LeadForm
-        lead={{ id: lead.id, fullName, phone, email, location, trip, destinationText }}
-        tripOptions={tripOptions}
-      />
+      {lead.archivedAt ? (
+        <p className="text-muted-foreground">Lead archivado: solo lectura.</p>
+      ) : (
+        <LeadForm
+          lead={{ id: lead.id, fullName, phone, email, location, trip, destinationText }}
+          tripOptions={tripOptions}
+        />
+      )}
     </section>
   );
 }
