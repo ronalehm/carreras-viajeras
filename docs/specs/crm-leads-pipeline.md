@@ -588,15 +588,16 @@ Requisito previo: `trips-catalog` F2-T2 cerrada (`components/shared/ConfirmActio
 - [ ] T4 — Ficha y edición en solo lectura si está archivado, botón "Archivar" y API pública; medir el Worker al terminar T3 y T4 · archivos: `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T2 · paralelo (con T3)
 
 ## Preguntas abiertas
-1. **Reasignar y editar.** ¿Un `commercial` puede reasignar y editar cualquier lead, o solo un `admin` reasigna? Recomendación: cualquiera con `leads.manage`, porque el equipo es pequeño, se evitan cuellos de botella y queda en el historial. Para restringirlo bastaría un permiso `leads.assign` solo para `admin` en la matriz.
-2. **Visibilidad.** ¿Los comerciales ven todos los leads o solo los suyos? Recomendación: todos ("Mis leads" es un filtro, no una restricción).
-3. **Motivo de pérdida.** ¿Texto libre o una lista cerrada (precio, fechas, sin respuesta, eligió otra opción, otro)? Recomendación: texto libre en el MVP; una lista cerrada sirve para métricas, pero exige definir los valores.
-4. **Transiciones.** ¿Se permite reabrir un lead "Pagado" o "Perdido"? Recomendación: sí (etapas libres y registradas).
-5. **Consentimiento.** ¿Cuál es el texto exacto y dónde está la política de privacidad (Ley 29733 de Perú)? Provisional: "El contacto aceptó que guardemos sus datos para atender su consulta.", versión `crm-manual-v1`. ¿Basta con que el comercial lo confirme en el alta manual?
-6. **Archivo y borrado (F6).** ¿Quieres archivar? Recomendación: sí, sin borrado físico y sin restaurar en el MVP. Si no lo quieres, se eliminan F6 y las columnas `archived_*` antes de aprobar. Las solicitudes del titular para borrar o anonimizar sus datos (derechos ARCO) necesitarían un procedimiento manual auditado fuera de esta spec.
-7. **Teléfono.** ¿Es obligatorio el código de país? Recomendación: sí, sin asumir `+51`, porque hay runners de varios países.
-8. **Duplicados.** No se detectan. ¿Basta con eso, o quieres al menos un aviso cuando el teléfono ya existe (sin bloquear el alta)?
-9. **Zona horaria.** `America/Lima` (la misma que ya usa `accounts`, provisional), para "hoy", las insignias "Vencida" y "Hoy" y las horas del historial. ¿Es correcta?
-10. **Destinos de la landing.** ¿Aceptas que la futura captura use el slug del catálogo (`maraton-santiago-2027`) como valor del destino en la landing, con `destination_text` para Panamá y Medellín?
-11. **Orden con `trips-catalog` F2.** Recomendación: cerrar primero `trips-catalog` F2 (textarea, `CrmShell`, `ConfirmActionButton` compartido) y después esta F2. F6 lo exige.
-12. **Tamaño de página.** 25 leads por página. ¿Te sirve?
+Todas resueltas por el usuario ("ok a todo", 2026-10-18), con la recomendación de cada una:
+1. **Reasignar y editar:** cualquiera con `leads.manage` (`commercial` y `admin`) edita y reasigna; queda en el historial.
+2. **Visibilidad:** los comerciales ven todos los leads; "Mis leads" es un filtro.
+3. **Motivo de pérdida:** texto libre en el MVP.
+4. **Transiciones:** se puede reabrir un lead "Pagado" o "Perdido"; etapas libres y registradas.
+5. **Consentimiento:** texto provisional "El contacto aceptó que guardemos sus datos para atender su consulta.", versión `crm-manual-v1`. El texto legal definitivo y la política de privacidad (Ley 29733) quedan pendientes de revisión del usuario; cambiarlos solo requiere una nueva versión.
+6. **Archivo (F6):** sí, sin borrado físico y sin restaurar en el MVP. Borrado o anonimización por derechos ARCO, fuera de alcance.
+7. **Teléfono:** obligatorio con código de país (E.164), sin asumir `+51`.
+8. **Duplicados:** no se detectan en el MVP.
+9. **Zona horaria:** `America/Lima`.
+10. **Destinos de la landing:** la futura captura usará el slug del catálogo (`maraton-santiago-2027`); `destination_text` para destinos sin viaje en el catálogo (Panamá, Medellín). Hay que avisar a la rama de la landing, que hoy usa `santiago-2027`.
+11. **Orden con `trips-catalog` F2:** se cierra primero `trips-catalog` F2 y después la F2 de esta spec.
+12. **Tamaño de página:** 25 leads por página.
