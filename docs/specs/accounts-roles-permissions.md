@@ -376,10 +376,10 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
 - [x] T5 — Scripts SQL de bootstrap del primer admin y de revocación de emergencia · archivos: `scripts/sql/bootstrap-admin.sql`, `scripts/sql/revoke-staff-role.sql` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
 
 ### Fase 2: administración del staff en servidor y documentación (4 tareas, 8 archivos)
-- [ ] T1 — Schemas zod y tipos de staff con su test · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/types/staff.types.ts` · depende de: Fase 1 · secuencial
-- [ ] T2 — Service de staff (listar, invitar, revocar invitación, asignar y revocar rol con protección del último admin) con tests · archivos: `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts` · depende de: F2-T1 · secuencial
-- [ ] T3 — Server Actions de administración con tests de llamada directa · archivos: `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: F2-T2 · secuencial
-- [ ] T4 — README:
+- [x] T1 — Schemas zod y tipos de staff con su test · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/types/staff.types.ts` · depende de: Fase 1 · secuencial
+- [x] T2 — Service de staff (listar, invitar, revocar invitación, asignar y revocar rol con protección del último admin) con tests · archivos: `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts` · depende de: F2-T1 · secuencial
+- [x] T3 — Server Actions de administración con tests de llamada directa · archivos: `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: F2-T2 · secuencial
+- [x] T4 — README:
   - modelo de acceso;
   - ajustes de Neon Auth (Sign-up ON como riesgo aceptado, verificación por código);
   - bootstrap y revocación de emergencia;

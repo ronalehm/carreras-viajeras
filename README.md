@@ -78,7 +78,7 @@ Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los pr
 ### Modelo de acceso
 
 - **Runners:** visitantes anónimos, sin cuenta ni perfil.
-- **Staff** (`commercial`, `admin`): entra solo por invitación. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. La página de administración `/crm/admin/usuarios` llega en la Fase 3 de la spec.
+- **Staff** (`commercial`, `admin`): entra solo por invitación. El admin invita un correo con un rol y comparte a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días. La página de administración `/crm/admin/usuarios` llega en la Fase 3 de la spec; hasta entonces la invitación se crea por SQL en el SQL Editor de Neon (`INSERT INTO staff_invitations (email, role, invited_by) VALUES (lower('<correo>'), 'commercial', '<user_id del admin>')`).
 - **Aceptación automática:** la primera petición autenticada con el correo **verificado** que coincide (sin distinguir mayúsculas) con una invitación pendiente y vigente la acepta en una sola sentencia: crea el perfil y la asignación. Después, la autorización usa solo el `user.id` estable de Neon Auth, no el correo.
 - **Denegación por defecto:** sin sesión → 401; correo sin verificar, cuenta sin rol, invitación caducada o revocada, o error de Neon Auth o de la base → 403. Los roles se leen de la base en cada petición, así que una revocación se aplica en la siguiente. Body, query, cookies propias y `user.role` de Neon Auth nunca conceden permisos.
 - **Último admin:** el CRM no permite revocar el rol `admin` del último admin activo. El primer admin se asigna solo con el script de bootstrap, nunca por ser el primer registro.
@@ -100,12 +100,16 @@ curl -X POST https://carreras-viajeras.mentec.dev/api/auth/email-otp/request-pas
   -H "Origin: https://carreras-viajeras.mentec.dev" -H "Content-Type: application/json" \
   -d '{"email":"<correo>"}'
 
-curl -X POST https://carreras-viajeras.mentec.dev/api/auth/email-otp/reset-password \
-  -H "Origin: https://carreras-viajeras.mentec.dev" -H "Content-Type: application/json" \
-  -d '{"email":"<correo>","otp":"<código>","password":"<nueva contraseña>"}'
+# La contraseña se lee sin eco y no queda en el historial
+read -rsp "Nueva contraseña: " NEW_PASSWORD; echo
+printf '{"email":"%s","otp":"%s","password":"%s"}' "<correo>" "<código>" "$NEW_PASSWORD" |
+  curl -X POST https://carreras-viajeras.mentec.dev/api/auth/email-otp/reset-password \
+    -H "Origin: https://carreras-viajeras.mentec.dev" -H "Content-Type: application/json" \
+    --data @-
+unset NEW_PASSWORD
 ```
 
-No dejar la contraseña en el historial de la terminal ni pegarla en un chat.
+No pegar la contraseña ni el código en un chat. La contraseña no debe contener `"` ni `\`.
 
 ### Migración de las tablas de staff
 
