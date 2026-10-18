@@ -165,10 +165,10 @@ type FailRequest = { leaseToken: string; errorCode: string }; // ^[a-z0-9_]{1,64
 ## Plan de tareas
 ### Fase 1 — Outbox y eventos
 Entregable: tablas y migración revisable, contrato del evento y servicios probados, sin rutas. Total: 12 archivos.
-- [ ] T1 — Schema, migración y export de `tripSlugSchema` · archivos: `lib/db-schema.ts`, `drizzle/0002_*.sql`, `drizzle/meta/0002_snapshot.json`, `drizzle/meta/_journal.json`, `modules/trips/index.ts` · depende de: — · secuencial (base)
-- [ ] T2 — Schemas, tipos y backoff con tests · archivos: `modules/automation/schemas/automation.schema.ts`, `modules/automation/schemas/automation.schema.test.ts`, `modules/automation/types/automation.types.ts`, `modules/automation/utils/retryDelay.ts`, `modules/automation/utils/retryDelay.test.ts` · depende de: T1 (export de `tripSlugSchema`) · secuencial
-- [ ] T3 — Servicio con test · archivos: `modules/automation/services/automation.service.ts`, `modules/automation/services/automation.service.test.ts` · depende de: T1, T2 · secuencial
-- [ ] T4 — API pública del módulo · archivos: `modules/automation/index.ts` · depende de: T3 · secuencial
+- [x] T1 — Schema, migración y export de `tripSlugSchema` · archivos: `lib/db-schema.ts`, `drizzle/0002_*.sql`, `drizzle/meta/0002_snapshot.json`, `drizzle/meta/_journal.json`, `modules/trips/index.ts` · depende de: — · secuencial (base)
+- [x] T2 — Schemas, tipos y backoff con tests · archivos: `modules/automation/schemas/automation.schema.ts`, `modules/automation/schemas/automation.schema.test.ts`, `modules/automation/types/automation.types.ts`, `modules/automation/utils/retryDelay.ts`, `modules/automation/utils/retryDelay.test.ts` · depende de: T1 (export de `tripSlugSchema`) · secuencial
+- [x] T3 — Servicio con test · archivos: `modules/automation/services/automation.service.ts`, `modules/automation/services/automation.service.test.ts` · depende de: T1, T2 · secuencial
+- [x] T4 — API pública del módulo · archivos: `modules/automation/index.ts` · depende de: T3 · secuencial
 
 ### Fase 2 — API privada
 Entregable: claim/ack/fail operativos con bearer. Total: 10 archivos. Requiere F1.

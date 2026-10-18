@@ -3,7 +3,9 @@ import { sql } from "drizzle-orm";
 import {
   check,
   date,
+  index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -139,5 +141,87 @@ export const trips = pgTable(
     check("trips_price_usd_chk", sql`${table.priceUsd} IS NULL OR ${table.priceUsd} >= 0`),
     check("trips_capacity_chk", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
     check("trips_image_url_chk", sql`${table.imageUrl} IS NULL OR ${table.imageUrl} LIKE 'https://%'`),
+  ],
+);
+
+export const automationEventStatusEnum = pgEnum("automation_event_status", [
+  "pending",
+  "processing",
+  "succeeded",
+  "dead",
+]);
+
+// Outbox for n8n (at-least-once delivery; id is the eventId n8n deduplicates by).
+// lead_id has no FK yet: the leads table arrives with the lead capture spec.
+// payload is validated with zod before insert. 8 = MAX_ATTEMPTS of modules/automation.
+// lease_token is kept on succeeded so a repeated ack with the same token stays idempotent.
+export const automationEvents = pgTable(
+  "automation_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: text("type").notNull(),
+    leadId: uuid("lead_id").notNull(),
+    payloadVersion: integer("payload_version").notNull(),
+    payload: jsonb("payload").notNull(),
+    status: automationEventStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    leaseToken: uuid("lease_token"),
+    lastErrorCode: text("last_error_code"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+  },
+  (table) => [
+    check("automation_events_type_chk", sql`${table.type} IN ('lead.created')`),
+    check("automation_events_payload_version_chk", sql`${table.payloadVersion} > 0`),
+    check("automation_events_attempts_chk", sql`${table.attempts} BETWEEN 0 AND 8`),
+    check(
+      "automation_events_last_error_code_chk",
+      sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} ~ '^[a-z0-9_]{1,64}$'`,
+    ),
+    check(
+      "automation_events_processing_lease_chk",
+      sql`${table.status} <> 'processing' OR (${table.leaseToken} IS NOT NULL AND ${table.leaseUntil} IS NOT NULL)`,
+    ),
+    check(
+      "automation_events_processed_at_chk",
+      sql`(${table.status} = 'succeeded') = (${table.processedAt} IS NOT NULL)`,
+    ),
+    uniqueIndex("automation_events_type_lead_uq").on(table.type, table.leadId),
+    index("automation_events_pending_idx")
+      .on(table.availableAt, table.id)
+      .where(sql`${table.status} = 'pending'`),
+    index("automation_events_lease_idx")
+      .on(table.leaseUntil)
+      .where(sql`${table.status} = 'processing'`),
+  ],
+);
+
+// Audit of manual redrives (dead → pending). Written only by scripts/sql with the migration role.
+export const automationEventRedrives = pgTable(
+  "automation_event_redrives",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => automationEvents.id, { onDelete: "restrict" }),
+    performedBy: text("performed_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    reason: text("reason").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "automation_event_redrives_reason_chk",
+      sql`char_length(${table.reason}) BETWEEN 1 AND 500`,
+    ),
   ],
 );

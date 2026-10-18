@@ -15,6 +15,13 @@
       "when": 1792330697363,
       "tag": "0001_young_korvac",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792332832564,
+      "tag": "0002_calm_dreadnoughts",
+      "breakpoints": true
     }
   ]
 }
