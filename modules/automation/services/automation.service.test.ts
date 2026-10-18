@@ -4,6 +4,11 @@ import { drizzle } from "drizzle-orm/neon-http";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
+// The public API of @/modules/trips also exports CRM components and actions (Neon Auth, next/headers):
+// expose only the schema this module reuses.
+vi.mock("@/modules/trips", async () => ({
+  tripSlugSchema: (await import("@/modules/trips/schemas/trips.schema")).tripSlugSchema,
+}));
 
 import { getDb } from "@/lib/db";
 import type { LeadCreatedPayload } from "../types/automation.types";

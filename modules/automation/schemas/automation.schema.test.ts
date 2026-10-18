@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 
-// tripSlugSchema comes from the public API of @/modules/trips, which also exports server-only services.
-vi.mock("server-only", () => ({}));
-vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
+// The public API of @/modules/trips also exports CRM components and actions (Neon Auth, next/headers):
+// expose only the schema this module reuses.
+vi.mock("@/modules/trips", async () => ({
+  tripSlugSchema: (await import("@/modules/trips/schemas/trips.schema")).tripSlugSchema,
+}));
 
 import {
   ackRequestSchema,
