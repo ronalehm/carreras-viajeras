@@ -3,6 +3,8 @@ import { leadListQuerySchema } from "../schemas/leads.schema";
 import type { LeadListFilters } from "../types/leads.types";
 
 type SearchParams = Record<string, string | string[] | undefined>;
+type LeadListQuery = z.output<typeof leadListQuerySchema>;
+type FollowUp = NonNullable<LeadListFilters["followUp"]>;
 
 export const LEAD_LIST_PATH = "/crm/leads";
 
@@ -10,11 +12,18 @@ export const LEAD_LIST_PATH = "/crm/leads";
 export const QUERY_KEYS = {
   stage: "etapa",
   owner: "responsable",
+  followUp: "seguimiento",
   page: "pagina",
-} as const satisfies Record<keyof LeadListFilters, keyof z.output<typeof leadListQuerySchema>>;
+} as const satisfies Record<keyof LeadListFilters, keyof LeadListQuery>;
 // Owner filters with their own URL value; any other value is a staff user id.
 export const OWNER_PARAMS = { mine: "mios", unassigned: "sin-asignar" } as const;
 type OwnerKeyword = keyof typeof OWNER_PARAMS;
+
+// Follow-up filters and their URL values.
+export const FOLLOW_UP_PARAMS = {
+  overdue: "vencidos",
+  pending: "pendientes",
+} as const satisfies Record<FollowUp, NonNullable<LeadListQuery["seguimiento"]>>;
 
 const isOwnerKeyword = (value: string): value is OwnerKeyword => Object.hasOwn(OWNER_PARAMS, value);
 
@@ -31,20 +40,26 @@ export function ownerToParam(owner: string): string {
   return isOwnerKeyword(owner) ? OWNER_PARAMS[owner] : owner;
 }
 
+function followUpFromParam(param: LeadListQuery["seguimiento"]): LeadListFilters["followUp"] {
+  return (Object.keys(FOLLOW_UP_PARAMS) as FollowUp[]).find((key) => FOLLOW_UP_PARAMS[key] === param);
+}
+
 export function parseLeadListQuery(searchParams: SearchParams): LeadListFilters {
   const query = leadListQuerySchema.parse(searchParams);
   return {
     stage: query[QUERY_KEYS.stage],
     owner: ownerFromParam(query[QUERY_KEYS.owner]),
+    followUp: followUpFromParam(query[QUERY_KEYS.followUp]),
     page: query[QUERY_KEYS.page],
   };
 }
 
-// Default values (no stage, no owner, page 1) are left out of the URL.
+// Default values (no stage, no owner, no follow-up, page 1) are left out of the URL.
 export function leadListHref(filters: LeadListFilters, page: number): string {
   const params = new URLSearchParams();
   if (filters.stage) params.set(QUERY_KEYS.stage, filters.stage);
   if (filters.owner) params.set(QUERY_KEYS.owner, ownerToParam(filters.owner));
+  if (filters.followUp) params.set(QUERY_KEYS.followUp, FOLLOW_UP_PARAMS[filters.followUp]);
   if (page > 1) params.set(QUERY_KEYS.page, String(page));
   const query = params.toString();
   return query ? `${LEAD_LIST_PATH}?${query}` : LEAD_LIST_PATH;

@@ -10,10 +10,17 @@ import {
   leadActivityFormSchema,
   leadOwnerChangeSchema,
   leadStageChangeSchema,
+  nextActionSchema,
   updateLeadSchema,
 } from "../schemas/leads.schema";
 import { addLeadActivity } from "../services/activities.service";
-import { changeLeadOwner, changeLeadStage, createLead, updateLead } from "../services/leads.service";
+import {
+  changeLeadOwner,
+  changeLeadStage,
+  createLead,
+  setNextAction,
+  updateLead,
+} from "../services/leads.service";
 import type { LeadActionState } from "../types/leads.types";
 import { LEAD_LIST_PATH } from "../utils/leadListQuery";
 
@@ -29,6 +36,7 @@ const ERROR_MESSAGES: Record<LeadActionErrorCode, string> = {
   invalid_trip: "Ese viaje ya no está disponible.",
   not_found: "El lead ya no existe o está archivado. Recarga la página.",
   no_change: "No hay cambios.",
+  closed: "El lead está cerrado o archivado.",
 };
 
 const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
@@ -36,6 +44,7 @@ const UPDATE_LEAD_FIELDS = Object.keys(updateLeadSchema.shape);
 const STAGE_CHANGE_FIELDS = Object.keys(leadStageChangeSchema.in.shape);
 const OWNER_CHANGE_FIELDS = Object.keys(leadOwnerChangeSchema.shape);
 const ACTIVITY_FIELDS = Object.keys(leadActivityFormSchema.shape);
+const NEXT_ACTION_FIELDS = Object.keys(nextActionSchema.shape);
 
 function failure(
   code: LeadActionErrorCode,
@@ -203,4 +212,26 @@ export async function addLeadActivityAction(
 
   revalidatePath(leadDetailPath(parsed.data.leadId));
   return { status: "success", message: "Seguimiento registrado." };
+}
+
+// Date and note of the next action; both blank clear it. The list shows it too.
+export async function setNextActionAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, NEXT_ACTION_FIELDS);
+  const parsed = nextActionSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => setNextAction(parsed.data));
+  if (result !== "saved") return failure(result, values);
+
+  revalidateLead(parsed.data.leadId);
+  return {
+    status: "success",
+    message: parsed.data.nextActionDate ? "Próxima acción guardada." : "Próxima acción quitada.",
+  };
 }

@@ -5,7 +5,13 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { leadStageSchema } from "../schemas/leads.schema";
 import type { LeadListFilters, LeadOwnerOption } from "../types/leads.types";
 import { LEAD_STAGE_LABELS, UNASSIGNED_OWNER_LABEL } from "../utils/leadDisplay";
-import { LEAD_LIST_PATH, OWNER_PARAMS, QUERY_KEYS, ownerToParam } from "../utils/leadListQuery";
+import {
+  FOLLOW_UP_PARAMS,
+  LEAD_LIST_PATH,
+  OWNER_PARAMS,
+  QUERY_KEYS,
+  ownerToParam,
+} from "../utils/leadListQuery";
 
 type LeadFiltersProps = {
   filters: LeadListFilters;
@@ -42,6 +48,18 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
               {owner.email}
             </NativeSelectOption>
           ))}
+        </NativeSelect>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="lead-filter-follow-up">Seguimiento</Label>
+        <NativeSelect
+          id="lead-filter-follow-up"
+          name={QUERY_KEYS.followUp}
+          defaultValue={filters.followUp ? FOLLOW_UP_PARAMS[filters.followUp] : ""}
+        >
+          <NativeSelectOption value="">Todos</NativeSelectOption>
+          <NativeSelectOption value={FOLLOW_UP_PARAMS.overdue}>Vencidos</NativeSelectOption>
+          <NativeSelectOption value={FOLLOW_UP_PARAMS.pending}>Pendientes (hoy o vencidos)</NativeSelectOption>
         </NativeSelect>
       </div>
       <div className="flex gap-2">

@@ -129,11 +129,30 @@ export const leadActivityFormSchema = z.object({
     .max(2000, ACTIVITY_BODY_LENGTH),
 });
 
+const NEXT_ACTION_DATE_REQUIRED = "Indica la fecha.";
+
+// Next action: a calendar date (YYYY-MM-DD, no time) and an optional note. Both blank clear it;
+// a note always needs a date.
+export const nextActionSchema = z
+  .object({
+    leadId: leadIdSchema,
+    nextActionDate: blankToNull(z.iso.date({ error: "Indica una fecha válida." })),
+    nextActionNote: blankToNull(z.string().max(200, "La nota puede tener hasta 200 caracteres.")),
+  })
+  .refine((value) => value.nextActionNote === null || value.nextActionDate !== null, {
+    path: ["nextActionDate"],
+    message: NEXT_ACTION_DATE_REQUIRED,
+  });
+
+// URL values of the follow-up filter (overdue, pending).
+export const followUpParamSchema = z.enum(["vencidos", "pendientes"]);
+
 // List filters from the URL. Each key falls back to its default on any invalid value,
 // including a repeated parameter (an array), so parsing never throws.
 export const leadListQuerySchema = z.object({
   etapa: leadStageSchema.optional().catch(undefined),
   responsable: z.string().min(1).max(255).optional().catch(undefined),
+  seguimiento: followUpParamSchema.optional().catch(undefined),
   pagina: z
     .string()
     .regex(/^\d+$/)

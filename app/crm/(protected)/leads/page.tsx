@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
+import { getTodayDate } from "@/lib/dates";
 import { getCrmAccess } from "@/modules/accounts";
 import {
   getLeadList,
@@ -33,7 +34,8 @@ export default async function LeadsPage({ searchParams }: PageProps<"/crm/leads"
   // The native filter form also sends its empty "Todas"/"Todos" options: drop them from the URL.
   if (Object.values(params).includes("")) redirect(leadListHref(filters, filters.page));
 
-  const list = await getLeadList(filters, access.user.id);
+  const today = getTodayDate();
+  const list = await getLeadList(filters, access.user.id, today);
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -44,7 +46,10 @@ export default async function LeadsPage({ searchParams }: PageProps<"/crm/leads"
       <LeadFilters filters={filters} ownerOptions={list.ownerOptions} />
       <LeadTable
         leads={list.leads}
-        hasFilters={filters.stage !== undefined || filters.owner !== undefined}
+        hasFilters={
+          filters.stage !== undefined || filters.owner !== undefined || filters.followUp !== undefined
+        }
+        today={today}
       />
       <LeadPagination filters={filters} hasNextPage={list.hasNextPage} />
     </section>

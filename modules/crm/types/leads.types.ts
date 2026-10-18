@@ -8,6 +8,7 @@ import type {
   leadSourceSchema,
   leadStageChangeSchema,
   leadStageSchema,
+  nextActionSchema,
   updateLeadSchema,
 } from "../schemas/leads.schema";
 
@@ -19,12 +20,15 @@ export type LeadStageChangeInput = z.output<typeof leadStageChangeSchema>;
 export type LeadOwnerChangeInput = z.output<typeof leadOwnerChangeSchema>;
 export type LeadActivityType = z.infer<typeof leadActivityTypeSchema>;
 export type LeadActivityInput = z.output<typeof leadActivityFormSchema>;
+export type NextActionInput = z.output<typeof nextActionSchema>;
 
 // owner: "mine" is the session user, "unassigned" the leads without owner;
-// any other value is a staff user id.
+// any other value is a staff user id. followUp: open leads with a next action before today
+// ("overdue") or up to today ("pending").
 export type LeadListFilters = {
   stage?: LeadStage;
   owner?: "mine" | "unassigned" | string;
+  followUp?: "overdue" | "pending";
   page: number;
 };
 
@@ -47,6 +51,9 @@ export type LeadListItem = {
   // null: unassigned (web form leads). active = false: the owner lost every role with
   // leads.manage ("(sin acceso)").
   owner: { userId: string; email: string; active: boolean } | null;
+  // Calendar date (YYYY-MM-DD) and optional note; only open, non-archived leads have one.
+  nextActionDate: string | null;
+  nextActionNote: string | null;
 };
 
 export type LeadList = {
@@ -67,8 +74,6 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   consentedAt: Date;
   createdBy: { email: string } | null;
   createdAt: Date;
-  nextActionDate: string | null;
-  nextActionNote: string | null;
   archivedAt: Date | null;
   archivedBy: { email: string } | null;
 };
@@ -101,7 +106,8 @@ export type LeadActionState =
         | "invalid_owner"
         | "invalid_trip"
         | "not_found"
-        | "no_change";
+        | "no_change"
+        | "closed";
       message: string;
       fieldErrors?: Record<string, string[]>;
       values?: Record<string, string>;

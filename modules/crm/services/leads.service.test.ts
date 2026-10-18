@@ -14,6 +14,7 @@ import {
   getLeadById,
   getLeadFormOptions,
   getLeadList,
+  setNextAction,
   updateLead,
 } from "./leads.service";
 
@@ -37,10 +38,11 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
 const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
+const TODAY = "2026-10-18";
 const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2)';
 
 // List row in select order (array mode): id, full_name, phone, stage, source, trip id/title,
-// destination_text, owner user_id/email/active.
+// destination_text, owner user_id/email/active, next_action_date/note.
 function listRow(index: number, overrides: unknown[] = []) {
   const row = [
     `lead-${index}`,
@@ -54,6 +56,8 @@ function listRow(index: number, overrides: unknown[] = []) {
     "user-1",
     "ana@example.com",
     true,
+    null,
+    null,
   ];
   overrides.forEach((value, position) => {
     if (value !== undefined) row[position] = value as never;
@@ -66,7 +70,7 @@ beforeEach(() => vi.mocked(getDb).mockReset());
 describe("getLeadList", () => {
   it("reads the page, the funnel counts and the owner options in one batch", async () => {
     const fake = useFakeDb();
-    await getLeadList({ page: 1 }, "user-1");
+    await getLeadList({ page: 1 }, "user-1", TODAY);
 
     expect(fake.transaction).toHaveBeenCalledTimes(1);
     expect(fake.queries).toHaveLength(3);
@@ -92,7 +96,7 @@ describe("getLeadList", () => {
 
   it("applies stage, mine (session user) and the page offset; counts ignore the stage", async () => {
     const fake = useFakeDb();
-    await getLeadList({ stage: "quoted", owner: "mine", page: 3 }, "user-1");
+    await getLeadList({ stage: "quoted", owner: "mine", page: 3 }, "user-1", TODAY);
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
@@ -107,7 +111,7 @@ describe("getLeadList", () => {
 
   it("filters by a specific owner id", async () => {
     const fake = useFakeDb();
-    await getLeadList({ owner: "user-7", page: 1 }, "user-1");
+    await getLeadList({ owner: "user-7", page: 1 }, "user-1", TODAY);
 
     expect(fake.queries[0].params).toEqual(["commercial", "admin", "user-7", 26]);
     expect(fake.queries[1].params).toEqual(["user-7"]);
@@ -115,7 +119,7 @@ describe("getLeadList", () => {
 
   it("filters unassigned leads (owner_user_id is null) in the list and in the funnel counts", async () => {
     const fake = useFakeDb();
-    await getLeadList({ stage: "new", owner: "unassigned", page: 1 }, "user-1");
+    await getLeadList({ stage: "new", owner: "unassigned", page: 1 }, "user-1", TODAY);
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
@@ -128,11 +132,56 @@ describe("getLeadList", () => {
     expect(counts.params).toEqual([]);
   });
 
+  it("selects the next action date and note", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ page: 1 }, "user-1", TODAY);
+    expect(normalize(fake.queries[0].sql)).toContain(
+      '"leads"."next_action_date", "leads"."next_action_note" from "leads"',
+    );
+  });
+
+  it("overdue: open leads with a next action before today, oldest first; the counts apply it too", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ followUp: "overdue", page: 1 }, "user-1", TODAY);
+
+    const [list, counts] = fake.queries;
+    const visible =
+      '"leads"."archived_at" is null and ("leads"."stage" not in ($3, $4) and "leads"."next_action_date" < $5)';
+    expect(normalize(list.sql)).toContain(
+      `where (${visible}) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $6`,
+    );
+    expect(list.params).toEqual(["commercial", "admin", "paid", "lost", TODAY, 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and ("leads"."stage" not in ($1, $2) and "leads"."next_action_date" < $3)) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["paid", "lost", TODAY]);
+  });
+
+  it("pending (mine): includes today's next actions (<=) and combines with owner, stage and page", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "quoted", owner: "mine", followUp: "pending", page: 2 }, "user-1", "2026-10-19");
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $3 and ("leads"."stage" not in ($4, $5) and "leads"."next_action_date" <= $6)) and "leads"."stage" = $7) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $8 offset $9',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "user-1", "paid", "lost", "2026-10-19", "quoted", 26, 25]);
+    expect(counts.params).toEqual(["user-1", "paid", "lost", "2026-10-19"]);
+  });
+
+  it("without a follow-up filter ignores today and keeps the newest first", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ page: 1 }, "user-1", TODAY);
+    expect(normalize(fake.queries[0].sql)).not.toContain('"next_action_date" <');
+    expect(normalize(fake.queries[0].sql)).toContain('order by "leads"."created_at" desc, "leads"."id" desc');
+    expect(fake.queries[0].params).not.toContain(TODAY);
+  });
+
   it("returns 25 leads and hasNextPage when the database returns 26 rows", async () => {
     const rows = Array.from({ length: 26 }, (_, index) => listRow(index));
     useFakeDb({ responses: [rows, [], []] });
 
-    const result = await getLeadList({ page: 1 }, "user-1");
+    const result = await getLeadList({ page: 1 }, "user-1", TODAY);
     expect(result.leads).toHaveLength(25);
     expect(result.leads.at(-1)?.id).toBe("lead-24");
     expect(result.hasNextPage).toBe(true);
@@ -142,7 +191,7 @@ describe("getLeadList", () => {
     useFakeDb({
       responses: [
         [
-          listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", TRIP_ID, "Maratón de Santiago 2027", "Panamá"]),
+          listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", TRIP_ID, "Maratón de Santiago 2027", "Panamá", undefined, undefined, undefined, "2026-10-25", "Enviar la cotización."]),
           listRow(2, [undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "user-9", "ex@example.com", false]),
           // Web form lead without owner: the LEFT JOIN returns NULL owner columns.
           listRow(3, [undefined, "Bea Web", undefined, undefined, "web_form", undefined, undefined, "Panamá", null, null, false]),
@@ -155,7 +204,7 @@ describe("getLeadList", () => {
       ],
     });
 
-    await expect(getLeadList({ page: 1 }, "user-1")).resolves.toEqual({
+    await expect(getLeadList({ page: 1 }, "user-1", TODAY)).resolves.toEqual({
       leads: [
         {
           id: "lead-1",
@@ -166,6 +215,8 @@ describe("getLeadList", () => {
           trip: { id: TRIP_ID, title: "Maratón de Santiago 2027" },
           destinationText: "Panamá",
           owner: { userId: "user-1", email: "ana@example.com", active: true },
+          nextActionDate: "2026-10-25",
+          nextActionNote: "Enviar la cotización.",
         },
         {
           id: "lead-2",
@@ -176,6 +227,8 @@ describe("getLeadList", () => {
           trip: null,
           destinationText: null,
           owner: { userId: "user-9", email: "ex@example.com", active: false },
+          nextActionDate: null,
+          nextActionNote: null,
         },
         {
           id: "lead-3",
@@ -186,6 +239,8 @@ describe("getLeadList", () => {
           trip: null,
           destinationText: "Panamá",
           owner: null,
+          nextActionDate: null,
+          nextActionNote: null,
         },
       ],
       hasNextPage: false,
@@ -197,7 +252,7 @@ describe("getLeadList", () => {
   it("propagates database rejections", async () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
-    await expect(getLeadList({ page: 1 }, "user-1")).rejects.toBe(failure);
+    await expect(getLeadList({ page: 1 }, "user-1", TODAY)).rejects.toBe(failure);
   });
 });
 
@@ -556,5 +611,44 @@ describe("changeLeadOwner", () => {
   ])("maps %o to %s", async (row, expected) => {
     useFakeDb({ responses: [[row]] });
     await expect(changeLeadOwner(input, "user-1")).resolves.toBe(expected);
+  });
+});
+
+describe("setNextAction", () => {
+  const input = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
+
+  it("saves the date and the note of an open, non-archived lead in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, saved: true }]] });
+
+    await expect(setNextAction(input)).resolves.toBe("saved");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      "WITH target AS ( SELECT id, stage FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
+        "updated AS ( UPDATE leads SET next_action_date = $2::date, next_action_note = $3, updated_at = now() FROM target WHERE leads.id = target.id AND target.stage NOT IN ($4::lead_stage, $5::lead_stage) RETURNING leads.id ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS saved",
+    );
+    expect(fake.queries[0].params).toEqual([LEAD_ID, "2026-10-25", "Enviar la cotización.", "paid", "lost"]);
+  });
+
+  it("clears the next action with null date and note", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, saved: true }]] });
+    await expect(setNextAction({ leadId: LEAD_ID, nextActionDate: null, nextActionNote: null })).resolves.toBe("saved");
+    expect(fake.queries[0].params).toEqual([LEAD_ID, null, null, "paid", "lost"]);
+  });
+
+  it.each([
+    [{ found: true, saved: false }, "closed"],
+    [{ found: false, saved: false }, "not_found"],
+  ])("maps %o to %s", async (row, expected) => {
+    useFakeDb({ responses: [[row]] });
+    await expect(setNextAction(input)).resolves.toBe(expected);
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(setNextAction(input)).rejects.toMatchObject({ cause: failure });
   });
 });

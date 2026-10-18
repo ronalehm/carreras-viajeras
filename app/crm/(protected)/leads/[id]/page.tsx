@@ -3,9 +3,11 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { getTodayDate } from "@/lib/dates";
 import { getCrmAccess } from "@/modules/accounts";
 import {
   ActivityForm,
+  CLOSED_LEAD_STAGES,
   getLeadById,
   getLeadFormOptions,
   LEAD_STAGE_BADGE_VARIANTS,
@@ -15,6 +17,7 @@ import {
   LeadStageForm,
   LeadTimeline,
   listLeadActivities,
+  NextActionForm,
 } from "@/modules/crm";
 
 export const metadata: Metadata = { title: "Ficha del lead" };
@@ -62,6 +65,19 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
           <LeadOwnerForm leadId={lead.id} ownerUserId={lead.owner?.userId ?? null} ownerOptions={ownerOptions} />
         </section>
       </div>
+      <section className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">Próxima acción</h2>
+        {CLOSED_LEAD_STAGES.includes(lead.stage) ? (
+          <p className="text-muted-foreground">Lead cerrado: no tiene próxima acción.</p>
+        ) : (
+          <NextActionForm
+            leadId={lead.id}
+            nextActionDate={lead.nextActionDate}
+            nextActionNote={lead.nextActionNote}
+            today={getTodayDate()}
+          />
+        )}
+      </section>
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Seguimiento</h2>
         <ActivityForm leadId={lead.id} />

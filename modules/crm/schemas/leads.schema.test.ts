@@ -10,6 +10,7 @@ import {
   leadSourceSchema,
   leadStageChangeSchema,
   leadStageSchema,
+  nextActionSchema,
   phoneSchema,
   updateLeadSchema,
 } from "./leads.schema";
@@ -211,6 +212,22 @@ describe("leadListQuerySchema", () => {
   it("accepts the last page (1000)", () => {
     expect(leadListQuerySchema.parse({ pagina: "1000" }).pagina).toBe(1000);
   });
+
+  it.each(["vencidos", "pendientes"])("parses seguimiento=%s", (seguimiento) => {
+    expect(leadListQuerySchema.parse({ seguimiento }).seguimiento).toBe(seguimiento);
+  });
+
+  it.each([["foo"], ["overdue"], ["pending"], [""], [["vencidos", "vencidos"]]])(
+    "treats an invalid seguimiento %j as no filter",
+    (seguimiento) => {
+      expect(leadListQuerySchema.parse({ seguimiento, etapa: "new" })).toEqual({
+        etapa: "new",
+        responsable: undefined,
+        seguimiento: undefined,
+        pagina: 1,
+      });
+    },
+  );
 });
 
 describe("updateLeadSchema", () => {
@@ -344,5 +361,68 @@ describe("leadActivityFormSchema", () => {
 
   it("rejects a leadId that is not a UUID", () => {
     expect(fieldErrors({ ...valid, leadId: "abc" }, leadActivityFormSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
+describe("nextActionSchema", () => {
+  const valid = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "  Enviar la cotización.  " };
+
+  it("accepts a date with a note, trims the note and drops other keys", () => {
+    expect(nextActionSchema.parse({ ...valid, stage: "paid", actorUserId: "intruder" })).toEqual({
+      leadId: LEAD_ID,
+      nextActionDate: "2026-10-25",
+      nextActionNote: "Enviar la cotización.",
+    });
+  });
+
+  it("accepts a date without a note", () => {
+    expect(nextActionSchema.parse({ ...valid, nextActionNote: "  " })).toEqual({
+      leadId: LEAD_ID,
+      nextActionDate: "2026-10-25",
+      nextActionNote: null,
+    });
+  });
+
+  it.each([["empty", { nextActionDate: "", nextActionNote: "" }], ["missing", {}]])(
+    "turns %s fields into null/null (clears the next action)",
+    (_, fields) => {
+      expect(nextActionSchema.parse({ leadId: LEAD_ID, ...fields })).toEqual({
+        leadId: LEAD_ID,
+        nextActionDate: null,
+        nextActionNote: null,
+      });
+    },
+  );
+
+  it("rejects a note without a date with «Indica la fecha.» on the date", () => {
+    expect(fieldErrors({ ...valid, nextActionDate: "" }, nextActionSchema)).toEqual({
+      nextActionDate: ["Indica la fecha."],
+    });
+  });
+
+  it.each(["2026-02-30", "2026-13-01", "25/10/2026", "2026-10-25T10:00", "mañana"])(
+    "rejects the invalid date %j",
+    (nextActionDate) => {
+      expect(fieldErrors({ ...valid, nextActionDate }, nextActionSchema).nextActionDate).toEqual([
+        "Indica una fecha válida.",
+      ]);
+    },
+  );
+
+  it("accepts a 200-character note and rejects 201", () => {
+    expect(nextActionSchema.safeParse({ ...valid, nextActionNote: "a".repeat(200) }).success).toBe(true);
+    expect(fieldErrors({ ...valid, nextActionNote: "a".repeat(201) }, nextActionSchema).nextActionNote).toEqual([
+      "La nota puede tener hasta 200 caracteres.",
+    ]);
+  });
+
+  it("rejects a leadId that is not a UUID", () => {
+    expect(fieldErrors({ ...valid, leadId: "abc" }, nextActionSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+
+  it("never echoes the input in its messages", () => {
+    const result = nextActionSchema.safeParse({ ...valid, nextActionDate: "secreto", nextActionNote: "b".repeat(201) });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues.map((issue) => issue.message))).not.toMatch(/secreto|bbbb/);
   });
 });

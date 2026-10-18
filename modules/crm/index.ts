@@ -10,6 +10,7 @@ export {
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
+  setNextActionAction,
   updateLeadAction,
 } from "./actions/leads.actions";
 export { ActivityForm } from "./components/ActivityForm";
@@ -22,4 +23,5 @@ export { LeadStageForm } from "./components/LeadStageForm";
 export { LeadStageSummary } from "./components/LeadStageSummary";
 export { LeadTable } from "./components/LeadTable";
 export { LeadTimeline } from "./components/LeadTimeline";
-export { LEAD_STAGE_BADGE_VARIANTS, LEAD_STAGE_LABELS } from "./utils/leadDisplay";
+export { NextActionForm } from "./components/NextActionForm";
+export { CLOSED_LEAD_STAGES, LEAD_STAGE_BADGE_VARIANTS, LEAD_STAGE_LABELS } from "./utils/leadDisplay";

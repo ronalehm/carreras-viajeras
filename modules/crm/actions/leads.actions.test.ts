@@ -11,6 +11,7 @@ vi.mock("../services/leads.service", () => ({
   updateLead: vi.fn(),
   changeLeadStage: vi.fn(),
   changeLeadOwner: vi.fn(),
+  setNextAction: vi.fn(),
 }));
 vi.mock("../services/activities.service", () => ({ addLeadActivity: vi.fn() }));
 
@@ -20,13 +21,20 @@ import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import { createLeadSchema } from "../schemas/leads.schema";
 import { addLeadActivity } from "../services/activities.service";
-import { changeLeadOwner, changeLeadStage, createLead, updateLead } from "../services/leads.service";
+import {
+  changeLeadOwner,
+  changeLeadStage,
+  createLead,
+  setNextAction,
+  updateLead,
+} from "../services/leads.service";
 import type { LeadActionState } from "../types/leads.types";
 import {
   addLeadActivityAction,
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
+  setNextActionAction,
   updateLeadAction,
 } from "./leads.actions";
 
@@ -229,6 +237,7 @@ const EDIT = {
 const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
 const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
+const NEXT_ACTION = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
 
 type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
 
@@ -237,6 +246,7 @@ const DETAIL_ACTIONS = [
   ["changeLeadStageAction", changeLeadStageAction, STAGE, changeLeadStage],
   ["changeLeadOwnerAction", changeLeadOwnerAction, OWNER, changeLeadOwner],
   ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
+  ["setNextActionAction", setNextActionAction, NEXT_ACTION, setNextAction],
 ] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
 
 describe("acciones de la ficha: permisos y errores del service", () => {
@@ -479,4 +489,60 @@ describe("addLeadActivityAction", () => {
       expect(addLeadActivity).not.toHaveBeenCalled();
     },
   );
+});
+
+describe("setNextActionAction", () => {
+  it("guarda la próxima acción, ignora campos extra (autor, etapa) y revalida la lista y la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(setNextAction).mockResolvedValue("saved");
+    const data = form({ ...NEXT_ACTION, nextActionNote: "  Enviar la cotización.  ", actorUserId: "intruder", stage: "paid" });
+
+    expect(await setNextActionAction(IDLE, data)).toEqual({
+      status: "success", message: "Próxima acción guardada.",
+    });
+    expect(setNextAction).toHaveBeenCalledExactlyOnceWith({
+      leadId: LEAD_ID,
+      nextActionDate: "2026-10-25",
+      nextActionNote: "Enviar la cotización.",
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("con ambos campos vacíos quita la próxima acción", async () => {
+    vi.mocked(setNextAction).mockResolvedValue("saved");
+    expect(
+      await setNextActionAction(IDLE, form({ ...NEXT_ACTION, nextActionDate: "", nextActionNote: "" })),
+    ).toEqual({ status: "success", message: "Próxima acción quitada." });
+    expect(setNextAction).toHaveBeenCalledExactlyOnceWith({
+      leadId: LEAD_ID,
+      nextActionDate: null,
+      nextActionNote: null,
+    });
+  });
+
+  it("una nota sin fecha muestra «Indica la fecha.» bajo la fecha, conserva la nota y no llama al service", async () => {
+    const values = { ...NEXT_ACTION, nextActionDate: "" };
+    expect(await setNextActionAction(IDLE, form(values))).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { nextActionDate: ["Indica la fecha."] },
+      values,
+    });
+    expect(setNextAction).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("con un lead pagado o perdido devuelve closed y no revalida", async () => {
+    vi.mocked(setNextAction).mockResolvedValue("closed");
+    expect(await setNextActionAction(IDLE, form(NEXT_ACTION))).toEqual({
+      status: "error",
+      code: "closed",
+      message: "El lead está cerrado o archivado.",
+      values: NEXT_ACTION,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 });

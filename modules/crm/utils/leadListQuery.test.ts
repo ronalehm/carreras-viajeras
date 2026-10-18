@@ -27,6 +27,26 @@ describe("parseLeadListQuery", () => {
     expect(parseLeadListQuery({ responsable })).toEqual({ stage: undefined, owner: undefined, page: 1 });
   });
 
+  it.each([
+    ["vencidos", "overdue"],
+    ["pendientes", "pending"],
+  ] as const)("maps seguimiento=%s to followUp %s", (seguimiento, followUp) => {
+    expect(parseLeadListQuery({ responsable: "mios", seguimiento })).toEqual({
+      stage: undefined,
+      owner: "mine",
+      followUp,
+      page: 1,
+    });
+  });
+
+  it.each([["overdue"], ["foo"], [""], [["pendientes", "pendientes"]]])(
+    "treats an invalid seguimiento %j as no follow-up filter",
+    (seguimiento) => {
+      expect(parseLeadListQuery({ seguimiento })).toEqual({ page: 1 });
+      expect(parseLeadListQuery({ seguimiento }).followUp).toBeUndefined();
+    },
+  );
+
   it("ignores invalid and repeated values without throwing", () => {
     expect(
       parseLeadListQuery({ etapa: "foo", responsable: ["mios", "mios"], pagina: "-3", extra: "x" }),
@@ -59,6 +79,25 @@ describe("leadListHref", () => {
     const filters = { stage: "new", owner: "mine", page: 2 } as const;
     expect(leadListHref(filters, 1)).toBe("/crm/leads?etapa=new&responsable=mios");
     expect(leadListHref(filters, 3)).toBe("/crm/leads?etapa=new&responsable=mios&pagina=3");
+  });
+
+  it("maps the follow-up filters to seguimiento and keeps them when changing page", () => {
+    expect(leadListHref({ followUp: "overdue", page: 1 }, 1)).toBe("/crm/leads?seguimiento=vencidos");
+    expect(leadListHref({ stage: "quoted", followUp: "pending", page: 1 }, 2)).toBe(
+      "/crm/leads?etapa=quoted&seguimiento=pendientes&pagina=2",
+    );
+  });
+
+  it("builds the «Mis pendientes» preset of the CRM header", () => {
+    expect(leadListHref({ owner: "mine", followUp: "pending", page: 1 }, 1)).toBe(
+      "/crm/leads?responsable=mios&seguimiento=pendientes",
+    );
+  });
+
+  it.each(["overdue", "pending"] as const)("round-trips followUp %s through parseLeadListQuery", (followUp) => {
+    const filters = { stage: "new", owner: "unassigned", followUp, page: 2 } as const;
+    const params = Object.fromEntries(new URL(leadListHref(filters, 2), "https://x.test").searchParams);
+    expect(parseLeadListQuery(params)).toEqual(filters);
   });
 
   it.each(["mine", "unassigned", "user-7"])("round-trips owner %s through parseLeadListQuery", (owner) => {

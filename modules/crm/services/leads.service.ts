@@ -1,5 +1,21 @@
 import "server-only";
-import { and, asc, count, desc, eq, exists, inArray, isNull, ne, or, sql, type SQLWrapper } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  exists,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  ne,
+  notInArray,
+  or,
+  sql,
+  type SQLWrapper,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
@@ -16,6 +32,7 @@ import type {
   LeadStage,
   LeadStageChangeInput,
   LeadTripOption,
+  NextActionInput,
   UpdateLeadInput,
 } from "../types/leads.types";
 import { CLOSED_LEAD_STAGES } from "../utils/leadDisplay";
@@ -59,12 +76,31 @@ function ownerCondition(owner: LeadListFilters["owner"], currentUserId: string) 
   return eq(leads.ownerUserId, owner === "mine" ? currentUserId : owner);
 }
 
+// Open leads with a next action before today ("overdue") or up to today ("pending"). today is the
+// CRM calendar date (YYYY-MM-DD): date columns compare in calendar order.
+function followUpCondition(followUp: LeadListFilters["followUp"], today: string) {
+  if (followUp === undefined) return undefined;
+  const due = followUp === "overdue" ? lt(leads.nextActionDate, today) : lte(leads.nextActionDate, today);
+  return and(notInArray(leads.stage, [...CLOSED_LEAD_STAGES]), due);
+}
+
 // One batch (one round-trip): the page plus one extra row (hasNextPage, no COUNT),
 // the funnel counts (every filter but the stage) and the owner options.
 // LEFT JOIN profiles: a lead without owner is listed with owner = null.
-export async function getLeadList(filters: LeadListFilters, currentUserId: string): Promise<LeadList> {
+// With a follow-up filter the most urgent next action comes first.
+export async function getLeadList(
+  filters: LeadListFilters,
+  currentUserId: string,
+  today: string,
+): Promise<LeadList> {
   const db = getDb();
-  const visible = and(isNull(leads.archivedAt), ownerCondition(filters.owner, currentUserId));
+  const visible = and(
+    isNull(leads.archivedAt),
+    ownerCondition(filters.owner, currentUserId),
+    followUpCondition(filters.followUp, today),
+  );
+  const newestFirst = [desc(leads.createdAt), desc(leads.id)];
+  const order = filters.followUp ? [asc(leads.nextActionDate), ...newestFirst] : newestFirst;
 
   const [rows, counts, ownerOptions] = await db.batch([
     db
@@ -81,12 +117,14 @@ export async function getLeadList(filters: LeadListFilters, currentUserId: strin
           email: profiles.email,
           active: sql<boolean>`${isActiveOwner(db, leads.ownerUserId)}`,
         },
+        nextActionDate: leads.nextActionDate,
+        nextActionNote: leads.nextActionNote,
       })
       .from(leads)
       .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
       .leftJoin(trips, eq(trips.id, leads.tripId))
       .where(and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage)))
-      .orderBy(desc(leads.createdAt), desc(leads.id))
+      .orderBy(...order)
       .limit(LEAD_PAGE_SIZE + 1)
       .offset((filters.page - 1) * LEAD_PAGE_SIZE),
     db
@@ -333,6 +371,33 @@ export async function changeLeadOwner(
   const row = result.rows[0];
   if (row?.found && !row.changed && !row.owner_ok) return "invalid_owner";
   return changeOutcome(row);
+}
+
+// One statement, same locking as changeLeadStage. The next action only exists in open,
+// non-archived leads: an archived or missing lead is "not_found" (like every other write) and a
+// paid or lost one is "closed". Null date and note clear it.
+export async function setNextAction(input: NextActionInput): Promise<"saved" | "not_found" | "closed"> {
+  const result = await getDb().execute<{ found: boolean; saved: boolean }>(sql`
+    WITH target AS (
+      SELECT id, stage FROM leads
+      WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET next_action_date = ${input.nextActionDate}::date, next_action_note = ${input.nextActionNote}, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id AND target.stage NOT IN (${sql.join(
+        CLOSED_LEAD_STAGES.map((stage) => sql`${stage}::lead_stage`),
+        sql`, `,
+      )})
+      RETURNING leads.id
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS saved
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  return row.saved ? "saved" : "closed";
 }
 
 function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {

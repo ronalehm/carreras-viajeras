@@ -27,9 +27,18 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
           {(canManageLeads || canManageTrips || canManageStaff) && (
             <nav aria-label="CRM" className="flex flex-wrap gap-1">
               {canManageLeads && (
-                <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
-                  Leads
-                </Link>
+                <>
+                  <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
+                    Leads
+                  </Link>
+                  {/* Preset of the lead list (same URL as leadListHref in modules/crm). */}
+                  <Link
+                    href="/crm/leads?responsable=mios&seguimiento=pendientes"
+                    className={buttonVariants({ variant: "ghost" })}
+                  >
+                    Mis pendientes
+                  </Link>
+                </>
               )}
               {canManageTrips && (
                 <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
