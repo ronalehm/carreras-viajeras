@@ -114,6 +114,21 @@ export const leadOwnerChangeSchema = z.object({
   ownerUserId: ownerUserIdSchema,
 });
 
+const ACTIVITY_BODY_REQUIRED = "Escribe el texto del seguimiento.";
+const ACTIVITY_BODY_LENGTH = "El texto puede tener hasta 2000 caracteres.";
+
+// Manual follow-up only: system types (created, stage_changed, owner_changed, archived and the
+// n8n automation) are never accepted from the form. The author is always the session user.
+export const leadActivityFormSchema = z.object({
+  leadId: leadIdSchema,
+  type: z.enum(["note", "call", "message"], { error: "Elige el tipo de seguimiento." }),
+  body: z
+    .string({ error: ACTIVITY_BODY_REQUIRED })
+    .trim()
+    .min(1, ACTIVITY_BODY_REQUIRED)
+    .max(2000, ACTIVITY_BODY_LENGTH),
+});
+
 // List filters from the URL. Each key falls back to its default on any invalid value,
 // including a repeated parameter (an array), so parsing never throws.
 export const leadListQuerySchema = z.object({

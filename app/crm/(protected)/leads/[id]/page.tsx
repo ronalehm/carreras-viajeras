@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
 import {
+  ActivityForm,
   getLeadById,
   getLeadFormOptions,
   LEAD_STAGE_BADGE_VARIANTS,
@@ -12,6 +13,8 @@ import {
   LeadDetails,
   LeadOwnerForm,
   LeadStageForm,
+  LeadTimeline,
+  listLeadActivities,
 } from "@/modules/crm";
 
 export const metadata: Metadata = { title: "Ficha del lead" };
@@ -30,7 +33,11 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
     );
   }
   const { id } = await params;
-  const [lead, { ownerOptions }] = await Promise.all([getLeadById(id), getLeadFormOptions()]);
+  const [lead, { ownerOptions }, activities] = await Promise.all([
+    getLeadById(id),
+    getLeadFormOptions(),
+    listLeadActivities(id),
+  ]);
   if (!lead) notFound();
 
   return (
@@ -55,6 +62,11 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
           <LeadOwnerForm leadId={lead.id} ownerUserId={lead.owner?.userId ?? null} ownerOptions={ownerOptions} />
         </section>
       </div>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Seguimiento</h2>
+        <ActivityForm leadId={lead.id} />
+        <LeadTimeline activities={activities} />
+      </section>
       <div>
         <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>Volver a leads</Link>
       </div>

@@ -2,6 +2,8 @@ import type { z } from "zod";
 import type { tripStatusEnum } from "@/lib/db-schema";
 import type {
   createLeadSchema,
+  leadActivityFormSchema,
+  leadActivityTypeSchema,
   leadOwnerChangeSchema,
   leadSourceSchema,
   leadStageChangeSchema,
@@ -15,6 +17,8 @@ export type CreateLeadInput = z.output<typeof createLeadSchema>;
 export type UpdateLeadInput = z.output<typeof updateLeadSchema>;
 export type LeadStageChangeInput = z.output<typeof leadStageChangeSchema>;
 export type LeadOwnerChangeInput = z.output<typeof leadOwnerChangeSchema>;
+export type LeadActivityType = z.infer<typeof leadActivityTypeSchema>;
+export type LeadActivityInput = z.output<typeof leadActivityFormSchema>;
 
 // owner: "mine" is the session user, "unassigned" the leads without owner;
 // any other value is a staff user id.
@@ -67,6 +71,20 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   nextActionNote: string | null;
   archivedAt: Date | null;
   archivedBy: { email: string } | null;
+};
+
+// History entry. actor is null only for system activities: created of a web form lead and
+// automation (n8n). ownerFrom is null when the first owner is assigned (web form lead).
+export type LeadActivity = {
+  id: string;
+  type: LeadActivityType;
+  body: string | null;
+  stageFrom: LeadStage | null;
+  stageTo: LeadStage | null;
+  ownerFrom: { email: string } | null;
+  ownerTo: { email: string } | null;
+  actor: { email: string } | null;
+  createdAt: Date;
 };
 
 // Compatible with useActionState. values only echoes the action's known form fields, to restore

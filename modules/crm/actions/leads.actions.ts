@@ -7,10 +7,12 @@ import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission, type CurrentUser } from "@/lib/auth/guards";
 import {
   createLeadSchema,
+  leadActivityFormSchema,
   leadOwnerChangeSchema,
   leadStageChangeSchema,
   updateLeadSchema,
 } from "../schemas/leads.schema";
+import { addLeadActivity } from "../services/activities.service";
 import { changeLeadOwner, changeLeadStage, createLead, updateLead } from "../services/leads.service";
 import type { LeadActionState } from "../types/leads.types";
 import { LEAD_LIST_PATH } from "../utils/leadListQuery";
@@ -33,6 +35,7 @@ const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
 const UPDATE_LEAD_FIELDS = Object.keys(updateLeadSchema.shape);
 const STAGE_CHANGE_FIELDS = Object.keys(leadStageChangeSchema.in.shape);
 const OWNER_CHANGE_FIELDS = Object.keys(leadOwnerChangeSchema.shape);
+const ACTIVITY_FIELDS = Object.keys(leadActivityFormSchema.shape);
 
 function failure(
   code: LeadActionErrorCode,
@@ -180,4 +183,24 @@ export async function changeLeadOwnerAction(
 
   revalidateLead(parsed.data.leadId);
   return { status: "success", message: "Responsable actualizado." };
+}
+
+// Manual follow-up (note, call or message). The schema rejects system types; the author is the
+// session user. Only the lead's detail page shows the history.
+export async function addLeadActivityAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, ACTIVITY_FIELDS);
+  const parsed = leadActivityFormSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => addLeadActivity(parsed.data, actor.id));
+  if (result === "not_found") return failure(result, values);
+
+  revalidatePath(leadDetailPath(parsed.data.leadId));
+  return { status: "success", message: "Seguimiento registrado." };
 }

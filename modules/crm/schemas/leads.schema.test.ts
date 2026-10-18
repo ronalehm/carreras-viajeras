@@ -3,6 +3,7 @@ import { z } from "zod";
 import { leadActivityTypeEnum, leadSourceEnum, leadStageEnum } from "@/lib/db-schema";
 import {
   createLeadSchema,
+  leadActivityFormSchema,
   leadActivityTypeSchema,
   leadListQuerySchema,
   leadOwnerChangeSchema,
@@ -302,5 +303,46 @@ describe("leadOwnerChangeSchema", () => {
     expect(fieldErrors({ leadId: LEAD_ID, ownerUserId }, leadOwnerChangeSchema).ownerUserId).toEqual([
       "Elige un responsable.",
     ]);
+  });
+});
+
+describe("leadActivityFormSchema", () => {
+  const valid = { leadId: LEAD_ID, type: "call", body: "  Llamó para preguntar por el viaje.  " };
+
+  it("accepts a manual follow-up, trims the text and drops other keys", () => {
+    expect(leadActivityFormSchema.parse({ ...valid, actorUserId: "intruder", stageFrom: "new" })).toEqual({
+      leadId: LEAD_ID,
+      type: "call",
+      body: "Llamó para preguntar por el viaje.",
+    });
+  });
+
+  it("only offers manual types, all of them activity types", () => {
+    expect(leadActivityFormSchema.shape.type.options).toEqual(["note", "call", "message"]);
+    for (const type of leadActivityFormSchema.shape.type.options) {
+      expect(leadActivityTypeSchema.options).toContain(type);
+    }
+  });
+
+  it.each(["created", "stage_changed", "owner_changed", "archived", "automation", ""])(
+    "rejects the system type %j",
+    (type) => {
+      expect(fieldErrors({ ...valid, type }, leadActivityFormSchema).type).toEqual(["Elige el tipo de seguimiento."]);
+    },
+  );
+
+  it.each([["empty", ""], ["blank", "   "], ["missing", undefined]])("rejects a %s text", (_, body) => {
+    expect(fieldErrors({ ...valid, body }, leadActivityFormSchema).body).toEqual(["Escribe el texto del seguimiento."]);
+  });
+
+  it("accepts 2000 characters and rejects 2001", () => {
+    expect(leadActivityFormSchema.safeParse({ ...valid, body: "a".repeat(2000) }).success).toBe(true);
+    expect(fieldErrors({ ...valid, body: "a".repeat(2001) }, leadActivityFormSchema).body).toEqual([
+      "El texto puede tener hasta 2000 caracteres.",
+    ]);
+  });
+
+  it("rejects a leadId that is not a UUID", () => {
+    expect(fieldErrors({ ...valid, leadId: "abc" }, leadActivityFormSchema).leadId).toEqual(["El lead no es válido."]);
   });
 });

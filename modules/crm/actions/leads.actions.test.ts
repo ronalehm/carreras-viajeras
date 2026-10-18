@@ -12,15 +12,18 @@ vi.mock("../services/leads.service", () => ({
   changeLeadStage: vi.fn(),
   changeLeadOwner: vi.fn(),
 }));
+vi.mock("../services/activities.service", () => ({ addLeadActivity: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import { createLeadSchema } from "../schemas/leads.schema";
+import { addLeadActivity } from "../services/activities.service";
 import { changeLeadOwner, changeLeadStage, createLead, updateLead } from "../services/leads.service";
 import type { LeadActionState } from "../types/leads.types";
 import {
+  addLeadActivityAction,
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
@@ -225,24 +228,26 @@ const EDIT = {
 };
 const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
+const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
 
 type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
 
-const F3_ACTIONS = [
+const DETAIL_ACTIONS = [
   ["updateLeadAction", updateLeadAction, EDIT, updateLead],
   ["changeLeadStageAction", changeLeadStageAction, STAGE, changeLeadStage],
   ["changeLeadOwnerAction", changeLeadOwnerAction, OWNER, changeLeadOwner],
+  ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
 ] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
 
 describe("acciones de la ficha: permisos y errores del service", () => {
-  it.each(F3_ACTIONS)("%s sin sesión devuelve unauthorized y no llama al service", async (_, action, values, service) => {
+  it.each(DETAIL_ACTIONS)("%s sin sesión devuelve unauthorized y no llama al service", async (_, action, values, service) => {
     vi.mocked(requirePermission).mockRejectedValue(new UnauthorizedError());
     expect(await action(IDLE, form(values))).toMatchObject({ status: "error", code: "unauthorized" });
     expect(service).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it.each(F3_ACTIONS)("%s sin permiso (runner) devuelve forbidden y no llama al service", async (_, action, values, service) => {
+  it.each(DETAIL_ACTIONS)("%s sin permiso (runner) devuelve forbidden y no llama al service", async (_, action, values, service) => {
     vi.mocked(requirePermission).mockRejectedValue(new ForbiddenError());
     expect(await action(IDLE, form(values))).toEqual({
       status: "error", code: "forbidden", message: "No tienes permiso para gestionar leads.",
@@ -251,7 +256,7 @@ describe("acciones de la ficha: permisos y errores del service", () => {
     expect(service).not.toHaveBeenCalled();
   });
 
-  it.each(F3_ACTIONS)("%s con datos inválidos devuelve invalid_input sin llamar al service", async (_, action, values, service) => {
+  it.each(DETAIL_ACTIONS)("%s con datos inválidos devuelve invalid_input sin llamar al service", async (_, action, values, service) => {
     const result = await action(IDLE, form({ ...values, leadId: "abc", secret: "no-devolver" }));
     expect(result).toMatchObject({
       status: "error",
@@ -264,7 +269,7 @@ describe("acciones de la ficha: permisos y errores del service", () => {
     expect(service).not.toHaveBeenCalled();
   });
 
-  it.each(F3_ACTIONS)("%s: si el service lanza, lanza 'lead action failed' sin causa ni consola", async (_, action, values, service) => {
+  it.each(DETAIL_ACTIONS)("%s: si el service lanza, lanza 'lead action failed' sin causa ni consola", async (_, action, values, service) => {
     const spies = ["error", "warn", "log"].map((method) =>
       vi.spyOn(console, method as "error").mockImplementation(() => {}),
     );
@@ -283,7 +288,7 @@ describe("acciones de la ficha: permisos y errores del service", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
-  it.each(F3_ACTIONS)("%s con not_found devuelve el mensaje fijo y no revalida", async (_, action, values, service) => {
+  it.each(DETAIL_ACTIONS)("%s con not_found devuelve el mensaje fijo y no revalida", async (_, action, values, service) => {
     vi.mocked(service).mockResolvedValue("not_found" as never);
     expect(await action(IDLE, form(values))).toEqual({
       status: "error",
@@ -431,4 +436,47 @@ describe("changeLeadOwnerAction", () => {
     });
     expect(revalidatePath).not.toHaveBeenCalled();
   });
+});
+
+describe("addLeadActivityAction", () => {
+  it("registra el seguimiento con el id de la sesión como autor, ignora campos extra y revalida la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(addLeadActivity).mockResolvedValue("added");
+    const data = form({ ...ACTIVITY, body: "  Llamó por la 21K.  ", actorUserId: "intruder", stageTo: "paid" });
+
+    expect(await addLeadActivityAction(IDLE, data)).toEqual({
+      status: "success", message: "Seguimiento registrado.",
+    });
+    expect(addLeadActivity).toHaveBeenCalledExactlyOnceWith(
+      { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." },
+      "session-user",
+    );
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("sin texto devuelve el error en su campo, conserva lo elegido y no crea nada", async () => {
+    const result = await addLeadActivityAction(IDLE, form({ ...ACTIVITY, body: "   " }));
+    expect(result).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { body: ["Escribe el texto del seguimiento."] },
+      values: { ...ACTIVITY, body: "   " },
+    });
+    expect(addLeadActivity).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each(["created", "stage_changed", "owner_changed", "archived", "automation"])(
+    "nunca acepta el tipo de sistema %s desde el formulario",
+    async (type) => {
+      const result = await addLeadActivityAction(IDLE, form({ ...ACTIVITY, type }));
+      expect(result).toMatchObject({
+        code: "invalid_input",
+        fieldErrors: { type: ["Elige el tipo de seguimiento."] },
+      });
+      expect(addLeadActivity).not.toHaveBeenCalled();
+    },
+  );
 });
