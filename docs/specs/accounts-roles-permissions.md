@@ -5,7 +5,7 @@
 - Depende de: platform-neon-foundation.md (Fase 1 aprobada)
 
 ## Objetivo
-Implementar la "Fase 2: permisos mínimos" que `platform-neon-foundation.md` deja para una spec separada: tablas de aplicación para perfiles, asignaciones de staff, organizaciones y membresías; guardas de autorización server-only que se ejecutan en cada API y Server Action, y pruebas de todos los casos de denegación que exige la foundation. Sirve a todo el equipo interno (COMERCIAL, OPERACIONES, MODERADOR, ADMIN), a los representantes de organizaciones (COLABORADOR) y a los runners: una sola cuenta de Neon Auth por persona, con permisos que solo concede la aplicación y nunca el cliente.
+Implementar la "Fase 2: permisos mínimos" que `platform-neon-foundation.md` deja para una spec separada: tablas de aplicación para perfiles, asignaciones de staff, organizaciones y membresías; guardas de autorización server-only que se ejecutan en cada API y Server Action, y pruebas de todos los casos de denegación que exige la foundation. Sirve a los cuatro perfiles actuales: RUNNER, COLABORADOR (representantes de organizaciones), COMERCIAL y ADMIN, con una sola cuenta de Neon Auth por persona, con permisos que solo concede la aplicación y nunca el cliente.
 
 Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana la foundation.
 
@@ -15,7 +15,7 @@ Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana
   - Matriz estática y pura de permisos de staff (`can()`).
   - Guardas server-only en `lib/auth/`: `getCurrentUser`, `requireUser`, `requireVerifiedEmail`, `requirePermission`, `requireCrmUser`, `requireOrgRole`; errores `UnauthorizedError`/`ForbiddenError` con mapeo a 401/403.
   - Ruta mínima protegida `GET /api/crm/me`, para probar 401/403/200 con llamadas directas.
-  - (Fase 2) Una Server Action protegida y útil: el moderador cambia el estado de verificación de una organización. Cubre el criterio de la foundation que exige probar la llamada directa a una Server Action.
+  - (Fase 2) Una Server Action protegida y útil: el admin cambia el estado de verificación de una organización. Cubre el criterio de la foundation que exige probar la llamada directa a una Server Action.
   - Scripts SQL manuales y auditables para asignar y revocar roles de staff por `user_id` exacto (primer ADMIN incluido).
   - (Fase 2) Documentación operativa en `README.md`: mapeo de roles, alta del primer ADMIN, aplicación manual de la migración y verificación de que `neon_auth` no cambia.
 - No incluye:
@@ -25,6 +25,7 @@ Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana
   - Recursos de runner (viajes, compras, reservas, itinerarios, comunidad).
   - Plugins Organization (Beta) y Admin de Neon Auth, y el campo `user.role` de Neon Auth: no se usan para autorizar (ver "Decisiones").
   - `proxy.ts`/middleware de rutas, RLS, Cloudflare Access, tabla de auditoría histórica, borrado de cuentas y limpieza de perfiles huérfanos, permisos (GRANT) del rol de base de datos de la app.
+  - Perfiles OPERACIONES y MODERADOR: no existen por ahora. Se añadirán en una spec futura, cuando hagan falta, como valores nuevos del enum `staff_role` (migración `ALTER TYPE staff_role ADD VALUE …`) y entradas nuevas en la matriz.
   - Aplicar migraciones o asignar roles en ramas Neon remotas: solo el usuario puede hacerlo, en su máquina y con autorización explícita.
 
 ## Requisitos
@@ -32,7 +33,7 @@ Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana
 2. La identidad de la aplicación es `session.user.id` de Neon Auth (string estable). El correo nunca es clave de autorización.
 3. RUNNER = cualquier usuario autenticado. Su fila en `profiles` se crea de forma perezosa en la primera petición autenticada. El registro público nunca crea staff, membresías ni organizaciones verificadas: esas filas solo nacen de procedimientos internos.
 4. COLABORADOR = usuario con membresía (`owner|admin|member`) en una organización. Una persona puede ser runner, tener membresías en varias organizaciones con roles distintos y además tener roles de staff, con una sola cuenta.
-5. Staff = asignación activa (`revoked_at IS NULL`) en `staff_assignments` con rol `commercial|operations|moderator|admin`. Los roles se leen de la base de datos en **cada petición**: no se guardan en cookies, JWT, metadatos de Neon Auth ni caché entre peticiones.
+5. Staff = asignación activa (`revoked_at IS NULL`) en `staff_assignments` con rol `commercial|admin`. Los roles se leen de la base de datos en **cada petición**: no se guardan en cookies, JWT, metadatos de Neon Auth ni caché entre peticiones.
 6. La autorización deniega por defecto: un permiso desconocido, una lista de roles vacía, una sesión ausente o malformada, un error de Neon Auth o un error de base de datos terminan en denegación.
 7. Solo cuentan los datos del servidor. Los campos de body, query, cookies propias o `session.user` (por ejemplo, `role`, `verified`, `organizationId`, `verifiedBy`) nunca elevan privilegios.
 8. CRM (foundation): sesión válida + email verificado + asignación de staff activa con un rol al que la matriz conceda `crm.access`.
@@ -51,7 +52,7 @@ Fase 1:
 - [ ] (F1) Dado que Neon Auth devuelve un error o una sesión con `user.id` vacío o malformado, cuando llamo a `GET /api/crm/me`, entonces responde 401.
 - [ ] (F1) Dado un usuario con sesión pero `emailVerified: false` (aunque tenga asignación `admin` activa), cuando llamo a `GET /api/crm/me`, entonces responde 403 `{ "error": "forbidden" }`.
 - [ ] (F1) Dado un runner con email verificado y sin asignaciones, cuando llamo a `GET /api/crm/me`, entonces responde 403. En esa petición se hace el upsert perezoso de su perfil y la lectura de roles en un solo `db.batch`.
-- [ ] (F1) Dado un usuario verificado con asignación activa `commercial`, `operations` o `admin`, cuando llamo a `GET /api/crm/me`, entonces responde 200 `{ userId, staffRoles }`. Con solo `moderator` responde 403 (mapeo propuesto; ver Pregunta abierta 1).
+- [ ] (F1) Dado un usuario verificado con asignación activa `commercial` o `admin`, cuando llamo a `GET /api/crm/me`, entonces responde 200 `{ userId, staffRoles }`.
 - [ ] (F1) Dado un staff con acceso, cuando su asignación se revoca entre dos peticiones, entonces la primera responde 200 y la siguiente 403 (sin caché entre peticiones).
 - [ ] (F1) Dado que la consulta de perfil o roles falla, cuando llamo a `GET /api/crm/me`, entonces responde 403 con cuerpo `{ "error": "forbidden" }`, sin el texto del error original.
 - [ ] (F1) Dado un runner verificado que envía `role=admin` en body, query y cookie, y cuya sesión de Neon Auth trae `user.role: "admin"`, cuando llamo a `GET /api/crm/me`, entonces responde 403.
@@ -61,8 +62,8 @@ Fase 1:
 - [ ] (F1) Dado `scripts/sql/grant-staff-role.sql` ejecutado con psql y las variables `user_id`, `role` y `reason`, entonces inserta una asignación activa. Falla si el perfil no existe (FK), si ya hay una asignación activa del mismo rol (índice único parcial) o si `reason` está vacío. `scripts/sql/revoke-staff-role.sql` marca `revoked_at` y devuelve la fila afectada.
 
 Fase 2:
-- [ ] (F2) Dada `updateOrganizationStatusAction` llamada directamente: sin sesión devuelve `{ status: "error", code: "unauthorized" }`; con runner verificado, `commercial` u `operations`, `forbidden`; con `moderator` o `admin` verificados y la organización existente, `{ status: "success" }`. En los casos denegados no se llama al service.
-- [ ] (F2) Dado un moderador revocado entre dos llamadas, cuando llamo a la acción por segunda vez, entonces devuelve `forbidden`. Si la base de datos falla dentro de la guarda, también devuelve `forbidden`.
+- [ ] (F2) Dada `updateOrganizationStatusAction` llamada directamente: sin sesión devuelve `{ status: "error", code: "unauthorized" }`; con runner verificado o `commercial` verificado, `forbidden`; con `admin` verificado y la organización existente, `{ status: "success" }`. En los casos denegados no se llama al service.
+- [ ] (F2) Dado un admin revocado entre dos llamadas, cuando llamo a la acción por segunda vez, entonces devuelve `forbidden`. Si la base de datos falla dentro de la guarda, también devuelve `forbidden`.
 - [ ] (F2) Dado un input con campos extra (`verifiedBy`, `role`, `userId`), cuando la acción tiene éxito, entonces los ignora y `verified_by` es el `user.id` de la sesión.
 - [ ] (F2) Dado un `organizationId` que no es UUID o un `status` fuera de `verified|rejected|suspended`, entonces devuelve `invalid_input` sin actualizar nada. Si la organización no existe, devuelve `not_found`.
 - [ ] (F2) Dado `status: "verified"`, entonces se guardan `verified_at = now()` y `verified_by = actor`. Con `rejected` o `suspended` ambos quedan en `NULL`. En todos los casos se actualiza `updated_at`.
@@ -75,10 +76,7 @@ Fase 2:
 - **Nombre de tabla:** `staff_assignments`, tal como lo nombra la foundation, en lugar de `staff_role_assignments`.
 - **Columna `active` de la foundation:** se expresa como `revoked_at IS NULL`. Así hay una sola fuente de verdad y se conserva el historial de revocaciones.
 - **Columna `status` de la foundation:** se mantiene el nombre `status` en `organizations`, con valores `unverified|pending|verified|rejected|suspended`.
-- **Roles:** la foundation define `crm_admin`/`crm_agent`; el documento del usuario, COMERCIAL/OPERACIONES/MODERADOR/ADMIN. El mapeo propuesto (Pregunta abierta 1) es:
-  - `crm_admin` → `admin` (contiene todo)
-  - `crm_agent` → `commercial`
-  - `operations` y `moderator` son roles nuevos.
+- **Roles de staff (decidido por el usuario):** el enum `staff_role` es `commercial | admin`. Mapeo desde la foundation: `crm_admin` → `admin` (contiene todo) y `crm_agent` → `commercial`. Otros perfiles internos se añadirán en specs futuras con `ALTER TYPE staff_role ADD VALUE …`.
 - **Matriz única:** las guardas de staff reciben un **permiso**, no listas de roles (`requirePermission(permission)`), y `can()` es la única fuente de la matriz. Esto evita listas de roles repetidas por el código. Sustituye al `requireStaffRole(...roles)` propuesto. `requireCrmUser()` se mantiene como nombre de la foundation y equivale a `requirePermission("crm.access")`.
 - **Plugins de Neon Auth no usados:** ni Organization (Beta, sin roles ni permisos propios) ni el `user.role` del plugin Admin. La foundation define tablas de aplicación y prohíbe confiar en metadatos de identidad.
 - **Sin FK hacia `neon_auth.user`:**
@@ -86,7 +84,7 @@ Fase 2:
   - `profiles.user_id` es `text`, que admite un id con forma de UUID o de texto, y solo se rellena desde sesiones validadas.
   - Las demás tablas hacen FK a `profiles.user_id`, dentro de `public`.
   - Antes de aplicar la migración, el usuario comprueba el tipo real del id con `SELECT data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' AND table_name = 'user' AND column_name = 'id';`.
-  - Una FK posterior queda como Pregunta abierta 5.
+  - Una FK posterior queda como Pregunta abierta 4.
 - **Ubicación del schema:** se queda en `lib/db-schema.ts`, sin cambiar `drizzle.config.ts` (KISS). Son tablas transversales que consultan las guardas de `lib/auth/` y varios módulos. Dividir en `db/schema/*.ts` se decidirá cuando haya tablas de dominio que lo justifiquen.
 - **Fallo de base de datos dentro de la autorización:** se convierte en `ForbiddenError` (403, falla cerrado). El 401 queda reservado para la ausencia de sesión.
 - **Caché de sesión:** `getSession()` usa la cookie de datos de sesión de Neon Auth (TTL por defecto de 300 s), así que `emailVerified` puede ir hasta 5 minutos por detrás. Los roles de staff y las membresías no se cachean nunca.
@@ -113,8 +111,8 @@ Drizzle `pg-core`, columnas en snake_case y todo en `public`:
 
 | Objeto | Definición |
 |---|---|
-| enum `staff_role` | `commercial`, `operations`, `moderator`, `admin` |
-| enum `organization_type` | `club`, `brand`, `organizer`, `gym`, `ally` (ver Pregunta abierta 2) |
+| enum `staff_role` | `commercial`, `admin` |
+| enum `organization_type` | `club`, `brand`, `organizer`, `gym`, `ally` (ver Pregunta abierta 1) |
 | enum `organization_status` | `unverified`, `pending`, `verified`, `rejected`, `suspended` |
 | enum `organization_role` | `owner`, `admin`, `member` |
 | `profiles` | `user_id text PK` (id de Neon Auth); `created_at timestamptz not null default now()` |
@@ -132,11 +130,11 @@ export type StaffRole = (typeof staffRoleEnum.enumValues)[number];
 export type OrganizationRole = (typeof organizationRoleEnum.enumValues)[number];
 export type Permission = "crm.access" | "organizations.verify";
 // Matriz (admin siempre permitido por regla explícita):
-// crm.access           → commercial, operations
-// organizations.verify → moderator
+// crm.access           → commercial
+// organizations.verify → (ningún rol además de admin)
 export function can(roles: readonly StaffRole[], permission: Permission): boolean;
 ```
-Solo se definen los permisos que tienen consumidor en esta spec. Los futuros (`leads.*` → commercial, `bookings.*` → operations, `content.moderate` → moderator, `staff.manage` → admin) los añadirá la spec que los use, con este mismo patrón.
+Solo se definen los permisos que tienen consumidor en esta spec. Los futuros (por ejemplo, `leads.*` → commercial, `staff.manage` → admin) los añadirá la spec que los use, con este mismo patrón.
 
 `lib/auth/errors.ts` (nuevo, F1):
 ```ts
@@ -196,7 +194,7 @@ Flujo de `getCurrentUser`:
 ### Contrato de API
 ```ts
 // GET /api/crm/me
-type CrmMeResponse = { userId: string; staffRoles: ("commercial" | "operations" | "moderator" | "admin")[] }; // 200
+type CrmMeResponse = { userId: string; staffRoles: ("commercial" | "admin")[] }; // 200
 type AuthErrorBody = { error: "unauthorized" } /* 401 */ | { error: "forbidden" } /* 403 */;
 
 // Server Action (F2)
@@ -247,7 +245,8 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
   - `admin` es `true` en todos los permisos;
   - roles vacíos → `false`;
   - permiso desconocido (forzado con un cast) → `false`;
-  - `moderator` sin `crm.access`; `commercial` y `operations` sin `organizations.verify`.
+  - `commercial` tiene `crm.access` y no tiene `organizations.verify`;
+  - `organizations.verify` solo es `true` con `admin`.
 - `lib/auth/access.service.test.ts` (F1, `@/lib/db` mockeado):
   - `syncProfileAndLoadStaffRoles` hace un único `batch` con `INSERT … ON CONFLICT DO NOTHING` para el `userId` recibido y un `SELECT` filtrado por `user_id` y `revoked_at IS NULL`;
   - mapea las filas a `StaffRole[]`;
@@ -257,7 +256,8 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
   - sin sesión, con `error` de Neon Auth o con `user.id` vacío → `requireUser` lanza `UnauthorizedError` sin consultar la base de datos;
   - `emailVerified: false` con rol `admin` → `requirePermission` lanza `ForbiddenError`;
   - runner verificado sin roles → `ForbiddenError` en `requireCrmUser`;
-  - `commercial`, `operations` y `admin` → permitido; `moderator` → denegado;
+  - `commercial` y `admin` → permitido en `requireCrmUser`;
+  - `commercial` → denegado en `requirePermission("organizations.verify")`; `admin` → permitido;
   - revocación: el mock devuelve `["commercial"]` y luego `[]` → la segunda llamada lanza, y el service se llama dos veces (sin caché entre peticiones);
   - error de la base de datos → `ForbiddenError`, sin `cause` y sin el mensaje original;
   - una sesión con `user.role: "admin"` y campos extra no aporta roles;
@@ -273,7 +273,7 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
   - 401 sin sesión;
   - 403 runner verificado;
   - 403 email no verificado;
-  - 200 con `{ userId, staffRoles }` para `commercial`;
+  - 200 con `{ userId, staffRoles }` para `commercial` y para `admin`;
   - 403 tras revocar;
   - 403 con error de la base de datos y un cuerpo sin el texto original;
   - 403 para un runner con `role=admin` en query, cookie y body;
@@ -284,9 +284,9 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
   - 0 filas → `false`.
 - `modules/accounts/actions/organizations.actions.test.ts` (F2, llamada directa; mocks de la sesión, `access.service` y el service de organizaciones):
   - `unauthorized` sin sesión;
-  - `forbidden` para runner, `commercial` y `operations`;
-  - `success` para `moderator` y `admin`;
-  - moderador revocado → `forbidden` en la segunda llamada;
+  - `forbidden` para runner y `commercial`;
+  - `success` para `admin`;
+  - admin revocado → `forbidden` en la segunda llamada;
   - error de la base de datos en la guarda → `forbidden`;
   - `invalid_input` con UUID inválido y con `status` `pending`/`unverified`;
   - `not_found` cuando el service devuelve `false`;
@@ -308,10 +308,9 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
 - [ ] T3 — README: mapeo de roles, alta y revocación manual de staff, aplicación manual de la migración, verificación de `neon_auth`, checklist de la prueba manual en una rama de desarrollo, y actualizar la frase "La fase 1 no añade … tablas de negocio" · archivos: `README.md` · depende de: Fase 1 · paralelo (con F2-T1 y F2-T2)
 
 ## Preguntas abiertas
-1. **Nombres y mapeo de roles.** Se propone reemplazar `crm_admin`/`crm_agent` de la foundation por `admin` (contiene todo) y `commercial` (agente CRM), y añadir `operations` y `moderator`. ¿Confirmas los nombres? ¿`crm.access` debe incluir a `operations` (reservas e itinerarios de clientes) como se propone, y excluir a `moderator`?
-2. **Tipos de organización.** Tu documento menciona clubes, marcas y organizadores. ¿Se incluyen también `gym` y `ally` en el enum, o solo `club|brand|organizer`?
-3. **Email verificado para colaboradores.** La foundation lo exige para el CRM, pero no lo menciona para los colaboradores. Esta spec lo exige también en `requireOrgRole`. ¿De acuerdo?
-4. **Transiciones de verificación.** Se propone que el moderador o el admin pase cualquier organización a `verified|rejected|suspended`, sin reglas de transición. ¿Hay transiciones prohibidas (por ejemplo, `rejected` → `verified` directo)? ¿Quién pasa una organización a `pending`? (Se asume que el futuro onboarding, fuera de alcance.)
-5. **FK hacia `neon_auth.user`.** Esta fase no la crea (ver Decisiones). ¿Quieres añadirla después con una migración SQL personalizada, una vez confirmado el tipo del id y que Neon lo admite? ¿Qué debe pasar con `profiles`, membresías y asignaciones si se borra un usuario en Neon Auth?
-6. **Auditoría.** Las asignaciones guardan `reason`, `granted_by`/`revoked_by` y fechas, pero los cambios de estado de organización solo guardan `verified_at`/`verified_by` y `updated_at`. ¿Hace falta ya una tabla de historial de verificaciones, o basta para el MVP?
-7. **Rol de base de datos de la app.** ¿`DATABASE_URL` usa un rol de permisos mínimos distinto del owner? Si es así, necesitará `SELECT, INSERT` en `profiles`, `SELECT` en `staff_assignments` y `organization_memberships` y `SELECT, UPDATE` en `organizations`. Los GRANT quedan fuera de esta spec. ¿Los preparas tú en la consola de Neon o se especifican aparte?
+1. **Tipos de organización.** Tu documento menciona clubes, marcas y organizadores. ¿Se incluyen también `gym` y `ally` en el enum, o solo `club|brand|organizer`?
+2. **Email verificado para colaboradores.** La foundation lo exige para el CRM, pero no lo menciona para los colaboradores. Esta spec lo exige también en `requireOrgRole`. ¿De acuerdo?
+3. **Transiciones de verificación.** Se propone que el admin pase cualquier organización a `verified|rejected|suspended`, sin reglas de transición. ¿Hay transiciones prohibidas (por ejemplo, `rejected` → `verified` directo)? ¿Quién pasa una organización a `pending`? (Se asume que el futuro onboarding, fuera de alcance.)
+4. **FK hacia `neon_auth.user`.** Esta fase no la crea (ver Decisiones). ¿Quieres añadirla después con una migración SQL personalizada, una vez confirmado el tipo del id y que Neon lo admite? ¿Qué debe pasar con `profiles`, membresías y asignaciones si se borra un usuario en Neon Auth?
+5. **Auditoría.** Las asignaciones guardan `reason`, `granted_by`/`revoked_by` y fechas, pero los cambios de estado de organización solo guardan `verified_at`/`verified_by` y `updated_at`. ¿Hace falta ya una tabla de historial de verificaciones, o basta para el MVP?
+6. **Rol de base de datos de la app.** ¿`DATABASE_URL` usa un rol de permisos mínimos distinto del owner? Si es así, necesitará `SELECT, INSERT` en `profiles`, `SELECT` en `staff_assignments` y `organization_memberships` y `SELECT, UPDATE` en `organizations`. Los GRANT quedan fuera de esta spec. ¿Los preparas tú en la consola de Neon o se especifican aparte?
