@@ -12,9 +12,9 @@ type CrmShellProps = {
 };
 
 export function CrmShell({ email, roles, children }: CrmShellProps) {
-  // Visual only: each page and every Server Action check their permission again.
-  const canManageTrips = can(roles, "trips.manage");
+  // Visual only: each page and Server Action checks its permission again.
   const canManageStaff = can(roles, "staff.manage");
+  const canManageTrips = can(roles, "trips.manage");
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -23,8 +23,8 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
           <Link href="/crm" className="font-heading font-medium">
             CRM Carreras Viajeras
           </Link>
-          {(canManageTrips || canManageStaff) && (
-            <nav aria-label="CRM" className="flex flex-wrap items-center gap-1">
+          {(canManageStaff || canManageTrips) && (
+            <nav aria-label="CRM" className="flex flex-wrap gap-1">
               {canManageTrips && (
                 <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
                   Viajes

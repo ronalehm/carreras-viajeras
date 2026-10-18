@@ -5,15 +5,11 @@ import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
 import { listTrips, TripTable } from "@/modules/trips";
 
-export const metadata: Metadata = {
-  title: "Viajes",
-};
+export const metadata: Metadata = { title: "Viajes" };
 
 export default async function TripsPage() {
-  // The layout does not re-render on client navigation, so the page checks trips.manage itself.
   const access = await getCrmAccess("trips.manage");
   if (access.status === "unauthenticated") redirect("/crm/acceso");
-
   if (access.status === "forbidden") {
     return (
       <section className="flex flex-col gap-2">
@@ -24,16 +20,14 @@ export default async function TripsPage() {
       </section>
     );
   }
-
+  const trips = await listTrips();
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Viajes</h1>
-        <Link href="/crm/viajes/nuevo" className={buttonVariants()}>
-          Nuevo viaje
-        </Link>
+        <Link href="/crm/viajes/nuevo" className={buttonVariants()}>Nuevo viaje</Link>
       </div>
-      <TripTable trips={await listTrips()} />
+      <TripTable trips={trips} />
     </section>
   );
 }

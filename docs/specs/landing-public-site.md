@@ -189,7 +189,7 @@ Sustituye el template "Hello world".
   - `metadata = { title: { default: "Carreras Viajeras", template: "%s | Carreras Viajeras" }, description: <description de index.html>, robots: { index: false, follow: false } }`;
   - `export const viewport: Viewport = { themeColor: "#0144ae" }`.
 - **`app/page.tsx`** (F1, reescribir; ampliado en F2 y F3):
-  - `metadata.title = "Tu próxima meta es la maratón de Santiago."`;
+  - `metadata.title = { absolute: "Tu próxima meta es la maratón de Santiago. | Carreras Viajeras" }`. En Next 16, el `title.template` del layout no se aplica a un `page.js` del mismo segmento (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-metadata.md`, líneas 285–288). `/contacto`, `/viajes/[slug]` y `/cuenta` son segmentos hijos, así que en ellas el template sí aplica;
   - compone `<SiteHeader />`, `<main>` con las secciones de la fase, `<SiteFooter />` y `<MobileCta />`.
 - **`app/contacto/page.tsx`** (F1, nuevo):
   - `metadata = { title: "Contacto", description: "Consulta por tu próximo viaje con Carreras Viajeras." }`;
@@ -400,10 +400,10 @@ Entregable: `/` con cabecera, carrusel, pie (con MAZ y redes) y CTA móvil, más
 
 ### Fase 2 — Resto de la landing y página del viaje
 Entregable: `/` con todas las secciones salvo comunidad, y `/viajes/maraton-santiago-2027`. Total: 15 archivos. Requiere F1.
-- [ ] T1 — Datos del viaje y sus componentes: `TRIPS`, datos, paquete, detalle y destinos · archivos: `modules/landing/utils/trips.ts`, `modules/landing/components/TripFacts.tsx`, `modules/landing/components/PackageSection.tsx`, `modules/landing/components/TripDetail.tsx`, `modules/landing/components/DestinationsSection.tsx` · depende de: Fase 1 · paralelo con T2 y T3
-- [ ] T2 — Historia, por qué viajar y FAQ · archivos: `modules/landing/components/StorySection.tsx`, `modules/landing/components/WhyUsSection.tsx`, `modules/landing/components/FaqSection.tsx` · depende de: Fase 1 · paralelo con T1 y T3 (StorySection enlaza a la ruta del viaje como literal, sin importar `trips.ts`)
-- [ ] T3 — Blog (referentes y tips con filtro) · archivos: `modules/landing/components/BlogSection.tsx`, `modules/landing/components/TipList.tsx` · depende de: Fase 1 · paralelo con T1 y T2
-- [ ] T4 — Ruta del viaje, exports, composición de `/`, nav ("Próxima maratón", "Blog") y CTA de la lámina 2 · archivos: `app/viajes/[slug]/page.tsx`, `modules/landing/index.ts`, `app/page.tsx`, `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: T1, T2, T3 · secuencial
+- [x] T1 — Datos del viaje y sus componentes: `TRIPS`, datos, paquete, detalle y destinos · archivos: `modules/landing/utils/trips.ts`, `modules/landing/components/TripFacts.tsx`, `modules/landing/components/PackageSection.tsx`, `modules/landing/components/TripDetail.tsx`, `modules/landing/components/DestinationsSection.tsx` · depende de: Fase 1 · paralelo con T2 y T3
+- [x] T2 — Historia, por qué viajar y FAQ · archivos: `modules/landing/components/StorySection.tsx`, `modules/landing/components/WhyUsSection.tsx`, `modules/landing/components/FaqSection.tsx` · depende de: Fase 1 · paralelo con T1 y T3 (StorySection enlaza a la ruta del viaje como literal, sin importar `trips.ts`)
+- [x] T3 — Blog (referentes y tips con filtro) · archivos: `modules/landing/components/BlogSection.tsx`, `modules/landing/components/TipList.tsx` · depende de: Fase 1 · paralelo con T1 y T2
+- [x] T4 — Ruta del viaje, exports, composición de `/`, nav ("Próxima maratón", "Blog") y CTA de la lámina 2 · archivos: `app/viajes/[slug]/page.tsx`, `modules/landing/index.ts`, `app/page.tsx`, `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: T1, T2, T3 · secuencial
 
 ### Fase 3 — Cuenta del runner y comunidad
 Entregable: `/cuenta` con alta, ingreso, verificación y cierre de sesión con Neon Auth, y la sección `#comunidad` con sus enlaces. Total: 15 archivos.

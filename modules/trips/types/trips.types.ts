@@ -7,6 +7,18 @@ export type Trip = InferSelectModel<typeof trips>;
 export type TripStatus = z.infer<typeof tripStatusSchema>;
 export type TripInput = z.output<typeof tripFormSchema>;
 
+export type TripActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | {
+      status: "error";
+      code: "unauthorized" | "forbidden" | "invalid_input" | "slug_taken" | "slug_locked"
+        | "not_found" | "archived" | "invalid_transition";
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+      values?: Record<string, string>;
+    };
+
 // Public read contract for the landing: published trips only, no internal fields.
 export type PublicTrip = {
   slug: string; // stable public identifier while published
@@ -23,23 +35,3 @@ export type PublicTrip = {
   capacity: number | null; // total informational seats
   imageUrl: string | null; // external https:// URL
 };
-
-// Shape returned by the trip Server Actions (useActionState and ConfirmActionButton).
-export type TripActionState =
-  | { status: "idle" }
-  | { status: "success"; message: string }
-  | {
-      status: "error";
-      code:
-        | "unauthorized"
-        | "forbidden"
-        | "invalid_input"
-        | "slug_taken"
-        | "slug_locked"
-        | "not_found"
-        | "archived"
-        | "invalid_transition";
-      message: string;
-      fieldErrors?: Record<string, string[]>;
-      values?: Record<string, string>; // what was typed, to restore the form
-    };

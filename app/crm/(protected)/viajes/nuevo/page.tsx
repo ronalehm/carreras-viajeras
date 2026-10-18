@@ -3,14 +3,11 @@ import { redirect } from "next/navigation";
 import { getCrmAccess } from "@/modules/accounts";
 import { TripForm } from "@/modules/trips";
 
-export const metadata: Metadata = {
-  title: "Nuevo viaje",
-};
+export const metadata: Metadata = { title: "Nuevo viaje" };
 
 export default async function NewTripPage() {
   const access = await getCrmAccess("trips.manage");
   if (access.status === "unauthenticated") redirect("/crm/acceso");
-
   if (access.status === "forbidden") {
     return (
       <section className="flex flex-col gap-2">
@@ -21,9 +18,8 @@ export default async function NewTripPage() {
       </section>
     );
   }
-
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Nuevo viaje</h1>
       <TripForm />
     </section>

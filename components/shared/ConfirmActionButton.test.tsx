@@ -1,97 +1,70 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
 import { ConfirmActionButton, type ConfirmActionState } from "./ConfirmActionButton";
-
-type Action = (prev: ConfirmActionState, formData: FormData) => Promise<ConfirmActionState>;
-
-const TITLE = "¿Publicar «Maratón de Santiago 2027»?";
-const DESCRIPTION = "Aparecerá en la web pública con sus datos actuales.";
-
-function renderButton(action: Action) {
-  render(
-    <ConfirmActionButton
-      action={action}
-      fields={{ id: "trip-1", status: "published" }}
-      label="Publicar"
-      title={TITLE}
-      description={DESCRIPTION}
-      confirmLabel="Publicar"
-      variant="outline"
-    />,
-  );
-}
-
-async function flush() {
-  await act(async () => {});
-}
-
-async function open() {
-  fireEvent.click(screen.getByRole("button", { name: "Publicar" }));
-  await flush();
-}
-
-function dialog() {
-  return screen.queryByRole("alertdialog");
-}
-
-async function confirm() {
-  fireEvent.click(screen.getAllByRole("button", { name: "Publicar" }).at(-1)!);
-  await flush();
-}
 
 afterEach(cleanup);
 
-describe("ConfirmActionButton", () => {
-  it("opens the dialog with the title and the description", async () => {
-    renderButton(vi.fn<Action>());
-    expect(dialog()).toBeNull();
+function setup(action = vi.fn<(prev: ConfirmActionState, data: FormData) => Promise<ConfirmActionState>>()
+  .mockResolvedValue({ status: "success", message: "Hecho." })) {
+  render(<ConfirmActionButton action={action} fields={{ id: "trip-1", status: "archived" }}
+    label="Archivar" title="¿Archivar el viaje?" description="No se podrá editar."
+    confirmLabel="Confirmar archivo" variant="destructive" />);
+  fireEvent.click(screen.getByRole("button", { name: "Archivar" }));
+  return action;
+}
 
-    await open();
+it("abre el diálogo y cancelar no ejecuta la acción", async () => {
+  const action = setup();
+  expect(await screen.findByRole("alertdialog")).toBeTruthy();
+  expect(screen.getByText("¿Archivar el viaje?")).toBeTruthy();
+  expect(screen.getByText("No se podrá editar.")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(action).not.toHaveBeenCalled();
+});
 
-    expect(dialog()).not.toBeNull();
-    expect(screen.getByText(TITLE)).toBeDefined();
-    expect(screen.getByText(DESCRIPTION)).toBeDefined();
-  });
+it("envía los campos y cierra después del éxito", async () => {
+  const action = setup();
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar archivo" }));
+  await waitFor(() => expect(action).toHaveBeenCalledOnce());
+  expect(action.mock.calls[0][0]).toEqual({ status: "idle" });
+  expect(Object.fromEntries(action.mock.calls[0][1])).toEqual({ id: "trip-1", status: "archived" });
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+});
 
-  it("sends the fields as FormData and closes on success", async () => {
-    const action = vi.fn<Action>().mockResolvedValue({ status: "success", message: "Viaje publicado." });
-    renderButton(action);
-    await open();
+it("mantiene abierto el error y permite corregir/reintentar", async () => {
+  const action = vi.fn<(prev: ConfirmActionState, data: FormData) => Promise<ConfirmActionState>>()
+    .mockResolvedValueOnce({ status: "error", message: "El viaje cambió de estado." })
+    .mockResolvedValueOnce({ status: "success", message: "Hecho." });
+  setup(action);
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar archivo" }));
+  expect((await screen.findByRole("alert")).textContent).toBe("El viaje cambió de estado.");
+  expect(screen.getByRole("alertdialog")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Confirmar archivo" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(action).toHaveBeenCalledTimes(2);
+});
 
-    await confirm();
+it("deshabilita confirmar y cancelar mientras procesa", async () => {
+  let finish!: (value: ConfirmActionState) => void;
+  const action = vi.fn<(prev: ConfirmActionState, data: FormData) => Promise<ConfirmActionState>>()
+    .mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  setup(action);
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar archivo" }));
+  await waitFor(() => expect(screen.getByRole<HTMLButtonElement>("button", { name: "Procesando…" }).disabled).toBe(true));
+  expect(screen.getByRole<HTMLButtonElement>("button", { name: "Cancelar" }).disabled).toBe(true);
+  await act(async () => finish({ status: "success", message: "Hecho." }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+});
 
-    expect(action).toHaveBeenCalledTimes(1);
-    const [prev, formData] = action.mock.calls[0];
-    expect(prev).toEqual({ status: "idle" });
-    expect(Object.fromEntries(formData)).toEqual({ id: "trip-1", status: "published" });
-    expect(dialog()).toBeNull();
-  });
-
-  it("shows the error with role alert and stays open", async () => {
-    const action = vi.fn<Action>().mockResolvedValue({
-      status: "error",
-      message: "El viaje ya no está en ese estado. Recarga la página.",
-    });
-    renderButton(action);
-    await open();
-
-    await confirm();
-
-    expect(dialog()).not.toBeNull();
-    expect(screen.getByRole("alert").textContent).toBe(
-      "El viaje ya no está en ese estado. Recarga la página.",
-    );
-  });
-
-  it("closes on Cancelar without calling the action", async () => {
-    const action = vi.fn<Action>();
-    renderButton(action);
-    await open();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
-    await flush();
-
-    expect(dialog()).toBeNull();
-    expect(action).not.toHaveBeenCalled();
-  });
+it("vuelve a estado inicial al cerrar un error y abrir de nuevo", async () => {
+  setup(vi.fn<(prev: ConfirmActionState, data: FormData) => Promise<ConfirmActionState>>()
+    .mockResolvedValue({ status: "error", message: "No se pudo cambiar." }));
+  fireEvent.click(await screen.findByRole("button", { name: "Confirmar archivo" }));
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  fireEvent.click(screen.getByRole("button", { name: "Archivar" }));
+  await screen.findByRole("alertdialog");
+  expect(screen.queryByRole("alert")).toBeNull();
 });

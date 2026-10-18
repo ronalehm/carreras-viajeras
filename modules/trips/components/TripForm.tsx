@@ -1,155 +1,104 @@
 "use client";
 
-import { startTransition, useActionState, type FormEvent, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { startTransition, useActionState, type FormEvent, type HTMLInputTypeAttribute } from "react";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { createTripAction, updateTripAction } from "../actions/trips.actions";
 import type { Trip, TripActionState, TripInput } from "../types/trips.types";
 
-type FieldName = keyof TripInput;
-type FormValues = Record<FieldName, string>;
+type TripField = {
+  name: keyof TripInput;
+  label: string;
+  type?: HTMLInputTypeAttribute;
+  rows?: number;
+  hint?: string;
+  required?: boolean;
+  min?: number;
+  max?: number;
+  maxLength?: number;
+};
+
+const FIELDS: TripField[] = [
+  { name: "title", label: "Título", required: true, maxLength: 120 },
+  { name: "slug", label: "Identificador", required: true, maxLength: 80,
+    hint: "Minúsculas, números y guiones. Ejemplo: maraton-santiago-2027." },
+  { name: "city", label: "Ciudad", required: true, maxLength: 80 },
+  { name: "country", label: "País", required: true, maxLength: 80 },
+  { name: "raceDate", label: "Fecha de la carrera", type: "date", required: true },
+  { name: "startDate", label: "Inicio del viaje", type: "date" },
+  { name: "endDate", label: "Fin del viaje", type: "date" },
+  { name: "distances", label: "Distancias", required: true, hint: "Separadas por comas. Ejemplo: 42K, 21K, 10K." },
+  { name: "summary", label: "Resumen", rows: 3, required: true, maxLength: 300, hint: "Entre 10 y 300 caracteres." },
+  { name: "includes", label: "Qué incluye", rows: 5, hint: "Un elemento por línea, hasta 20 elementos." },
+  { name: "priceUsd", label: "Precio desde (USD)", type: "number", min: 0, max: 1_000_000,
+    hint: "Sin decimales. Déjalo vacío para mostrar «Precio a consultar»." },
+  { name: "capacity", label: "Cupos totales", type: "number", min: 1, max: 10_000,
+    hint: "Cantidad informativa; no calcula disponibilidad." },
+  { name: "imageUrl", label: "URL de la imagen", type: "url", maxLength: 2048,
+    hint: "Enlace externo que empiece por https://." },
+];
 
 const INITIAL_STATE: TripActionState = { status: "idle" };
 
-// Values shown in the inputs: lists joined as typed, numbers as text, null as "".
-function toFormValues(trip?: Trip): FormValues {
-  return {
-    title: trip?.title ?? "",
-    slug: trip?.slug ?? "",
-    city: trip?.city ?? "",
-    country: trip?.country ?? "",
-    raceDate: trip?.raceDate ?? "",
-    startDate: trip?.startDate ?? "",
-    endDate: trip?.endDate ?? "",
-    distances: trip?.distances.join(", ") ?? "",
-    summary: trip?.summary ?? "",
-    includes: trip?.includes.join("\n") ?? "",
-    priceUsd: trip?.priceUsd?.toString() ?? "",
-    capacity: trip?.capacity?.toString() ?? "",
-    imageUrl: trip?.imageUrl ?? "",
-  };
-}
-
-type TripFormProps = {
-  trip?: Trip;
-};
-
-export function TripForm({ trip }: TripFormProps) {
+export function TripForm({ trip }: { trip?: Trip }) {
   const [state, formAction, pending] = useActionState(
-    trip ? updateTripAction : createTripAction,
-    INITIAL_STATE,
+    trip ? updateTripAction : createTripAction, INITIAL_STATE,
   );
+  const errors = state.status === "error" ? state.fieldErrors : undefined;
+  const values = state.status === "error" ? state.values : undefined;
 
-  // Submitting through onSubmit avoids React's automatic reset of <form action={…}>,
-  // so everything typed stays in the inputs after an error. Success redirects to the list.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    startTransition(() => formAction(formData));
-  }
-
-  const error = state.status === "error" ? state : null;
-  const values = error?.values ? { ...toFormValues(trip), ...error.values } : toFormValues(trip);
-  const slugLocked = trip !== undefined && trip.status !== "draft";
-
-  // Shared props of every control: id, name, initial value and its error wiring.
-  function control(name: FieldName, hint?: boolean) {
-    const invalid = Boolean(error?.fieldErrors?.[name]);
-    const describedBy = [hint && `trip-${name}-hint`, invalid && `trip-${name}-error`]
-      .filter(Boolean)
-      .join(" ");
-    return {
-      id: `trip-${name}`,
-      name,
-      defaultValue: values[name],
-      "aria-invalid": invalid || undefined,
-      "aria-describedby": describedBy || undefined,
-    };
-  }
-
-  function field(name: FieldName, label: string, input: ReactNode, hint?: string) {
-    const message = error?.fieldErrors?.[name]?.[0];
-    return (
-      <div className="flex flex-col gap-2">
-        <Label htmlFor={`trip-${name}`}>{label}</Label>
-        {input}
-        {hint && (
-          <p id={`trip-${name}-hint`} className="text-sm text-muted-foreground">
-            {hint}
-          </p>
-        )}
-        {message && (
-          <p id={`trip-${name}-error`} role="alert" className="text-sm text-destructive">
-            {message}
-          </p>
-        )}
-      </div>
-    );
+    if (pending) return;
+    const data = new FormData(event.currentTarget);
+    // Dispatch manually so React does not reset the user's fields after a rejected submission.
+    startTransition(() => formAction(data));
   }
 
   return (
-    <form noValidate onSubmit={handleSubmit} className="flex max-w-2xl flex-col gap-4">
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error.message}
-        </p>
-      )}
-
+    <form noValidate onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-6">
       {trip && <input type="hidden" name="id" value={trip.id} />}
-
-      {field("title", "Título", <Input {...control("title")} />)}
-      {field(
-        "slug",
-        "Identificador",
-        <Input
-          {...control("slug", slugLocked)}
-          readOnly={slugLocked}
-          placeholder="maraton-santiago-2027"
-          autoComplete="off"
-        />,
-        slugLocked ? "Solo se puede cambiar en borrador." : undefined,
+      {state.status === "error" && (
+        <p role="alert" className="text-sm text-destructive">{state.message}</p>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {field("city", "Ciudad", <Input {...control("city")} />)}
-        {field("country", "País", <Input {...control("country")} />)}
+      <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
+        <legend className="sr-only">Datos del viaje</legend>
+        {FIELDS.map(({ name, label, hint, rows, type = "text", ...constraints }) => {
+          const id = `trip-${name}`;
+          const locked = name === "slug" && !!trip && trip.status !== "draft";
+          const help = locked ? "Solo se puede cambiar en borrador." : hint;
+          const original = trip?.[name];
+          const initial = Array.isArray(original)
+            ? original.join(name === "includes" ? "\n" : ", ") : String(original ?? "");
+          const props = {
+            id, name, defaultValue: values?.[name] ?? initial, ...constraints,
+            "aria-invalid": errors?.[name] ? true : undefined,
+            "aria-describedby": [help && `${id}-help`, errors?.[name] && `${id}-error`]
+              .filter(Boolean).join(" ") || undefined,
+          };
+          return (
+            <div key={name} className={cn("flex flex-col gap-2", (rows || name === "imageUrl") && "sm:col-span-2")}>
+              <Label htmlFor={id}>{label}{constraints.required ? " *" : ""}</Label>
+              {rows ? <Textarea {...props} rows={rows} />
+                : <Input {...props} type={type} step={type === "number" ? 1 : undefined} readOnly={locked} />}
+              {help && <p id={`${id}-help`} className="text-sm text-muted-foreground">{help}</p>}
+              {errors?.[name] && (
+                <p id={`${id}-error`} role="alert" className="text-sm text-destructive">{errors[name][0]}</p>
+              )}
+            </div>
+          );
+        })}
+      </fieldset>
+      <div className="flex flex-wrap gap-3">
+        <Button type="submit" disabled={pending}>
+          {pending ? "Guardando…" : trip ? "Guardar cambios" : "Crear viaje"}
+        </Button>
+        <Link href="/crm/viajes" className={buttonVariants({ variant: "outline" })}>Volver a viajes</Link>
       </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {field("raceDate", "Fecha de la carrera", <Input type="date" {...control("raceDate")} />)}
-        {field("startDate", "Inicio del viaje", <Input type="date" {...control("startDate")} />)}
-        {field("endDate", "Fin del viaje", <Input type="date" {...control("endDate")} />)}
-      </div>
-
-      {field(
-        "distances",
-        "Distancias",
-        <Input {...control("distances", true)} placeholder="42K, 21K, 10K" />,
-        "Separadas por comas.",
-      )}
-      {field("summary", "Resumen", <Textarea {...control("summary")} />)}
-      {field("includes", "Qué incluye", <Textarea {...control("includes", true)} />, "Uno por línea.")}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        {field(
-          "priceUsd",
-          "Precio desde (USD)",
-          <Input type="number" min={0} step={1} inputMode="numeric" {...control("priceUsd")} />,
-        )}
-        {field(
-          "capacity",
-          "Cupos totales",
-          <Input type="number" min={1} step={1} inputMode="numeric" {...control("capacity")} />,
-        )}
-      </div>
-
-      {field("imageUrl", "URL de la imagen", <Input type="url" {...control("imageUrl")} />)}
-
-      <Button type="submit" disabled={pending} className="self-start">
-        {pending ? "Guardando…" : trip ? "Guardar cambios" : "Crear viaje"}
-      </Button>
     </form>
   );
 }

@@ -14,23 +14,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 
-type IdleState = { status: "idle" };
-
-// Minimum shape the dialog reads; module states (staff, trips) may add codes, field errors, etc.
 export type ConfirmActionState =
-  | IdleState
+  | { status: "idle" }
   | { status: "success"; message: string }
   | { status: "error"; message: string };
 
-// prev also accepts the idle state: the dialog starts from it on every opening.
-// NoInfer: State comes from the action's return type, idle included or not.
-type ConfirmAction<State extends ConfirmActionState> = (
-  prev: NoInfer<State> | IdleState,
-  formData: FormData,
-) => Promise<State>;
-
 type ConfirmActionButtonProps<State extends ConfirmActionState> = {
-  action: ConfirmAction<State>;
+  action: (prev: State | { status: "idle" }, formData: FormData) => Promise<State | { status: "idle" }>;
   fields: Record<string, string>;
   label: string;
   title: string;
@@ -38,8 +28,6 @@ type ConfirmActionButtonProps<State extends ConfirmActionState> = {
   confirmLabel: string;
   variant: "outline" | "destructive";
 };
-
-const INITIAL_STATE: IdleState = { status: "idle" };
 
 export function ConfirmActionButton<State extends ConfirmActionState>({
   action,
@@ -88,13 +76,13 @@ function ConfirmActionForm<State extends ConfirmActionState>({
   confirmVariant,
   onSuccess,
 }: ConfirmActionFormProps<State>) {
-  const [state, formAction, pending] = useActionState<State | IdleState, FormData>(
+  const [state, formAction, pending] = useActionState<State | { status: "idle" }, FormData>(
     async (prev, formData) => {
       const next = await action(prev, formData);
       if (next.status === "success") onSuccess();
       return next;
     },
-    INITIAL_STATE,
+    { status: "idle" },
   );
 
   return (

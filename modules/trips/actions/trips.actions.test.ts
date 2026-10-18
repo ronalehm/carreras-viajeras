@@ -1,267 +1,175 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/auth/guards", () => ({ requirePermission: vi.fn() }));
-vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
-vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("../services/trips.service", () => ({
-  createTrip: vi.fn(),
-  updateTrip: vi.fn(),
-  setTripStatus: vi.fn(),
+const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }));
+vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
+vi.mock("@/lib/auth/access.service", () => ({
+  acceptInvitationAndLoadStaffRoles: vi.fn(), loadStaffRoles: vi.fn(),
 }));
+vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+vi.mock("next/navigation", () => ({ redirect: vi.fn(() => { throw new Error("NEXT_REDIRECT"); }) }));
+vi.mock("../services/trips.service", () => ({ createTrip: vi.fn(), updateTrip: vi.fn(), setTripStatus: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
-import { requirePermission } from "@/lib/auth/guards";
+import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
 import { createTrip, setTripStatus, updateTrip } from "../services/trips.service";
+import { tripFormSchema } from "../schemas/trips.schema";
 import type { TripActionState } from "../types/trips.types";
-import { changeTripStatusAction, createTripAction, updateTripAction } from "./trips.actions";
+import { createTripAction, updateTripAction, changeTripStatusAction } from "./trips.actions";
 
-const guard = vi.mocked(requirePermission);
-const revalidate = vi.mocked(revalidatePath);
-const navigate = vi.mocked(redirect);
-const services = {
-  createTrip: vi.mocked(createTrip),
-  updateTrip: vi.mocked(updateTrip),
-  setTripStatus: vi.mocked(setTripStatus),
+const ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
+const IDLE = { status: "idle" } as const;
+const VALID = {
+  title: " Maratón Santiago 2027 ", slug: "maraton-santiago-2027", city: "Santiago", country: "Chile",
+  raceDate: "2027-04-25", startDate: "2027-04-23", endDate: "2027-04-27",
+  distances: "42K, 21K", summary: "Un viaje para correr en Santiago.", includes: "Hotel\nTraslados",
+  priceUsd: "1990", capacity: "100", imageUrl: "",
 };
-
-const IDLE: TripActionState = { status: "idle" };
-const TRIP_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
-
-const validTrip = {
-  title: "Maratón de Santiago 2027",
-  slug: "maraton-santiago-2027",
-  city: "Santiago",
-  country: "Chile",
-  raceDate: "2027-04-25",
-  startDate: "2027-04-23",
-  endDate: "2027-04-27",
-  distances: "42K, 21K, 10K",
-  summary: "Viaje grupal para correr la Maratón de Santiago.",
-  includes: "Hotel 4 noches\nTraslados",
-  priceUsd: "1990",
-  capacity: "100",
-  imageUrl: "",
-};
-
-const parsedTrip = {
-  title: "Maratón de Santiago 2027",
-  slug: "maraton-santiago-2027",
-  city: "Santiago",
-  country: "Chile",
-  raceDate: "2027-04-25",
-  startDate: "2027-04-23",
-  endDate: "2027-04-27",
-  distances: ["42K", "21K", "10K"],
-  summary: "Viaje grupal para correr la Maratón de Santiago.",
-  includes: ["Hotel 4 noches", "Traslados"],
-  priceUsd: 1990,
-  capacity: 100,
-  imageUrl: null,
-};
-
-function form(fields: Record<string, string>) {
-  const formData = new FormData();
-  for (const [key, value] of Object.entries(fields)) formData.append(key, value);
-  return formData;
+function form(values: Record<string, string>) {
+  const data = new FormData();
+  for (const [key, value] of Object.entries(values)) data.set(key, value);
+  return data;
+}
+function signIn(roles: ("commercial" | "admin")[], emailVerified = true) {
+  getSession.mockResolvedValue({ data: { user: { id: "staff-1", email: "agent@example.com", emailVerified } }, error: null });
+  vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue(roles);
+  vi.mocked(loadStaffRoles).mockResolvedValue(roles);
 }
 
 beforeEach(() => {
-  vi.clearAllMocks();
-  guard.mockResolvedValue({ id: "user-1", email: "ana@example.com", emailVerified: true, staffRoles: ["commercial"] });
-  services.createTrip.mockResolvedValue({ id: TRIP_ID });
-  services.updateTrip.mockResolvedValue("updated");
-  services.setTripStatus.mockResolvedValue("changed");
+  vi.resetAllMocks();
+  vi.mocked(redirect).mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
+  signIn(["commercial"]);
+  vi.mocked(createTrip).mockResolvedValue({ id: ID });
+  vi.mocked(updateTrip).mockResolvedValue("updated");
+  vi.mocked(setTripStatus).mockResolvedValue("changed");
 });
 
-type ActionCase = {
+const actions: {
   name: string;
-  action: (prev: TripActionState, formData: FormData) => Promise<TripActionState>;
-  service: MockInstance;
-  valid: Record<string, string>;
-};
-
-const actions: ActionCase[] = [
-  { name: "createTripAction", action: createTripAction, service: services.createTrip, valid: validTrip },
-  {
-    name: "updateTripAction",
-    action: updateTripAction,
-    service: services.updateTrip,
-    valid: { ...validTrip, id: TRIP_ID },
-  },
-  {
-    name: "changeTripStatusAction",
-    action: changeTripStatusAction,
-    service: services.setTripStatus,
-    valid: { id: TRIP_ID, status: "published" },
-  },
+  action: (prev: TripActionState, data: FormData) => Promise<TripActionState>;
+  service: typeof createTrip | typeof updateTrip | typeof setTripStatus;
+  values: Record<string, string>;
+  redirects: boolean;
+}[] = [
+  { name: "crear", action: createTripAction, service: createTrip, values: VALID, redirects: true },
+  { name: "editar", action: updateTripAction, service: updateTrip, values: { ...VALID, id: ID }, redirects: true },
+  { name: "cambiar estado", action: changeTripStatusAction, service: setTripStatus, values: { id: ID, status: "published" }, redirects: false },
 ];
 
-describe.each(actions)("$name called directly", ({ action, service, valid }) => {
-  it("checks trips.manage", async () => {
-    await action(IDLE, form(valid));
-    expect(guard).toHaveBeenCalledExactlyOnceWith("trips.manage");
-  });
-
-  it("returns unauthorized without a session and does not call the service", async () => {
-    guard.mockRejectedValue(new UnauthorizedError());
-
-    await expect(action(IDLE, form(valid))).resolves.toEqual({
-      status: "error",
-      code: "unauthorized",
-      message: "Tu sesión no es válida. Vuelve a iniciar sesión.",
-    });
+describe.each(actions)("$name: permisos en llamadas directas", ({ action, service, values, redirects }) => {
+  it("rechaza sin sesión antes de consultar o mutar", async () => {
+    getSession.mockResolvedValue({ data: null, error: null });
+    expect(await action(IDLE, form(values))).toMatchObject({ status: "error", code: "unauthorized" });
+    expect(acceptInvitationAndLoadStaffRoles).not.toHaveBeenCalled();
     expect(service).not.toHaveBeenCalled();
-    expect(revalidate).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
-
-  it("returns forbidden without trips.manage (e.g. an account without a staff role)", async () => {
-    guard.mockRejectedValue(new ForbiddenError());
-
-    await expect(action(IDLE, form(valid))).resolves.toEqual({
-      status: "error",
-      code: "forbidden",
-      message: "No tienes permiso para gestionar viajes.",
-    });
+  it("rechaza al runner aunque envíe roles falsificados", async () => {
+    signIn([]);
+    expect(await action(IDLE, form({ ...values, role: "admin" }))).toMatchObject({ status: "error", code: "forbidden" });
     expect(service).not.toHaveBeenCalled();
-    expect(revalidate).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
-
-  it("returns invalid_input with field errors for an empty form, without calling the service", async () => {
-    const state = await action(IDLE, form({}));
-
-    expect(state).toMatchObject({ status: "error", code: "invalid_input", message: "Revisa los campos marcados." });
-    expect(state.status === "error" && Object.keys(state.fieldErrors ?? {}).length).toBeGreaterThan(0);
+  it("rechaza staff sin correo verificado", async () => {
+    signIn(["admin"], false);
+    expect(await action(IDLE, form(values))).toMatchObject({ code: "forbidden" });
     expect(service).not.toHaveBeenCalled();
-    expect(revalidate).not.toHaveBeenCalled();
   });
-
-  it("rethrows service failures without the original message", async () => {
-    service.mockRejectedValue(new Error('duplicate key value violates unique constraint "trips_slug_uq"'));
-
-    const error = await action(IDLE, form(valid)).catch((caught: unknown) => caught);
-    expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("trip action failed");
-    expect((error as Error).cause).toBeUndefined();
-    expect(revalidate).not.toHaveBeenCalled();
+  it.each(["commercial", "admin"] as const)("permite %s y revalida solo el CRM", async (role) => {
+    signIn([role]);
+    const result = action(IDLE, form(values));
+    if (redirects) await expect(result).rejects.toThrow("NEXT_REDIRECT");
+    else await expect(result).resolves.toMatchObject({ status: "success" });
+    expect(service).toHaveBeenCalledOnce();
+    expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
+    if (redirects) expect(redirect).toHaveBeenCalledWith("/crm/viajes");
+  });
+  it("valida antes de mutar y no devuelve campos desconocidos", async () => {
+    const result = await action(IDLE, form({ ...values, title: "ab", id: "abc", status: "invalid", secret: "do-not-echo" }));
+    expect(result).toMatchObject({ status: "error", code: "invalid_input" });
+    expect(service).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+    if (result.status === "error") {
+      expect(result.fieldErrors).toBeTruthy();
+      expect(result.values).not.toHaveProperty("secret");
+    }
+  });
+  it("oculta errores de base de datos y su causa", async () => {
+    vi.mocked(service).mockRejectedValue(new Error("postgres://private-host password=secret"));
+    const result = action(IDLE, form(values));
+    await expect(result).rejects.toThrow("trip action failed");
+    await expect(result).rejects.not.toHaveProperty("cause");
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
   });
 });
 
-describe("createTripAction", () => {
-  it("creates the parsed trip without status or createdAt, revalidates and redirects", async () => {
-    await createTripAction(IDLE, form({ ...validTrip, status: "published", createdAt: "2020-01-01" }));
-
-    expect(services.createTrip).toHaveBeenCalledExactlyOnceWith(parsedTrip);
-    expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
-    expect(navigate).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
-  });
-
-  it("returns the field errors and what was typed for invalid data", async () => {
-    const state = await createTripAction(
-      IDLE,
-      form({ ...validTrip, title: "ab", distances: " , ", priceUsd: "12.5", status: "published" }),
-    );
-
-    expect(state).toEqual({
-      status: "error",
-      code: "invalid_input",
-      message: "Revisa los campos marcados.",
-      fieldErrors: {
-        title: ["El título debe tener entre 3 y 120 caracteres."],
-        distances: ["Indica al menos una distancia."],
-        priceUsd: ["Indica un precio en dólares, sin decimales."],
-      },
-      values: { ...validTrip, title: "ab", distances: " , ", priceUsd: "12.5" },
-    });
-    expect(services.createTrip).not.toHaveBeenCalled();
-  });
-
-  it("maps slug_taken to an error on slug without revalidating", async () => {
-    services.createTrip.mockResolvedValue("slug_taken");
-
-    const state = await createTripAction(IDLE, form(validTrip));
-
-    expect(state).toMatchObject({
-      status: "error",
-      code: "slug_taken",
-      fieldErrors: { slug: ["Ese identificador ya está en uso."] },
-      values: validTrip,
-    });
-    expect(revalidate).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
-  });
+it("crea con datos parseados, sin estado ni fechas suministradas por el cliente", async () => {
+  await expect(createTripAction(IDLE, form({ ...VALID, status: "published", createdAt: "fake" }))).rejects.toThrow("NEXT_REDIRECT");
+  expect(createTrip).toHaveBeenCalledExactlyOnceWith(tripFormSchema.parse(VALID));
 });
 
-describe("updateTripAction", () => {
-  it("updates the trip by id with the parsed input, revalidates and redirects", async () => {
-    await updateTripAction(IDLE, form({ ...validTrip, id: TRIP_ID, status: "archived" }));
-
-    expect(services.updateTrip).toHaveBeenCalledExactlyOnceWith(TRIP_ID, parsedTrip);
-    expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
-    expect(navigate).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
-  });
-
-  it("rejects an id that is not a UUID as invalid_input", async () => {
-    await expect(updateTripAction(IDLE, form({ ...validTrip, id: "abc" }))).resolves.toMatchObject({
-      status: "error",
-      code: "invalid_input",
-      fieldErrors: { id: ["El viaje no es válido."] },
-    });
-    expect(services.updateTrip).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ["slug_taken", { fieldErrors: { slug: ["Ese identificador ya está en uso."] } }],
-    ["slug_locked", { fieldErrors: { slug: ["Solo se puede cambiar en borrador."] } }],
-    ["not_found", { message: "El viaje ya no existe. Recarga la página." }],
-    ["archived", { message: "Este viaje está archivado y no se puede editar." }],
-  ] as const)("maps %s to its error, keeping what was typed", async (result, expected) => {
-    services.updateTrip.mockResolvedValue(result);
-
-    const state = await updateTripAction(IDLE, form({ ...validTrip, id: TRIP_ID }));
-
-    expect(state).toMatchObject({ status: "error", code: result, values: validTrip, ...expected });
-    expect(revalidate).not.toHaveBeenCalled();
-    expect(navigate).not.toHaveBeenCalled();
-  });
+it("preserva los strings escritos ante validación y omite archivos y claves ajenas", async () => {
+  const data = form({ ...VALID, title: "ab", priceUsd: "12.5", status: "published", createdAt: "fake" });
+  data.set("imageUrl", new File(["image"], "image.png"));
+  const result = await createTripAction(IDLE, data);
+  expect(result).toMatchObject({ code: "invalid_input", values: { title: "ab", priceUsd: "12.5", includes: "Hotel\nTraslados" } });
+  if (result.status === "error") {
+    expect(result.fieldErrors).toHaveProperty("title");
+    expect(result.fieldErrors).toHaveProperty("priceUsd");
+    expect(result.values).not.toHaveProperty("status");
+    expect(result.values).not.toHaveProperty("createdAt");
+    expect(result.values).not.toHaveProperty("imageUrl");
+  }
 });
 
-describe("changeTripStatusAction", () => {
-  it.each([
-    ["published", "Viaje publicado. Ya aparece en la web."],
-    ["draft", "Viaje despublicado. Ya no aparece en la web."],
-    ["archived", "Viaje archivado."],
-  ] as const)("changes the status to %s, revalidates and confirms", async (status, message) => {
-    const state = await changeTripStatusAction(IDLE, form({ id: TRIP_ID, status, title: "ignored" }));
-
-    expect(services.setTripStatus).toHaveBeenCalledExactlyOnceWith(TRIP_ID, status);
-    expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/viajes");
-    expect(navigate).not.toHaveBeenCalled();
-    expect(state).toEqual({ status: "success", message });
+it("devuelve slug duplicado en alta sin redirigir ni revalidar", async () => {
+  vi.mocked(createTrip).mockResolvedValue("slug_taken");
+  expect(await createTripAction(IDLE, form(VALID))).toMatchObject({
+    code: "slug_taken", fieldErrors: { slug: ["Ese identificador ya está en uso."] }, values: VALID,
   });
+  expect(revalidatePath).not.toHaveBeenCalled();
+  expect(redirect).not.toHaveBeenCalled();
+});
 
-  it("maps invalid_transition to its error without revalidating", async () => {
-    services.setTripStatus.mockResolvedValue("invalid_transition");
+it("edita pasando el id separado de los campos editables", async () => {
+  await expect(updateTripAction(IDLE, form({ ...VALID, id: ID, status: "archived" }))).rejects.toThrow("NEXT_REDIRECT");
+  expect(updateTrip).toHaveBeenCalledExactlyOnceWith(ID, tripFormSchema.parse(VALID));
+});
 
-    await expect(changeTripStatusAction(IDLE, form({ id: TRIP_ID, status: "published" }))).resolves.toEqual({
-      status: "error",
-      code: "invalid_transition",
-      message: "El viaje ya no está en ese estado. Recarga la página.",
-    });
-    expect(revalidate).not.toHaveBeenCalled();
+it.each([
+  ["slug_taken", "Ese identificador ya está en uso."],
+  ["slug_locked", "Solo se puede cambiar en borrador."],
+  ["not_found", "El viaje ya no existe. Recarga la página."],
+  ["archived", "Este viaje está archivado y no se puede editar."],
+] as const)("edición: maneja %s y conserva el formulario", async (code, message) => {
+  vi.mocked(updateTrip).mockResolvedValue(code);
+  const result = await updateTripAction(IDLE, form({ ...VALID, id: ID }));
+  expect(result).toMatchObject({ code, message, values: { ...VALID, id: ID } });
+  if (result.status === "error" && code.startsWith("slug_")) {
+    expect(result.fieldErrors).toEqual({ slug: [message] });
+  }
+  expect(revalidatePath).not.toHaveBeenCalled();
+  expect(redirect).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["published", "Viaje publicado. Ya aparece en la web."],
+  ["draft", "Viaje despublicado. Ya no aparece en la web."],
+  ["archived", "Viaje archivado."],
+] as const)("cambia a %s", async (status, message) => {
+  expect(await changeTripStatusAction(IDLE, form({ id: ID, status }))).toEqual({ status: "success", message });
+  expect(setTripStatus).toHaveBeenCalledExactlyOnceWith(ID, status);
+  expect(redirect).not.toHaveBeenCalled();
+});
+
+it("rechaza una transición obsoleta sin revalidar", async () => {
+  vi.mocked(setTripStatus).mockResolvedValue("invalid_transition");
+  expect(await changeTripStatusAction(IDLE, form({ id: ID, status: "published" }))).toMatchObject({
+    code: "invalid_transition", message: "El viaje ya no está en ese estado. Recarga la página.",
   });
-
-  it.each([
-    [{ id: "abc", status: "published" }, "id"],
-    [{ id: TRIP_ID, status: "deleted" }, "status"],
-  ])("rejects %o as invalid_input on %s", async (fields, field) => {
-    const state = await changeTripStatusAction(IDLE, form(fields));
-
-    expect(state).toMatchObject({ status: "error", code: "invalid_input" });
-    expect(state.status === "error" && Object.keys(state.fieldErrors ?? {})).toEqual([field]);
-    expect(services.setTripStatus).not.toHaveBeenCalled();
-  });
+  expect(revalidatePath).not.toHaveBeenCalled();
 });
