@@ -16,13 +16,14 @@
 			"service": "carreras-viajeras"
 		}
 	],
-	"d1_databases": [
+	"hyperdrive": [
 		{
-			"binding": "DB",
-			"database_name": "carreras_viajeras_db",
-			// Reemplazar por el id real tras `wrangler d1 create carreras_viajeras_db`
-			"database_id": "00000000-0000-0000-0000-000000000000",
-			"migrations_dir": "migrations"
+			// Pool de conexiones hacia Neon Postgres.
+			// Reemplazar por el id real tras `wrangler hyperdrive create carreras-viajeras --connection-string=<DATABASE_URL>`.
+			// En local, CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE (ver .env.local) reemplaza localConnectionString.
+			"binding": "HYPERDRIVE",
+			"id": "00000000000000000000000000000000",
+			"localConnectionString": "postgresql://postgres:postgres@localhost:5432/postgres"
 		}
 	],
 	"routes": [
