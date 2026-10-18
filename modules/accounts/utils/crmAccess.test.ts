@@ -3,27 +3,27 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/server", () => ({ connection: vi.fn() }));
-vi.mock("@/lib/auth/guards", () => ({ requireCrmUser: vi.fn() }));
+vi.mock("@/lib/auth/guards", () => ({ requirePermission: vi.fn() }));
 
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
-import { requireCrmUser, type CurrentUser } from "@/lib/auth/guards";
+import { requirePermission, type CurrentUser } from "@/lib/auth/guards";
 import { getCrmAccess } from "./crmAccess";
 
-const requireCrmUserMock = vi.mocked(requireCrmUser);
+const requirePermissionMock = vi.mocked(requirePermission);
 
 beforeEach(() => {
-  requireCrmUserMock.mockReset();
+  requirePermissionMock.mockReset();
 });
 
 describe("getCrmAccess", () => {
   it("maps UnauthorizedError to unauthenticated", async () => {
-    requireCrmUserMock.mockRejectedValue(new UnauthorizedError());
+    requirePermissionMock.mockRejectedValue(new UnauthorizedError());
 
     await expect(getCrmAccess()).resolves.toEqual({ status: "unauthenticated" });
   });
 
   it("maps ForbiddenError to forbidden", async () => {
-    requireCrmUserMock.mockRejectedValue(new ForbiddenError());
+    requirePermissionMock.mockRejectedValue(new ForbiddenError());
 
     await expect(getCrmAccess()).resolves.toEqual({ status: "forbidden" });
   });
@@ -35,15 +35,37 @@ describe("getCrmAccess", () => {
       emailVerified: true,
       staffRoles: ["admin"],
     };
-    requireCrmUserMock.mockResolvedValue(user);
+    requirePermissionMock.mockResolvedValue(user);
 
     await expect(getCrmAccess()).resolves.toEqual({ status: "ok", user });
   });
 
   it("rethrows any other error", async () => {
     const error = new Error("unexpected");
-    requireCrmUserMock.mockRejectedValue(error);
+    requirePermissionMock.mockRejectedValue(error);
 
     await expect(getCrmAccess()).rejects.toBe(error);
+  });
+
+  it("checks crm.access when called without a permission", async () => {
+    requirePermissionMock.mockRejectedValue(new ForbiddenError());
+
+    await getCrmAccess();
+
+    expect(requirePermissionMock).toHaveBeenCalledExactlyOnceWith("crm.access");
+  });
+
+  it("checks the given permission", async () => {
+    requirePermissionMock.mockRejectedValue(new ForbiddenError());
+
+    await getCrmAccess("staff.manage");
+
+    expect(requirePermissionMock).toHaveBeenCalledExactlyOnceWith("staff.manage");
+  });
+
+  it("maps a ForbiddenError for staff.manage (commercial) to forbidden", async () => {
+    requirePermissionMock.mockRejectedValue(new ForbiddenError());
+
+    await expect(getCrmAccess("staff.manage")).resolves.toEqual({ status: "forbidden" });
   });
 });
