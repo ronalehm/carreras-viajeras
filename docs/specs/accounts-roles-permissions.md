@@ -1,15 +1,15 @@
 # Roles, invitaciones y permisos del equipo (RBAC del CRM)
 
 - Módulo: accounts
-- Estado: aprobado
-- Depende de: platform-neon-foundation.md (Fase 1 aprobada)
+- Estado: borrador
+- Depende de: platform-neon-foundation.md (Fase 1 aprobada); accounts-auth-ui.md (Fases 1 y 2 implementadas: `/crm/acceso`, layout protegido `app/crm/(protected)/`, `CrmShell`, `getCrmAccess`), necesaria para la Fase 3
 
 ## Objetivo
 Implementar la "Fase 2: permisos mínimos" que `platform-neon-foundation.md` deja para una spec separada, adaptada a cómo funciona el MVP:
 - **Runners:** son visitantes anónimos. Consultan viajes, completan formularios y escriben por WhatsApp sin registrarse, así que no tienen cuenta ni perfil.
 - **Equipo comercial:** entra al CRM con correo y contraseña de Neon Auth.
 - **Admin:** gestiona desde el CRM a los usuarios autorizados y sus permisos.
-- **Alta de comerciales:** el admin envía una **invitación por correo**. Una persona solo obtiene permisos si tiene una invitación válida o una asignación hecha por un admin. Registrarse no concede nada.
+- **Alta de comerciales:** el admin crea una **invitación para el correo** de la persona y le comparte a mano el enlace de acceso (Pregunta 2, resuelta). Una persona solo obtiene permisos si tiene una invitación válida o una asignación hecha por un admin. Registrarse no concede nada.
 
 Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana la foundation. La foundation exige que el registro público nunca cree staff; aquí se cumple porque registrarse sin invitación no concede ningún permiso.
 
@@ -24,16 +24,30 @@ Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana
   - Ruta mínima protegida `GET /api/crm/me`.
   - Scripts SQL manuales: alta del primer admin (bootstrap) y revocación de emergencia.
   - (F2) Módulo `modules/accounts/`: schemas, service y Server Actions de administración (invitar, revocar invitación, asignar rol a un staff existente y revocar rol), protegidas con `requirePermission("staff.manage")`. Incluye la documentación operativa en `README.md`.
-  - (F3) Página `/crm/admin/usuarios` con sus componentes.
+  - (F3) Página `/crm/admin/usuarios` dentro de la zona protegida del CRM (`app/crm/(protected)/admin/usuarios/page.tsx`), con sus componentes:
+    - formulario de invitación que muestra el enlace de acceso para copiarlo y compartirlo a mano;
+    - tabla de staff activo con asignar y revocar rol;
+    - tabla de invitaciones pendientes con revocar;
+    - mensaje "sin permiso" para quien tiene acceso al CRM pero no `staff.manage`.
+  - (F3) Enlace "Usuarios" en la cabecera de `CrmShell`, solo para quien tiene `staff.manage`. El título de la cabecera pasa a enlazar a `/crm`.
+  - (F3) Observaciones del reviewer de F2:
+    - `staff.schema.ts` reutiliza `emailSchema`, exportado desde `auth.schema.ts`;
+    - `getCrmAccess` acepta el permiso que comprueba.
 - No incluye:
-  - **UI de autenticación** (`/crm/acceso`: crear cuenta con correo y contraseña, verificar el correo con código, login, logout y recuperación). Va en la spec siguiente, `accounts-auth-ui.md`.
-    - `@neondatabase/auth-ui` ya está en el árbol como dependencia de `@neondatabase/auth`.
-    - El Worker pesa hoy ~1071 KiB gzip (límite de Workers Free: 3 MiB), así que hay que medir antes de importarla.
-  - **Envío automático del correo de invitación.** En el MVP, el admin comparte a mano el enlace `/crm/acceso` (Pregunta abierta 2).
+  - **UI de autenticación** (`/crm/acceso`: crear cuenta con correo y contraseña, verificar el correo con código, login, logout y recuperación). Es de `accounts-auth-ui.md` (Fases 1 y 2 implementadas, Fase 3 pendiente).
+  - **Envío automático del correo de invitación.** El admin copia el enlace `/crm/acceso` que muestra la página y lo comparte a mano, por WhatsApp o su correo (Pregunta 2, resuelta).
+  - (F3) **Migrar los formularios a `field` de shadcn.** No se instala `field` en F3; ver "Decisiones" y Pregunta abierta 6.
+  - (F3) En la página de administración:
+    - `error.tsx` o `loading.tsx` propios;
+    - paginación, búsqueda u orden configurable en las tablas;
+    - resaltado del enlace activo en la navegación, que requeriría un componente de cliente con `usePathname`;
+    - volver a mostrar el enlace desde la tabla de invitaciones: es siempre el mismo `/crm/acceso`;
+    - un mensaje de invitación predefinido para copiar;
+    - aviso especial al revocarse a uno mismo.
   - **Colaboradores:** tablas `organizations` y `organization_memberships`, enums de organización, `requireOrgRole`/`findMembership`, verificación de organizaciones (`updateOrganizationStatusAction`) y los endpoints de colaboradores. Quedan para una spec futura de colaboradores.
   - **Perfiles OPERACIONES y MODERADOR:** no existen por ahora. Se añadirán en una spec futura, cuando hagan falta, como valores nuevos del enum `staff_role` (migración `ALTER TYPE staff_role ADD VALUE …`) y entradas nuevas en la matriz.
   - **Cuentas o recursos de runner.** Los runners son anónimos en el MVP.
-  - Otras pantallas del CRM: layout `/crm`, leads y embudo.
+  - Otras pantallas del CRM: leads y embudo. El layout `/crm` ya existe (`accounts-auth-ui.md`).
   - Plugins Admin y Organization de Neon Auth, y su `user.role`: no se usan para autorizar.
   - `proxy.ts`/middleware, RLS, Cloudflare Access, tabla de auditoría histórica aparte, borrado de cuentas y permisos (GRANT) del rol de base de datos de la app.
   - Aplicar migraciones o asignar roles en ramas Neon remotas. Solo lo hace el usuario, en su máquina y con autorización explícita.
@@ -58,6 +72,16 @@ Precedencia: si algo de esta spec contradice `platform-neon-foundation.md`, gana
 13. **Primer admin:** se asigna con el script SQL de bootstrap, por `user_id` exacto y con un motivo. Nunca se asigna por ser el primer registro.
 14. Las guardas se ejecutan dentro de cada Route Handler y Server Action, no solo en páginas.
 15. Las respuestas y los logs no incluyen el mensaje original de la base de datos ni de Neon Auth.
+16. **Página de administración (F3):**
+    - vive bajo el layout protegido, que ya resuelve "sin sesión" y "sin acceso al CRM";
+    - además comprueba ella misma `requirePermission("staff.manage")` mediante `getCrmAccess("staff.manage")`, porque los layouts no se vuelven a renderizar en la navegación de cliente;
+    - solo consulta datos (`listStaffOverview`) después de esa comprobación;
+    - la UI es la defensa visual; la seguridad sigue en cada Server Action.
+17. **Navegación (F3):** el enlace "Usuarios" solo se muestra si `can(roles, "staff.manage")`. Ocultarlo es solo visual; la página y las acciones vuelven a comprobar el permiso.
+18. **Invitación sin envío automático (F3):**
+    - la página muestra el `acceptUrl` que devuelve `inviteStaffAction` para que el admin lo copie y lo comparta a mano;
+    - el enlace es el mismo para todos y no es secreto: la invitación se liga al correo verificado (Requisito 5).
+19. **Tamaño del Worker (F3):** se mide sin desplegar al cerrar la fase. Si el gzip supera 2 MiB, se detiene y se consulta al usuario (límite de Workers Free: 3 MiB).
 
 ## Criterios de aceptación
 Fase 1:
@@ -101,15 +125,58 @@ Fase 2:
   - la aplicación manual de la migración y la verificación de `neon_auth`;
   - el checklist de la prueba manual en la rama de desarrollo.
 
-Fase 3:
-- [ ] (F3) Dado un admin verificado, cuando abre `/crm/admin/usuarios`, entonces ve:
-  - el formulario de invitación (correo + rol);
-  - la tabla de staff activo (correo, roles como `Badge`, fecha de alta, asignar rol y revocar rol);
-  - la tabla de invitaciones pendientes (correo, rol, caducidad, insignia "Caducada" cuando aplica, revocar).
-- [ ] (F3) Dado un `commercial` verificado o una cuenta sin roles, cuando abre `/crm/admin/usuarios`, entonces ve la página 404. Sin sesión, se le redirige a `/crm/acceso`.
-- [ ] (F3) Dado el botón de revocar, cuando lo pulso, entonces un `AlertDialog` pide confirmación y, si la acción devuelve error (por ejemplo `last_admin`), se muestra el mensaje en español.
-- [ ] (F3) Dado el formulario de invitación válido, cuando se envía, entonces aparece la URL para compartir y la invitación figura en la tabla. Con errores, se muestran por campo.
-- [ ] (F3) `"use client"` solo aparece en `InviteStaffForm`, `StaffRoleForm` y `ConfirmActionButton`.
+Fase 3 (página de administración en el CRM):
+
+Acceso y navegación:
+- [ ] (F3) Dado un admin verificado, cuando abre `/crm/admin/usuarios`, entonces la página se ve dentro de `CrmShell` (correo, roles y "Cerrar sesión") con el título "Usuarios del equipo" y estas secciones:
+  - "Invitar a una persona": campos "Correo" y "Rol" (`Comercial`, seleccionado por defecto, y `Admin`) y botón "Invitar";
+  - "Equipo activo": tabla con las columnas "Correo", "Roles", "Alta" y "Acciones";
+    - "Roles" muestra cada rol activo como `Badge` "Comercial" o "Admin";
+    - "Alta" es la fecha del rol activo más antiguo con el formato "18 oct 2026, 10:30";
+  - "Invitaciones pendientes": tabla con las columnas "Correo", "Rol", "Caduca" y "Acciones";
+    - si `expired`, junto a la fecha aparece un `Badge` "Caducada";
+    - sin invitaciones, se ve el texto "Sin invitaciones pendientes".
+- [ ] (F3) Dado un `commercial` verificado, cuando abre `/crm/admin/usuarios` (URL directa o navegación de cliente), entonces:
+  - ve el shell con el título "Usuarios del equipo" y el texto "No tienes permiso para gestionar el equipo. Si lo necesitas, pídeselo a un administrador.";
+  - no ve el formulario ni las tablas;
+  - la respuesta es 200, no 403 ni 404;
+  - en el código, `listStaffOverview()` solo se llama después de que `getCrmAccess("staff.manage")` devuelva `ok`.
+- [ ] (F3) Dada una cuenta verificada sin roles, o con el correo sin verificar, cuando abre `/crm/admin/usuarios`, entonces ve la pantalla de `NoCrmAccess` del layout, sin shell. Sin sesión, se le redirige a `/crm/acceso`.
+- [ ] (F3) Dado un admin, entonces la cabecera de `CrmShell` muestra el enlace "Usuarios" a `/crm/admin/usuarios`. Dado un `commercial`, no lo muestra. En ambos casos, el título "CRM Carreras Viajeras" enlaza a `/crm`.
+
+Invitar:
+- [ ] (F3) Dado el formulario de invitación con `Luis@Example.com` y rol `Comercial`, cuando pulso "Invitar", entonces:
+  - mientras espera, el botón queda deshabilitado con "Invitando…";
+  - se llama a `inviteStaffAction`;
+  - aparece (`role="status"`) el mensaje "Invitación creada para luis@example.com. Comparte el enlace de acceso.";
+  - el enlace `<APP_ORIGIN>/crm/acceso` aparece en un campo de solo lectura "Enlace para compartir", con el botón "Copiar enlace";
+  - aparece el texto "Envíalo tú (por WhatsApp o correo). La persona debe crear su cuenta con el correo invitado y verificarlo con el código que recibirá.";
+  - el formulario se vacía y la invitación aparece en "Invitaciones pendientes" (`revalidatePath`);
+  - no se envía ningún correo.
+- [ ] (F3) Dado el enlace mostrado, cuando pulso "Copiar enlace", entonces se llama a `navigator.clipboard.writeText(acceptUrl)` y aparece "Enlace copiado.". Si la escritura falla, aparece "No se pudo copiar. Selecciona el enlace y cópialo a mano.".
+- [ ] (F3) Dado un correo vacío o mal formado, cuando pulso "Invitar", entonces:
+  - aparece "Introduce un correo válido." junto al campo, con `aria-invalid` y `aria-describedby`;
+  - el valor escrito y el rol elegido se conservan;
+  - no aparece ningún enlace.
+- [ ] (F3) Dado un correo con una invitación pendiente y vigente, cuando lo invito, entonces aparece un error general (`role="alert"`) "Ya hay una invitación pendiente y vigente para ese correo." y el formulario conserva los valores.
+
+Confirmar acciones:
+- [ ] (F3) Dado "Revocar <Rol>" en una fila de "Equipo activo", "Asignar <Rol>" o "Revocar" en una invitación, cuando lo pulso, entonces se abre un `AlertDialog` con el correo y el rol afectados y los botones "Cancelar" y el de confirmar.
+  - "Cancelar" cierra el diálogo sin llamar a la acción.
+  - Confirmar envía los campos ocultos (`userId` y `role`, o `invitationId`) a la acción; mientras espera, el botón queda deshabilitado con "Procesando…".
+  - Si hay éxito, el diálogo se cierra y la tabla refleja el cambio (`revalidatePath`).
+- [ ] (F3) Dado el último admin activo, cuando confirmo "Revocar Admin" sobre él (incluido uno mismo), entonces el diálogo sigue abierto con el error (`role="alert"`) "No se puede revocar el rol del último admin activo." y la tabla no cambia. Cualquier otro `code` de error muestra su `message` de la misma forma.
+- [ ] (F3) Dado un staff solo con rol `Comercial`, entonces su fila ofrece "Asignar Admin". Si solo tiene `Admin`, ofrece "Asignar Comercial". Si tiene los dos, no ofrece asignar. Cada rol activo tiene su botón "Revocar <Rol>".
+
+Calidad:
+- [ ] (F3) Dado el árbol de componentes, entonces:
+  - `"use client"` solo aparece en `InviteStaffForm` y `ConfirmActionButton`;
+  - la página, `StaffTable`, `InvitationsTable` y `CrmShell` son Server Components;
+  - `staffDisplay.ts` solo usa `import type` de `@/lib/auth/permissions`.
+- [ ] (F3) Dado `auth.schema.ts`, entonces exporta `emailSchema` e `inviteStaffSchema` lo reutiliza. `staff.schema.test.ts` y `auth.schema.test.ts` pasan sin cambios.
+- [ ] (F3) Dado `npx shadcn@latest add table badge native-select alert-dialog`, entonces solo se crean esos cuatro archivos en `components/ui/` y `components/ui/button.tsx` no cambia.
+- [ ] (F3) Dado `npm run build:worker` seguido de `npx wrangler deploy --dry-run --outdir <scratch>` (sin desplegar), entonces el tamaño gzip del Worker se registra en el resumen de la fase. Se compara con los 1610 KiB de referencia y debe ser < 2 MiB; si lo supera, se detiene y se consulta al usuario.
+- [ ] (F3) `npm run lint`, `npx vitest run` y `npm run build` pasan.
 
 Manual (en la máquina del usuario, con su autorización, en una rama Neon de desarrollo y nunca en `production`):
 - [ ] Se aplica la migración y el volcado del schema `neon_auth` es idéntico antes y después.
@@ -117,6 +184,13 @@ Manual (en la máquina del usuario, con su autorización, en una rama Neon de de
 - [ ] Invitar → crear la cuenta y verificar con código → 200 `commercial`. Esto requiere la UI de `accounts-auth-ui.md` o la API de Neon Auth.
 - [ ] Revocar el rol → 403 en la siguiente petición.
 - [ ] Dos revocaciones concurrentes del penúltimo y del último admin → solo una tiene éxito.
+- [ ] (F3) Desde `/crm/admin/usuarios`:
+  - invitar y copiar el enlace;
+  - la persona crea su cuenta y verifica su correo;
+  - al recargar, aparece en "Equipo activo" y desaparece de "Invitaciones pendientes".
+- [ ] (F3) Esa persona (`commercial`):
+  - no ve "Usuarios" en la cabecera;
+  - al abrir la URL directa ve el mensaje sin permiso.
 
 ## Diseño técnico
 
@@ -144,7 +218,50 @@ Manual (en la máquina del usuario, con su autorización, en una rama Neon de de
 - **Ajustes de Neon Auth necesarios:** los verifica el usuario en la consola; se documentan en el README.
   - **Sign-up with Email ON:** los invitados crean su cuenta. **Riesgo aceptado:** cualquiera puede crear una cuenta en Neon Auth, pero sin invitación no obtiene permisos (403) ni filas en `public`.
   - **Verificación de correo al registrarse ON, con código OTP:** el SMTP compartido de Neon envía códigos; los enlaces requieren SMTP propio. Sin verificación, nadie pasa `requireVerifiedEmail`.
-- **Página de administración:** usa `redirect`/`notFound` de `next/navigation`. No usa `forbidden()`/`unauthorized()` porque requieren `experimental.authInterrupts`.
+- **Página de administración (F3):**
+  - vive en `app/crm/(protected)/admin/usuarios/page.tsx` para heredar el layout protegido y `CrmShell`;
+  - el route group no cambia la URL, así que el `revalidatePath("/crm/admin/usuarios")` de las acciones de F2 sigue siendo correcto;
+  - sin sesión usa `redirect("/crm/acceso")` de `next/navigation`;
+  - sin `staff.manage` muestra un mensaje dentro del shell (respuesta 200), no la página 404: quien ya está en el CRM entiende por qué no ve la página;
+  - no usa `forbidden()`/`unauthorized()` porque requieren `experimental.authInterrupts`;
+  - el mensaje sin permiso es texto estático en la página, como la bienvenida de `app/crm/(protected)/page.tsx`. No se crea un componente para él.
+- **`getCrmAccess(permission)` (F3):**
+  - se amplía la util existente con un parámetro `permission: Permission = "crm.access"` y pasa a llamar a `requirePermission(permission)`;
+  - el layout y `/crm` no cambian, porque el valor por defecto mantiene su comportamiento;
+  - `cache()` de `getCurrentUser` hace que el layout y la página compartan una sola consulta de sesión y roles por render;
+  - así la página no repite en `app/` el `try/catch` de las guardas.
+- **Navegación (F3):**
+  - `CrmShell` calcula `can(roles, "staff.manage")` con la matriz de `lib/auth/permissions.ts`, la única fuente de verdad. Es un Server Component, así que puede importarla;
+  - si es `true`, añade un `<nav>` con un `Link` "Usuarios" (`next/link`, estilo `buttonVariants({ variant: "ghost" })`);
+  - el título pasa a ser un `Link` a `/crm` para volver desde la página de usuarios;
+  - no hay resaltado del enlace activo (necesitaría `usePathname` en cliente; YAGNI);
+  - cabe en F3 sin pasar de 5 tareas: solo modifica `CrmShell.tsx`.
+- **Asignar rol sin selector (F3):**
+  - con dos roles, a un staff solo le puede faltar uno, así que un selector por fila tendría como mucho una opción;
+  - por eso se sustituye el `StaffRoleForm` planificado por un `ConfirmActionButton` "Asignar <Rol>". Así se pide confirmación también al elevar privilegios y hay un archivo menos;
+  - si en el futuro hay más roles (Alcance: OPERACIONES, MODERADOR), se volverá a valorar el selector.
+- **Sin `field` en F3:**
+  - `field` existe en el estilo `base-nova` (`registryDependencies`: `label` y `separator`), pero no se instala:
+    - los tres formularios existentes (`SignInForm`, `SignUpForm` y `VerifyEmailForm`) y los dos de recuperación que añadirá `accounts-auth-ui.md` F3 usan `Label` + `Input` + `<p role="alert">`;
+    - mezclar dos patrones rompe la consistencia;
+    - migrarlos inflaría la fase (5+ archivos) y chocaría con `accounts-auth-ui.md` F3, que modifica `SignInForm` y `AccessPanel`.
+  - `InviteStaffForm` sigue el patrón actual. Ver Pregunta abierta 6.
+- **El formulario de invitación conserva los valores si hay error (F3):**
+  - React 19 resetea los campos no controlados de un `<form action={…}>` al terminar la acción;
+  - sugerencia: enviar con `onSubmit` + `event.preventDefault()` + `startTransition(() => formAction(new FormData(form)))`, y llamar a `form.reset()` solo cuando el estado sea `success`.
+
+  El criterio de aceptación es el comportamiento, no la técnica.
+- **Fechas (F3):**
+  - `formatStaffDateTime(date)` usa `Intl.DateTimeFormat("es", { dateStyle: "medium", timeStyle: "short", timeZone: CRM_TIME_ZONE })`;
+  - `CRM_TIME_ZONE = "America/Lima"` es provisional, la misma zona que propone el borrador `crm-leads-pipeline.md` (Pregunta abierta 5);
+  - vive en el módulo (`utils/staffDisplay.ts`) y se subirá a `lib/` cuando otro dominio lo necesite (SETUP §1, regla 5).
+- **Etiquetas de rol (F3):**
+  - `STAFF_ROLE_LABELS` (`commercial` → "Comercial", `admin` → "Admin") se mueve de `CrmShell` a `utils/staffDisplay.ts`, porque ahora la usan `CrmShell`, las tablas y `InviteStaffForm` (DRY);
+  - `staffDisplay.ts` importa `StaffRole` solo con `import type`, para que el componente de cliente no arrastre `server-only`.
+- **Tamaño del Worker (F3):**
+  - medido el 2026-10-18 sobre `4fd366e` con `npm run build:worker` + `npx wrangler deploy --dry-run`: **1610,41 KiB gzip** (7699,80 KiB sin comprimir);
+  - cada página nueva bajo `/crm` suma ~160 KiB gzip con Turbopack, así que la estimación tras F3 es ~1,8 MiB (una página, `AlertDialog` de Base UI y dos componentes de cliente), por debajo del umbral de consulta de 2 MiB;
+  - después quedará margen para ~1 página más antes de ese umbral. Las specs siguientes con páginas en `/crm` (p. ej. `crm-leads-pipeline.md`) tendrán que tenerlo en cuenta.
 
 ### Rutas (`app/`)
 - `app/api/crm/me/route.ts` (nuevo, F1):
@@ -156,10 +273,21 @@ Manual (en la máquina del usuario, con su autorización, en una rama Neon de de
     } catch (error) { return authErrorResponse(error); }
   }
   ```
-- `app/crm/admin/usuarios/page.tsx` (nuevo, F3): Server Component delgado.
-  1. Llama a `requirePermission("staff.manage")`. Con `UnauthorizedError` hace `redirect("/crm/acceso")` (esa ruta llega con `accounts-auth-ui.md`); con `ForbiddenError`, `notFound()`.
-  2. Llama a `listStaffOverview()`.
-  3. Compone `InviteStaffForm`, `StaffTable` e `InvitationsTable` desde `@/modules/accounts`.
+- `app/crm/(protected)/admin/usuarios/page.tsx` (nuevo, F3): Server Component delgado bajo el layout protegido existente (`app/crm/(protected)/layout.tsx`, sin cambios). Exporta `metadata = { title: "Usuarios del equipo" }`; `robots` se hereda del layout.
+  ```tsx
+  export default async function StaffAdminPage() {
+    const access = await getCrmAccess("staff.manage");
+    if (access.status === "unauthenticated") redirect("/crm/acceso");
+    // h1 "Usuarios del equipo" en ambos casos
+    if (access.status === "forbidden") return /* <section> con h1 + texto sin permiso (Criterios F3) */;
+    const { staff, invitations } = await listStaffOverview();
+    return /* <section>: h1; InviteStaffForm; h2 "Equipo activo" + <StaffTable staff={staff} />;
+              h2 "Invitaciones pendientes" + <InvitationsTable invitations={invitations} /> */;
+  }
+  ```
+  - `redirect()` se llama fuera de `try/catch`.
+  - Todo se importa desde `@/modules/accounts`.
+  - Si `listStaffOverview()` falla, el error se propaga al error boundary por defecto de Next, que en producción no muestra el mensaje original. No se añade `error.tsx` (No incluye).
 
   Es la defensa visual; la seguridad está en cada Server Action.
 
@@ -244,20 +372,47 @@ F2:
 
   Cualquier otro error se relanza sin datos sensibles. `inviteStaffAction` devuelve `acceptUrl = new URL("/crm/acceso", getEnv().APP_ORIGIN).toString()`.
 
-F3 (componentes en `modules/accounts/components/`):
+F3, base del módulo (modificaciones):
+
+| Archivo | Tipo | Cambio |
+|---|---|---|
+| `schemas/auth.schema.ts` | existente | `emailSchema` pasa a `export const emailSchema`, sin otros cambios |
+| `schemas/staff.schema.ts` | existente | `inviteStaffSchema = z.object({ email: emailSchema, role: staffRoleSchema })`, con `import { emailSchema } from "./auth.schema"`. Mismo comportamiento: trim, minúsculas y `z.email()`; el mensaje de campo de la acción no cambia (`FIELD_MESSAGES`) |
+| `utils/crmAccess.ts` | existente | `getCrmAccess(permission: Permission = "crm.access")` llama a `requirePermission(permission)` en lugar de `requireCrmUser()`. El mapeo de errores y `await connection()` no cambian |
+| `utils/staffDisplay.ts` | nuevo (no existe ningún formateador de fechas ni etiquetas compartidas; `lib/dates.ts` solo está en specs en borrador) | `STAFF_ROLE_LABELS: Record<StaffRole, string>`; `CRM_TIME_ZONE = "America/Lima"` (provisional); `formatStaffDateTime(date: Date): string`. Sin `server-only`, porque lo usa un componente de cliente |
+| `components/CrmShell.tsx` | existente | Usa `STAFF_ROLE_LABELS` (elimina su `ROLE_LABELS` local), el título enlaza a `/crm` y añade el enlace "Usuarios" si `can(roles, "staff.manage")`. Las props no cambian |
+
+F3, componentes nuevos en `modules/accounts/components/` (no existen en el proyecto; son de un solo dominio):
 
 | Componente | Tipo | Descripción |
 |---|---|---|
-| `InviteStaffForm` | nuevo, `"use client"` | `useActionState(inviteStaffAction)`; `Field` + `Input type="email"` + `NativeSelect` (Comercial/Admin) + `Button`; errores por campo con `FieldError`; si hay éxito, muestra la URL para compartir |
-| `StaffRoleForm` | nuevo, `"use client"` | Por fila de staff: `NativeSelect` con los roles que no tiene + `Button` "Asignar"; usa `grantStaffRoleAction` y muestra el error en línea |
-| `ConfirmActionButton` | nuevo, `"use client"` | `AlertDialog` de confirmación que envía un `<form>` con campos ocultos a una acción recibida por props (`revokeStaffRoleAction` o `revokeInvitationAction`) y muestra el mensaje de error devuelto. Hacen falta estado y eventos, así que es cliente; es reutilizable dentro del módulo |
-| `StaffTable` | nuevo, Server | `Table` con correo, roles como `Badge`, fecha de alta, `StaffRoleForm` y un `ConfirmActionButton` por rol |
-| `InvitationsTable` | nuevo, Server | `Table` con correo, rol, caducidad, `Badge` "Caducada" y un `ConfirmActionButton` "Revocar"; si no hay ninguna, "Sin invitaciones pendientes" |
+| `InviteStaffForm` | nuevo, `"use client"` | Sección "Invitar a una persona" con un formulario `noValidate`: `useActionState(inviteStaffAction, { status: "idle" })`; `Label` + `Input type="email" name="email" autoComplete="off"`; `Label` + `NativeSelect name="role"` con `staffRoleSchema.options` y las etiquetas de `STAFF_ROLE_LABELS` (`commercial` por defecto); `Button` "Invitar"/"Invitando…". Errores por campo de `state.fieldErrors` y error general, con el mismo patrón que `SignInForm`. Si hay `success`, muestra `state.message`, el `acceptUrl` en un `Input readOnly`, el botón "Copiar enlace" (`navigator.clipboard.writeText`, con estado local "Enlace copiado." o el texto de fallo) y el texto de instrucciones (Criterios F3). Conserva los valores si hay error (ver Decisiones) |
+| `ConfirmActionButton` | nuevo, `"use client"` | `AlertDialog` (trigger `Button`) con un `<form>` de campos ocultos (`fields`) enviado a `action` mediante `useActionState`. "Cancelar" cierra; confirmar queda deshabilitado con "Procesando…" mientras espera; si hay `success`, cierra el diálogo; si hay `error`, muestra `state.message` con `role="alert"` y el diálogo sigue abierto. Hacen falta estado y eventos, así que es cliente. Lo reutilizan las tres acciones de fila |
+| `StaffTable` | nuevo, Server | Props `{ staff: StaffMember[] }`. `Table` con las columnas "Correo", "Roles" (`Badge` por rol con `STAFF_ROLE_LABELS`), "Alta" (`formatStaffDateTime` del `grantedAt` mínimo) y "Acciones": un `ConfirmActionButton` "Asignar <Rol>" (`grantStaffRoleAction`, `variant="outline"`) para el rol que le falte, si le falta alguno, y un `ConfirmActionButton` "Revocar <Rol>" (`revokeStaffRoleAction`, `variant="destructive"`) por cada rol activo. Importa las acciones desde `../actions/staff.actions` y las pasa por props |
+| `InvitationsTable` | nuevo, Server | Props `{ invitations: PendingInvitation[] }`. `Table` con las columnas "Correo", "Rol", "Caduca" (`formatStaffDateTime(expiresAt)`, más `Badge variant="destructive"` "Caducada" si `expired`) y "Acciones" (`ConfirmActionButton` "Revocar", `revokeInvitationAction`, `variant="destructive"`). Lista vacía: "Sin invitaciones pendientes" |
 
-- `index.ts` (F3): exporta `InviteStaffForm`, `StaffTable`, `InvitationsTable` y `listStaffOverview`.
+Textos de `ConfirmActionButton` por uso (`<email>` y `<Rol>` vienen de la fila):
+
+| Uso | Disparador | Título | Descripción | Confirmar |
+|---|---|---|---|---|
+| Revocar rol | "Revocar <Rol>" | "¿Revocar el rol <Rol>?" | "<email> dejará de tener el rol <Rol> en su próxima petición." | "Revocar" |
+| Asignar rol | "Asignar <Rol>" | "¿Asignar el rol <Rol>?" | "<email> tendrá el rol <Rol> desde su próxima petición." | "Asignar" |
+| Revocar invitación | "Revocar" | "¿Revocar la invitación?" | "<email> ya no podrá aceptar esta invitación." | "Revocar" |
+
+- `index.ts` (F3): además de lo que ya exporta (`AccessPanel`, `CrmShell`, `NoCrmAccess`, `getCrmAccess`), exporta `InviteStaffForm`, `StaffTable`, `InvitationsTable` y `listStaffOverview`.
 - shadcn:
-  - instalado: `button`;
-  - por instalar (F3): `npx shadcn@latest add table badge input native-select alert-dialog field`. `field` arrastra `label` y `separator`. Todos existen en `@shadcn`, según `npx shadcn@latest search`.
+  - instalados: `button`, `input`, `label`, `card`. No se reinstalan.
+  - por instalar (F3-T1): `npx shadcn@latest add table badge native-select alert-dialog`. Comprobado en el registro del estilo `base-nova` (`https://ui.shadcn.com/r/styles/base-nova/<name>.json`) y con `npx shadcn@latest search @shadcn`:
+
+    | Componente | Archivo | Dependencias |
+    |---|---|---|
+    | `table` | `components/ui/table.tsx` | ninguna |
+    | `badge` | `components/ui/badge.tsx` | `@base-ui/react` y `class-variance-authority`, ya instalados |
+    | `native-select` | `components/ui/native-select.tsx` | icono de `lucide-react` |
+    | `alert-dialog` | `components/ui/alert-dialog.tsx` | `@base-ui/react/alert-dialog`; `registryDependencies: ["button"]`, ya instalado |
+
+    Si el CLI pregunta si sobrescribe `button.tsx`, se responde que no.
+  - `field` existe en `base-nova` (añadiría `field.tsx` y `separator.tsx`), pero no se instala en F3 (ver Decisiones).
 
 ### Contrato
 ```ts
@@ -272,6 +427,24 @@ type StaffActionState =
   | { status: "success"; message: string; acceptUrl?: string }
   | { status: "error"; message: string; fieldErrors?: Record<string, string[]>;
       code: "unauthorized" | "forbidden" | "invalid_input" | "pending_invitation_exists" | "not_found" | "no_change" | "last_admin" };
+
+// F3 (sin cambios en el contrato de las acciones ni en StaffActionState)
+// modules/accounts/utils/crmAccess.ts
+export function getCrmAccess(permission?: Permission /* = "crm.access" */): Promise<CrmAccess>;
+// modules/accounts/utils/staffDisplay.ts
+export const STAFF_ROLE_LABELS: Record<StaffRole, string>; // { commercial: "Comercial", admin: "Admin" }
+export const CRM_TIME_ZONE = "America/Lima";                // provisional (Pregunta abierta 5)
+export function formatStaffDateTime(date: Date): string;    // "18 oct 2026, 10:30"
+// modules/accounts/components/ConfirmActionButton.tsx
+type ConfirmActionButtonProps = {
+  action: (prev: StaffActionState, formData: FormData) => Promise<StaffActionState>;
+  fields: Record<string, string>; // campos ocultos: { userId, role } o { invitationId }
+  label: string;                  // texto del disparador
+  title: string;
+  description: string;
+  confirmLabel: string;
+  variant: "outline" | "destructive"; // variante del disparador
+};
 ```
 
 ### Scripts manuales (F1)
@@ -304,10 +477,21 @@ Se ejecutan con `psql`, `\set ON_ERROR_STOP on` y dentro de una transacción. Cr
 
 ## Reutilización
 - `getAuth()` (`lib/auth/server.ts`), `getDb()` (`lib/db.ts`, con `db.batch`) y `getEnv()` (`lib/env.ts`), sin modificarlos. `drizzle.config.ts` y `db:generate`, sin cambios.
-- zod v4, `server-only`, `cache` de React, `revalidatePath`, `redirect`/`notFound` de Next.
+- zod v4, `server-only`, `cache` de React, `revalidatePath`, `redirect` de Next.
 - Patrón de tests de `lib/env.test.ts`: `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`.
 - `drizzle.mock()` de `drizzle-orm/neon-http` para inspeccionar el SQL con `.toSQL()` sin conexión.
-- shadcn: `button` (instalado); `table`, `badge`, `input`, `native-select`, `alert-dialog` y `field` (por instalar en F3). No se añaden dependencias de runtime.
+- shadcn:
+  - ya instalados: `button` (con `buttonVariants` para el enlace de navegación), `input` y `label`;
+  - por instalar en F3: `table`, `badge`, `native-select` y `alert-dialog`.
+
+  No se añaden dependencias de runtime.
+- (F3) Existentes en el proyecto:
+  - el layout `app/crm/(protected)/layout.tsx`, `CrmShell`, `NoCrmAccess` y `getCrmAccess`, de `accounts-auth-ui.md`;
+  - `listStaffOverview`, las cuatro Server Actions con sus mensajes en español (`ERROR_MESSAGES`/`FIELD_MESSAGES`), `staffRoleSchema` y los tipos `StaffMember`, `PendingInvitation` y `StaffActionState`, de F2;
+  - `emailSchema`, de `auth.schema.ts`;
+  - `can()`, de `lib/auth/permissions.ts`;
+  - el patrón de campos y errores de `SignInForm`.
+- (F3) De Next/React: `next/link`, `useActionState` y `startTransition`.
 
 ## Tests
 Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, sin red ni secretos.
@@ -361,11 +545,21 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
   - el actor es `user.id` de la sesión aunque el `FormData` traiga `invitedBy`/`grantedBy`;
   - `revalidatePath` solo si hay éxito;
   - `acceptUrl` termina en `/crm/acceso`.
+- `modules/accounts/utils/crmAccess.test.ts` (F3, modificar; se mockea `requirePermission` en lugar de `requireCrmUser`):
+  - se mantienen los cuatro casos actuales (`unauthenticated`, `forbidden`, `ok` y relanzar cualquier otro error);
+  - sin argumento llama a `requirePermission("crm.access")`;
+  - con `"staff.manage"` llama a `requirePermission("staff.manage")`;
+  - un `ForbiddenError` con ese permiso (caso `commercial`) → `{ status: "forbidden" }`.
+- `modules/accounts/utils/staffDisplay.test.ts` (F3, nuevo):
+  - `formatStaffDateTime(new Date("2026-10-18T15:30:00Z"))` → `"18 oct 2026, 10:30"`;
+  - `formatStaffDateTime(new Date("2026-10-19T03:00:00Z"))` → `"18 oct 2026, 22:00"`: no salta al día UTC y no depende de la zona horaria del proceso;
+  - `STAFF_ROLE_LABELS` tiene una etiqueta para cada valor de `staffRoleSchema.options`.
+- `modules/accounts/schemas/staff.schema.test.ts` y `auth.schema.test.ts` (F3): pasan sin cambios tras reutilizar `emailSchema`.
 - Sin unit tests (según SETUP o por limitación):
   - `lib/db-schema.ts`, scripts SQL y tipos;
   - componentes de `components/ui/`;
   - página async de `app/` (Server Component asíncrono);
-  - componentes del módulo: son de un solo dominio y su lógica está en las acciones. Se cubren con el checklist manual de F3 y con E2E cuando exista.
+  - componentes del módulo (`InviteStaffForm`, `ConfirmActionButton`, `StaffTable`, `InvitationsTable`, `CrmShell`): son de un solo dominio y su lógica está en las acciones y en `staffDisplay`. Se cubren con los criterios de F3, el checklist manual y E2E cuando exista.
 
 ## Plan de tareas
 ### Fase 1: schema, guardas, aceptación de invitaciones y API protegida (5 tareas, 15 archivos)
@@ -389,18 +583,38 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
 
   Archivos: `README.md` · depende de: Fase 1 · paralelo (con F2-T1 a F2-T3)
 
-### Fase 3: página de administración en el CRM (4 tareas, ~15 archivos)
-- [ ] T1 — Instalar shadcn: `npx shadcn@latest add table badge input native-select alert-dialog field` · archivos: `components/ui/table.tsx`, `badge.tsx`, `input.tsx`, `native-select.tsx`, `alert-dialog.tsx`, `field.tsx`, `label.tsx`, `separator.tsx` (los que genere el CLI) · depende de: Fase 2 · secuencial (base)
-- [ ] T2 — Componentes de cliente · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffRoleForm.tsx`, `modules/accounts/components/ConfirmActionButton.tsx` · depende de: F3-T1 · secuencial (T3 los compone)
-- [ ] T3 — Tablas Server · archivos: `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx` · depende de: F3-T2 · secuencial
-- [ ] T4 — API pública del módulo y página `/crm/admin/usuarios` · archivos: `modules/accounts/index.ts`, `app/crm/admin/usuarios/page.tsx` · depende de: F3-T3 · secuencial
+### Fase 3: página de administración en el CRM (5 tareas, 17 archivos: 4 generados por el CLI de shadcn y 13 escritos a mano)
+Coordinación: F3-T2 modifica `modules/accounts/schemas/auth.schema.ts`, que también toca `accounts-auth-ui.md` F3-T1. No se ejecutan en la misma sesión ni en paralelo.
+- [ ] T1 — Instalar shadcn: `npx shadcn@latest add table badge native-select alert-dialog` (sin sobrescribir `button.tsx`) · archivos: `components/ui/table.tsx`, `components/ui/badge.tsx`, `components/ui/native-select.tsx`, `components/ui/alert-dialog.tsx` · depende de: Fase 2 · secuencial (base, `components/ui/`)
+- [ ] T2 — Base del módulo:
+  - exportar `emailSchema` y reutilizarlo en `inviteStaffSchema`;
+  - `getCrmAccess(permission)` con su test;
+  - `staffDisplay` (etiquetas de rol y `formatStaffDateTime`) con su test.
+
+  Archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/utils/crmAccess.ts`, `modules/accounts/utils/crmAccess.test.ts`, `modules/accounts/utils/staffDisplay.ts`, `modules/accounts/utils/staffDisplay.test.ts` · depende de: F3-T1 · paralelo (con F3-T3; archivos disjuntos)
+- [ ] T3 — `ConfirmActionButton` (cliente, `AlertDialog` + `useActionState`) · archivos: `modules/accounts/components/ConfirmActionButton.tsx` · depende de: F3-T1 · paralelo (con F3-T2; archivos disjuntos y sin dependencia entre ellas)
+- [ ] T4 — `InviteStaffForm` (cliente, con el enlace para copiar) y tablas Server `StaffTable` e `InvitationsTable` · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx` · depende de: F3-T2, F3-T3 · secuencial
+- [ ] T5 — Navegación, API pública y página:
+  - `CrmShell` con el enlace "Usuarios" y `STAFF_ROLE_LABELS`;
+  - exports en `index.ts`;
+  - `app/crm/(protected)/admin/usuarios/page.tsx`;
+  - medir el Worker con `build:worker` + `wrangler deploy --dry-run` sin desplegar, y registrar el gzip frente a 1610 KiB.
+
+  Archivos: `modules/accounts/components/CrmShell.tsx`, `modules/accounts/index.ts`, `app/crm/(protected)/admin/usuarios/page.tsx` · depende de: F3-T4 · secuencial
 
 ## Preguntas abiertas
-1. **Caducidad de las invitaciones.** Se propone 7 días (default de `expires_at`). ¿Te sirve, o prefieres otro plazo?
-2. **Aviso de la invitación.** En el MVP, el admin comparte a mano el enlace `/crm/acceso` (por WhatsApp o correo propio) y la persona se registra con el correo invitado. El envío automático por correo quedaría para una spec futura (requiere SMTP propio o un proveedor). ¿De acuerdo?
+1. ~~**Caducidad de las invitaciones.**~~ **Resuelta:** 7 días (default de `expires_at`), ya implementado en F1/F2.
+2. ~~**Aviso de la invitación.**~~ **Resuelta:** aviso manual.
+   - El admin comparte el enlace `/crm/acceso` por WhatsApp o su correo, y la persona se registra con el correo invitado.
+   - F3 muestra el enlace para copiarlo.
+   - El envío automático queda para una spec futura (requiere SMTP propio o un proveedor).
 3. **FK hacia `neon_auth.user`.** No se crea en esta fase. ¿Quieres añadirla después con una migración SQL propia, cuando se confirme el tipo del id y que Neon lo admite? ¿Qué debe pasar con el perfil y las asignaciones si se borra la cuenta en Neon Auth?
 4. **Rol de base de datos con permisos mínimos.** ¿`DATABASE_URL` usa un rol distinto del owner? Si es así, necesitará:
    - `SELECT, INSERT` en `profiles`;
    - `SELECT, INSERT, UPDATE` en `staff_assignments` y `staff_invitations`.
 
    Los GRANT quedan fuera de esta spec. ¿Los preparas tú en la consola de Neon o se especifican aparte?
+5. **Zona horaria de las fechas (F3).** "Alta" y "Caduca" se muestran con `CRM_TIME_ZONE = "America/Lima"`, la misma zona provisional que el borrador `crm-leads-pipeline.md`. ¿Es la zona en la que trabaja el equipo? Si no, basta con cambiar la constante.
+6. **Migrar los formularios a `field` de shadcn.** F3 no lo instala y mantiene el patrón actual de `Label` + `Input` + `<p role="alert">` (ver Decisiones). ¿Prefieres:
+   - (a) mantener el patrón actual (propuesta), o
+   - (b) una tarea posterior, después de `accounts-auth-ui.md` F3, que instale `field` y migre todos los formularios (`SignInForm`, `SignUpForm`, `VerifyEmailForm`, los de recuperación e `InviteStaffForm`)?
