@@ -5,12 +5,16 @@ import {
   createLeadSchema,
   leadActivityTypeSchema,
   leadListQuerySchema,
+  leadOwnerChangeSchema,
   leadSourceSchema,
+  leadStageChangeSchema,
   leadStageSchema,
   phoneSchema,
+  updateLeadSchema,
 } from "./leads.schema";
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
+const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 
 // Strings as Object.fromEntries(formData) delivers them: blanks are "", the checkbox is "on".
 const validForm = {
@@ -26,8 +30,8 @@ const validForm = {
   consent: "on",
 };
 
-function fieldErrors(input: Record<string, unknown>) {
-  const result = createLeadSchema.safeParse(input);
+function fieldErrors(input: Record<string, unknown>, schema: z.ZodType = createLeadSchema) {
+  const result = schema.safeParse(input);
   if (result.success) throw new Error("expected a validation error");
   return z.flattenError(result.error).fieldErrors as Record<string, string[] | undefined>;
 }
@@ -205,5 +209,98 @@ describe("leadListQuerySchema", () => {
 
   it("accepts the last page (1000)", () => {
     expect(leadListQuerySchema.parse({ pagina: "1000" }).pagina).toBe(1000);
+  });
+});
+
+describe("updateLeadSchema", () => {
+  const validEdit = {
+    leadId: LEAD_ID,
+    fullName: " Ana Pérez ",
+    phone: "+51 938 127 170",
+    email: "",
+    location: " Lima ",
+    tripId: TRIP_ID,
+    destinationText: "",
+  };
+
+  it("normalizes the contact fields and drops every other key", () => {
+    const result = updateLeadSchema.parse({
+      ...validEdit,
+      stage: "paid",
+      source: "web_form",
+      ownerUserId: "intruder",
+      actorUserId: "intruder",
+      consent: "on",
+    });
+    expect(result).toEqual({
+      leadId: LEAD_ID,
+      fullName: "Ana Pérez",
+      phone: "+51938127170",
+      email: null,
+      location: "Lima",
+      tripId: TRIP_ID,
+      destinationText: null,
+    });
+  });
+
+  it.each([["missing", undefined], ["not a UUID", "abc"]])("rejects a leadId %s", (_, leadId) => {
+    expect(fieldErrors({ ...validEdit, leadId }, updateLeadSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+
+  it("rejects an invalid email with the same message as the manual form", () => {
+    expect(fieldErrors({ ...validEdit, email: "ana@" }, updateLeadSchema).email).toEqual([
+      "Introduce un correo válido.",
+    ]);
+  });
+});
+
+describe("leadStageChangeSchema", () => {
+  it("requires a lost reason for lost", () => {
+    for (const lostReason of [undefined, "", "   "]) {
+      expect(fieldErrors({ leadId: LEAD_ID, stage: "lost", lostReason }, leadStageChangeSchema).lostReason).toEqual([
+        "Indica el motivo de la pérdida.",
+      ]);
+    }
+  });
+
+  it.each(["ab", "x".repeat(201)])("rejects a lost reason of %#: outside 3–200 characters", (lostReason) => {
+    expect(fieldErrors({ leadId: LEAD_ID, stage: "lost", lostReason }, leadStageChangeSchema).lostReason).toEqual([
+      "El motivo debe tener entre 3 y 200 caracteres.",
+    ]);
+  });
+
+  it("trims and keeps the reason for lost", () => {
+    expect(leadStageChangeSchema.parse({ leadId: LEAD_ID, stage: "lost", lostReason: "  Eligió otra agencia " })).toEqual({
+      leadId: LEAD_ID,
+      stage: "lost",
+      lostReason: "Eligió otra agencia",
+    });
+  });
+
+  it("forces the reason to null in any other stage", () => {
+    expect(
+      leadStageChangeSchema.parse({ leadId: LEAD_ID, stage: "quoted", lostReason: "x", actorUserId: "intruder" }),
+    ).toEqual({ leadId: LEAD_ID, stage: "quoted", lostReason: null });
+  });
+
+  it("rejects an unknown stage and a leadId that is not a UUID", () => {
+    const errors = fieldErrors({ leadId: "abc", stage: "archived", lostReason: "" }, leadStageChangeSchema);
+    expect(errors.stage).toEqual(["Elige una etapa."]);
+    expect(errors.leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
+describe("leadOwnerChangeSchema", () => {
+  it("accepts an owner id and drops other keys", () => {
+    expect(leadOwnerChangeSchema.parse({ leadId: LEAD_ID, ownerUserId: "user-2", actorUserId: "x" })).toEqual({
+      leadId: LEAD_ID,
+      ownerUserId: "user-2",
+    });
+  });
+
+  it.each([["missing", undefined], ["empty", ""]])("never leaves a lead without owner: %s owner is rejected", (_, ownerUserId) => {
+    expect(fieldErrors({ leadId: LEAD_ID, ownerUserId }, leadOwnerChangeSchema).ownerUserId).toEqual([
+      "Elige un responsable.",
+    ]);
   });
 });

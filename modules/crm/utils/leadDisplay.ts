@@ -1,7 +1,7 @@
 // No server-only: client components import these labels. Type-only imports keep the bundle small.
 import type { VariantProps } from "class-variance-authority";
 import type { badgeVariants } from "@/components/ui/badge";
-import type { LeadSource, LeadStage } from "../types/leads.types";
+import type { LeadListItem, LeadSource, LeadStage, LeadTripOption } from "../types/leads.types";
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
@@ -35,3 +35,21 @@ export const CLOSED_LEAD_STAGES: readonly LeadStage[] = ["paid", "lost"];
 
 // Owner of a lead without owner (web form): list, filter, detail and history.
 export const UNASSIGNED_OWNER_LABEL = "Sin asignar";
+
+// Owner as shown in the list and the detail: "Sin asignar" without owner, "(sin acceso)" when the
+// owner lost every role with leads.manage.
+export function leadOwnerLabel(owner: LeadListItem["owner"]): string {
+  if (!owner) return UNASSIGNED_OWNER_LABEL;
+  return owner.active ? owner.email : `${owner.email} (sin acceso)`;
+}
+
+const TRIP_STATUS_SUFFIXES: Record<LeadTripOption["status"], string> = {
+  draft: " (borrador)",
+  published: "",
+  archived: " (archivado)",
+};
+
+// Catalog trip as shown in the lead form and the detail.
+export function leadTripLabel(trip: Pick<LeadTripOption, "title" | "status">): string {
+  return `${trip.title}${TRIP_STATUS_SUFFIXES[trip.status]}`;
+}

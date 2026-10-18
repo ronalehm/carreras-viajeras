@@ -66,6 +66,54 @@ export const createLeadSchema = z.object({
   consent: z.literal("on", { error: CONSENT_MESSAGE }),
 });
 
+const leadIdSchema = z.uuid({ error: "El lead no es válido." });
+
+// Contact data edit: the contact fields of the manual form plus the lead id. Source, owner,
+// note and consent are not editable; any other key (stage, actorUserId…) is dropped.
+export const updateLeadSchema = createLeadSchema
+  .pick({
+    fullName: true,
+    phone: true,
+    email: true,
+    location: true,
+    tripId: true,
+    destinationText: true,
+  })
+  .extend({ leadId: leadIdSchema });
+
+const LOST_REASON_REQUIRED = "Indica el motivo de la pérdida.";
+const LOST_REASON_LENGTH = "El motivo debe tener entre 3 y 200 caracteres.";
+
+// The lost reason only applies to "lost": it is required there and forced to null elsewhere
+// (leaving "lost" clears it).
+export const leadStageChangeSchema = z
+  .object({
+    leadId: leadIdSchema,
+    stage: z.enum(leadStageSchema.options, { error: "Elige una etapa." }),
+    lostReason: z
+      .string()
+      .optional()
+      .transform((value) => value?.trim() || null),
+  })
+  .transform(({ leadId, stage, lostReason }, ctx) => {
+    if (stage !== "lost") return { leadId, stage, lostReason: null };
+    if (!lostReason || lostReason.length < 3 || lostReason.length > 200) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["lostReason"],
+        message: lostReason ? LOST_REASON_LENGTH : LOST_REASON_REQUIRED,
+      });
+      return z.NEVER;
+    }
+    return { leadId, stage, lostReason };
+  });
+
+// The CRM never leaves a lead without owner: an owner id is always required.
+export const leadOwnerChangeSchema = z.object({
+  leadId: leadIdSchema,
+  ownerUserId: ownerUserIdSchema,
+});
+
 // List filters from the URL. Each key falls back to its default on any invalid value,
 // including a repeated parameter (an array), so parsing never throws.
 export const leadListQuerySchema = z.object({

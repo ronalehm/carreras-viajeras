@@ -1,17 +1,24 @@
 import "server-only";
-import { and, asc, count, desc, eq, exists, inArray, isNull, ne, sql, type SQLWrapper } from "drizzle-orm";
+import { and, asc, count, desc, eq, exists, inArray, isNull, ne, or, sql, type SQLWrapper } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
 import { leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
 import { leadStageSchema } from "../schemas/leads.schema";
 import type {
   CreateLeadInput,
+  LeadDetail,
   LeadList,
   LeadListFilters,
+  LeadOwnerChangeInput,
   LeadOwnerOption,
   LeadStage,
+  LeadStageChangeInput,
   LeadTripOption,
+  UpdateLeadInput,
 } from "../types/leads.types";
+import { CLOSED_LEAD_STAGES } from "../utils/leadDisplay";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -164,4 +171,171 @@ export async function createLead(
   const [row] = result.rows;
   if (row?.id) return { id: row.id };
   return row?.owner_ok ? "invalid_trip" : "invalid_owner";
+}
+
+const owner = alias(profiles, "owner");
+const creator = alias(profiles, "creator");
+const archiver = alias(profiles, "archiver");
+
+// Archived leads are returned too (read-only detail). A non-UUID id never reaches the database.
+// LEFT JOINs: web form leads have no owner and no author (owner and createdBy are null).
+export async function getLeadById(id: string): Promise<LeadDetail | null> {
+  if (!z.uuid().safeParse(id).success) return null;
+  const db = getDb();
+  const [lead] = await db
+    .select({
+      id: leads.id,
+      fullName: leads.fullName,
+      phone: leads.phone,
+      email: leads.email,
+      location: leads.location,
+      stage: leads.stage,
+      lostReason: leads.lostReason,
+      source: leads.source,
+      trip: { id: trips.id, title: trips.title, status: trips.status },
+      destinationText: leads.destinationText,
+      owner: {
+        userId: owner.userId,
+        email: owner.email,
+        active: sql<boolean>`${isActiveOwner(db, leads.ownerUserId)}`,
+      },
+      consentVersion: leads.consentVersion,
+      consentedAt: leads.consentedAt,
+      createdBy: { email: creator.email },
+      createdAt: leads.createdAt,
+      nextActionDate: leads.nextActionDate,
+      nextActionNote: leads.nextActionNote,
+      archivedAt: leads.archivedAt,
+      archivedBy: { email: archiver.email },
+    })
+    .from(leads)
+    .leftJoin(owner, eq(owner.userId, leads.ownerUserId))
+    .leftJoin(creator, eq(creator.userId, leads.createdBy))
+    .leftJoin(archiver, eq(archiver.userId, leads.archivedBy))
+    .leftJoin(trips, eq(trips.id, leads.tripId))
+    .where(eq(leads.id, id))
+    .limit(1);
+  return lead ?? null;
+}
+
+// One batch (one transaction, one round-trip). The UPDATE decides with its WHERE: the lead exists,
+// is not archived and the trip is none, the one already linked (even if archived since) or a
+// trip that is not archived. The SELECT tells "not_found" from "invalid_trip".
+export async function updateLead(input: UpdateLeadInput): Promise<"updated" | "not_found" | "invalid_trip"> {
+  const db = getDb();
+  const editable = and(eq(leads.id, input.leadId), isNull(leads.archivedAt));
+  const [updated, found] = await db.batch([
+    db
+      .update(leads)
+      .set({
+        fullName: input.fullName,
+        phone: input.phone,
+        email: input.email,
+        location: input.location,
+        tripId: input.tripId,
+        destinationText: input.destinationText,
+        updatedAt: sql`now()`,
+      })
+      .where(
+        and(
+          editable,
+          input.tripId === null
+            ? undefined
+            : or(
+                eq(leads.tripId, input.tripId),
+                exists(
+                  db
+                    .select({ one: sql`1` })
+                    .from(trips)
+                    .where(and(eq(trips.id, input.tripId), ne(trips.status, "archived"))),
+                ),
+              ),
+        ),
+      )
+      .returning({ id: leads.id }),
+    db.select({ id: leads.id }).from(leads).where(editable),
+  ]);
+  if (updated.length > 0) return "updated";
+  return found.length > 0 ? "invalid_trip" : "not_found";
+}
+
+type ChangeResult = { found: boolean; changed: boolean };
+
+// One statement. The target CTE locks the lead (FOR UPDATE) so the previous stage written in the
+// activity is the one the UPDATE replaced, even under concurrent changes. A closed stage clears
+// the next action; lost_reason is set for "lost" and cleared otherwise (schema forces null).
+export async function changeLeadStage(
+  input: LeadStageChangeInput,
+  actorUserId: string,
+): Promise<"changed" | "not_found" | "no_change"> {
+  const clearNextAction = CLOSED_LEAD_STAGES.includes(input.stage)
+    ? sql`, next_action_date = NULL, next_action_note = NULL`
+    : sql``;
+  const result = await getDb().execute<ChangeResult>(sql`
+    WITH target AS (
+      SELECT id, stage FROM leads
+      WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET stage = ${input.stage}::lead_stage, lost_reason = ${input.lostReason}, updated_at = now()${clearNextAction}
+      FROM target
+      WHERE leads.id = target.id AND target.stage <> ${input.stage}::lead_stage
+      RETURNING leads.id, target.stage AS stage_from
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id)
+      SELECT id, 'stage_changed', ${input.lostReason}, stage_from, ${input.stage}::lead_stage, ${actorUserId}
+      FROM updated
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS changed
+  `);
+  return changeOutcome(result.rows[0]);
+}
+
+// One statement, same locking as changeLeadStage. IS DISTINCT FROM: a lead without owner (web
+// form) gets its first owner, and the activity records owner_from = NULL. The new owner must
+// have an active role with leads.manage.
+export async function changeLeadOwner(
+  input: LeadOwnerChangeInput,
+  actorUserId: string,
+): Promise<"changed" | "not_found" | "no_change" | "invalid_owner"> {
+  const db = getDb();
+  const result = await db.execute<ChangeResult & { owner_ok: boolean }>(sql`
+    WITH checks AS (
+      SELECT ${isActiveOwner(db, input.ownerUserId)} AS owner_ok
+    ),
+    target AS (
+      SELECT id, owner_user_id FROM leads
+      WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET owner_user_id = ${input.ownerUserId}, updated_at = now()
+      FROM target, checks
+      WHERE leads.id = target.id AND checks.owner_ok
+        AND target.owner_user_id IS DISTINCT FROM ${input.ownerUserId}
+      RETURNING leads.id, target.owner_user_id AS owner_from
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id)
+      SELECT id, 'owner_changed', owner_from, ${input.ownerUserId}, ${actorUserId}
+      FROM updated
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      EXISTS (SELECT 1 FROM updated) AS changed,
+      owner_ok
+    FROM checks
+  `);
+  const row = result.rows[0];
+  if (row?.found && !row.changed && !row.owner_ok) return "invalid_owner";
+  return changeOutcome(row);
+}
+
+function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {
+  if (!row?.found) return "not_found";
+  return row.changed ? "changed" : "no_change";
 }

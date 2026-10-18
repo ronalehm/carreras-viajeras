@@ -6,8 +6,16 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 
 import { getDb } from "@/lib/db";
-import type { CreateLeadInput } from "../types/leads.types";
-import { createLead, getLeadFormOptions, getLeadList } from "./leads.service";
+import type { CreateLeadInput, UpdateLeadInput } from "../types/leads.types";
+import {
+  changeLeadOwner,
+  changeLeadStage,
+  createLead,
+  getLeadById,
+  getLeadFormOptions,
+  getLeadList,
+  updateLead,
+} from "./leads.service";
 
 type Query = { sql: string; params: unknown[] };
 
@@ -28,6 +36,7 @@ function useFakeDb({ responses = [] as unknown[][], failWith }: { responses?: un
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
+const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2)';
 
 // List row in select order (array mode): id, full_name, phone, stage, source, trip id/title,
@@ -297,5 +306,255 @@ describe("createLead", () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
     await expect(createLead(input, "user-1")).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+// Detail row in select order (array mode): id, full_name, phone, email, location, stage,
+// lost_reason, source, trip id/title/status, destination_text, owner user_id/email/active,
+// consent_version, consented_at, creator email, created_at, next_action_date/note,
+// archived_at, archiver email.
+function detailRow(overrides: Record<number, unknown> = {}) {
+  const row: unknown[] = [
+    LEAD_ID,
+    "Ana Pérez",
+    "+51938127170",
+    "ana@example.com",
+    "Lima",
+    "lost",
+    "Eligió otra agencia",
+    "whatsapp",
+    TRIP_ID,
+    "Maratón de Santiago 2027",
+    "archived",
+    "Panamá",
+    "user-1",
+    "agent@example.com",
+    true,
+    "crm-manual-v1",
+    "2026-10-18 14:00:00+00",
+    "agent@example.com",
+    "2026-10-18 14:00:00+00",
+    null,
+    null,
+    null,
+    null,
+  ];
+  for (const [position, value] of Object.entries(overrides)) row[Number(position)] = value;
+  return row;
+}
+
+describe("getLeadById", () => {
+  it("returns null without querying when the id is not a UUID", async () => {
+    const fake = useFakeDb();
+    await expect(getLeadById("abc")).resolves.toBeNull();
+    expect(fake.queries).toHaveLength(0);
+  });
+
+  it("returns null when the lead does not exist", async () => {
+    useFakeDb({ responses: [[]] });
+    await expect(getLeadById(LEAD_ID)).resolves.toBeNull();
+  });
+
+  it("reads the lead with LEFT JOINs for the owner, the author, the archiver and the trip", async () => {
+    const fake = useFakeDb({ responses: [[detailRow()]] });
+
+    await expect(getLeadById(LEAD_ID)).resolves.toEqual({
+      id: LEAD_ID,
+      fullName: "Ana Pérez",
+      phone: "+51938127170",
+      email: "ana@example.com",
+      location: "Lima",
+      stage: "lost",
+      lostReason: "Eligió otra agencia",
+      source: "whatsapp",
+      trip: { id: TRIP_ID, title: "Maratón de Santiago 2027", status: "archived" },
+      destinationText: "Panamá",
+      owner: { userId: "user-1", email: "agent@example.com", active: true },
+      consentVersion: "crm-manual-v1",
+      consentedAt: new Date("2026-10-18T14:00:00Z"),
+      createdBy: { email: "agent@example.com" },
+      createdAt: new Date("2026-10-18T14:00:00Z"),
+      nextActionDate: null,
+      nextActionNote: null,
+      archivedAt: null,
+      archivedBy: null,
+    });
+
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toContain(
+      'from "leads" left join "profiles" "owner" on "owner"."user_id" = "leads"."owner_user_id" left join "profiles" "creator" on "creator"."user_id" = "leads"."created_by" left join "profiles" "archiver" on "archiver"."user_id" = "leads"."archived_by" left join "trips" on "trips"."id" = "leads"."trip_id"',
+    );
+    expect(statement).toMatch(/where "leads"\."id" = \$\d+ limit \$\d+$/);
+    // Archived leads are read too: the detail shows them read-only.
+    expect(statement).not.toContain("archived_at\" is null");
+    expect(fake.queries[0].params).toEqual(["commercial", "admin", LEAD_ID, 1]);
+  });
+
+  it("returns owner: null and createdBy: null for a web form lead", async () => {
+    useFakeDb({
+      responses: [
+        [detailRow({ 5: "new", 6: null, 7: "web_form", 8: null, 9: null, 10: null, 12: null, 13: null, 14: false, 15: "web-form-v1", 17: null })],
+      ],
+    });
+
+    await expect(getLeadById(LEAD_ID)).resolves.toMatchObject({
+      source: "web_form",
+      trip: null,
+      owner: null,
+      consentVersion: "web-form-v1",
+      createdBy: null,
+      archivedBy: null,
+    });
+  });
+});
+
+describe("updateLead", () => {
+  const input: UpdateLeadInput = {
+    leadId: LEAD_ID,
+    fullName: "Ana Pérez",
+    phone: "+51999888777",
+    email: null,
+    location: null,
+    tripId: TRIP_ID,
+    destinationText: null,
+  };
+
+  it("updates and checks the lead in one batch; an archived trip is accepted if it does not change", async () => {
+    const fake = useFakeDb({ responses: [[[LEAD_ID]], [[LEAD_ID]]] });
+
+    await expect(updateLead(input)).resolves.toBe("updated");
+
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    const [update, check] = fake.queries;
+    expect(normalize(update.sql)).toBe(
+      'update "leads" set "full_name" = $1, "phone" = $2, "email" = $3, "location" = $4, "trip_id" = $5, "destination_text" = $6, "updated_at" = now() where (("leads"."id" = $7 and "leads"."archived_at" is null) and ("leads"."trip_id" = $8 or exists (select 1 from "trips" where ("trips"."id" = $9 and "trips"."status" <> $10)))) returning "id"',
+    );
+    expect(update.params).toEqual([
+      "Ana Pérez", "+51999888777", null, null, TRIP_ID, null, LEAD_ID, TRIP_ID, TRIP_ID, "archived",
+    ]);
+    expect(normalize(check.sql)).toBe(
+      'select "id" from "leads" where ("leads"."id" = $1 and "leads"."archived_at" is null)',
+    );
+  });
+
+  it("does not check any trip when it is removed", async () => {
+    const fake = useFakeDb({ responses: [[[LEAD_ID]], [[LEAD_ID]]] });
+    await updateLead({ ...input, tripId: null });
+
+    expect(normalize(fake.queries[0].sql)).toContain(
+      'where ("leads"."id" = $7 and "leads"."archived_at" is null) returning',
+    );
+    expect(normalize(fake.queries[0].sql)).not.toContain("trips");
+  });
+
+  it.each<[unknown[], string]>([
+    [[[LEAD_ID]], "invalid_trip"],
+    [[], "not_found"],
+  ])("without an updated row and lead rows %j returns %s", async (found, expected) => {
+    useFakeDb({ responses: [[], found] });
+    await expect(updateLead(input)).resolves.toBe(expected);
+  });
+});
+
+describe("changeLeadStage", () => {
+  it("updates the stage and inserts the stage_changed activity in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, changed: true }]] });
+
+    await expect(
+      changeLeadStage({ leadId: LEAD_ID, stage: "quoted", lostReason: null }, "user-1"),
+    ).resolves.toBe("changed");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toBe(
+      "WITH target AS ( SELECT id, stage FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
+        "updated AS ( UPDATE leads SET stage = $2::lead_stage, lost_reason = $3, updated_at = now() FROM target WHERE leads.id = target.id AND target.stage <> $4::lead_stage RETURNING leads.id, target.stage AS stage_from ), " +
+        "activity AS ( INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id) SELECT id, 'stage_changed', $5, stage_from, $6::lead_stage, $7 FROM updated ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS changed",
+    );
+    // An open stage keeps the next action.
+    expect(statement).not.toContain("next_action");
+    expect(fake.queries[0].params).toEqual([LEAD_ID, "quoted", null, "quoted", null, "quoted", "user-1"]);
+  });
+
+  it.each(["paid", "lost"] as const)("a closed stage (%s) clears the next action", async (stage) => {
+    const fake = useFakeDb({ responses: [[{ found: true, changed: true }]] });
+    const input =
+      stage === "lost"
+        ? { leadId: LEAD_ID, stage, lostReason: "Eligió otra agencia" }
+        : { leadId: LEAD_ID, stage, lostReason: null };
+    const lostReason = input.lostReason;
+    await changeLeadStage(input, "user-1");
+
+    expect(normalize(fake.queries[0].sql)).toContain(
+      "updated_at = now(), next_action_date = NULL, next_action_note = NULL FROM target",
+    );
+    // lost_reason and the activity body carry the reason (null for paid).
+    expect(fake.queries[0].params).toEqual([LEAD_ID, stage, lostReason, stage, lostReason, stage, "user-1"]);
+  });
+
+  it.each([
+    [{ found: true, changed: false }, "no_change"],
+    [{ found: false, changed: false }, "not_found"],
+  ])("maps %o to %s", async (row, expected) => {
+    useFakeDb({ responses: [[row]] });
+    await expect(changeLeadStage({ leadId: LEAD_ID, stage: "new", lostReason: null }, "user-1")).resolves.toBe(
+      expected,
+    );
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(
+      changeLeadStage({ leadId: LEAD_ID, stage: "new", lostReason: null }, "user-1"),
+    ).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+describe("changeLeadOwner", () => {
+  const input = { leadId: LEAD_ID, ownerUserId: "user-2" };
+
+  it("updates the owner (IS DISTINCT FROM) and inserts owner_changed in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, changed: true, owner_ok: true }]] });
+
+    await expect(changeLeadOwner(input, "user-1")).resolves.toBe("changed");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toMatch(
+      /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok \)/,
+    );
+    expect(statement).toContain(
+      "target AS ( SELECT id, owner_user_id FROM leads WHERE id = $4::uuid AND archived_at IS NULL FOR UPDATE )",
+    );
+    // A lead without owner (NULL) also gets the first one: IS DISTINCT FROM, never "<>".
+    expect(statement).toContain(
+      "updated AS ( UPDATE leads SET owner_user_id = $5, updated_at = now() FROM target, checks WHERE leads.id = target.id AND checks.owner_ok AND target.owner_user_id IS DISTINCT FROM $6 RETURNING leads.id, target.owner_user_id AS owner_from )",
+    );
+    // owner_from is the previous owner, NULL for an unassigned lead.
+    expect(statement).toContain(
+      "activity AS ( INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id) SELECT id, 'owner_changed', owner_from, $7, $8 FROM updated )",
+    );
+    expect(statement).toMatch(
+      /SELECT EXISTS \(SELECT 1 FROM target\) AS found, EXISTS \(SELECT 1 FROM updated\) AS changed, owner_ok FROM checks$/,
+    );
+    expect(fake.queries[0].params).toEqual([
+      "user-2", "commercial", "admin", LEAD_ID, "user-2", "user-2", "user-2", "user-1",
+    ]);
+  });
+
+  it.each([
+    [{ found: true, changed: true, owner_ok: true }, "changed"],
+    [{ found: true, changed: false, owner_ok: true }, "no_change"],
+    [{ found: true, changed: false, owner_ok: false }, "invalid_owner"],
+    [{ found: false, changed: false, owner_ok: true }, "not_found"],
+    [{ found: false, changed: false, owner_ok: false }, "not_found"],
+  ])("maps %o to %s", async (row, expected) => {
+    useFakeDb({ responses: [[row]] });
+    await expect(changeLeadOwner(input, "user-1")).resolves.toBe(expected);
   });
 });

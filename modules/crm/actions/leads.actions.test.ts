@@ -6,16 +6,26 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/auth/guards", () => ({ requirePermission: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
-vi.mock("../services/leads.service", () => ({ createLead: vi.fn() }));
+vi.mock("../services/leads.service", () => ({
+  createLead: vi.fn(),
+  updateLead: vi.fn(),
+  changeLeadStage: vi.fn(),
+  changeLeadOwner: vi.fn(),
+}));
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import { createLeadSchema } from "../schemas/leads.schema";
-import { createLead } from "../services/leads.service";
+import { changeLeadOwner, changeLeadStage, createLead, updateLead } from "../services/leads.service";
 import type { LeadActionState } from "../types/leads.types";
-import { createLeadAction } from "./leads.actions";
+import {
+  changeLeadOwnerAction,
+  changeLeadStageAction,
+  createLeadAction,
+  updateLeadAction,
+} from "./leads.actions";
 
 const IDLE: LeadActionState = { status: "idle" };
 const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
@@ -90,14 +100,14 @@ describe("createLeadAction: permisos en llamadas directas", () => {
 });
 
 describe("createLeadAction", () => {
-  it("con datos válidos crea con el id de la sesión como autor, revalida y redirige a la lista", async () => {
+  it("con datos válidos crea con el id de la sesión como autor, revalida la lista y redirige a la ficha", async () => {
     signIn("session-user");
     const data = form({ ...VALID, stage: "paid", createdBy: "intruder", consentVersion: "fake", actorUserId: "x" });
     await expect(createLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
     expect(createLead).toHaveBeenCalledExactlyOnceWith(createLeadSchema.parse(VALID), "session-user");
     expect(vi.mocked(createLead).mock.calls[0][0]).not.toHaveProperty("stage");
     expect(revalidatePath).toHaveBeenCalledExactlyOnceWith("/crm/leads");
-    expect(redirect).toHaveBeenCalledExactlyOnceWith("/crm/leads");
+    expect(redirect).toHaveBeenCalledExactlyOnceWith(`/crm/leads/${LEAD_ID}`);
   });
 
   it("con datos inválidos devuelve invalid_input con fieldErrors y values, sin llamar al service", async () => {
@@ -201,5 +211,224 @@ describe("createLeadAction: errores del service", () => {
     }
     expect(revalidatePath).not.toHaveBeenCalled();
     expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+const EDIT = {
+  leadId: LEAD_ID,
+  fullName: "Ana Pérez",
+  phone: "+51 999 888 777",
+  email: "",
+  location: "",
+  tripId: TRIP_ID,
+  destinationText: "",
+};
+const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
+const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
+
+type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
+
+const F3_ACTIONS = [
+  ["updateLeadAction", updateLeadAction, EDIT, updateLead],
+  ["changeLeadStageAction", changeLeadStageAction, STAGE, changeLeadStage],
+  ["changeLeadOwnerAction", changeLeadOwnerAction, OWNER, changeLeadOwner],
+] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
+
+describe("acciones de la ficha: permisos y errores del service", () => {
+  it.each(F3_ACTIONS)("%s sin sesión devuelve unauthorized y no llama al service", async (_, action, values, service) => {
+    vi.mocked(requirePermission).mockRejectedValue(new UnauthorizedError());
+    expect(await action(IDLE, form(values))).toMatchObject({ status: "error", code: "unauthorized" });
+    expect(service).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it.each(F3_ACTIONS)("%s sin permiso (runner) devuelve forbidden y no llama al service", async (_, action, values, service) => {
+    vi.mocked(requirePermission).mockRejectedValue(new ForbiddenError());
+    expect(await action(IDLE, form(values))).toEqual({
+      status: "error", code: "forbidden", message: "No tienes permiso para gestionar leads.",
+    });
+    expect(requirePermission).toHaveBeenCalledExactlyOnceWith("leads.manage");
+    expect(service).not.toHaveBeenCalled();
+  });
+
+  it.each(F3_ACTIONS)("%s con datos inválidos devuelve invalid_input sin llamar al service", async (_, action, values, service) => {
+    const result = await action(IDLE, form({ ...values, leadId: "abc", secret: "no-devolver" }));
+    expect(result).toMatchObject({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { leadId: ["El lead no es válido."] },
+      values: { ...values, leadId: "abc" },
+    });
+    if (result.status === "error") expect(result.values).not.toHaveProperty("secret");
+    expect(service).not.toHaveBeenCalled();
+  });
+
+  it.each(F3_ACTIONS)("%s: si el service lanza, lanza 'lead action failed' sin causa ni consola", async (_, action, values, service) => {
+    const spies = ["error", "warn", "log"].map((method) =>
+      vi.spyOn(console, method as "error").mockImplementation(() => {}),
+    );
+    vi.mocked(service).mockRejectedValue(new Error('Failed query: update "leads" params: Ana Pérez,+51999888777'));
+    let thrown: unknown;
+    try {
+      await action(IDLE, form(values));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toEqual(new Error("lead action failed"));
+    expect(thrown).not.toHaveProperty("cause");
+    expect((thrown as Error).stack ?? "").not.toContain("Ana Pérez");
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it.each(F3_ACTIONS)("%s con not_found devuelve el mensaje fijo y no revalida", async (_, action, values, service) => {
+    vi.mocked(service).mockResolvedValue("not_found" as never);
+    expect(await action(IDLE, form(values))).toEqual({
+      status: "error",
+      code: "not_found",
+      message: "El lead ya no existe o está archivado. Recarga la página.",
+      values,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("updateLeadAction", () => {
+  it("guarda solo los datos de contacto, revalida la lista y la ficha y redirige a la ficha", async () => {
+    vi.mocked(updateLead).mockResolvedValue("updated");
+    const data = form({ ...EDIT, stage: "paid", ownerUserId: "intruder", actorUserId: "intruder", source: "web_form" });
+
+    await expect(updateLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
+
+    expect(updateLead).toHaveBeenCalledExactlyOnceWith({
+      leadId: LEAD_ID,
+      fullName: "Ana Pérez",
+      phone: "+51999888777",
+      email: null,
+      location: null,
+      tripId: TRIP_ID,
+      destinationText: null,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).toHaveBeenCalledExactlyOnceWith(`/crm/leads/${LEAD_ID}`);
+  });
+
+  it("con un email inválido devuelve el error en su campo y conserva lo escrito", async () => {
+    const values = { ...EDIT, email: "ana@" };
+    expect(await updateLeadAction(IDLE, form(values))).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { email: ["Introduce un correo válido."] },
+      values,
+    });
+    expect(updateLead).not.toHaveBeenCalled();
+  });
+
+  it("con invalid_trip devuelve el error en el campo del viaje", async () => {
+    vi.mocked(updateLead).mockResolvedValue("invalid_trip");
+    expect(await updateLeadAction(IDLE, form(EDIT))).toEqual({
+      status: "error",
+      code: "invalid_trip",
+      message: "Ese viaje ya no está disponible.",
+      fieldErrors: { tripId: ["Ese viaje ya no está disponible."] },
+      values: EDIT,
+    });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+});
+
+describe("changeLeadStageAction", () => {
+  it("cambia la etapa con el id de la sesión como autor, ignora campos extra y revalida", async () => {
+    signIn("session-user");
+    vi.mocked(changeLeadStage).mockResolvedValue("changed");
+    const data = form({ ...STAGE, lostReason: "x", actorUserId: "intruder" });
+
+    expect(await changeLeadStageAction(IDLE, data)).toEqual({ status: "success", message: "Etapa actualizada." });
+    expect(changeLeadStage).toHaveBeenCalledExactlyOnceWith(
+      { leadId: LEAD_ID, stage: "quoted", lostReason: null },
+      "session-user",
+    );
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("Perdido sin motivo muestra «Indica el motivo de la pérdida.» y no llama al service", async () => {
+    const result = await changeLeadStageAction(IDLE, form({ ...STAGE, stage: "lost" }));
+    expect(result).toMatchObject({
+      code: "invalid_input",
+      fieldErrors: { lostReason: ["Indica el motivo de la pérdida."] },
+      values: { ...STAGE, stage: "lost" },
+    });
+    expect(changeLeadStage).not.toHaveBeenCalled();
+  });
+
+  it("Perdido con motivo envía el motivo al service", async () => {
+    vi.mocked(changeLeadStage).mockResolvedValue("changed");
+    await changeLeadStageAction(IDLE, form({ ...STAGE, stage: "lost", lostReason: " Eligió otra agencia " }));
+    expect(changeLeadStage).toHaveBeenCalledExactlyOnceWith(
+      { leadId: LEAD_ID, stage: "lost", lostReason: "Eligió otra agencia" },
+      "staff-1",
+    );
+  });
+
+  it("la misma etapa devuelve «No hay cambios.» sin revalidar", async () => {
+    vi.mocked(changeLeadStage).mockResolvedValue("no_change");
+    expect(await changeLeadStageAction(IDLE, form(STAGE))).toEqual({
+      status: "error", code: "no_change", message: "No hay cambios.", values: STAGE,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("changeLeadOwnerAction", () => {
+  it("reasigna con el id de la sesión como autor, ignora campos extra y revalida", async () => {
+    signIn("session-user");
+    vi.mocked(changeLeadOwner).mockResolvedValue("changed");
+    const data = form({ ...OWNER, actorUserId: "intruder" });
+
+    expect(await changeLeadOwnerAction(IDLE, data)).toEqual({
+      status: "success", message: "Responsable actualizado.",
+    });
+    expect(changeLeadOwner).toHaveBeenCalledExactlyOnceWith(
+      { leadId: LEAD_ID, ownerUserId: "staff-2" },
+      "session-user",
+    );
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+  });
+
+  it("sin elegir responsable muestra «Elige un responsable.» y nunca deja el lead sin responsable", async () => {
+    const result = await changeLeadOwnerAction(IDLE, form({ ...OWNER, ownerUserId: "" }));
+    expect(result).toMatchObject({
+      code: "invalid_input",
+      fieldErrors: { ownerUserId: ["Elige un responsable."] },
+    });
+    expect(changeLeadOwner).not.toHaveBeenCalled();
+  });
+
+  it("con invalid_owner devuelve el error en el campo del responsable", async () => {
+    vi.mocked(changeLeadOwner).mockResolvedValue("invalid_owner");
+    expect(await changeLeadOwnerAction(IDLE, form(OWNER))).toEqual({
+      status: "error",
+      code: "invalid_owner",
+      message: "Ese responsable ya no tiene acceso. Elige otro.",
+      fieldErrors: { ownerUserId: ["Ese responsable ya no tiene acceso. Elige otro."] },
+      values: OWNER,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("el mismo responsable devuelve «No hay cambios.»", async () => {
+    vi.mocked(changeLeadOwner).mockResolvedValue("no_change");
+    expect(await changeLeadOwnerAction(IDLE, form(OWNER))).toMatchObject({
+      code: "no_change", message: "No hay cambios.",
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
