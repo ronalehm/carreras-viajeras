@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { ArrowUpRight } from "lucide-react";
-import type { Trip } from "../utils/trips";
+import type { TripContent } from "../utils/trips";
 
-export function TripFacts({ trip }: { trip: Trip }) {
+export function TripFacts({ trip }: { trip: TripContent }) {
   const facts: { label: string; value: ReactNode; note: ReactNode }[] = [
     {
       label: "LA CARRERA",

@@ -177,7 +177,7 @@ Prueba manual opcional de las restricciones, **solo en una rama de desarrollo de
 
 ### Lectura pública para la landing
 
-La landing (otra rama) lee el catálogo con funciones de servidor, sin API HTTP (no existe `GET /api/trips`):
+El catálogo se lee con funciones de servidor, sin API HTTP (no existe `GET /api/trips`):
 
 ```ts
 import {
@@ -196,8 +196,34 @@ import {
 - Ambas consultan Neon en cada petición (`connection()`): la página nunca se prerenderiza con datos de la base. No usar `generateStaticParams` sobre el catálogo ni `revalidatePath`; un viaje publicado aparece en la siguiente carga.
 - `PublicTrip` solo tiene campos públicos: `slug`, `title`, `city`, `country`, `raceDate`, `startDate`, `endDate`, `distances`, `summary`, `includes`, `priceUsd`, `capacity` e `imageUrl` (sin `id`, `status` ni fechas de auditoría). Las fechas son `YYYY-MM-DD`; `startDate` y `endDate` vienen las dos o ninguna.
 - Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" y `formatTripPrice(null)` → "Precio a consultar". Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
-- Llamar a `getPublishedTripBySlug` en `generateMetadata` y en la página son dos consultas; la landing puede envolverla con `cache` de React en su propio módulo. Los errores de la base se propagan al `error.tsx` de la página.
-- **Cuándo cambiar al catálogo:** hasta que esta Fase 1 esté en `main`, la migración aplicada y "Maratón de Santiago 2027" creado y publicado desde `/crm/viajes` (Fase 2), la landing mantiene su contenido fijo; si cambiara antes, `/viajes/maraton-santiago-2027` devolvería 404. Mientras tanto, sus tests pueden simular `@/modules/trips`. Lo que no está en `PublicTrip` (itinerario, hotel, FAQ, testimonios, WhatsApp, `/contacto`) sigue como contenido fijo.
+#### Qué usa hoy la landing
+
+Especificado en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4).
+
+- **`/viajes/[slug]`** se renderiza en cada petición: `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y combina el resultado con el contenido fijo de `TRIPS`. Del catálogo salen el título (`h1` y `<title>`), el resumen (meta description), la fecha de la carrera, el precio "desde" (`formatTripPrice`, en "EL PAQUETE" y "AL CONTADO") y los cupos ("100 cupos definidos", o "Cupos por confirmar" si no hay). El resto (portada, ruta, destacados, cuotas, reserva, acompañante, incluidos, pendientes, enlace oficial y CTA) sigue como contenido fijo de la landing. No se muestran `imageUrl`, `includes`, `distances`, `city`, `country` ni las fechas de viaje.
+- **404:** un slug sin contenido fijo en `TRIPS` devuelve `null` sin consultar Neon; si el viaje no existe, está en borrador o archivado, `getPublishedTripBySlug` devuelve `null`. En ambos casos, `notFound()` responde con estado `404`. No hay `loading.tsx`, para que el estado no quede en `200`.
+- **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado.
+- **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
+- **`/` no consulta Neon:** sigue estática y conserva su propia copia de fecha, precio y cupos en `TRIPS` (`modules/landing/utils/trips.ts`), igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de consulta. **Si el equipo cambia la fecha, el precio o los cupos en el CRM, hay que editar a mano esa copia en la landing**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
+- `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` aparece como dinámica (`ƒ`).
+
+#### Precondición operativa (antes de mergear)
+
+Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a leer `production`; si el despliegue es manual, se comprueba antes de `npm run deploy`. En la rama `production` de Neon:
+
+1. **Migración `0001` aplicada** (ver "Migración de la tabla de viajes"). Comprobación: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, la página responde **500**.
+2. **Viaje creado en `/crm/viajes/nuevo` y publicado**, con:
+   - slug `maraton-santiago-2027` (exacto);
+   - título "Maratón de Santiago 42K 2027";
+   - ciudad "Santiago" y país "Chile";
+   - fecha de la carrera 2027-05-16 y distancias "42K";
+   - resumen: "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.";
+   - precio desde 1499 y cupos 100;
+   - sin fechas de viaje ni imagen (no se muestran).
+
+   Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página responde **404** y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a un 404.
+3. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
+4. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
 
 ## Leads (CRM comercial)
 
