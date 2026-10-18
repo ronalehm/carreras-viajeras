@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { MobileMenu } from "./MobileMenu";
 
 const NAV_LINKS = [
   { href: "/#paquete", label: "Próxima maratón" },
@@ -33,7 +34,7 @@ export function SiteBrand({ className }: { className?: string }) {
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-x-4 gap-y-2 bg-background px-[5%] py-3 text-primary shadow-sm md:px-[6%] lg:h-24 lg:flex-nowrap lg:py-0">
+    <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-x-2 gap-y-2 sm:gap-x-4 bg-background px-[5%] py-3 text-primary shadow-sm md:px-[6%] lg:h-24 lg:flex-nowrap lg:py-0">
       <SiteBrand />
       {/* md–lg: the nav takes its own row so it never collides with the actions. */}
       <nav
@@ -46,12 +47,12 @@ export function SiteHeader() {
           </Link>
         ))}
       </nav>
-      <div className="ml-auto flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+      <div className="ml-auto flex items-center justify-end gap-1 sm:gap-3">
         <Link
           href="/cuenta"
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "h-auto gap-1.5 rounded-sm border-primary px-3 py-2.5 text-xs font-bold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-3.5 sm:py-3",
+            "h-auto gap-1.5 rounded-sm border-primary px-2.5 py-2.5 text-xs font-bold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-3.5 sm:py-3",
           )}
         >
           Ingresar / Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
@@ -60,11 +61,12 @@ export function SiteHeader() {
           href="/contacto"
           className={cn(
             buttonVariants(),
-            "h-auto gap-1.5 rounded-sm px-3 py-2.5 text-xs font-bold sm:px-4 sm:py-3 sm:text-sm",
+            "h-auto gap-1.5 rounded-sm px-3 py-2.5 text-xs font-bold max-md:hidden sm:px-4 sm:py-3 sm:text-sm",
           )}
         >
           Quiero correr <ArrowUpRight aria-hidden />
         </Link>
+        <MobileMenu links={NAV_LINKS} />
       </div>
     </header>
   );
