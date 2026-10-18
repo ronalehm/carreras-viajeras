@@ -2,6 +2,7 @@
 
 - Módulo: landing
 - Estado: borrador
+- **OBSOLETA — no aprobar ni implementar.** Depende de Cloudflare D1, Cloudflare Access y de las specs eliminadas `crm-auth.md` y `platform-cloudflare-deploy.md`. Debe reescribirse sobre `platform-neon-foundation.md` (Neon + Drizzle `neon-http` + Neon Auth) antes de pedir aprobación.
 - Orden en el roadmap: 4 de 5 (`crm-auth` → `trips-catalog` → `crm-leads-pipeline` → `landing-public-site` → `platform-cloudflare-deploy`)
 - Depende de: `trips-catalog.md` Fases 1–3 (`listPublishedTrips`, `formatPrice`, `lib/dates.ts`, `lib/formState.ts`, shadcn `badge`, `field`, `input`, `textarea`, `native-select`), `crm-leads-pipeline.md` Fase 1 (`createLead`, `createLeadSchema`, shadcn `card`) — solo para la Fase 2 de esta spec — y `crm-auth.md` (`lib/env.ts`, ampliado en Fase 3).
 

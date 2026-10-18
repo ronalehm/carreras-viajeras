@@ -2,6 +2,7 @@
 
 - Módulo: crm
 - Estado: borrador
+- **OBSOLETA — no aprobar ni implementar.** Depende de Cloudflare D1, Cloudflare Access y de las specs eliminadas `crm-auth.md` y `platform-cloudflare-deploy.md`. Debe reescribirse sobre `platform-neon-foundation.md` (Neon + Drizzle `neon-http` + Neon Auth) antes de pedir aprobación.
 - Orden en el roadmap: 3 de 5 (`crm-auth` → `trips-catalog` → `crm-leads-pipeline` → `landing-public-site` → `platform-cloudflare-deploy`)
 - Depende de: `crm-auth.md` (layout `/crm`, `CrmShell`, `requireCrmUser()`), `trips-catalog.md` Fases 1–3 (tabla `trips`, `lib/db.ts`, `lib/dates.ts`, `lib/formState.ts`, shadcn `badge`, `field`, `input`, `textarea`, `native-select`; "Patrón de datos").
 
