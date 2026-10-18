@@ -3,7 +3,11 @@ import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const NAV_LINKS = [{ href: "/contacto", label: "Contacto" }];
+const NAV_LINKS = [
+  { href: "/#paquete", label: "Próxima maratón" },
+  { href: "/#blog", label: "Blog" },
+  { href: "/contacto", label: "Contacto" },
+];
 
 /** Brand mark shared by header and footer; inherits the text color. */
 export function SiteBrand({ className }: { className?: string }) {
