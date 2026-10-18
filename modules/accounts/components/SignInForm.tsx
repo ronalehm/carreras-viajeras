@@ -15,10 +15,17 @@ type SignInFormProps = {
   defaultEmail?: string;
   notice?: string;
   onUnverified: (email: string) => void;
+  onForgotPassword: () => void;
   onSignUp: () => void;
 };
 
-export function SignInForm({ defaultEmail, notice, onUnverified, onSignUp }: SignInFormProps) {
+export function SignInForm({
+  defaultEmail,
+  notice,
+  onUnverified,
+  onForgotPassword,
+  onSignUp,
+}: SignInFormProps) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<SignInInput>>({});
@@ -55,7 +62,8 @@ export function SignInForm({ defaultEmail, notice, onUnverified, onSignUp }: Sig
           onUnverified(email);
           return;
         }
-        setFormError(authErrorMessage(sendError, "sign-in"));
+        // The password was correct: a failed send is a service problem, never "wrong credentials".
+        setFormError(authErrorMessage(sendError.status === 429 ? sendError : null, "sign-in"));
         setPending(false);
         return;
       }
@@ -130,6 +138,9 @@ export function SignInForm({ defaultEmail, notice, onUnverified, onSignUp }: Sig
         {pending ? "Entrando…" : "Iniciar sesión"}
       </Button>
 
+      <Button type="button" variant="link" onClick={onForgotPassword}>
+        ¿Olvidaste tu contraseña?
+      </Button>
       <Button type="button" variant="link" onClick={onSignUp}>
         ¿Te invitaron? Crea tu cuenta
       </Button>
