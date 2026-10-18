@@ -676,11 +676,11 @@ Coordinación: PR #12 y PR #8 modifican `lib/db-schema.ts`, `drizzle/meta/_journ
 
 ### Fase 2 — CRM: reservas (5 tareas, 15 archivos)
 Requisitos previos: F1 cerrada y migración aplicada en la rama de Neon de prueba. Si PR #12 sigue abierto, F2-T5 se ejecuta después de integrarlo (ambos tocan `CrmShell`).
-- [ ] T1 — Schemas de reserva (con `usdIntegerSchema`) y tests; tipos de reservas del CRM · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 1 · secuencial
-- [ ] T2 — Service de reservas con tests · archivos: `modules/bookings/services/bookings.service.ts`, `modules/bookings/services/bookings.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions de reservas con tests de llamada directa · archivos: `modules/bookings/actions/bookings.actions.ts`, `modules/bookings/actions/bookings.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — Componentes: `BookingFilters`, `BookingTable`, `BookingForm` · archivos: `modules/bookings/components/BookingFilters.tsx`, `modules/bookings/components/BookingTable.tsx`, `modules/bookings/components/BookingForm.tsx` · depende de: T3 · secuencial
-- [ ] T5 — Enlace "Reservas" en `CrmShell`, exports y páginas; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — Schemas de reserva (con `usdIntegerSchema`) y tests; tipos de reservas del CRM · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 1 · secuencial
+- [x] T2 — Service de reservas con tests · archivos: `modules/bookings/services/bookings.service.ts`, `modules/bookings/services/bookings.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions de reservas con tests de llamada directa · archivos: `modules/bookings/actions/bookings.actions.ts`, `modules/bookings/actions/bookings.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — Componentes: `BookingFilters`, `BookingTable`, `BookingForm` · archivos: `modules/bookings/components/BookingFilters.tsx`, `modules/bookings/components/BookingTable.tsx`, `modules/bookings/components/BookingForm.tsx` · depende de: T3 · secuencial
+- [x] T5 — Enlace "Reservas" en `CrmShell`, exports y páginas; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 3 — CRM: pagos (4 tareas, 11 archivos)
 - [ ] T1 — Schemas de pago con tests; tipos de pagos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 2 · secuencial

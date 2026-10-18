@@ -1,4 +1,6 @@
+import type { z } from "zod";
 import type { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
+import type { bookingFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
 export type ItineraryKind = (typeof itineraryKindEnum.enumValues)[number];
@@ -77,3 +79,40 @@ export type Timeline = {
   unscheduled: TimelineEntry[];
   itineraryConfirmed: boolean;
 };
+
+
+// CRM (bookings.manage). Amounts are integer USD; paidUsd excludes voided payments.
+export type BookingInput = z.output<typeof bookingFormSchema>;
+export type UpdateBookingInput = z.output<typeof updateBookingSchema>;
+
+export type CrmBookingListItem = {
+  id: string;
+  participantName: string;
+  participantEmail: string;
+  status: BookingStatus;
+  packageLabel: string;
+  totalUsd: number;
+  paidUsd: number;
+  linked: boolean; // runner_user_id is set; the id itself never leaves the service
+  trip: { id: string; title: string };
+};
+
+export type CrmBooking = CrmBookingListItem & {
+  distance: string | null;
+  balanceDueOn: string | null; // YYYY-MM-DD
+  internalNote: string | null;
+  createdAt: Date;
+};
+
+// Fits ConfirmActionState of components/shared/ConfirmActionButton.
+export type BookingActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | {
+      status: "error";
+      code: "unauthorized" | "forbidden" | "invalid_input" | "invalid_trip" | "duplicate"
+        | "email_locked" | "not_found" | "invalid_transition";
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+      values?: Record<string, string>;
+    };
