@@ -56,7 +56,7 @@ Los runners no se registran: consultan los viajes en la landing, envían formula
 2. **Estados y transiciones:** un viaje nuevo nace en `draft`. Transiciones permitidas: `draft → published` (publicar), `published → draft` (despublicar) y `draft | published → archived` (archivar). `archived` es final en el MVP y un viaje archivado no se edita.
 3. **Slug estable:** el `slug` solo se puede cambiar mientras el viaje está en `draft`. Los leads futuros se vinculan por `id` (UUID inmutable); el `slug` es el identificador público que usa la landing.
 4. **Lectura pública:** solo devuelve viajes `published` y solo los campos de `PublicTrip` (sin `id`, `status`, fechas de auditoría ni otros datos internos). Se ejecuta en cada petición.
-5. **Permiso:** crear, editar y cambiar el estado exigen `trips.manage`, comprobado en cada Server Action y en cada página del CRM de viajes. Por defecto solo lo tiene `admin` (provisional, Pregunta abierta 2).
+5. **Permiso:** crear, editar y cambiar el estado exigen `trips.manage`, comprobado en cada Server Action y en cada página del CRM de viajes. Lo tienen `commercial` y `admin` (decisión del usuario).
 6. **CRM:** la lista muestra todos los viajes, con los archivados al final. Publicar, despublicar y archivar piden confirmación. Los errores de validación se muestran junto a cada campo y el formulario conserva lo escrito.
 7. **Errores:** ningún mensaje original de la base de datos llega a la respuesta, a la UI ni a los logs.
 
@@ -65,7 +65,7 @@ Los runners no se registran: consultan los viajes en la landing, envían formula
 Fase 1 (datos, permiso y lectura pública):
 - [ ] (F1) Dado el schema nuevo, cuando ejecuto `npm run db:generate` sin credenciales, entonces se genera una sola migración nueva `drizzle/0001_*.sql` con el enum `trip_status`, la tabla `trips`, el índice único `trips_slug_uq` y los CHECK de la tabla. El SQL no contiene `neon_auth`, `DROP`, `CREATE SCHEMA` ni cambios en `profiles`, `staff_assignments` o `staff_invitations`, y `drizzle.config.ts` no cambia.
 - [ ] (F1, manual del usuario, en una rama de desarrollo de Neon) Dada la migración aplicada a mano en el SQL Editor, cuando inserto filas de prueba, entonces la base rechaza: slug con mayúsculas o espacios, slug duplicado, `distances` vacío, precio sin moneda o moneda sin precio, `capacity = 0`, `image_url` que no empieza por `https://` y `start_date` sin `end_date` o con `race_date` fuera del rango.
-- [ ] (F1) Dado `can()`, entonces `admin` tiene `trips.manage`, `commercial` no lo tiene (provisional) y sin roles no lo tiene nadie; los permisos existentes no cambian (unit test).
+- [ ] (F1) Dado `can()`, entonces `commercial` y `admin` tienen `trips.manage` y sin roles no lo tiene nadie; los permisos existentes no cambian (unit test).
 - [ ] (F1) Dado el service con la base simulada, cuando llamo `listPublishedTrips()`, entonces llama antes a `connection()`, la consulta filtra `status = 'published'`, ordena por `race_date` y `slug`, solo selecciona las columnas públicas y devuelve `PublicTrip[]` con `price: null` si no hay precio (unit test).
 - [ ] (F1) Dado `getPublishedTripBySlug("Maraton Santiago")` (formato inválido), entonces devuelve `null` sin consultar la base; dado un slug válido de un viaje en `draft` o `archived` (la consulta no devuelve filas), entonces devuelve `null` (unit test).
 - [ ] (F1) Dado `tripFormSchema`, cuando recibe los strings de un `FormData` válido, entonces devuelve las listas ya separadas y limpias, los números como enteros, la moneda en mayúsculas y los opcionales vacíos como `null`; y rechaza cada regla del Requisito 1 con el error en su campo (unit test).
@@ -79,7 +79,7 @@ Fase 2 (gestión en el CRM):
 - [ ] (F2) Dada la Pregunta abierta 1 resuelta como "webpack", cuando reviso `package.json`, entonces `build` es `next build --webpack` y `dev` sigue con Turbopack; el tamaño gzip del Worker tras el cambio queda registrado en el resumen de la tarea.
 - [ ] (F2) Dado un admin verificado, cuando abre `/crm/viajes`, entonces ve dentro de `CrmShell` el título "Viajes", el enlace "Nuevo viaje" y una tabla con: viaje (título y slug), destino ("Ciudad, País"), fecha de carrera (`formatTripDate`), precio (`formatTripPrice`), estado (`Badge` "Borrador", "Publicado" o "Archivado") y acciones. Los archivados aparecen al final y sin acciones.
 - [ ] (F2) Dado que no hay viajes, cuando abro `/crm/viajes`, entonces veo "Aún no hay viajes. Crea el primero con «Nuevo viaje»."
-- [ ] (F2) Dado un `commercial` verificado (sin `trips.manage`), cuando abre `/crm/viajes` o `/crm/viajes/nuevo`, entonces ve el shell con el título de la página y el texto "No tienes permiso para gestionar viajes. Si lo necesitas, pídeselo a un administrador.", y la cabecera no muestra "Viajes". Sin sesión, se le redirige a `/crm/acceso`.
+- [ ] (F2) Dado un `commercial` verificado, cuando abre `/crm/viajes` o `/crm/viajes/nuevo`, entonces ve la lista o el formulario y la cabecera muestra "Viajes" (y no "Usuarios"). Sin sesión, se le redirige a `/crm/acceso`. Si en el futuro un rol del CRM no tiene `trips.manage`, la página muestra el `h1` y "No tienes permiso para gestionar viajes. Si lo necesitas, pídeselo a un administrador." (rama `forbidden`, cubierta por el test de `getCrmAccess`).
 - [ ] (F2) Dado un admin, entonces la cabecera de `CrmShell` muestra el enlace "Viajes" a `/crm/viajes`, además de "Usuarios".
 - [ ] (F2) Dado `/crm/viajes/nuevo` con datos válidos, cuando pulso "Crear viaje", entonces vuelvo a `/crm/viajes` y el viaje aparece como "Borrador".
 - [ ] (F2) Dado el formulario con título de 2 caracteres, distancias vacías, precio sin moneda o un slug ya usado, cuando lo envío, entonces veo el error bajo el campo correspondiente ("Ese identificador ya está en uso." para el slug) y el resto de lo escrito se conserva.
@@ -144,7 +144,7 @@ export type Permission = "crm.access" | "staff.manage" | "trips.manage";
 const PERMISSION_MATRIX = {
   "crm.access": ["commercial"],
   "staff.manage": [],
-  "trips.manage": [], // provisional: solo admin (Pregunta abierta 2). Para el equipo comercial: ["commercial"].
+  "trips.manage": ["commercial"], // admin pasa siempre
 };
 ```
 
@@ -286,7 +286,7 @@ Ambas bajo `app/crm/(protected)/`, heredan el layout protegido (`CrmShell`, `rob
 - `staffDisplay` (`CRM_TIME_ZONE`, `formatStaffDateTime`) **no** se usa: los viajes solo tienen fechas de calendario (ver Decisiones).
 
 ## Tests
-- `lib/auth/permissions.test.ts` (F1, ampliar): filas de `trips.manage` (`commercial` → false, `admin` → true, ambos → true, `[]` → false); los bucles "admin tiene todo" y "sin roles nada" incluyen `trips.manage`; los casos existentes no cambian.
+- `lib/auth/permissions.test.ts` (F1, ampliar): filas de `trips.manage` (`commercial` → true, `admin` → true, ambos → true, `[]` → false); los bucles "admin tiene todo" y "sin roles nada" incluyen `trips.manage`; los casos existentes no cambian.
 - `modules/trips/schemas/trips.schema.test.ts` (F1):
   - `tripStatusSchema.options` coincide con `tripStatusEnum.enumValues`;
   - caso válido completo → listas separadas (`"42K, 21K , ,10K"` → `["42K","21K","10K"]`; líneas en blanco de `includes` descartadas), números enteros, `"usd"` → `"USD"`, vacíos → `null`;
@@ -354,7 +354,7 @@ Requisito previo: Fase 1 de esta spec cerrada y Fase 3 de `accounts-roles-permis
 1. **Tamaño del Worker (bloquea F2-T1).** Hoy ~1610 KiB gzip; ~1,8 MiB estimados tras `/crm/admin/usuarios`. F2 añade 1 ruta nueva bajo `/crm` más la dinámica (~160–320 KiB con Turbopack) y la landing de la otra rama sumará las suyas, así que con Turbopack se pasaría el umbral de consulta de 2 MiB (límite Free: 3 MiB). Opciones:
    - (a) **Recomendada:** `next build --webpack` como F2-T1, o antes en modo build (1 archivo) si la landing lo necesita primero. Se midió −458 KiB. `npm run dev` sigue con Turbopack; el coste es que dev y build usan bundlers distintos, así que la verificación con `build:worker` en Linux/WSL sigue siendo obligatoria.
    - (b) Mantener Turbopack y aceptar acercarse a 3 MiB, subiendo el umbral de consulta (¿a cuánto?).
-2. **¿Quién gestiona el catálogo?** La spec deja `trips.manage` solo para `admin` (mínimo privilegio). Si el equipo comercial también debe crear, editar y publicar viajes, basta con `"trips.manage": ["commercial"]` en la matriz (y su test). ¿Lo concedemos a `commercial`?
+2. ~~**¿Quién gestiona el catálogo?**~~ **Resuelta:** `commercial` y `admin` (`"trips.manage": ["commercial"]`).
 3. **Datos reales de "Maratón de Santiago 2027".** La web de referencia (`carreras-viajeras-santiago-2027.ronaldlora.chatgpt.site`) no resuelve desde este entorno (DNS `ENOTFOUND`), así que los campos salen de tu lista (fechas, ciudad, país, distancias, precio, qué incluye, cupos, imagen, estado). ¿Puedes confirmar fecha de la carrera, fechas del viaje, distancias, precio y moneda, lo que incluye, cupos y URL de imagen? ¿Falta algún campo que la web muestre (hotel, itinerario, requisitos)?
 4. **Moneda y precio.** La spec admite cualquier código ISO por viaje y un único precio "desde" entero. ¿Vendes siempre en una moneda (USD, PEN, CLP…)? Si es así, se cambia el campo libre por una lista fija. ¿Necesitas precios distintos por distancia o decimales?
 5. **Cupos.** `capacity` son cupos **totales** informativos y la landing decide si los muestra. ¿Prefieres "cupos disponibles" que el equipo actualiza a mano conforme registra pagos?
