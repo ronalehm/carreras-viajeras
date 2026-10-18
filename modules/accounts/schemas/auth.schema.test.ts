@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { signInSchema } from "./auth.schema";
+import { z } from "zod";
+import { signInSchema, signUpSchema, verifyEmailSchema } from "./auth.schema";
 
 describe("signInSchema", () => {
   it("trims the email and lowercases it", () => {
@@ -37,5 +38,115 @@ describe("signInSchema", () => {
     const result = signInSchema.safeParse({ email: "admin@example.com", password: " pass " });
 
     expect(result.data?.password).toBe(" pass ");
+  });
+});
+
+describe("signInSchema messages", () => {
+  it("declares Spanish messages for each field", () => {
+    const result = signInSchema.safeParse({ email: "x", password: "" });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      email: ["Introduce un correo válido."],
+      password: ["Introduce tu contraseña."],
+    });
+  });
+});
+
+describe("signUpSchema", () => {
+  const valid = {
+    name: "  Ana Pérez ",
+    email: " Ana@Example.com ",
+    password: "12345678",
+    confirmPassword: "12345678",
+  };
+
+  it("accepts valid data, trimming the name and normalizing the email", () => {
+    const result = signUpSchema.safeParse(valid);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({
+      name: "Ana Pérez",
+      email: "ana@example.com",
+      password: "12345678",
+      confirmPassword: "12345678",
+    });
+  });
+
+  it("requires a name", () => {
+    const result = signUpSchema.safeParse({ ...valid, name: "   " });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      name: ["Introduce tu nombre."],
+    });
+  });
+
+  it("rejects names longer than 100 characters", () => {
+    const result = signUpSchema.safeParse({ ...valid, name: "a".repeat(101) });
+
+    expect(z.flattenError(result.error!).fieldErrors.name).toEqual([
+      "El nombre no puede tener más de 100 caracteres.",
+    ]);
+  });
+
+  it("rejects passwords shorter than 8 characters", () => {
+    const result = signUpSchema.safeParse({
+      ...valid,
+      password: "1234567",
+      confirmPassword: "1234567",
+    });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      password: ["La contraseña debe tener al menos 8 caracteres."],
+    });
+  });
+
+  it("accepts passwords of exactly 8 and 128 characters", () => {
+    for (const password of ["a".repeat(8), "a".repeat(128)]) {
+      const result = signUpSchema.safeParse({ ...valid, password, confirmPassword: password });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("rejects passwords longer than 128 characters", () => {
+    const password = "a".repeat(129);
+    const result = signUpSchema.safeParse({ ...valid, password, confirmPassword: password });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      password: ["La contraseña no puede tener más de 128 caracteres."],
+    });
+  });
+
+  it("puts the mismatch error on confirmPassword", () => {
+    const result = signUpSchema.safeParse({ ...valid, confirmPassword: "87654321" });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      confirmPassword: ["Las contraseñas no coinciden."],
+    });
+  });
+
+  it("rejects an invalid email", () => {
+    const result = signUpSchema.safeParse({ ...valid, email: "ana" });
+
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      email: ["Introduce un correo válido."],
+    });
+  });
+});
+
+describe("verifyEmailSchema", () => {
+  it("accepts 6 digits, trimming spaces", () => {
+    const result = verifyEmailSchema.safeParse({ otp: " 123456 " });
+
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ otp: "123456" });
+  });
+
+  it.each(["12345", "1234567", "12a456", "", "12 3456"])("rejects %j", (otp) => {
+    const result = verifyEmailSchema.safeParse({ otp });
+
+    expect(result.success).toBe(false);
+    expect(z.flattenError(result.error!).fieldErrors).toEqual({
+      otp: ["Introduce el código de 6 dígitos."],
+    });
   });
 });
