@@ -604,11 +604,11 @@ Requisitos previos: Fase 1 cerrada, migraciones `0001` y `0002` aplicadas, y `tr
 - [x] T5 — Enlace a la ficha en `LeadTable`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadTable.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 4: historial y actividades (5 tareas, 15 archivos)
-- [ ] T1 — `lib/dates.ts` con tests y reexportación desde `staffDisplay` (sin tocar `StaffTable` ni `InvitationsTable`) · archivos: `lib/dates.ts`, `lib/dates.test.ts`, `modules/accounts/utils/staffDisplay.ts` · depende de: Fase 3 · secuencial (base, `lib/`)
-- [ ] T2 — Schema, tipos y etiquetas de actividades, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadDisplay.ts` · depende de: T1 (la base compartida va primero) · secuencial
-- [ ] T3 — Service de actividades con tests · archivos: `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `addLeadActivityAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T3 · secuencial
-- [ ] T5 — UI del seguimiento (`ActivityForm`, `LeadTimeline`), integración en la ficha y exports; medir el Worker · archivos: `modules/crm/components/ActivityForm.tsx`, `modules/crm/components/LeadTimeline.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — `lib/dates.ts` con tests y reexportación desde `staffDisplay` (sin tocar `StaffTable` ni `InvitationsTable`) · archivos: `lib/dates.ts`, `lib/dates.test.ts`, `modules/accounts/utils/staffDisplay.ts` · depende de: Fase 3 · secuencial (base, `lib/`)
+- [x] T2 — Schema, tipos y etiquetas de actividades, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadDisplay.ts` · depende de: T1 (la base compartida va primero) · secuencial
+- [x] T3 — Service de actividades con tests · archivos: `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `addLeadActivityAction` con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T3 · secuencial
+- [x] T5 — UI del seguimiento (`ActivityForm`, `LeadTimeline`), integración en la ficha y exports; medir el Worker · archivos: `modules/crm/components/ActivityForm.tsx`, `modules/crm/components/LeadTimeline.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 5: próxima acción y pendientes (5 tareas, 16 archivos)
 - [ ] T1 — `nextActionSchema`, filtro `seguimiento` (schema, tipos y mapa `followUp → seguimiento` de la query), con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: Fase 4 · secuencial
