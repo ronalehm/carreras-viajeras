@@ -8,6 +8,13 @@
       "when": 1792314305196,
       "tag": "0000_tough_thor",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792330697363,
+      "tag": "0001_young_korvac",
+      "breakpoints": true
     }
   ]
 }
