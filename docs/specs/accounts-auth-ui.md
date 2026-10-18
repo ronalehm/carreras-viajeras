@@ -276,9 +276,9 @@ Vitest. Los de servidor llevan `// @vitest-environment node` y `vi.mock("server-
 
 ### Fase 3: recuperar contraseña y documentación (3 tareas, 8 archivos)
 Requisito previo, manual y sin archivos: el usuario confirma en una rama de desarrollo que Neon Auth acepta `POST /api/auth/email-otp/request-password-reset` y `/api/auth/email-otp/reset-password`. Si no, se aplica la alternativa de "Decisiones" y se actualiza esta spec antes de implementar F3-T1 y F3-T2.
-- [ ] T1 — Schemas de recuperación y test · archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts` · depende de: Fase 2 y el requisito previo · secuencial
-- [ ] T2 — Formularios de recuperación y pasos en el panel, con test · archivos: `modules/accounts/components/ForgotPasswordForm.tsx`, `modules/accounts/components/ResetPasswordForm.tsx`, `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/SignInForm.tsx`, `modules/accounts/components/AccessPanel.test.tsx` · depende de: F3-T1 · secuencial
-- [ ] T3 — README: requisitos previos manuales de Neon Auth y checklist manual en producción de esta spec · archivos: `README.md` · depende de: Fase 2 · paralelo (con F3-T1 y F3-T2)
+- [x] T1 — Schemas de recuperación y test · archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts` · depende de: Fase 2 y el requisito previo · secuencial
+- [x] T2 — Formularios de recuperación y pasos en el panel, con test · archivos: `modules/accounts/components/ForgotPasswordForm.tsx`, `modules/accounts/components/ResetPasswordForm.tsx`, `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/SignInForm.tsx`, `modules/accounts/components/AccessPanel.test.tsx` · depende de: F3-T1 · secuencial
+- [x] T3 — README: requisitos previos manuales de Neon Auth y checklist manual en producción de esta spec · archivos: `README.md` · depende de: Fase 2 · paralelo (con F3-T1 y F3-T2)
 
 ## Preguntas abiertas
 1. **Si Neon Auth gestionado no admite la recuperación por código** (la comprobación previa de F3 lo dirá), ¿qué prefieres?
