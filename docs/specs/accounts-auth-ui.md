@@ -1,7 +1,7 @@
 # Acceso del equipo al CRM (UI de autenticación)
 
 - Módulo: accounts
-- Estado: borrador
+- Estado: aprobado
 - Depende de: accounts-roles-permissions.md (Fase 1 aprobada y desplegada en `main` eb75dd6), platform-neon-foundation.md (Fase 1 aprobada)
 
 ## Objetivo
