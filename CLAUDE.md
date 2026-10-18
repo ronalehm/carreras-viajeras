@@ -38,7 +38,7 @@ Next development reads `.env.local` copied from `.env.example`; local Wrangler/O
 
 Neon Auth includes localhost preconfigured; if local authentication fails, check callback and origin configuration. The user confirmed Neon Email Sign-up and Sign-in ON. Trusted origin `https://carreras-viajeras.mentec.dev` is still unverified. Existing auth users do not become CRM staff automatically. Phase 1 adds no frontend, CRM RBAC, organization endpoints, lead form or outbox. Future CRM access needs verified email plus current administrative role by stable user ID, denied by default; Access is only an optional additional layer. Future leads need a Neon outbox and retryable processing by local n8n through a private API. WhatsApp Business App stays manual initially. PostHog is disabled by default; Gemini is optional and outside this phase.
 
-`/api/health` is public liveness only: no database query or connection details. These foundation changes belong to PR #1 branch `claude/determined-cannon-bxoqo1`, not yet merged into `main`; use that branch before following this setup. Consult `README.md` for local setup and handoff steps.
+`/api/health` is public liveness only: no database query or connection details. These foundation changes were merged into `main` via PR #1. Consult `README.md` for local setup and handoff steps.
 
 Vitest runs in jsdom with Testing Library; `@/` alias resolved natively via `resolve.tsconfigPaths` (no vite-tsconfig-paths, no @vitejs/plugin-react — its latest version requires Babel 8 and conflicts with shadcn's Babel 7). Async Server Components can't be unit tested.
 
