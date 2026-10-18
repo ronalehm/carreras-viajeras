@@ -48,7 +48,7 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
       <div className="grid gap-6 sm:grid-cols-2">
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Etapa</h2>
-          <LeadStageForm leadId={lead.id} stage={lead.stage} />
+          <LeadStageForm key={lead.stage} leadId={lead.id} stage={lead.stage} />
         </section>
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Responsable</h2>

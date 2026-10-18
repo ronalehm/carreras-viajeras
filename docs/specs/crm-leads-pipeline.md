@@ -597,11 +597,11 @@ Requisitos previos: Fase 1 cerrada, migraciones `0001` y `0002` aplicadas, y `tr
 - [x] T4 — `LeadForm`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadForm.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/nuevo/page.tsx` · depende de: T2, T3 · secuencial
 
 ### Fase 3: ficha, edición, etapa y responsable (5 tareas, 15 archivos)
-- [ ] T1 — Schemas y tipos de edición, etapa y responsable, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts` · depende de: Fase 2 · secuencial
-- [ ] T2 — Service: `getLeadById`, `updateLead`, `changeLeadStage` y `changeLeadOwner`, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Acciones de edición, etapa y responsable, y alta que redirige a la ficha, con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — Componentes de la ficha y modo edición de `LeadForm` · archivos: `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadStageForm.tsx`, `modules/crm/components/LeadOwnerForm.tsx`, `modules/crm/components/LeadForm.tsx` · depende de: T3 · secuencial
-- [ ] T5 — Enlace a la ficha en `LeadTable`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadTable.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — Schemas y tipos de edición, etapa y responsable, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts` · depende de: Fase 2 · secuencial
+- [x] T2 — Service: `getLeadById`, `updateLead`, `changeLeadStage` y `changeLeadOwner`, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Acciones de edición, etapa y responsable, y alta que redirige a la ficha, con tests · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — Componentes de la ficha y modo edición de `LeadForm` · archivos: `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadStageForm.tsx`, `modules/crm/components/LeadOwnerForm.tsx`, `modules/crm/components/LeadForm.tsx` · depende de: T3 · secuencial
+- [x] T5 — Enlace a la ficha en `LeadTable`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadTable.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 4: historial y actividades (5 tareas, 15 archivos)
 - [ ] T1 — `lib/dates.ts` con tests y reexportación desde `staffDisplay` (sin tocar `StaffTable` ni `InvitationsTable`) · archivos: `lib/dates.ts`, `lib/dates.test.ts`, `modules/accounts/utils/staffDisplay.ts` · depende de: Fase 3 · secuencial (base, `lib/`)
