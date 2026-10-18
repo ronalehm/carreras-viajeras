@@ -1,12 +1,14 @@
 # Captura automática de leads (formulario web → CRM) y outbox para n8n
 
 - Módulo: crm (también `integrations`, nuevo, y `landing`)
-- Estado: aprobado
+- Estado: borrador
+- Estado de la implementación (2026-10-18): F1 y F2 implementadas y aprobadas por el reviewer; F3, F4 y F5 pendientes.
+- Enmienda (2026-10-18), marcada con "(enmienda 2)": (1) destinos de consulta alineados con `main`: Panamá y Medellín se sustituyen por Río de Janeiro (`rio`) y Roma (`roma`), con el mismo modelo (Santiago con el slug del catálogo → `trip_id` si está publicado; Río y Roma sin slug → `destination_text`); (2) la F4 se ajusta al código real de la landing en `main` (página del viaje que lee el catálogo publicado, `catalogTrip.ts` y su test, cuenta del runner y menú móvil) y exige la rama sincronizada con `main`; (3) la migración de captura y outbox es `drizzle/0004_fluffy_prodigy.sql` (antes `0003`), porque `main` ya tiene `0003_talented_skin.sql` (reservas); orden `0001 → 0002 → 0003 (reservas) → 0004 (outbox, dos bloques)`; (4) la F5 y su guía de n8n se alinean con la guía implementada en la F2 (bucle "Uno a uno", nodos con nombre, deduplicación por `event_id`), sin cambiar el contrato de la API. Las demás decisiones del usuario no cambian.
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): contrato de la sección "Leads y procesamiento posterior" (Turnstile en servidor, lead y evento en una transacción, idempotencia, outbox con lease, claim/ack para n8n local, máximo 8 intentos). Esta spec lo concreta y no lo contradice.
-  - `crm-leads-pipeline.md` (F1 implementada en `ff28b28`; enmendada para esta captura y de vuelta en borrador hasta su nueva aprobación): tablas `leads` y `lead_activities` (migración `0002`), `createLead`, `getLeadList`, `changeLeadStage` (su F3) y el permiso `leads.manage`. Esta spec **no duplica** ese modelo: lo amplía con la migración `0003` y toca su service solo donde se indica (ver "Relación con otras specs").
+  - (enmienda 2) `crm-leads-pipeline.md` (aprobada; F1–F6 implementadas y aprobadas por el reviewer): tablas `leads` y `lead_activities` (migración `0002`), `createLead`, `getLeadList`, `changeLeadStage` (su F3, ya implementada como una sola sentencia CTE) y el permiso `leads.manage`. Esta spec **no duplica** ese modelo: lo amplía con la migración `0004` y toca su service solo donde se indica (ver "Relación con otras specs").
   - `trips-catalog.md` (aprobada): slug `maraton-santiago-2027` y `trips.status = 'published'`.
-  - `landing-public-site.md` (aprobada; F1 en `main`): `/contacto`, `ContactSection`, `ContactForm` y `modules/landing/utils/inquiry.ts`.
+  - (enmienda 2) `landing-public-site.md` (aprobada; F1–F4 en `main`): `/contacto`, `ContactSection`, `ContactForm`, `modules/landing/utils/inquiry.ts` (destinos `santiago-2027`, `rio`, `roma`), `utils/trips.ts` y `utils/catalogTrip.ts` (la página `/viajes/[slug]` combina el contenido fijo con el viaje publicado del catálogo).
 
 ## Objetivo
 Hoy el formulario de `/contacto` solo prepara un texto para WhatsApp y no guarda nada, así que el equipo comercial no se entera de las consultas que no llegan a enviarse por WhatsApp. Esta spec hace que:
@@ -18,7 +20,7 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
 
 ## Alcance
 - Incluye:
-  - (F1) Migración `0003`: tabla `outbox_events` y sus enums; `leads` admite leads sin responsable ni autor (formulario web) y guarda la clave de idempotencia; `lead_activities` admite actividades de sistema (`automation`, autor nulo) y el primer responsable. Variables de entorno opcionales (`N8N_API_TOKEN`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) validadas de forma perezosa. Adaptación del código ya implementado de `crm-leads-pipeline` F1: el alta manual (`createLead`) emite `lead.created`, la lista admite leads sin responsable y el filtro "Sin asignar" en datos (ver "Cambios en `crm-leads-pipeline`"). README: migración y secretos, con una guía paso a paso de Turnstile para una persona sin experiencia técnica.
+  - (F1) Migración `0004` (enmienda 2: `drizzle/0004_fluffy_prodigy.sql`, antes `0003`): tabla `outbox_events` y sus enums; `leads` admite leads sin responsable ni autor (formulario web) y guarda la clave de idempotencia; `lead_activities` admite actividades de sistema (`automation`, autor nulo) y el primer responsable. Variables de entorno opcionales (`N8N_API_TOKEN`, `TURNSTILE_SECRET_KEY`, `NEXT_PUBLIC_TURNSTILE_SITE_KEY`) validadas de forma perezosa. Adaptación del código ya implementado de `crm-leads-pipeline` F1: el alta manual (`createLead`) emite `lead.created`, la lista admite leads sin responsable y el filtro "Sin asignar" en datos (ver "Cambios en `crm-leads-pipeline`"). README: migración y secretos, con una guía paso a paso de Turnstile para una persona sin experiencia técnica.
   - (F2) API privada para n8n bajo `/api/integrations/n8n/`: reclamar un lote de eventos con lease, confirmar (ack), marcar fallo con backoff, y leer los datos mínimos de un lead. Guía de n8n en el README (aviso por correo, borrador con Gemini y plantillas de respaldo).
   - (F3) Captura en servidor: schema del formulario web, verificación de Turnstile, `createWebLead` atómico e idempotente (lead + actividad + evento) y la Server Action pública. Lista de destinos de consulta compartida en `lib/`.
   - (F4) Formulario de `/contacto` conectado: envío real, widget de Turnstile, honeypot, consentimiento `web-form-v1`, textos sin "demostración" y destinos con el slug del catálogo. WhatsApp sigue disponible tras enviar.
@@ -34,7 +36,7 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
   - Lead al registrarse un runner en `/cuenta` (F3 de la landing): queda para una spec posterior (decisión provisional P1).
   - Reenvío de eventos `dead` desde el CRM (pantalla o acción administrativa): spec posterior (decisión provisional P2).
   - Editar plantillas de mensajes desde el CRM (tabla `message_templates`): spec posterior si se necesita.
-  - Cambios en la UI del CRM (lista, ficha, historial) para mostrar "Sin asignar", "Formulario web" o "Automatización (n8n)": van en las fases F2–F4 de `crm-leads-pipeline`, ya enmendada (ver "Relación con otras specs").
+  - Cambios en la UI del CRM (lista, ficha, historial) para mostrar "Sin asignar", "Formulario web" o "Automatización (n8n)": van en las fases F2–F4 de `crm-leads-pipeline`, ya implementadas (ver "Relación con otras specs").
   - Rate limiting por IP en código o con bindings: Turnstile + honeypot + ventana de duplicados bastan en el MVP. Una regla WAF opcional se documenta en el README, sin código.
   - PostHog, analítica o métricas del formulario.
   - Página de privacidad o términos (sigue fuera de la landing); el texto legal definitivo lo aporta el usuario antes de publicar la F4 (requisito previo de F4).
@@ -54,8 +56,10 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
    | id (valor del formulario y de `?destino=`) | Nombre visible | Slug del catálogo |
    |---|---|---|
    | `maraton-santiago-2027` | Maratón de Santiago 42K 2027 | `maraton-santiago-2027` |
-   | `panama` | Panamá | — |
-   | `medellin` | Medellín | — |
+   | `rio` | Río de Janeiro | — |
+   | `roma` | Roma | — |
+
+   (enmienda 2) Río y Roma sustituyen a Panamá y Medellín, como en la landing de `main`; sus ids (`rio`, `roma`) coinciden con los que ya usa la landing en `?destino=`, así que solo cambia el id de Santiago (`santiago-2027` → `maraton-santiago-2027`, con el enlace antiguo aún aceptado, ver Diseño técnico).
 
    El servidor resuelve el slug a `trips.id` solo si el viaje está `published`, y lo guarda en `trip_id` con `destination_text = NULL`. Si no hay slug o el viaje no está publicado, guarda `trip_id = NULL` y `destination_text` = nombre visible.
 4. **Idempotencia:** el formulario envía un `submissionId` (UUID generado en el navegador al enviar y renovado tras un éxito). El lead guarda `idempotency_key = submissionId` (único) y `submission_hash` (SHA-256 de los datos normalizados).
@@ -89,7 +93,7 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
     - **Lectura del lead:** solo los campos que n8n necesita para el aviso por correo y el borrador: id, nombre completo, nombre de pila (`firstName`, primera palabra del nombre, calculada en el servidor para facilitar la minimización hacia Gemini), email del lead (solo para el aviso al usuario; nunca va a Gemini), teléfono, etapa, origen, viaje (slug y título) o destino, email del responsable (o `null`), archivado y fecha de alta. **No** expone ciudad, notas, historial, consentimiento ni ids de usuarios.
     - **(F5) Actividad de automatización:** n8n registra en el historial del lead que preparó un mensaje (`type = 'automation'`, autor nulo, texto ≤ 500), vinculada al evento que la originó. Idempotente por evento.
 12. **Qué hace n8n (guía en el README, fuera del código):**
-    - Cada minuto: claim → por cada evento: deduplicar por `id` → leer el lead → si está archivado, ack y fin.
+    - Cada minuto: claim → por cada evento: deduplicar por `id` → leer el lead → si está archivado, ack y fin. (enmienda 2) Tal como quedó la guía de la F2: los eventos se procesan **de uno en uno** con un bucle *Loop Over Items* llamado "Uno a uno" (los nodos "Ack" y "Fail" vuelven a su entrada), los nodos tienen nombre y cada dato se toma del nodo que lo tiene (`$('Uno a uno').item.json` es el evento; `$('Leer lead').item.json`, el lead), y la deduplicación usa una *Data table* `eventos_procesados` con la columna `event_id` (= `id` del evento).
     - **Aviso al usuario solo por correo** cuando entra un lead (`lead.created` con `source = "web_form"`). Las altas manuales emiten `lead.created`, pero no generan este aviso (resuelto por el usuario). El correo incluye nombre, email y teléfono del lead, el viaje o destino, y el borrador del mensaje con su enlace `wa.me`.
     - **Preparar el mensaje para el runner** según la etapa (`new` para `lead.created`, `stageTo` para `lead.stage_changed`). Si la etapa actual del lead ya no coincide con la del evento, el evento está obsoleto: ack sin preparar nada.
     - **Borrador con Gemini desde n8n** (resuelto por el usuario; encaja con `platform-neon-foundation.md`, donde Gemini es opcional):
@@ -97,7 +101,7 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
       - **minimización de datos:** a Gemini solo se envían `firstName` (nombre de pila), la etapa, el viaje (`trip.title`) o el destino (`destinationText`) y un contexto mínimo fijo del prompt (marca, tipo de viaje). **Nunca** se envían teléfono, email, apellidos, notas, historial ni ids. Ampliar estos datos exige una decisión explícita del usuario y un cambio de esta spec. Motivo adicional: en el plan gratuito de la API de Gemini, Google puede usar el contenido enviado para mejorar sus productos;
       - **plantilla fija de respaldo por etapa** en n8n: si Gemini falla, tarda más de 20 s o devuelve un texto vacío o de más de 1000 caracteres, n8n usa la plantilla de respaldo de esa etapa, con `firstName` y el viaje o destino. El fallo de Gemini **no** marca el evento como fallido;
       - **revisión humana obligatoria:** el texto (de Gemini o de respaldo) va en el correo al usuario como borrador, con el enlace `https://wa.me/<teléfono sin +>?text=<texto>`. El usuario o el comercial lo revisan, lo editan si hace falta en WhatsApp y lo envían a mano desde WhatsApp Business App. Nada se envía automáticamente al runner.
-    - (F5, opcional) Registrar la actividad `automation` ("Borrador para la etapa Cotizado enviado por correo al usuario."), sin copiar el texto del mensaje.
+    - (F5, opcional) Registrar la actividad `automation` ("Borrador para la etapa Cotizado enviado por correo al usuario."), sin copiar el texto del mensaje. (enmienda 2) Va en un nodo "Registrar actividad" entre "Guardar procesado" y "Ack", con `eventId` y el id del lead tomados de `$('Uno a uno').item.json`; si falla, el evento **no** se marca como fallido (el correo ya salió y la deduplicación evitaría repetirlo): su salida, correcta o de error, sigue a "Ack".
     - Éxito → ack. Error → fail con un código corto (`smtp_error`, `lead_not_found`…).
     - La asignación de responsable no la hace n8n: es manual en el CRM.
 13. **Seguridad del CRM sin cambios:** la API de integración no usa sesiones ni `requirePermission`; el CRM sigue protegido por `leads.manage`. Un token de n8n no da acceso al CRM y una sesión del CRM no da acceso a la API de integración.
@@ -105,14 +109,14 @@ Usuarios: personas que consultan en la landing (anónimas), el equipo comercial 
 ## Criterios de aceptación
 
 Fase 1 (modelo, outbox, entorno y alta manual con evento):
-- [ ] (F1) Dado el schema nuevo, cuando ejecuto `npm run db:generate` sin credenciales, entonces se genera solo `drizzle/0003_*.sql` (más su snapshot y el journal) con:
+- [ ] (F1) Dado el schema nuevo, cuando ejecuto `npm run db:generate` sin credenciales, entonces se genera solo `drizzle/0004_*.sql` (enmienda 2: `0004_fluffy_prodigy.sql`, sobre la `0003_talented_skin.sql` de reservas de `main`; más su snapshot y el journal) con:
   - los enums `outbox_event_type` (`lead.created`, `lead.stage_changed`) y `outbox_status`, y `ALTER TYPE "lead_activity_type" ADD VALUE 'automation'`;
   - la tabla `outbox_events` con sus FK, CHECK e índice;
   - en `leads`: `DROP NOT NULL` de `owner_user_id` y `created_by`, columnas `idempotency_key` y `submission_hash`, índice único y CHECK nuevos;
   - en `lead_activities`: `DROP NOT NULL` de `actor_user_id`, columna `source_event_id` con FK y único, y los CHECK `lead_activities_body_chk` y `lead_activities_owner_chk` sustituidos.
 
   El SQL no contiene `neon_auth`, `CREATE SCHEMA`, `DROP TABLE`, `DROP TYPE` ni `DROP COLUMN`, ni cambios en `profiles`, `staff_*` o `trips`. Los únicos `DROP` son `DROP NOT NULL` y `DROP CONSTRAINT` de los dos CHECK sustituidos. `drizzle.config.ts` no cambia.
-- [ ] (F1, manual del usuario, en una rama de desarrollo de Neon) Dadas `0002` y `0003` aplicadas a mano, entonces la base:
+- [ ] (F1, manual del usuario, en una rama de desarrollo de Neon) Dadas `0002`, `0003` (reservas) y `0004` aplicadas a mano (enmienda 2: antes "`0002` y `0003`"), entonces la base:
   - acepta un lead `web_form` sin responsable ni autor, y una actividad `owner_changed` de `NULL` a un responsable;
   - rechaza: un lead `whatsapp` sin `created_by`; `idempotency_key` sin `submission_hash`; una `idempotency_key` repetida; una actividad `note` sin autor; una `automation` sin `source_event_id` o sin texto; un `owner_changed` sin `owner_to`;
   - rechaza en `outbox_events`: `processing` sin `lease_token`; `attempts = 9`; `last_error_code = 'Error de SMTP'`; un `payload` de más de 1 KiB; `succeeded` sin `processed_at`.
@@ -124,9 +128,9 @@ Fase 1 (modelo, outbox, entorno y alta manual con evento):
 - [ ] (F1) Correcciones de la revisión de `crm-leads-pipeline` F1, hechas aquí porque esta fase ya modifica esos archivos (las verifica también la F2 del pipeline) (unit test):
   - en `parseLeadListQuery`, solo `responsable=mios` produce `owner: "mine"` y solo `responsable=sin-asignar` produce `owner: "unassigned"`; los literales `mine` y `unassigned` en la URL son inválidos y equivalen a "sin filtro";
   - `blankToNull` de `leads.schema.ts` trata una clave ausente como `""` (→ `null`), así que un opcional que falta nunca produce un mensaje de zod en inglés;
-  - el README sustituye la frase "Aún no hay tablas de leads, organizaciones de colaboradores ni captura durable de leads…" por el estado real (tablas de leads en `0002`, captura y outbox en `0003` según esta spec; organizaciones pendientes).
+  - el README sustituye la frase "Aún no hay tablas de leads, organizaciones de colaboradores ni captura durable de leads…" por el estado real (tablas de leads en `0002`, captura y outbox en `0004` según esta spec (enmienda 2: antes `0003`); organizaciones pendientes).
 - [ ] (F1) Dado `leadActivityTypeSchema`, entonces incluye `automation` y sigue coincidiendo con `leadActivityTypeEnum.enumValues` (unit test). `phoneSchema` se exporta sin cambiar su comportamiento.
-- [ ] (F1) Dado el README, entonces documenta: aplicar `0003` después de `0002` en **dos bloques** (primero `ALTER TYPE … ADD VALUE 'automation'` solo y confirmado; después el resto entre `BEGIN;` y `COMMIT;`), sin GRANT ni reaplicar migraciones; y cómo crear los Secrets `N8N_API_TOKEN` y `TURNSTILE_SECRET_KEY` y la variable de build `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. La parte de Turnstile es una **guía paso a paso para una persona sin experiencia técnica** (ver Diseño técnico, "Guía de Turnstile en el README"): crear el widget en el panel de Cloudflare, copiar las dos claves, dónde pegar cada una (`.env.local`, `.dev.vars`, Secrets del Worker y variables de build) y cómo comprobar que funciona, sin que el README contenga ningún valor real.
+- [ ] (F1) Dado el README, entonces documenta: aplicar `0004` (enmienda 2: antes `0003`) después de `0002` y `0003` (reservas) en **dos bloques** (primero `ALTER TYPE … ADD VALUE 'automation'` solo y confirmado; después el resto entre `BEGIN;` y `COMMIT;`), sin GRANT ni reaplicar migraciones; y cómo crear los Secrets `N8N_API_TOKEN` y `TURNSTILE_SECRET_KEY` y la variable de build `NEXT_PUBLIC_TURNSTILE_SITE_KEY`. La parte de Turnstile es una **guía paso a paso para una persona sin experiencia técnica** (ver Diseño técnico, "Guía de Turnstile en el README"): crear el widget en el panel de Cloudflare, copiar las dos claves, dónde pegar cada una (`.env.local`, `.dev.vars`, Secrets del Worker y variables de build) y cómo comprobar que funciona, sin que el README contenga ningún valor real.
 - [ ] (F1) `npm run lint`, `npx vitest run` y `npm run build` sin errores. Tamaño del Worker medido y registrado.
 
 Fase 2 (API privada para n8n):
@@ -152,7 +156,7 @@ Fase 3 (captura en servidor):
 - [ ] (F3) Dado `createWebLead` con la base simulada, entonces (unit test):
   - ejecuta **una sola sentencia** (CTE) que inserta lead, actividad `created` y evento `lead.created` con payload `{ "source": "web_form" }`;
   - pasa `consent_version = 'web-form-v1'`, `source = 'web_form'`, sin responsable ni autor, y nunca `stage`;
-  - resuelve `maraton-santiago-2027` por slug con `status = 'published'`; para `panama` envía `destination_text = 'Panamá'` sin slug;
+  - resuelve `maraton-santiago-2027` por slug con `status = 'published'`; para `rio` envía `destination_text = 'Río de Janeiro'` y para `roma`, `'Roma'`, sin slug (enmienda 2: antes `panama`/`'Panamá'`);
   - devuelve `"created"`, `"duplicate"` (misma clave y hash, ventana de 10 minutos por teléfono o carrera concurrente) o `"conflict"` (misma clave, hash distinto) según la fila devuelta.
 - [ ] (F3) Dada `submitWebLeadAction` llamada directamente con `FormData` (mocks de los services y de `next/headers`), entonces (unit test):
   - honeypot `website` con texto → `success` sin llamar a Turnstile ni a la base;
@@ -165,15 +169,17 @@ Fase 3 (captura en servidor):
 - [ ] (F3, manual del usuario, en una rama de desarrollo de Neon) Dada la sentencia de `createWebLead` ejecutada con un payload de outbox inválido (forzado en el SQL Editor), entonces no queda ni el lead ni la actividad: la escritura es atómica.
 - [ ] (F3) Lint, tests y build sin errores. Worker medido.
 
-Fase 4 (formulario de la landing conectado). Requisito previo: el usuario ha confirmado el texto legal definitivo del consentimiento y de la nota de uso de datos (o mantiene expresamente el provisional):
+Fase 4 (formulario de la landing conectado). Requisitos previos: el usuario ha confirmado el texto legal definitivo del consentimiento y de la nota de uso de datos (o mantiene expresamente el provisional); (enmienda 2) la rama contiene la landing de `main` (destinos `rio`/`roma`, `catalogTrip.ts`, `MobileMenu`, `/cuenta`):
 - [ ] (F4) Dado `/contacto` en `npm run dev` con las claves de prueba de Turnstile, cuando completo el formulario con destino Santiago, marco el consentimiento y pulso "Enviar mi consulta", entonces el botón pasa a "Enviando…", veo "¡Listo! Recibimos tu consulta. Te escribiremos por WhatsApp." con la consulta preparada, "Copiar consulta" y "Abrir WhatsApp ↗", y en la base hay un lead `web_form` en `new` sin responsable, su actividad `created` y un evento `lead.created` `pending`.
 - [ ] (F4) Dado el mismo envío repetido (doble clic o reenvío sin editar), entonces solo existe un lead. Si edito un campo tras el éxito y vuelvo a enviar, se crea un lead nuevo con otro `submissionId` (salvo la ventana de 10 minutos por teléfono).
-- [ ] (F4) Dado el destino "Panamá · Quiero novedades", entonces el lead queda con `trip_id` nulo y `destination_text = 'Panamá'`. Con Santiago y el viaje `maraton-santiago-2027` publicado, queda con su `trip_id`.
+- [ ] (F4, enmienda 2) Dado el destino "Río de Janeiro · Quiero novedades", entonces el lead queda con `trip_id` nulo y `destination_text = 'Río de Janeiro'` (con "Roma · Quiero novedades", `'Roma'`). Con Santiago y el viaje `maraton-santiago-2027` publicado, queda con su `trip_id`; si no está publicado, con `trip_id` nulo y `destination_text = 'Maratón de Santiago 42K 2027'`.
 - [ ] (F4) Dado un error del servidor (`unavailable`, `verification_failed` o `conflict`), entonces veo su mensaje en `role="alert"` y, salvo en `invalid_input`, la consulta preparada con WhatsApp como alternativa. El widget de Turnstile se reinicia tras cada respuesta (los tokens son de un solo uso).
 - [ ] (F4) Dados errores de validación del servidor, entonces cada campo muestra su mensaje debajo con `aria-invalid`, y lo escrito se conserva.
 - [ ] (F4) Dado `/contacto`, entonces ya no aparecen "VISTA DE DEMOSTRACIÓN", "Los datos no se envían ni se guardan", "Entiendo que es una demostración…" ni "La consulta no se envía desde esta demostración."; aparecen el consentimiento `web-form-v1` del Requisito 6 y la nota de uso de datos del Diseño técnico.
 - [ ] (F4) Dado el HTML de `/contacto`, entonces el campo `website` está dentro de un contenedor `aria-hidden="true"` fuera de pantalla, con `tabIndex={-1}` y `autoComplete="off"`.
 - [ ] (F4) Dado `?destino=santiago-2027` (enlaces antiguos), entonces el selector muestra Santiago (valor por defecto). `MobileCta`, `HeroCarousel` y el CTA de `TripDetail` enlazan a `/contacto?destino=maraton-santiago-2027`. `buildInquiryMessage` mantiene el texto exacto de cada destino (unit test).
+- [ ] (F4, enmienda 2) Dados los enlaces de la landing de `main`, entonces: `/contacto?destino=rio` y `?destino=roma` (tarjetas de `DestinationsSection`) preseleccionan "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades"; los enlaces sin `destino` ("Quiero correr" de `MobileMenu`, cabecera, `WhyUsSection`) preseleccionan Santiago; la tarjeta de Santiago y "Descubre el viaje" siguen yendo a `/viajes/maraton-santiago-2027`. `DestinationsSection`, `MobileMenu`, `SiteHeader`, `StorySection`, `WhyUsSection`, `TripDetail`, `catalogTrip.ts` y `app/viajes/[slug]/page.tsx` no cambian.
+- [ ] (F4, enmienda 2) Dado `getCatalogTrip("maraton-santiago-2027")` con el viaje publicado, entonces devuelve `destinationId: "maraton-santiago-2027"`, y en `/viajes/maraton-santiago-2027` el botón "Quiero correr Santiago" enlaza a `/contacto?destino=maraton-santiago-2027` (unit test de `catalogTrip.test.ts` actualizado).
 - [ ] (F4) Dada la pestaña Red al enviar, entonces hay una única petición POST a `/contacto` (Server Action) más las de `challenges.cloudflare.com`; ninguna a n8n ni a otros dominios.
 - [ ] (F4) Sin `NEXT_PUBLIC_TURNSTILE_SITE_KEY` en el build, entonces el widget no se renderiza, el envío devuelve `verification_failed` y se ofrece WhatsApp.
 - [ ] (F4) Lint, tests y build sin errores. Worker medido.
@@ -185,7 +191,12 @@ Fase 5 (cambio de etapa y actividad de n8n):
   - el mismo `eventId` otra vez → 200 `{ "status": "duplicate" }` sin insertar;
   - lead archivado o inexistente, o evento de otro lead → 404 `{ "error": "not_found" }`;
   - `body` vacío o de más de 500 caracteres → 400 (unit test).
-- [ ] (F5) Dado el README, entonces la guía de n8n incluye el borrador para `lead.stage_changed` (prompt y respaldo de la etapa `stageTo`), cómo descartar eventos obsoletos (etapa actual distinta de `stageTo`) y la llamada opcional de actividad.
+- [ ] (F5, enmienda 2) Dado el README, entonces la guía de n8n de la F2 se **amplía sin rehacerse** (mismo bucle "Uno a uno", mismos nombres de nodo y misma deduplicación por `event_id`):
+  - la introducción y el apartado de la API dicen que también hay un evento por cada cambio de etapa en el CRM y describen su `payload` `{ "stageFrom", "stageTo" }`; desaparece la nota del paso "Etapa" que dice que los `lead.stage_changed` aún no se emiten;
+  - el borrador de `lead.stage_changed` usa el prompt y la plantilla de respaldo de `stageTo` mediante los nodos ya documentados ("Datos para Gemini" calcula `etapa`; "¿Sigue vigente?" descarta el evento obsoleto con ack si la etapa actual del lead es distinta), sin nodos nuevos para ello;
+  - un paso nuevo, nodo **HTTP Request** "Registrar actividad", entre "Guardar procesado" y "Ack": `POST …/leads/{{ $('Uno a uno').item.json.leadId }}/activities` con `{ "eventId": "{{ $('Uno a uno').item.json.id }}", "body": "Borrador para la etapa <Etapa> enviado por correo al usuario." }`, donde `<Etapa>` es el nombre visible de la etapa (Nuevo, Contactado, Cotizado, Reservado, Pagado, Perdido, como `LEAD_STAGE_LABELS`); *On Error* → *Continue* y su salida va a "Ack". La lista de caminos que llegan a "Ack" se actualiza;
+  - la tabla de la API incluye `POST /api/integrations/n8n/leads/{id}/activities` y sus respuestas (201 `recorded`, 200 `duplicate`, 404 `not_found`);
+  - la prueba manual añade: cambiar la etapa de un lead en el CRM → un `claim` devuelve un `lead.stage_changed` con `stageFrom`/`stageTo`; y cambiarla dos veces antes de que n8n recoja los eventos → el primero se descarta con ack (obsoleto) y solo llega un correo, el de la última etapa.
 - [ ] (F5) Lint, tests y build sin errores. Worker medido.
 
 ## Diseño técnico
@@ -194,7 +205,18 @@ Fase 5 (cambio de etapa y actividad de n8n):
 - **Pull, no push:** n8n corre en la computadora del usuario sin IP pública, así que el Worker nunca llama a n8n; n8n consulta la API privada por HTTPS (resuelto por el usuario). Con n8n apagado, los eventos esperan en Neon.
 - **Módulo nuevo `modules/integrations/`** para el outbox y la API de n8n: es un concepto distinto del embudo comercial. Además, sus archivos son disjuntos de los de `modules/crm`, que `crm-leads-pipeline` sigue modificando en sus fases F2–F6. Lee y escribe `leads`, `lead_activities` y `outbox_events` mediante `@/lib/db-schema` (esquema compartido en `lib/`), igual que `crm` lee `trips`. No importa internals de `modules/crm`.
 - **La captura web vive en `modules/crm`** (es un alta de lead), en archivos nuevos (`webLeads.*`) para no chocar con `leads.service.ts`/`leads.actions.ts` de la otra spec. La landing no importa nada de `crm` desde un componente cliente: `ContactSection` (Server Component) importa la acción desde `@/modules/crm` y se la pasa a `ContactForm` como prop.
-- **Destinos en `lib/inquiryDestinations.ts`:** lo usan dos dominios (`landing` para el selector y el mensaje, `crm` para validar en el servidor); SETUP §1, regla 5. Sustituye a `DESTINATION_IDS`/`DESTINATION_NAMES` de `inquiry.ts`. El valor por defecto es `maraton-santiago-2027`, así que los enlaces antiguos `?destino=santiago-2027` siguen preseleccionando Santiago.
+- **Destinos en `lib/inquiryDestinations.ts`:** lo usan dos dominios (`landing` para el selector y el mensaje, `crm` para validar en el servidor); SETUP §1, regla 5. Sustituye a `DESTINATION_IDS`/`DESTINATION_NAMES` de `inquiry.ts`. El valor por defecto es `maraton-santiago-2027`, así que los enlaces antiguos `?destino=santiago-2027` siguen preseleccionando Santiago. (enmienda 2) Forma:
+  ```ts
+  export const INQUIRY_DESTINATION_IDS = ["maraton-santiago-2027", "rio", "roma"] as const; // for z.enum
+  export type InquiryDestinationId = (typeof INQUIRY_DESTINATION_IDS)[number];
+  export const DEFAULT_INQUIRY_DESTINATION: InquiryDestinationId = "maraton-santiago-2027";
+  export const INQUIRY_DESTINATIONS: Record<InquiryDestinationId, { name: string; tripSlug: string | null }> = {
+    "maraton-santiago-2027": { name: "Maratón de Santiago 42K 2027", tripSlug: "maraton-santiago-2027" },
+    rio: { name: "Río de Janeiro", tripSlug: null },
+    roma: { name: "Roma", tripSlug: null },
+  };
+  ```
+  `name` es el texto del mensaje de WhatsApp y de `destination_text`. Los textos de las opciones del selector ("Santiago 2027 · Maratón 42K · Desde US$1,499", "Río de Janeiro · Quiero novedades", "Roma · Quiero novedades") son contenido de la landing (llevan precio) y se quedan en `ContactForm`, en un `Record<InquiryDestinationId, string>` para que TypeScript exija uno por destino.
 - **Una sola sentencia CTE para la captura**, no `db.batch`: la idempotencia, la ventana de duplicados y la resolución del slug necesitan condiciones encadenadas (`INSERT … SELECT … WHERE NOT EXISTS … ON CONFLICT DO NOTHING RETURNING`), y la actividad y el evento se insertan `FROM new_lead`. Es atómica por construcción.
 - **Leads web sin responsable:** `owner_user_id` pasa a ser opcional y la asignación es manual en el CRM (resuelto por el usuario). `created_by` es nulo en los leads web; un CHECK lo exige en los demás orígenes.
 - **Actividades de sistema:** `actor_user_id` nulo solo en `created` (alta web) y en `automation` (n8n). El tipo `automation` se añade al enum para no mezclar lo que hace n8n con los mensajes que registra un comercial (`message`).
@@ -206,7 +228,7 @@ Fase 5 (cambio de etapa y actividad de n8n):
 - **Claim por `POST`** (cambia el estado); lectura del lead por `GET`.
 - **Tamaño del Worker:** F1 no añade rutas; F2 añade 4 route handlers; F5 añade 1. La última tarea de cada fase ejecuta, en Linux/WSL y sin desplegar, `npm run build:worker` y `npx wrangler deploy --dry-run --outdir <scratch>`. Registra el gzip frente a la última medición y al umbral de consulta de 2 MiB (límite Free: 3 MiB). Si se supera, se detiene y se consulta.
 
-### Base de datos: `lib/db-schema.ts` (modificar, F1) → `drizzle/0003_*.sql`
+### Base de datos: `lib/db-schema.ts` (modificar, F1) → `drizzle/0004_fluffy_prodigy.sql` (enmienda 2: antes `0003`)
 Todo en `public`, en snake_case.
 
 | Objeto | Definición |
@@ -236,7 +258,7 @@ Todo en `public`, en snake_case.
 | `outbox_events.last_error_code` | `text`; CHECK `last_error_code IS NULL OR last_error_code ~ '^[a-z0-9_]{1,40}$'` |
 | índice `outbox_events_ready_idx` | `(available_at)` `WHERE status IN ('pending', 'processing')` |
 
-- **Aplicación manual en dos bloques:** PostgreSQL no permite usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos de `lead_activities` mencionan `'automation'`. Por eso el README indica: (1) ejecutar solo `ALTER TYPE "public"."lead_activity_type" ADD VALUE 'automation';`; (2) el resto de `0003` entre `BEGIN;` y `COMMIT;`. Orden global: `0001` → `0002` → `0003`.
+- **Aplicación manual en dos bloques:** PostgreSQL no permite usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos de `lead_activities` mencionan `'automation'`. Por eso el README indica: (1) ejecutar solo `ALTER TYPE "public"."lead_activity_type" ADD VALUE 'automation';`; (2) el resto de `0004` entre `BEGIN;` y `COMMIT;`. (enmienda 2) Orden global: `0001` → `0002` → `0003` (reservas, de `runner-portal.md`) → `0004` (captura y outbox, en dos bloques). `0004` solo depende de `0002`; el orden evita confusiones.
 - Los CHECK sustituidos se generan como `DROP CONSTRAINT` + `ADD CONSTRAINT` del mismo nombre. El developer revisa que drizzle-kit no genere nada más.
 
 ### Entorno: `lib/env.ts` (modificar, F1)
@@ -319,14 +341,17 @@ export function getTurnstileEnv(): { TURNSTILE_SECRET_KEY: string; isTestSecret:
 |---|---|---|
 | `button`, `input`, `label`, `native-select` | shadcn (instalado) | Sin cambios; los usa `ContactForm` |
 | `checkbox` de shadcn | descartado | La landing ya usa `<input type="checkbox">` nativo con `required` (validación del navegador); se mantiene |
-| `utils/inquiry.ts` | existente | Usa `INQUIRY_DESTINATIONS` de `@/lib/inquiryDestinations`; elimina `DESTINATION_IDS`/`DESTINATION_NAMES`; `DestinationId` pasa a ser un alias de `InquiryDestinationId`; la cláusula de precios se aplica a `maraton-santiago-2027`; `parseDestinationId` cae a `maraton-santiago-2027` |
+| `utils/inquiry.ts` | existente | Usa `INQUIRY_DESTINATIONS` de `@/lib/inquiryDestinations`; elimina `DESTINATION_IDS`/`DESTINATION_NAMES`; `DestinationId` pasa a ser un alias de `InquiryDestinationId`; la cláusula de precios se aplica a `maraton-santiago-2027`; `parseDestinationId` acepta `maraton-santiago-2027`, `rio` y `roma`, y cae a `maraton-santiago-2027` con cualquier otro valor (incluido el antiguo `santiago-2027`). `buildWhatsAppUrl` y `WHATSAPP_NUMBER` no cambian (enmienda 2: `runner-portal.md` F5 los exporta desde `@/modules/landing`) |
 | `utils/trips.ts` | existente (landing F2) | `destinationId: "maraton-santiago-2027"` (así `TripDetail` enlaza con el slug sin cambiar su código) |
+| `utils/catalogTrip.ts` | existente (landing F4, `main`) | (enmienda 2) Sin cambios: combina con `{ ...content }` el contenido fijo de `trips.ts` y el viaje publicado de `getPublishedTripBySlug`, así que `destinationId` le llega de `trips.ts`. `app/viajes/[slug]/page.tsx` y `TripDetail` tampoco cambian |
+| `utils/catalogTrip.test.ts` | existente (landing F4, `main`) | (enmienda 2) Su caso "applies the catalog fields…" espera `destinationId: "santiago-2027"`; pasa a `"maraton-santiago-2027"` |
 | `components/ContactSection.tsx` | existente (Server) | Importa `submitWebLeadAction` de `@/modules/crm` y lo pasa como `action`. Sustituye la nota "VISTA DE DEMOSTRACIÓN" por "CÓMO USAMOS TUS DATOS" + "Guardamos tu consulta para que un asesor te contacte por WhatsApp o correo. Sin pagos ni compromiso de reserva." (provisional hasta que el usuario confirme el texto legal, requisito previo de F4) |
-| `components/ContactForm.tsx` | existente (`"use client"`) | Props `{ defaultDestination, action }`. `onSubmit` + `startTransition` (conserva lo escrito): añade `submissionId` (ref; se genera al enviar si no existe y se borra tras un éxito o al editar después de un éxito) y llama a `action`. Botón "Enviar mi consulta" / "Enviando…" (deshabilitado). Errores por campo con `aria-invalid`, mensaje general en `role="alert"`, resultado en `role="status"` (Requisito 7). Consentimiento `web-form-v1`. Honeypot `website`. Opciones del selector desde `INQUIRY_DESTINATIONS`, con los mismos textos visibles. Renderiza `TurnstileWidget` si hay site key |
+| `components/ContactForm.tsx` | existente (`"use client"`) | Props `{ defaultDestination, action }`. `onSubmit` + `startTransition` (conserva lo escrito): añade `submissionId` (ref; se genera al enviar si no existe y se borra tras un éxito o al editar después de un éxito) y llama a `action`. Botón "Enviar mi consulta" / "Enviando…" (deshabilitado). Errores por campo con `aria-invalid`, mensaje general en `role="alert"`, resultado en `role="status"` (Requisito 7). Consentimiento `web-form-v1`. Honeypot `website`. (enmienda 2) Opciones del selector en el orden de `INQUIRY_DESTINATION_IDS`, con los textos visibles actuales de `main` en un `Record<InquiryDestinationId, string>` local: valores `maraton-santiago-2027`, `rio` y `roma` (hoy `santiago-2027`, `rio` y `roma`). Renderiza `TurnstileWidget` si hay site key |
 | `components/TurnstileWidget.tsx` | nuevo (`"use client"`; no existe en shadcn ni en el proyecto; un solo dominio, se sube a `components/shared` si el registro de runners lo necesita) | Props `{ siteKey: string; action: string; resetSignal: number }`. `next/script` con `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit`; `turnstile.render(ref, { sitekey, action, language: "es", theme: "light" })` dentro del `<form>` (inyecta el campo oculto `cf-turnstile-response`); `turnstile.reset()` cuando cambia `resetSignal`; `turnstile.remove()` al desmontar. Tipado mínimo local de `window.turnstile`, sin `@types` |
-| `components/MobileCta.tsx`, `components/HeroCarousel.tsx` | existente | `href` → `/contacto?destino=maraton-santiago-2027` |
+| `components/MobileCta.tsx`, `components/HeroCarousel.tsx` | existente | `href` → `/contacto?destino=maraton-santiago-2027` (lámina 1 del carrusel; las láminas 2 y 3 enlazan a `#paquete` y `#comunidad` y no cambian) |
+| `DestinationsSection`, `MobileMenu`, `SiteHeader`, `StorySection`, `WhyUsSection`, `AccountSection`, `TripDetail` | existentes (`main`) | (enmienda 2) Sin cambios: Río y Roma ya enlazan a `?destino=rio`/`roma`; Santiago y "Descubre el viaje" a `/viajes/maraton-santiago-2027`; el menú móvil ("Quiero correr"), la cabecera y `WhyUsSection` a `/contacto` sin `destino` (preselecciona Santiago) |
 
-`app/contacto/page.tsx` no cambia (ya es dinámica por `searchParams`).
+`app/contacto/page.tsx` no cambia (ya es dinámica por `searchParams`). (enmienda 2) `modules/landing/index.ts` tampoco cambia: `ContactSection` sigue siendo el único export que usa `/contacto`.
 
 ### Outbox y API privada (`modules/integrations/` y `app/api/integrations/n8n/`, F2 y F5)
 - `utils/integrationRequest.ts` (`server-only`):
@@ -426,13 +451,15 @@ type ActivityRequest = { eventId: string; body: string };      // body 1–500, 
   - `getLeadList` usa `LEFT JOIN profiles` para el responsable; `LeadListItem.owner` pasa a `{ userId; email; active } | null`.
   - Filtro "Sin asignar" en datos: `LeadListFilters.owner` admite `"unassigned"`; `parseLeadListQuery`/`leadListHref` lo traducen desde y hacia `responsable=sin-asignar` (como `mios` ↔ `mine`); `getLeadList` filtra `owner_user_id IS NULL`, también en los contadores del embudo.
   - `leads.schema.ts` exporta `phoneSchema` y añade `automation` a `leadActivityTypeSchema` (el formulario de actividades de su F4 sigue limitado a `note`/`call`/`message`).
-  - **Por qué aquí y no en una tarea previa de la F2 del pipeline:** al hacer nullable `owner_user_id` en `0003`, los tipos que infiere Drizzle cambian y `leads.service.ts` debe adaptarse en la misma fase para que el build siga en verde. Además, la F2 del pipeline ya tiene 15 archivos. La enmienda de `crm-leads-pipeline` solo recoge lo que se construye en sus F2–F4 (UI y servicios que aún no existen).
-- **F5 de esta spec** (requiere `crm-leads-pipeline` F3 cerrada): `changeLeadStage` añade a su misma sentencia el `INSERT` del evento `lead.stage_changed`, solo cuando el cambio es efectivo.
+  - **Por qué aquí y no en una tarea previa de la F2 del pipeline:** al hacer nullable `owner_user_id` en `0004` (antes `0003`), los tipos que infiere Drizzle cambian y `leads.service.ts` debe adaptarse en la misma fase para que el build siga en verde. Además, la F2 del pipeline ya tiene 15 archivos. La enmienda de `crm-leads-pipeline` solo recoge lo que se construye en sus F2–F4 (UI y servicios que aún no existen).
+- **F5 de esta spec** (requiere `crm-leads-pipeline` F3 cerrada; hecho): `changeLeadStage` añade a su misma sentencia el `INSERT` del evento `lead.stage_changed`, solo cuando el cambio es efectivo. (enmienda 2) La función ya es una sola sentencia CTE (`target` con `FOR UPDATE` → `updated` → `activity`): se añade un CTE `event AS (INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.stage_changed', id, jsonb_build_object('stageFrom', stage_from, 'stageTo', <etapa nueva>) FROM updated)`, sin cambiar su firma ni sus resultados.
 
 ### Guía de n8n (README, F2 y F5)
 Sección "Automatizaciones con n8n", sin secretos ni datos reales:
 1. Credencial "Header Auth" en n8n con `Authorization: Bearer <token>`; el mismo valor se guarda como Secret `N8N_API_TOKEN` en Cloudflare. Credencial SMTP del correo del usuario y credencial de Gemini (API key de Google AI Studio), ambas solo en n8n.
 2. Workflow: *Schedule Trigger* (cada minuto) → *HTTP Request* `POST …/events/claim` → *Split Out* `events` → deduplicar por `id` (*Remove Duplicates* entre ejecuciones o una tabla de n8n) → `GET …/leads/{leadId}` → si `archived` o la etapa actual ≠ la del evento, ack → *Switch* por etapa (`new` para `lead.created`, `stageTo` para `lead.stage_changed`) → **nodo de Gemini** con el prompt de la etapa → si falla, plantilla de respaldo → enlace `https://wa.me/<phone sin +>?text=<encodeURIComponent(borrador)>` → *Send Email* al usuario → (F5) `POST …/leads/{id}/activities` → `POST …/events/{id}/ack`. Rama de error (correo no enviado, lead no encontrado) → `POST …/events/{id}/fail` con un código corto.
+
+   (enmienda 2) **Como quedó implementada en la F2** (README, "Automatizaciones con n8n", apartado 3), con nodos con nombre: "Reclamar eventos" → "Split Out" → "Uno a uno" (*Loop Over Items*, *Batch Size* 1; "Ack" y cada "Fail" vuelven a su entrada) → "Buscar procesado" (*Data table* `eventos_procesados`, columna `event_id`, *Always Output Data*) → "¿Ya procesado?" (sí → "Ack") → "Leer lead" (salida de error → "Fail" `lead_not_found`) → "Datos para Gemini" (`etapa`, `firstName`, `viaje`; `etapa` ya vale `payload.stageTo` en los `lead.stage_changed`) → "¿Sigue vigente?" (archivado o etapa distinta → "Ack") → "Etapa" (*Switch*) → nodos de Gemini (20 s, salida de error) → "Borrador" (*Code*, con la plantilla de respaldo) → "Enlace WhatsApp" → "Enviar correo" (error → "Fail" `smtp_error`) → "Guardar procesado" → **(F5) "Registrar actividad"** (*On Error* → *Continue*; ambas salidas → "Ack") → "Ack" (*On Error* → *Continue*). Esta descripción manda sobre la del párrafo anterior; la F5 solo añade "Registrar actividad" y actualiza los textos indicados en su criterio del README.
 3. **Datos hacia Gemini (lista cerrada):** solo `firstName`, la etapa y `trip.title` o `destinationText`, más el contexto fijo del prompt. El nodo de Gemini no recibe el item completo del lead: se construye su entrada con una expresión que solo toma esos campos. Nunca se envían teléfono, email, apellidos, notas ni historial.
 4. **Prompt base por etapa** (en español; el usuario ajusta el tono): instrucciones comunes ("Eres el asistente comercial de Carreras Viajeras, una agencia peruana de viajes para runners. Escribe un mensaje de WhatsApp breve (máximo 600 caracteres), cálido y en español neutro de Perú, tuteando, sin inventar precios, fechas, cupos ni condiciones que no te doy. Firma como «Equipo Carreras Viajeras». Devuelve solo el texto del mensaje.") más el objetivo de cada etapa:
    - `new`: dar la bienvenida, agradecer el interés en el viaje o destino y preguntar qué distancia y fechas le interesan;
@@ -458,15 +485,16 @@ Subsección "Activar la protección antispam (Turnstile)", escrita para una pers
 8. Qué hacer si una clave se filtra: en Turnstile → el widget → **Rotate secret key**, y actualizar el Secret del Worker.
 
 ### Relación con otras specs
-- **`crm-leads-pipeline.md` enmendada** (vuelve a `Estado: borrador` y necesita nueva aprobación; su F1 está implementada en `ff28b28`). La enmienda añade a sus F2–F4, sin tocar los criterios de su F1:
+- **`crm-leads-pipeline.md`** (enmienda 2: aprobada, con su enmienda para esta captura; F1–F6 implementadas y aprobadas por el reviewer). Su enmienda añadió a sus F2–F4, ya implementadas, sin tocar los criterios de su F1:
   1. (F2) "Sin asignar" en `LeadTable` y opción "Sin asignar" en el filtro "Responsable" (`responsable=sin-asignar`), con el backend que aporta la F1 de esta spec.
   2. (F3) `getLeadById` con `LEFT JOIN` para responsable y autor; `LeadDetails` muestra "Sin asignar" y "Registrado por: Formulario web" si `created_by` es nulo; `LeadOwnerForm` sin preselección para un lead sin responsable; `changeLeadOwner` acepta asignar el primer responsable (`owner_user_id IS DISTINCT FROM $nuevo`) y registra `owner_changed` con `owner_from` nulo.
   3. (F4) `LeadTimeline` y `LEAD_ACTIVITY_LABELS`: etiqueta `automation` "Automatización (n8n)", autor nulo mostrado como "Formulario web" (`created`) o "n8n" (`automation`), y "Sin asignar → b@…" en el primer `owner_changed`.
   4. Su Requisito 3, "No incluye" y "Preparación para la captura automática" remiten a esta spec.
 
-  **Orden:** `crm-leads-pipeline` F1 (hecha) → aprobación de esta spec y de la enmienda → F1 de esta spec → `crm-leads-pipeline` F2 (requisito previo añadido en esa spec) → … Las demás fases de esta spec no tocan la UI del CRM.
-- **No se ejecutan en paralelo** con esta spec: `crm-leads-pipeline` F1 (comparte `lib/db-schema.ts`, `drizzle/` y `modules/crm/services/leads.service.ts`) ni su F3 respecto a nuestra F5 (`changeLeadStage`). Tampoco las fases de `landing-public-site` que tocan `HeroCarousel` o `ContactForm` en paralelo con nuestra F4.
-- **`landing-public-site.md`:** sus criterios de F1 "no se crea un schema zod" y "la pestaña Red no registra ninguna petición al enviar" quedan superados por la F4 de esta spec. Su F2 ya está en `main`: `modules/landing/utils/trips.ts` usa `destinationId: "santiago-2027"` (lo cambia la F4 de esta spec) y `DestinationsSection` enlaza `?destino=panama`/`medellin`, que no cambian. Su F3 (`/cuenta`) no cambia.
+  **Orden** (enmienda 2, actualizado): `crm-leads-pipeline` F1 → F1 de esta spec → `crm-leads-pipeline` F2–F6 → F2 de esta spec: todo hecho. Quedan F3, F4 y F5 de esta spec, que no tocan la UI del CRM.
+- **No se ejecutan en paralelo** con esta spec: cualquier trabajo futuro sobre `modules/crm/services/leads.service.ts` respecto a nuestra F5 (`changeLeadStage`), ni sobre `HeroCarousel`, `MobileCta`, `ContactForm`, `ContactSection`, `utils/inquiry.ts`, `utils/trips.ts` o `utils/catalogTrip.test.ts` respecto a nuestra F4.
+- **`landing-public-site.md`** (enmienda 2, actualizado): sus criterios de F1 "no se crea un schema zod" y "la pestaña Red no registra ninguna petición al enviar", y el texto "La consulta no se envía desde esta demostración." de su inventario, quedan superados por la F4 de esta spec; también su tabla de enlaces para el hero y el CTA móvil (`?destino=santiago-2027` pasa a `?destino=maraton-santiago-2027`). Sus F1–F4 están en `main`: `utils/inquiry.ts` usa los ids `santiago-2027`, `rio` y `roma`; `utils/trips.ts` usa `destinationId: "santiago-2027"` y `catalogTrip.test.ts` lo comprueba (los cambia la F4 de esta spec); `DestinationsSection` enlaza `?destino=rio`/`roma`, que no cambian. Su F3 (`/cuenta`, `AccountSection`) y el menú móvil (`MobileMenu`) no cambian.
+- **`runner-portal.md`** (enmienda 2): su F5 exporta `buildWhatsAppUrl` y `WHATSAPP_NUMBER` desde `@/modules/landing`; además, usa en `bookings` el mismo nombre y mecanismo (`runner_user_id`) que la decisión provisional P1. Nuestra F4 no cambia esas dos funciones ni `modules/landing/index.ts`. Su migración `0003_talented_skin.sql` (reservas) es la razón de que la nuestra sea `0004`.
 - **`platform-neon-foundation.md`:** esta spec es su "Fase 3: captura durable mínima". El reenvío administrativo auditado de eventos `dead` queda para una spec posterior.
 
 ## Reutilización
@@ -476,7 +504,8 @@ Subsección "Activar la protección antispam (Turnstile)", escrita para una pers
 - Patrón de acciones de `staff.actions.ts` (guarda → zod → service, errores fijos) y de formularios con `onSubmit` + `startTransition` (`InviteStaffForm`).
 - Patrón de route handler con `Cache-Control: no-store` de `app/api/crm/me/route.ts` y `lib/auth/errors.ts`.
 - Fake del cliente Neon HTTP de `staff.service.test.ts` para los tests de services (se copia el patrón, como en `crm-leads-pipeline`).
-- Landing: `ContactForm`, `ContactSection`, `buildInquiryMessage`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER`.
+- Landing: `ContactForm`, `ContactSection`, `buildInquiryMessage`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER`; (enmienda 2) `getCatalogTrip` y `TripDetail` sin cambios.
+- (enmienda 2) Guía de n8n implementada en la F2 (README, "Automatizaciones con n8n"): la F5 la amplía, no la reescribe. `LEAD_STAGE_LABELS` (`modules/crm/utils/leadDisplay.ts`) como referencia de los nombres visibles de etapa del texto de la actividad.
 - shadcn instalados: `button`, `input`, `label` y `native-select`. No se instala nada (Turnstile no existe en shadcn).
 
 ## Tests
@@ -493,7 +522,8 @@ Subsección "Activar la protección antispam (Turnstile)", escrita para una pers
 - `modules/crm/services/turnstile.service.test.ts` (F3): los casos del criterio de F3, con `fetch` y entorno simulados.
 - `modules/crm/services/webLeads.service.test.ts` (F3): una sola llamada `execute`; parámetros (`web_form`, `web-form-v1`, sin `stage`, slug o nombre visible, hash hex de 64); mapeo de `created`/`duplicate`/`conflict`; el hash es estable para los mismos datos y cambia si cambia un campo.
 - `modules/crm/actions/webLeads.actions.test.ts` (F3): los casos del criterio de F3 (mocks de `server-only`, `next/headers` y los dos services; espía de `console.error`).
-- `modules/landing/utils/inquiry.test.ts` (F4, actualizar): ids nuevos, plantilla exacta de Santiago con `maraton-santiago-2027`, `parseDestinationId("santiago-2027")` → `maraton-santiago-2027`.
+- `modules/landing/utils/inquiry.test.ts` (F4, actualizar): ids nuevos, plantilla exacta de Santiago con `maraton-santiago-2027`, `parseDestinationId("santiago-2027")` → `maraton-santiago-2027`. (enmienda 2) Los casos de `rio` ("Río de Janeiro") y `roma` ("Roma") que ya tiene en `main` se mantienen; `parseDestinationId("rio")` → `rio`.
+- `modules/landing/utils/catalogTrip.test.ts` (F4, enmienda 2, actualizar): `destinationId` esperado `"maraton-santiago-2027"`; el resto de casos no cambia.
 - Sin unit test (SETUP §3): `lib/inquiryDestinations.ts` (constantes), tipos, `lib/db-schema.ts` (lo cubren la migración y la prueba manual), route handlers que solo componen, `ContactForm`, `ContactSection` y `TurnstileWidget` (componentes de módulo; la lógica está en schema, acción y services).
 
 ## Plan de tareas
@@ -501,13 +531,13 @@ Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los eje
 
 ### Fase 1: modelo, outbox, entorno y alta manual con evento (4 tareas, 16 archivos: 2 generados por drizzle-kit)
 Requisitos previos: `crm-leads-pipeline` F1 cerrada (hecha, `ff28b28`) y su enmienda aprobada. Se ejecuta antes que la F2 del pipeline.
-- [x] T1 — Schema y migración `0003`: enums, `outbox_events` y cambios en `leads`/`lead_activities`; `npm run db:generate` y revisión del SQL (`grep -inE 'neon_auth|create schema|drop (table|type|column|schema)'`) · archivos: `lib/db-schema.ts`, `drizzle/0003_*.sql` (generado), `drizzle/meta/0003_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
+- [x] T1 — Schema y migración `0004` (enmienda 2: generada como `0003` y renumerada a `0004` en `d834003`, con las mismas sentencias, sobre la `0003_talented_skin.sql` de reservas traída de `main`): enums, `outbox_events` y cambios en `leads`/`lead_activities`; `npm run db:generate` y revisión del SQL (`grep -inE 'neon_auth|create schema|drop (table|type|column|schema)'`) · archivos: `lib/db-schema.ts`, `drizzle/0004_fluffy_prodigy.sql` (generado), `drizzle/meta/0004_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
 - [x] T2 — Entorno opcional (`getIntegrationEnv`, `getTurnstileEnv`) con tests y plantillas · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (base, `lib/`)
 - [x] T3 — Código de `crm-leads-pipeline` F1: `createLead` con evento `lead.created`; `getLeadList` con responsable opcional y filtro `unassigned`; `responsable=sin-asignar` en la query; `phoneSchema` exportado y `automation` en el enum; correcciones de la revisión de la F1 del pipeline (`mine`/`unassigned` literales inválidos en la URL, `blankToNull` con clave ausente); con tests; medir el Worker · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T2 · paralelo (con T4)
-- [x] T4 — README: "Migración de captura y outbox" (dos bloques, orden `0001` → `0002` → `0003`, pruebas manuales del criterio de F1 en una rama de desarrollo) y "Activar la protección antispam (Turnstile)" y secretos de integraciones, como guía paso a paso para una persona sin experiencia técnica (Diseño técnico, "Guía de Turnstile en el README"); actualizar la frase "Aún no hay tablas de leads…" de "Stack y alcance" · archivos: `README.md` · depende de: T2 · paralelo (con T3)
+- [x] T4 — README: "Migración de captura y outbox" (dos bloques, orden `0001` → `0002` → `0003` (reservas) → `0004` (enmienda 2), pruebas manuales del criterio de F1 en una rama de desarrollo) y "Activar la protección antispam (Turnstile)" y secretos de integraciones, como guía paso a paso para una persona sin experiencia técnica (Diseño técnico, "Guía de Turnstile en el README"); actualizar la frase "Aún no hay tablas de leads…" de "Stack y alcance" · archivos: `README.md` · depende de: T2 · paralelo (con T3)
 
 ### Fase 2: API privada para n8n (5 tareas, 15 archivos)
-Requisitos previos: Fase 1 cerrada y `0003` aplicada en la rama de pruebas.
+Requisitos previos: Fase 1 cerrada y `0004` (enmienda 2: antes `0003`) aplicada en la rama de pruebas.
 - [x] T1 — Helper de petición (auth Bearer en tiempo constante, cuerpo ≤ 4 KiB, respuestas `no-store`), schemas y tipos, con tests · archivos: `modules/integrations/utils/integrationRequest.ts`, `modules/integrations/utils/integrationRequest.test.ts`, `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/types/integrations.types.ts` · depende de: Fase 1 · secuencial (base del módulo)
 - [x] T2 — `outbox.service.ts` (claim, ack, fail) con tests · archivos: `modules/integrations/services/outbox.service.ts`, `modules/integrations/services/outbox.service.test.ts` · depende de: T1 · paralelo (con T3)
 - [x] T3 — `integrationLeads.service.ts` (`getIntegrationLead`) con tests · archivos: `modules/integrations/services/integrationLeads.service.ts`, `modules/integrations/services/integrationLeads.service.test.ts` · depende de: T1 · paralelo (con T2)
@@ -515,24 +545,24 @@ Requisitos previos: Fase 1 cerrada y `0003` aplicada en la rama de pruebas.
 - [x] T5 — README: "Automatizaciones con n8n" (contrato, workflow, plantillas por etapa en n8n, deduplicación, códigos de error, regla WAF opcional) · archivos: `README.md` · depende de: T4 · secuencial
 
 ### Fase 3: captura en servidor (4 tareas, 11 archivos)
-Requisitos previos: Fase 1 cerrada (la Fase 2 puede ir antes o después; los archivos son disjuntos, pero no se ejecutan en la misma sesión).
+Requisitos previos: Fase 1 cerrada (enmienda 2: hecho; la Fase 2 también está cerrada). No depende de la landing de `main`: `lib/inquiryDestinations.ts` es nuevo y la landing no lo usa hasta la F4.
 - [ ] T1 — Destinos de consulta compartidos y schema/tipos del formulario web, con tests · archivos: `lib/inquiryDestinations.ts`, `modules/crm/schemas/webLeads.schema.ts`, `modules/crm/schemas/webLeads.schema.test.ts`, `modules/crm/types/webLeads.types.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
 - [ ] T2 — `verifyTurnstileToken` con tests · archivos: `modules/crm/services/turnstile.service.ts`, `modules/crm/services/turnstile.service.test.ts` · depende de: T1 · paralelo (con T3)
 - [ ] T3 — `createWebLead` (CTE única, idempotencia, ventana de duplicados, slug) con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T1 · paralelo (con T2)
 - [ ] T4 — `submitWebLeadAction` con tests y export en la API pública; medir el Worker · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts`, `modules/crm/index.ts` · depende de: T2, T3 · secuencial
 
-### Fase 4: formulario de la landing conectado (3 tareas, 8 archivos)
-Requisitos previos: Fase 3 cerrada; **texto legal definitivo del consentimiento y de la nota de uso de datos confirmado por el usuario** (o el provisional aceptado expresamente); ninguna fase de `landing-public-site` en curso sobre `HeroCarousel`, `ContactForm` o `utils/trips.ts`.
-- [ ] T1 — `inquiry.ts` sobre `INQUIRY_DESTINATIONS` (ids con slug), `destinationId` del viaje y enlaces actualizados, con tests · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/components/MobileCta.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 3 · paralelo (con T2)
+### Fase 4: formulario de la landing conectado (3 tareas, 9 archivos)
+Requisitos previos: Fase 3 cerrada; **texto legal definitivo del consentimiento y de la nota de uso de datos confirmado por el usuario** (o el provisional aceptado expresamente); (enmienda 2) **la rama contiene la landing de `main`** (`modules/landing/` con los destinos `rio`/`roma`, `utils/catalogTrip.ts` y su test, `MobileMenu`, `AccountSection` y `app/viajes/[slug]/page.tsx` leyendo el catálogo); si no, el developer se detiene y lo consulta (ver Preguntas abiertas, Q1); ningún otro trabajo en curso sobre los archivos de esta fase.
+- [ ] T1 — `inquiry.ts` sobre `INQUIRY_DESTINATIONS` (ids con slug), `destinationId` del viaje y enlaces actualizados, con tests · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/utils/catalogTrip.test.ts` (enmienda 2), `modules/landing/components/MobileCta.tsx`, `modules/landing/components/HeroCarousel.tsx` · depende de: Fase 3 · paralelo (con T2)
 - [ ] T2 — `TurnstileWidget` · archivos: `modules/landing/components/TurnstileWidget.tsx` · depende de: Fase 3 · paralelo (con T1)
 - [ ] T3 — `ContactForm` con envío, honeypot, consentimiento y estados, y `ContactSection` con la acción y los textos nuevos; medir el Worker · archivos: `modules/landing/components/ContactForm.tsx`, `modules/landing/components/ContactSection.tsx` · depende de: T1, T2 · secuencial
 
 ### Fase 5: cambio de etapa y actividad de n8n (4 tareas, 9 archivos)
-Requisitos previos: Fases 2 y 4 cerradas y `crm-leads-pipeline` F3 cerrada (`changeLeadStage`).
+Requisitos previos: Fases 2 y 4 cerradas y `crm-leads-pipeline` F3 cerrada (`changeLeadStage`; enmienda 2: hecho, todo el pipeline está implementado).
 - [ ] T1 — `changeLeadStage` emite `lead.stage_changed` en la misma sentencia, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: — · paralelo (con T2)
 - [ ] T2 — `activityRequestSchema` y `recordAutomationActivity`, con tests · archivos: `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/services/integrationLeads.service.ts`, `modules/integrations/services/integrationLeads.service.test.ts` · depende de: — · paralelo (con T1)
 - [ ] T3 — Ruta de actividades y export; medir el Worker · archivos: `modules/integrations/index.ts`, `app/api/integrations/n8n/leads/[id]/activities/route.ts` · depende de: T2 · secuencial
-- [ ] T4 — README: plantillas por etapa, descarte de eventos obsoletos y llamada de actividad en la guía de n8n · archivos: `README.md` · depende de: T1, T3 · secuencial
+- [ ] T4 — README (enmienda 2): ampliar la guía de n8n de la F2 sin rehacerla, según el criterio de F5 del README: eventos `lead.stage_changed` y su `payload` en la introducción y en la API, quitar la nota de que aún no se emiten, nodo "Registrar actividad" entre "Guardar procesado" y "Ack" (con la ruta de actividades en la tabla de la API) y pruebas manuales del cambio de etapa. Las plantillas por etapa y el descarte de eventos obsoletos ya están en la guía y no se reescriben · archivos: `README.md` · depende de: T1, T3 · secuencial
 
 ## Preguntas abiertas
 Resueltas por el usuario (2026-10-18):
@@ -550,4 +580,7 @@ Decisiones provisionales (recomendación aceptada por defecto; el usuario puede 
 - **P2. Eventos `dead`** (tras 8 intentos): de momento se consultan en el SQL Editor; el reenvío administrativo auditado (acción "Reintentar" para `admin` en el CRM) irá en una spec posterior.
 - **P3. Ventana de duplicados:** 10 minutos por teléfono para el formulario web.
 - **P4. Email del lead hacia n8n:** sí, en la lectura del lead, porque el aviso por correo al usuario lo necesita. **Nunca** se envía a Gemini.
-- **P5. Orden de fases:** `crm-leads-pipeline` F1 (hecha) → aprobación de esta spec y de la enmienda del pipeline → F1 de esta spec → F2 del pipeline → F2, F3 y F4 de esta spec → F3 del pipeline → F5 de esta spec (requiere `changeLeadStage`).
+- **P5. Orden de fases:** `crm-leads-pipeline` F1 (hecha) → aprobación de esta spec y de la enmienda del pipeline → F1 de esta spec → F2 del pipeline → F2, F3 y F4 de esta spec → F3 del pipeline → F5 de esta spec (requiere `changeLeadStage`). (enmienda 2) Estado actual: hecho hasta la F2 de esta spec y todo `crm-leads-pipeline` (F1–F6); quedan F3 → F4 → F5 de esta spec.
+
+Pendiente del usuario (enmienda 2):
+- **Q1. Landing de `main` en esta rama antes de la F4.** En el checkout actual solo se trajeron de `main` el schema, la migración `0003` de reservas y el README; `modules/landing/` sigue siendo la versión anterior (destinos `panama`/`medellin`, sin `catalogTrip.ts` ni `MobileMenu`). La F4 está escrita sobre la landing de `main`. Recomendación: integrar `main` en esta rama (merge, lo decide y lo hace el usuario) antes de empezar la F4. La F3 no lo necesita.
