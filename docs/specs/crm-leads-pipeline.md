@@ -2,12 +2,13 @@
 
 - Módulo: crm
 - Estado: borrador
-- Enmienda (2026-10-18), pendiente de aprobación: adapta F2–F4 a los leads de `crm-leads-capture.md` (formulario web sin responsable ni autor, actividades de n8n) e incorpora las sugerencias de la revisión de F1. La F1 está implementada y aprobada por el reviewer (`ff28b28`); sus criterios y tareas no cambian. Los cambios están marcados con "(enmienda)".
+- Estado de la implementación (2026-10-18): F1–F6 implementadas y aprobadas por el reviewer. Esta revisión del documento solo sincroniza el texto con `main` (destinos Río/Roma de la landing, migración de captura renumerada a `0004`) y con lo implementado; no cambia criterios ni tareas.
+- Enmienda (2026-10-18), aprobada: adapta F2–F4 a los leads de `crm-leads-capture.md` (formulario web sin responsable ni autor, actividades de n8n) e incorpora las sugerencias de la revisión de F1. La F1 está implementada y aprobada por el reviewer (`ff28b28`); sus criterios y tareas no cambian. Los cambios están marcados con "(enmienda)".
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, `db.batch` atómico, sin transacciones interactivas), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano.
   - `accounts-roles-permissions.md` y `accounts-auth-ui.md` (implementadas): `can()`, `requirePermission`, `getCrmAccess(permission)`, layout `app/crm/(protected)/`, `CrmShell`, `NoCrmAccess`, `profiles` y `staff_assignments`.
   - `trips-catalog.md` (aprobada; F1 implementada, F2 pendiente): tabla `trips` (`id` UUID inmutable, `slug`, `status`), migración `drizzle/0001_young_korvac.sql` (pendiente de aplicar). Coordinación con su F2 en "Relación con otras specs".
-  - (enmienda) `crm-leads-capture.md` (borrador): su F1 (migración `0003`) hace opcionales `leads.owner_user_id`, `leads.created_by` y `lead_activities.actor_user_id`, añade el tipo de actividad `automation` y adapta el código de esta F1 (`getLeadList` con responsable opcional y filtro `unassigned`, `createLead` con evento de outbox). **Es requisito previo de la F2 de esta spec.**
+  - (enmienda) `crm-leads-capture.md` (aprobada): su F1 (migración `0004`, antes `0003`; renumerada porque `main` ya tiene la `0003` de reservas) hace opcionales `leads.owner_user_id`, `leads.created_by` y `lead_activities.actor_user_id`, añade el tipo de actividad `automation` y adapta el código de esta F1 (`getLeadList` con responsable opcional y filtro `unassigned`, `createLead` con evento de outbox). **Es requisito previo de la F2 de esta spec.**
 - Sustituye por completo a la versión anterior de esta spec (D1, Cloudflare Access, `crm-auth.md`, `platform-cloudflare-deploy.md`). Esa versión obsoleta llegó a quedar marcada como aprobada en disco; esta reescritura es un borrador nuevo y necesita su propia aprobación.
 
 ## Objetivo
@@ -489,7 +490,7 @@ Todas heredan el layout protegido (`NoCrmAccess` sin rol de staff, `CrmShell`, `
 - (F5) además `NextActionForm`.
 - (F6) además `archiveLeadAction`.
 
-Las páginas importan solo desde `@/modules/crm`, `@/modules/accounts` (`getCrmAccess`) y `@/lib/dates`.
+Las páginas importan solo desde `@/modules/crm`, `@/modules/accounts` (`getCrmAccess`), `@/lib/dates`, `@/components/ui` y `@/components/shared` (`ConfirmActionButton`, F6).
 
 ### Discrepancia de destinos con la landing
 - `modules/landing/utils/inquiry.ts` usa `DESTINATION_IDS = ["santiago-2027", "rio", "roma"]`, pero el catálogo usa el slug `maraton-santiago-2027` (`trips-catalog.md`, Requisito 3) y no tiene viajes para Río ni Roma ("Quiero novedades").
@@ -625,7 +626,7 @@ Requisito previo: `trips-catalog` F2-T2 cerrada (`components/shared/ConfirmActio
 - [x] T4 — Ficha y edición en solo lectura si está archivado, botón "Archivar" y API pública; medir el Worker al terminar T3 y T4 · archivos: `modules/crm/index.ts`, `app/crm/(protected)/leads/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/editar/page.tsx` · depende de: T2 · paralelo (con T3)
 
 ## Preguntas abiertas
-(enmienda, 2026-10-18) Sin preguntas nuevas: la enmienda aplica decisiones ya tomadas por el usuario en `crm-leads-capture.md` (leads web sin responsable, asignación manual en el CRM, actividades de n8n) y las sugerencias de la revisión de F1. Requiere nueva aprobación ("apruebo docs/specs/crm-leads-pipeline.md").
+(enmienda, 2026-10-18) Sin preguntas nuevas: la enmienda aplica decisiones ya tomadas por el usuario en `crm-leads-capture.md` (leads web sin responsable, asignación manual en el CRM, actividades de n8n) y las sugerencias de la revisión de F1. Aprobada por el usuario el 2026-10-18. La sincronización posterior con `main` (destinos Río/Roma y migración `0004`) devuelve el documento a borrador y requiere una nueva aprobación ("apruebo docs/specs/crm-leads-pipeline.md").
 
 Todas resueltas por el usuario ("ok a todo", 2026-10-18), con la recomendación de cada una:
 1. **Reasignar y editar:** cualquiera con `leads.manage` (`commercial` y `admin`) edita y reasigna; queda en el historial.
