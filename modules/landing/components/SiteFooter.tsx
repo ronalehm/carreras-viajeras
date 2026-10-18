@@ -1,4 +1,6 @@
 import Image from "next/image";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import { SiteBrand } from "./SiteHeader";
 
 const SOCIAL_LINKS = [
@@ -93,7 +95,7 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="grid gap-6 py-9 md:grid-cols-2 md:gap-10">
+        <div className="grid gap-6 py-9 md:grid-cols-3 md:gap-10">
           <div>
             <h2 className="mb-4 text-sm font-bold">Información del proveedor</h2>
             <dl className="text-xs">
@@ -104,6 +106,15 @@ export function SiteFooter() {
                 </div>
               ))}
             </dl>
+          </div>
+          <div>
+            <h2 className="mb-4 text-sm font-bold">Tu comunidad</h2>
+            <Link
+              href="/cuenta"
+              className="inline-flex items-center gap-1 text-xs underline underline-offset-4"
+            >
+              Ingresar / Registrarse <ArrowUpRight aria-hidden className="size-4" />
+            </Link>
           </div>
           <div>
             <h2 className="mb-4 text-sm font-bold">Atención al consumidor</h2>

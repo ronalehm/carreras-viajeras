@@ -1,4 +1,6 @@
+export { AccountSection } from "./components/AccountSection";
 export { BlogSection } from "./components/BlogSection";
+export { CommunitySection } from "./components/CommunitySection";
 export { ContactSection } from "./components/ContactSection";
 export { DestinationsSection } from "./components/DestinationsSection";
 export { FaqSection } from "./components/FaqSection";

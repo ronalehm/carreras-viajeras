@@ -11,10 +11,11 @@ import type { FieldErrors, SignUpInput } from "../types/auth.types";
 import { authErrorMessage } from "../utils/authErrorMessage";
 
 type SignUpFormProps = {
+  notice: string;
   onRegistered: (email: string) => void;
 };
 
-export function SignUpForm({ onRegistered }: SignUpFormProps) {
+export function SignUpForm({ notice, onRegistered }: SignUpFormProps) {
   const [pending, setPending] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors<SignUpInput>>({});
   const [formError, setFormError] = useState<string | null>(null);
@@ -59,9 +60,7 @@ export function SignUpForm({ onRegistered }: SignUpFormProps) {
   return (
     <form noValidate onSubmit={handleSubmit} className="flex w-full flex-col gap-4">
       <h1 className="text-xl font-semibold">Crea tu cuenta</h1>
-      <p className="text-sm text-muted-foreground">
-        Solo para personas invitadas por un administrador.
-      </p>
+      <p className="text-sm text-muted-foreground">{notice}</p>
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="sign-up-name">Nombre</Label>

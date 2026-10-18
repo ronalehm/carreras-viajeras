@@ -64,6 +64,7 @@ const SLIDES: Slide[] = [
         {em("se comparte.")}
       </>
     ),
+    cta: { href: "#comunidad", label: "Explorar la comunidad" },
   },
 ];
 
