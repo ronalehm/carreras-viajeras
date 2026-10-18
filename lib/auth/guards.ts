@@ -29,6 +29,9 @@ async function readSessionUser() {
     const parsed = sessionSchema.safeParse(data);
     return parsed.success ? parsed.data.user : null;
   } catch {
+    // Fail closed (401) but leave a trace, e.g. a missing Worker secret in getEnv().
+    // Fixed text only: the original error may contain variable names or data.
+    console.error("auth: session lookup failed");
     return null;
   }
 }

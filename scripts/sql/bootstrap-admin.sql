@@ -32,6 +32,7 @@
 --
 -- Comportamiento:
 --   - Todo va en una única transacción; cualquier error la deshace entera.
+--   - Recorta espacios de user_id y email antes de guardarlos.
 --   - Crea el perfil con el correo en minúsculas o reutiliza el existente
 --     (si ya existía, su correo no se modifica).
 --   - Inserta una asignación 'admin' activa con granted_by = NULL
@@ -66,12 +67,13 @@ BEGIN
 END
 $$;
 
+-- Se guardan los mismos valores recortados que se validaron arriba.
 INSERT INTO profiles (user_id, email)
-VALUES (:'user_id', lower(:'email'))
+VALUES (trim(:'user_id'), lower(trim(:'email')))
 ON CONFLICT (user_id) DO NOTHING;
 
 INSERT INTO staff_assignments (user_id, role, reason, granted_by)
-VALUES (:'user_id', 'admin', :'reason', NULL)
+VALUES (trim(:'user_id'), 'admin', :'reason', NULL)
 RETURNING id, user_id, role, granted_at;
 
 COMMIT;

@@ -53,11 +53,26 @@ describe("missing or invalid session", () => {
     expect(load).not.toHaveBeenCalled();
   });
 
-  it("treats a thrown Neon Auth call as no session", async () => {
-    getSession.mockRejectedValue(new Error("fetch failed: secret detail"));
+  it("treats a thrown Neon Auth call as no session and logs only a fixed message", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    getSession.mockRejectedValue(new Error("Missing NEON_AUTH_COOKIE_SECRET: secret detail"));
+
     await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith("auth: session lookup failed");
+    expect(JSON.stringify(logError.mock.calls)).not.toMatch(/NEON_AUTH|secret detail/);
     expect(accept).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
+    logError.mockRestore();
+  });
+
+  it("does not log when there is simply no session", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    getSession.mockResolvedValue({ data: null, error: null });
+
+    await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(logError).not.toHaveBeenCalled();
+    logError.mockRestore();
   });
 });
 

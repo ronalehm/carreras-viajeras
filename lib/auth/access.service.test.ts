@@ -53,7 +53,7 @@ describe("acceptInvitationAndLoadStaffRoles", () => {
       /INSERT INTO profiles \(user_id, email\) SELECT \$\d+, accepted\.email FROM accepted ON CONFLICT \(user_id\) DO NOTHING/,
     );
     expect(accept).toMatch(
-      /INSERT INTO staff_assignments \(user_id, role, reason, granted_by\) SELECT \$\d+, accepted\.role, 'invitation:' \|\| accepted\.id::text, accepted\.invited_by FROM accepted/,
+      /INSERT INTO staff_assignments \(user_id, role, reason, granted_by\) SELECT \$\d+, accepted\.role, 'invitation:' \|\| accepted\.id::text, accepted\.invited_by FROM accepted ON CONFLICT DO NOTHING$/,
     );
     expect(accept.match(/;/g)).toBeNull();
     expect(fake.queries[0].params).toEqual(["user-1", "ana@example.com", "user-1", "user-1"]);

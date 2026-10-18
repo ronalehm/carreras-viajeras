@@ -369,11 +369,11 @@ Todos con `// @vitest-environment node` y `vi.mock("server-only", () => ({}))`, 
 
 ## Plan de tareas
 ### Fase 1: schema, guardas, aceptación de invitaciones y API protegida (5 tareas, 15 archivos)
-- [ ] T1 — Schema Drizzle (enum, 3 tablas, CHECK, índices parciales) y migración generada, revisada sin `neon_auth` · archivos: `lib/db-schema.ts`, `drizzle/0000_*.sql` (generado), `drizzle/meta/0000_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base)
-- [ ] T2 — Matriz de permisos y errores con su mapeo a 401/403 · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts`, `lib/auth/errors.ts` · depende de: T1 · secuencial (`lib/`)
-- [ ] T3 — Service de acceso (aceptación atómica + roles) y guardas con sus tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts` · depende de: T1, T2 · secuencial (`lib/`)
-- [ ] T4 — `GET /api/crm/me` y test de llamada directa · archivos: `app/api/crm/me/route.ts`, `app/api/crm/me/route.test.ts` · depende de: T3 · paralelo (con T5)
-- [ ] T5 — Scripts SQL de bootstrap del primer admin y de revocación de emergencia · archivos: `scripts/sql/bootstrap-admin.sql`, `scripts/sql/revoke-staff-role.sql` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
+- [x] T1 — Schema Drizzle (enum, 3 tablas, CHECK, índices parciales) y migración generada, revisada sin `neon_auth` · archivos: `lib/db-schema.ts`, `drizzle/0000_*.sql` (generado), `drizzle/meta/0000_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base)
+- [x] T2 — Matriz de permisos y errores con su mapeo a 401/403 · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts`, `lib/auth/errors.ts` · depende de: T1 · secuencial (`lib/`)
+- [x] T3 — Service de acceso (aceptación atómica + roles) y guardas con sus tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts` · depende de: T1, T2 · secuencial (`lib/`)
+- [x] T4 — `GET /api/crm/me` y test de llamada directa · archivos: `app/api/crm/me/route.ts`, `app/api/crm/me/route.test.ts` · depende de: T3 · paralelo (con T5)
+- [x] T5 — Scripts SQL de bootstrap del primer admin y de revocación de emergencia · archivos: `scripts/sql/bootstrap-admin.sql`, `scripts/sql/revoke-staff-role.sql` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
 
 ### Fase 2: administración del staff en servidor y documentación (4 tareas, 8 archivos)
 - [ ] T1 — Schemas zod y tipos de staff con su test · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/types/staff.types.ts` · depende de: Fase 1 · secuencial
