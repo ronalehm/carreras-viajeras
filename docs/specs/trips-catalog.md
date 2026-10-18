@@ -1,7 +1,7 @@
 # Catálogo de viajes (datos, lectura pública y gestión en el CRM)
 
 - Módulo: trips
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), migraciones generadas con `npm run db:generate` y aplicadas a mano.
   - `accounts-roles-permissions.md`: guardas de `lib/auth/guards.ts` y matriz `can()`. Fases 1, 2 y 3 cerradas (PR #5: `/crm/admin/usuarios`, `StaffTable`, `InvitationsTable` y enlace "Usuarios" en `CrmShell`); la Fase 2 de esta spec modifica esos archivos.
@@ -351,13 +351,13 @@ Las tres bajo `app/crm/(protected)/`, heredan el layout protegido (`getCrmAccess
 
 ## Plan de tareas
 ### Fase 1: datos, permiso y lectura pública (5 tareas, 15 archivos: 2 generados por drizzle-kit)
-- [ ] T1 — Base compartida en `lib/`:
+- [x] T1 — Base compartida en `lib/`:
   - tabla `trips` (con `price_usd`, sin moneda) y enum `trip_status` en el schema;
   - `npm run db:generate` y revisión del SQL (solo objetos nuevos en `public`, sin `neon_auth` ni `DROP`);
   - permiso `trips.manage` (`commercial`; `admin` implícito) en la matriz y sus tests.
 
   Archivos: `lib/db-schema.ts`, `drizzle/0001_*.sql` (generado), `drizzle/meta/0001_snapshot.json` (generado), `drizzle/meta/_journal.json`, `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — Schemas zod y tipos de viajes con su test · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts` · depende de: T1 · secuencial
+- [x] T2 — Schemas zod y tipos de viajes con su test · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts` · depende de: T1 · secuencial
 - [ ] T3 — Service (lecturas públicas con `connection()`, lecturas del CRM, alta, edición y cambio de estado) con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo (con T4; archivos disjuntos)
 - [ ] T4 — Utilidades de formato públicas (precio en USD) con test · archivos: `modules/trips/utils/tripDisplay.ts`, `modules/trips/utils/tripDisplay.test.ts` · depende de: T2 · paralelo (con T3)
 - [ ] T5 — API pública del módulo y README:
