@@ -11,7 +11,7 @@ import { grantStaffRoleAction, revokeStaffRoleAction } from "../actions/staff.ac
 import { staffRoleSchema } from "../schemas/staff.schema";
 import type { StaffMember } from "../types/staff.types";
 import { formatStaffDateTime, STAFF_ROLE_LABELS } from "../utils/staffDisplay";
-import { ConfirmActionButton } from "./ConfirmActionButton";
+import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 
 type StaffTableProps = {
   staff: StaffMember[];
