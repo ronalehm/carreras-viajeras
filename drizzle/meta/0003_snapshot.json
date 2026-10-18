@@ -1,0 +1,1205 @@
+{
+  "id": "c911fe6e-6f24-4af9-b0a8-7601d04c2543",
+  "prevId": "beae813c-20cd-47d9-9123-d5f684aa9c55",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.automation_event_redrives": {
+      "name": "automation_event_redrives",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "performed_by": {
+          "name": "performed_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "automation_event_redrives_event_id_automation_events_id_fk": {
+          "name": "automation_event_redrives_event_id_automation_events_id_fk",
+          "tableFrom": "automation_event_redrives",
+          "tableTo": "automation_events",
+          "columnsFrom": [
+            "event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "automation_event_redrives_performed_by_profiles_user_id_fk": {
+          "name": "automation_event_redrives_performed_by_profiles_user_id_fk",
+          "tableFrom": "automation_event_redrives",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "performed_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "automation_event_redrives_reason_chk": {
+          "name": "automation_event_redrives_reason_chk",
+          "value": "char_length(\"automation_event_redrives\".\"reason\") BETWEEN 1 AND 500"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.automation_events": {
+      "name": "automation_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_version": {
+          "name": "payload_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "automation_event_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_token": {
+          "name": "lease_token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_code": {
+          "name": "last_error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "automation_events_type_lead_uq": {
+          "name": "automation_events_type_lead_uq",
+          "columns": [
+            {
+              "expression": "type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "lead_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "automation_events_pending_idx": {
+          "name": "automation_events_pending_idx",
+          "columns": [
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"automation_events\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "automation_events_lease_idx": {
+          "name": "automation_events_lease_idx",
+          "columns": [
+            {
+              "expression": "lease_until",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"automation_events\".\"status\" = 'processing'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "automation_events_type_chk": {
+          "name": "automation_events_type_chk",
+          "value": "\"automation_events\".\"type\" IN ('lead.created')"
+        },
+        "automation_events_payload_version_chk": {
+          "name": "automation_events_payload_version_chk",
+          "value": "\"automation_events\".\"payload_version\" > 0"
+        },
+        "automation_events_attempts_chk": {
+          "name": "automation_events_attempts_chk",
+          "value": "\"automation_events\".\"attempts\" BETWEEN 0 AND 8"
+        },
+        "automation_events_last_error_code_chk": {
+          "name": "automation_events_last_error_code_chk",
+          "value": "\"automation_events\".\"last_error_code\" IS NULL OR \"automation_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,64}$'"
+        },
+        "automation_events_processing_lease_chk": {
+          "name": "automation_events_processing_lease_chk",
+          "value": "\"automation_events\".\"status\" <> 'processing' OR (\"automation_events\".\"lease_token\" IS NOT NULL AND \"automation_events\".\"lease_until\" IS NOT NULL)"
+        },
+        "automation_events_processed_at_chk": {
+          "name": "automation_events_processed_at_chk",
+          "value": "(\"automation_events\".\"status\" = 'succeeded') = (\"automation_events\".\"processed_at\" IS NOT NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.lead_activities": {
+      "name": "lead_activities",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "lead_activity_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stage_from": {
+          "name": "stage_from",
+          "type": "lead_stage",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stage_to": {
+          "name": "stage_to",
+          "type": "lead_stage",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_from": {
+          "name": "owner_from",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_to": {
+          "name": "owner_to",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "actor_user_id": {
+          "name": "actor_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "lead_activities_lead_created_idx": {
+          "name": "lead_activities_lead_created_idx",
+          "columns": [
+            {
+              "expression": "lead_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "lead_activities_lead_id_leads_id_fk": {
+          "name": "lead_activities_lead_id_leads_id_fk",
+          "tableFrom": "lead_activities",
+          "tableTo": "leads",
+          "columnsFrom": [
+            "lead_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "lead_activities_owner_from_profiles_user_id_fk": {
+          "name": "lead_activities_owner_from_profiles_user_id_fk",
+          "tableFrom": "lead_activities",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "owner_from"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "lead_activities_owner_to_profiles_user_id_fk": {
+          "name": "lead_activities_owner_to_profiles_user_id_fk",
+          "tableFrom": "lead_activities",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "owner_to"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "lead_activities_actor_user_id_profiles_user_id_fk": {
+          "name": "lead_activities_actor_user_id_profiles_user_id_fk",
+          "tableFrom": "lead_activities",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "actor_user_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "lead_activities_body_chk": {
+          "name": "lead_activities_body_chk",
+          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
+        },
+        "lead_activities_stage_chk": {
+          "name": "lead_activities_stage_chk",
+          "value": "CASE WHEN \"lead_activities\".\"type\" = 'stage_changed' THEN \"lead_activities\".\"stage_from\" IS NOT NULL AND \"lead_activities\".\"stage_to\" IS NOT NULL AND \"lead_activities\".\"stage_from\" <> \"lead_activities\".\"stage_to\" ELSE \"lead_activities\".\"stage_from\" IS NULL AND \"lead_activities\".\"stage_to\" IS NULL END"
+        },
+        "lead_activities_owner_chk": {
+          "name": "lead_activities_owner_chk",
+          "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_from\" IS NOT NULL AND \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" <> \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.leads": {
+      "name": "leads",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "full_name": {
+          "name": "full_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "phone": {
+          "name": "phone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "destination_text": {
+          "name": "destination_text",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "lead_source",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stage": {
+          "name": "stage",
+          "type": "lead_stage",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'new'"
+        },
+        "lost_reason": {
+          "name": "lost_reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "owner_user_id": {
+          "name": "owner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_action_date": {
+          "name": "next_action_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_action_note": {
+          "name": "next_action_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "consent_version": {
+          "name": "consent_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "consented_at": {
+          "name": "consented_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "archived_at": {
+          "name": "archived_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "archived_by": {
+          "name": "archived_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "leads_trip_id_trips_id_fk": {
+          "name": "leads_trip_id_trips_id_fk",
+          "tableFrom": "leads",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "leads_owner_user_id_profiles_user_id_fk": {
+          "name": "leads_owner_user_id_profiles_user_id_fk",
+          "tableFrom": "leads",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "owner_user_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "leads_created_by_profiles_user_id_fk": {
+          "name": "leads_created_by_profiles_user_id_fk",
+          "tableFrom": "leads",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "leads_archived_by_profiles_user_id_fk": {
+          "name": "leads_archived_by_profiles_user_id_fk",
+          "tableFrom": "leads",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "archived_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "leads_full_name_chk": {
+          "name": "leads_full_name_chk",
+          "value": "char_length(\"leads\".\"full_name\") BETWEEN 2 AND 120"
+        },
+        "leads_phone_chk": {
+          "name": "leads_phone_chk",
+          "value": "\"leads\".\"phone\" ~ '^\\+[1-9][0-9]{7,14}$'"
+        },
+        "leads_email_chk": {
+          "name": "leads_email_chk",
+          "value": "\"leads\".\"email\" IS NULL OR (\"leads\".\"email\" = lower(\"leads\".\"email\") AND char_length(\"leads\".\"email\") <= 254)"
+        },
+        "leads_location_chk": {
+          "name": "leads_location_chk",
+          "value": "\"leads\".\"location\" IS NULL OR char_length(\"leads\".\"location\") <= 80"
+        },
+        "leads_destination_text_chk": {
+          "name": "leads_destination_text_chk",
+          "value": "\"leads\".\"destination_text\" IS NULL OR char_length(\"leads\".\"destination_text\") <= 120"
+        },
+        "leads_lost_reason_chk": {
+          "name": "leads_lost_reason_chk",
+          "value": "(\"leads\".\"stage\" = 'lost') = (\"leads\".\"lost_reason\" IS NOT NULL) AND (\"leads\".\"lost_reason\" IS NULL OR char_length(\"leads\".\"lost_reason\") <= 200)"
+        },
+        "leads_next_action_chk": {
+          "name": "leads_next_action_chk",
+          "value": "(\"leads\".\"next_action_note\" IS NULL OR (\"leads\".\"next_action_date\" IS NOT NULL AND char_length(\"leads\".\"next_action_note\") <= 200)) AND (\"leads\".\"next_action_date\" IS NULL OR (\"leads\".\"stage\" NOT IN ('paid', 'lost') AND \"leads\".\"archived_at\" IS NULL))"
+        },
+        "leads_consent_version_chk": {
+          "name": "leads_consent_version_chk",
+          "value": "char_length(\"leads\".\"consent_version\") BETWEEN 1 AND 40"
+        },
+        "leads_archived_chk": {
+          "name": "leads_archived_chk",
+          "value": "(\"leads\".\"archived_at\" IS NULL) = (\"leads\".\"archived_by\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.profiles": {
+      "name": "profiles",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "profiles_email_lowercase_chk": {
+          "name": "profiles_email_lowercase_chk",
+          "value": "\"profiles\".\"email\" = lower(\"profiles\".\"email\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.staff_assignments": {
+      "name": "staff_assignments",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "staff_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "granted_by": {
+          "name": "granted_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "granted_at": {
+          "name": "granted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_by": {
+          "name": "revoked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "staff_assignments_active_uq": {
+          "name": "staff_assignments_active_uq",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "role",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"staff_assignments\".\"revoked_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "staff_assignments_user_id_profiles_user_id_fk": {
+          "name": "staff_assignments_user_id_profiles_user_id_fk",
+          "tableFrom": "staff_assignments",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "staff_assignments_granted_by_profiles_user_id_fk": {
+          "name": "staff_assignments_granted_by_profiles_user_id_fk",
+          "tableFrom": "staff_assignments",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "granted_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "staff_assignments_revoked_by_profiles_user_id_fk": {
+          "name": "staff_assignments_revoked_by_profiles_user_id_fk",
+          "tableFrom": "staff_assignments",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "revoked_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.staff_invitations": {
+      "name": "staff_invitations",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "email": {
+          "name": "email",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "staff_role",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "invited_by": {
+          "name": "invited_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now() + interval '7 days'"
+        },
+        "accepted_at": {
+          "name": "accepted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "accepted_user_id": {
+          "name": "accepted_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_by": {
+          "name": "revoked_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "staff_invitations_pending_email_uq": {
+          "name": "staff_invitations_pending_email_uq",
+          "columns": [
+            {
+              "expression": "email",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"staff_invitations\".\"accepted_at\" IS NULL AND \"staff_invitations\".\"revoked_at\" IS NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "staff_invitations_invited_by_profiles_user_id_fk": {
+          "name": "staff_invitations_invited_by_profiles_user_id_fk",
+          "tableFrom": "staff_invitations",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "invited_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "staff_invitations_accepted_user_id_profiles_user_id_fk": {
+          "name": "staff_invitations_accepted_user_id_profiles_user_id_fk",
+          "tableFrom": "staff_invitations",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "accepted_user_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "staff_invitations_revoked_by_profiles_user_id_fk": {
+          "name": "staff_invitations_revoked_by_profiles_user_id_fk",
+          "tableFrom": "staff_invitations",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "revoked_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "staff_invitations_email_lowercase_chk": {
+          "name": "staff_invitations_email_lowercase_chk",
+          "value": "\"staff_invitations\".\"email\" = lower(\"staff_invitations\".\"email\")"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.trips": {
+      "name": "trips",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "slug": {
+          "name": "slug",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "city": {
+          "name": "city",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country": {
+          "name": "country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "race_date": {
+          "name": "race_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "distances": {
+          "name": "distances",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "summary": {
+          "name": "summary",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "includes": {
+          "name": "includes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "price_usd": {
+          "name": "price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "capacity": {
+          "name": "capacity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "image_url": {
+          "name": "image_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "trip_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'draft'"
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "trips_slug_uq": {
+          "name": "trips_slug_uq",
+          "columns": [
+            {
+              "expression": "slug",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trips_slug_format_chk": {
+          "name": "trips_slug_format_chk",
+          "value": "\"trips\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(\"trips\".\"slug\") BETWEEN 3 AND 80"
+        },
+        "trips_travel_dates_chk": {
+          "name": "trips_travel_dates_chk",
+          "value": "(\"trips\".\"start_date\" IS NULL) = (\"trips\".\"end_date\" IS NULL) AND (\"trips\".\"start_date\" IS NULL OR (\"trips\".\"start_date\" <= \"trips\".\"race_date\" AND \"trips\".\"race_date\" <= \"trips\".\"end_date\"))"
+        },
+        "trips_distances_chk": {
+          "name": "trips_distances_chk",
+          "value": "cardinality(\"trips\".\"distances\") BETWEEN 1 AND 10"
+        },
+        "trips_includes_chk": {
+          "name": "trips_includes_chk",
+          "value": "cardinality(\"trips\".\"includes\") <= 20"
+        },
+        "trips_price_usd_chk": {
+          "name": "trips_price_usd_chk",
+          "value": "\"trips\".\"price_usd\" IS NULL OR \"trips\".\"price_usd\" >= 0"
+        },
+        "trips_capacity_chk": {
+          "name": "trips_capacity_chk",
+          "value": "\"trips\".\"capacity\" IS NULL OR \"trips\".\"capacity\" > 0"
+        },
+        "trips_image_url_chk": {
+          "name": "trips_image_url_chk",
+          "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.automation_event_status": {
+      "name": "automation_event_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "processing",
+        "succeeded",
+        "dead"
+      ]
+    },
+    "public.lead_activity_type": {
+      "name": "lead_activity_type",
+      "schema": "public",
+      "values": [
+        "created",
+        "stage_changed",
+        "owner_changed",
+        "archived",
+        "note",
+        "call",
+        "message"
+      ]
+    },
+    "public.lead_source": {
+      "name": "lead_source",
+      "schema": "public",
+      "values": [
+        "whatsapp",
+        "web_form",
+        "other"
+      ]
+    },
+    "public.lead_stage": {
+      "name": "lead_stage",
+      "schema": "public",
+      "values": [
+        "new",
+        "contacted",
+        "quoted",
+        "reserved",
+        "paid",
+        "lost"
+      ]
+    },
+    "public.staff_role": {
+      "name": "staff_role",
+      "schema": "public",
+      "values": [
+        "commercial",
+        "admin"
+      ]
+    },
+    "public.trip_status": {
+      "name": "trip_status",
+      "schema": "public",
+      "values": [
+        "draft",
+        "published",
+        "archived"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}
