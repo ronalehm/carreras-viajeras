@@ -1,3 +1,4 @@
+import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -10,7 +11,6 @@ import {
 import { revokeInvitationAction } from "../actions/staff.actions";
 import type { PendingInvitation } from "../types/staff.types";
 import { formatStaffDateTime, STAFF_ROLE_LABELS } from "../utils/staffDisplay";
-import { ConfirmActionButton } from "./ConfirmActionButton";
 
 type InvitationsTableProps = {
   invitations: PendingInvitation[];

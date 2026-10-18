@@ -12,7 +12,8 @@ type CrmShellProps = {
 };
 
 export function CrmShell({ email, roles, children }: CrmShellProps) {
-  // Visual only: the admin page and every Server Action check staff.manage again.
+  // Visual only: each page and every Server Action check their permission again.
+  const canManageTrips = can(roles, "trips.manage");
   const canManageStaff = can(roles, "staff.manage");
 
   return (
@@ -22,11 +23,18 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
           <Link href="/crm" className="font-heading font-medium">
             CRM Carreras Viajeras
           </Link>
-          {canManageStaff && (
-            <nav aria-label="CRM">
-              <Link href="/crm/admin/usuarios" className={buttonVariants({ variant: "ghost" })}>
-                Usuarios
-              </Link>
+          {(canManageTrips || canManageStaff) && (
+            <nav aria-label="CRM" className="flex flex-wrap items-center gap-1">
+              {canManageTrips && (
+                <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
+                  Viajes
+                </Link>
+              )}
+              {canManageStaff && (
+                <Link href="/crm/admin/usuarios" className={buttonVariants({ variant: "ghost" })}>
+                  Usuarios
+                </Link>
+              )}
             </nav>
           )}
         </div>

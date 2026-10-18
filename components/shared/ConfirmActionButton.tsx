@@ -13,12 +13,24 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import type { StaffActionState } from "../types/staff.types";
 
-type StaffAction = (prev: StaffActionState, formData: FormData) => Promise<StaffActionState>;
+type IdleState = { status: "idle" };
 
-type ConfirmActionButtonProps = {
-  action: StaffAction;
+// Minimum shape the dialog reads; module states (staff, trips) may add codes, field errors, etc.
+export type ConfirmActionState =
+  | IdleState
+  | { status: "success"; message: string }
+  | { status: "error"; message: string };
+
+// prev also accepts the idle state: the dialog starts from it on every opening.
+// NoInfer: State comes from the action's return type, idle included or not.
+type ConfirmAction<State extends ConfirmActionState> = (
+  prev: NoInfer<State> | IdleState,
+  formData: FormData,
+) => Promise<State>;
+
+type ConfirmActionButtonProps<State extends ConfirmActionState> = {
+  action: ConfirmAction<State>;
   fields: Record<string, string>;
   label: string;
   title: string;
@@ -27,9 +39,9 @@ type ConfirmActionButtonProps = {
   variant: "outline" | "destructive";
 };
 
-const INITIAL_STATE: StaffActionState = { status: "idle" };
+const INITIAL_STATE: IdleState = { status: "idle" };
 
-export function ConfirmActionButton({
+export function ConfirmActionButton<State extends ConfirmActionState>({
   action,
   fields,
   label,
@@ -37,7 +49,7 @@ export function ConfirmActionButton({
   description,
   confirmLabel,
   variant,
-}: ConfirmActionButtonProps) {
+}: ConfirmActionButtonProps<State>) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -59,15 +71,15 @@ export function ConfirmActionButton({
   );
 }
 
-type ConfirmActionFormProps = Pick<
-  ConfirmActionButtonProps,
+type ConfirmActionFormProps<State extends ConfirmActionState> = Pick<
+  ConfirmActionButtonProps<State>,
   "action" | "fields" | "title" | "description" | "confirmLabel"
 > & {
   confirmVariant: "default" | "destructive";
   onSuccess: () => void;
 };
 
-function ConfirmActionForm({
+function ConfirmActionForm<State extends ConfirmActionState>({
   action,
   fields,
   title,
@@ -75,9 +87,9 @@ function ConfirmActionForm({
   confirmLabel,
   confirmVariant,
   onSuccess,
-}: ConfirmActionFormProps) {
-  const [state, formAction, pending] = useActionState(
-    async (prev: StaffActionState, formData: FormData) => {
+}: ConfirmActionFormProps<State>) {
+  const [state, formAction, pending] = useActionState<State | IdleState, FormData>(
+    async (prev, formData) => {
       const next = await action(prev, formData);
       if (next.status === "success") onSuccess();
       return next;
