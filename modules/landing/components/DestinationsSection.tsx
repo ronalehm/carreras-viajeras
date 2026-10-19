@@ -9,7 +9,7 @@ const santiago = TRIPS[0];
 const DESTINATIONS = [
   {
     href: `/viajes/${santiago.slug}`,
-    image: "/images/destino-santiago.jpg",
+    image: "/images/destino-santiago.webp",
     alt: "Salida de la Maratón de Santiago con los corredores en la línea de partida",
     flag: "🇨🇱",
     status: "Preventa abierta",
@@ -25,7 +25,7 @@ const DESTINATIONS = [
   },
   {
     href: "/contacto?destino=rio",
-    image: "/images/destino-rio.jpg",
+    image: "/images/destino-rio.webp",
     alt: "Vista aérea de Río de Janeiro con el Cristo Redentor",
     flag: "🇧🇷",
     status: "En exploración",
@@ -41,7 +41,7 @@ const DESTINATIONS = [
   },
   {
     href: "/contacto?destino=roma",
-    image: "/images/destino-roma.jpg",
+    image: "/images/destino-roma.webp",
     alt: "El Coliseo de Roma al atardecer",
     flag: "🇮🇹",
     status: "En exploración",

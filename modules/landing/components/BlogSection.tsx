@@ -7,13 +7,13 @@ import { type Tip, TipList } from "./TipList";
 const REFERENTS = [
   {
     name: "Daniela\nZarfati",
-    image: "/images/daniela-zafarti.jpg",
+    image: "/images/daniela-zafarti.webp",
     alt: "Daniela Zarfati",
     disclaimer: "FOTO REAL DE DANIELA",
   },
   {
     name: "Karla\nMedina",
-    image: "/images/carla-medina.jpg",
+    image: "/images/carla-medina.webp",
     alt: "Karla Medina",
     disclaimer: "FOTO REAL DE KARLA",
   },
@@ -22,7 +22,7 @@ const REFERENTS = [
 const TIPS: Tip[] = [
   {
     category: "empezar",
-    image: "/images/running-road.jpg",
+    image: "/images/running-road.webp",
     eyebrow: "TU PRIMERA CARRERA · 45 S",
     title: "Antes del 42K,\nencuentra tu punto de partida.",
     summary: "Tu primera carrera y tu primera maratón pueden ser etapas distintas.",
@@ -34,7 +34,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "empezar",
-    image: "/images/running-team.jpg",
+    image: "/images/running-team.webp",
     eyebrow: "TU MOTIVACIÓN · 30 S",
     title: "¿Por qué correr\nuna maratón?",
     summary: "Un reto personal. Una ciudad nueva. Una historia compartida.",
@@ -46,7 +46,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "preparar",
-    image: "/images/running-training.jpg",
+    image: "/images/running-training.webp",
     eyebrow: "PREPARACIÓN · 45 S",
     title: "Un plan que\nse adapte a ti.",
     summary: "La constancia también incluye recuperar.",
@@ -58,7 +58,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "viajar",
-    image: "/images/santiago.jpg",
+    image: "/images/santiago.webp",
     eyebrow: "TU PRIMERA INTERNACIONAL · 45 S",
     title: "La carrera empieza\nantes del avión.",
     summary: "Documentos, kit, horarios y regreso: prepara también el viaje.",
@@ -70,7 +70,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "preparar",
-    image: "/images/running-road.jpg",
+    image: "/images/running-road.webp",
     eyebrow: "CUIDAR EL PROCESO · 30 S",
     title: "Escuchar también\nes entrenar.",
     summary: "No conviertas el dolor en una meta que superar.",
@@ -82,7 +82,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "despues",
-    image: "/images/running-team.jpg",
+    image: "/images/running-team.webp",
     eyebrow: "DESPUÉS DE LA META · 30 S",
     title: "Tu experiencia\nabre el camino.",
     summary: "Una foto, un consejo honesto y lo que mejorarías.",

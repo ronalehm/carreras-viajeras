@@ -53,7 +53,7 @@ export function CommunitySection() {
         </div>
         <div className="relative h-48 overflow-hidden rounded-sm md:h-65">
           <Image
-            src="/images/running-team.jpg"
+            src="/images/running-team.webp"
             alt="Corredores juntos, imagen ilustrativa de la comunidad"
             fill
             sizes="(min-width: 768px) 42vw, 100vw"

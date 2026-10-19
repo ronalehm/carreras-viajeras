@@ -66,7 +66,7 @@ describe("getCatalogTrip", () => {
       capacity: "100 cupos definidos",
       prices: { cash: "US$ 1,499", installmentsTotal: "US$1,799" },
       destinationId: "santiago-2027",
-      image: "/images/cover-santiago.jpg",
+      image: "/images/cover-santiago.webp",
     });
     expect(trip?.included).toHaveLength(9);
   });

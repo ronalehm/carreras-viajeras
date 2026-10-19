@@ -32,19 +32,19 @@ export function SiteBrand({
     >
       {variant === "logo" ? (
         <Image
-          src="/images/logo-cv.png"
+          src="/images/logo-cv.webp"
           alt="Carreras Viajeras by MAZ Producciones"
-          width={2172}
-          height={724}
+          width={640}
+          height={213}
           priority
           className="h-8 w-auto sm:h-10 lg:h-11"
         />
       ) : (
         <Image
-          src="/images/isotipo-cv.png"
+          src="/images/isotipo-cv.webp"
           alt="Carreras Viajeras"
-          width={1254}
-          height={1254}
+          width={256}
+          height={256}
           className="size-11 sm:size-14"
         />
       )}

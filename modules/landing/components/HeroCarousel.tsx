@@ -24,7 +24,7 @@ const em = (text: string) => <em className="text-highlight italic">{text}</em>;
 
 const SLIDES: Slide[] = [
   {
-    image: "/images/hero-santiago.jpg",
+    image: "/images/hero-santiago.webp",
     alt: "Corredores en la línea de partida de la Maratón de Santiago",
     label: "Maratón de Santiago",
     status: "Maratón de Santiago 42K",
@@ -38,7 +38,7 @@ const SLIDES: Slide[] = [
     cta: { href: "/contacto?destino=santiago-2027", label: "Quiero vivir esta carrera" },
   },
   {
-    image: "/images/hero-patagonia.jpg",
+    image: "/images/hero-patagonia.webp",
     alt: "Corredores en un sendero de montaña de la Patagonia",
     label: "Tu paquete corredor",
     status: "Tu paquete corredor",
@@ -52,7 +52,7 @@ const SLIDES: Slide[] = [
     cta: { href: "#paquete", label: "Descubrir el paquete" },
   },
   {
-    image: "/images/hero-meta.jpg",
+    image: "/images/hero-meta.webp",
     alt: "Corredor cruzando la meta de la Maratón de Santiago",
     label: "La comunidad viajera",
     status: "La comunidad viajera",

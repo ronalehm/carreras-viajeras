@@ -82,17 +82,23 @@ export function WhyUsSection() {
           con nosotros?
         </h2>
         <ul className="grid gap-4 sm:grid-cols-3 sm:gap-6">
-          {KEY_POINTS.map(({ glyph, title, text }) => (
-            <li key={title} className="flex items-start gap-3.5 sm:block">
-              <span aria-hidden className="block w-6 shrink-0 text-xl sm:mb-3 sm:text-2xl">
-                {glyph}
-              </span>
-              <div>
-                <strong className="mb-1 block text-sm">{title}</strong>
-                <p className="text-xs leading-relaxed">{text}</p>
-              </div>
-            </li>
-          ))}
+          {KEY_POINTS.map(({ glyph, title, text }, index) => {
+            const tone = index % 2 === 0 ? "text-highlight" : "text-primary";
+            return (
+              <li key={title} className="flex items-start gap-3.5 sm:block">
+                <span
+                  aria-hidden
+                  className={`block w-6 shrink-0 text-xl sm:mb-3 sm:text-2xl ${tone}`}
+                >
+                  {glyph}
+                </span>
+                <div>
+                  <strong className={`mb-1 block text-sm ${tone}`}>{title}</strong>
+                  <p className="text-xs leading-relaxed">{text}</p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
