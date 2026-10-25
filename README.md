@@ -14,10 +14,10 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Datos | Neon PostgreSQL Free + Drizzle con driver HTTPS `neon-http` |
 | Identidad | Neon Auth gestionado, basado en Better Auth; un solo proveedor |
 | Validación | Zod; Turnstile para futuros formularios |
-| Operación posterior | Outbox persistente en Neon y n8n Community local |
+| Automatización | Outbox persistente en Neon, API privada y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Aún no hay tablas de leads, organizaciones de colaboradores ni captura durable de leads: requieren sus specs.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) existen con su migración pendiente de aplicar (ver [Leads](#leads-crm-comercial)). La outbox de automatización (`automation_events`), la API privada para n8n y el workflow de n8n que avisa al equipo por correo están implementados según [`automation-outbox.md`](docs/specs/automation-outbox.md) (ver [Automatización (outbox y n8n)](#automatización-outbox-y-n8n)). Aún no hay formulario de leads protegido con Turnstile (que encolará los eventos reales) ni organizaciones de colaboradores: requieren sus specs.
 
 ## Preparación local
 
@@ -39,6 +39,7 @@ Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo
 | `DATABASE_URL` | Conexión PostgreSQL con TLS de un rol de aplicación con permisos mínimos |
 | `NEON_AUTH_BASE_URL` | Endpoint HTTPS de Neon Auth, no el dominio de la aplicación |
 | `NEON_AUTH_COOKIE_SECRET` | Secreto aleatorio de al menos 32 caracteres, solo servidor |
+| `AUTOMATION_API_TOKEN` | Secreto aleatorio de al menos 32 caracteres, solo servidor, para la API privada de n8n. El mismo valor va en la credencial Header Auth de n8n como `Bearer <token>`. Sin él (o con menos de 32 caracteres) la API privada responde `503` y el resto de la aplicación funciona igual (ver [Automatización](#automatización-outbox-y-n8n)) |
 
 El origen previsto de producción es `https://carreras-viajeras.mentec.dev`. Para desarrollo, usar el origen local. Neon Auth incluye localhost preconfigurado; comprobar el callback y el origen local si aparece un problema de autenticación. La configuración se valida al usarla en una petición; compilar no debe conectarse a Neon ni exigir secretos.
 
@@ -61,17 +62,17 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)) y `drizzle/0005_abnormal_gladiator.sql` crea la outbox de automatización (pendiente, después de `0004`; ver [Migración del outbox](#migración-del-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
 1. Neon ya tiene proyecto `carreras-viajeras`, rama `production`, región AWS São Paulo y base `neondb`. Los ajustes de Neon Auth están en [Ajustes de Neon Auth](#ajustes-de-neon-auth).
 2. El usuario confirmó el trusted origin exacto `https://carreras-viajeras.mentec.dev` en Neon Auth.
-3. `DATABASE_URL`, `NEON_AUTH_BASE_URL` y `NEON_AUTH_COOKIE_SECRET` se cargan en Cloudflare como **Secret** (nunca como texto). `APP_ORIGIN` no es secreto y vive en `vars` de `wrangler.jsonc`: cada despliegue automático ejecuta `wrangler deploy`, que borra las variables de texto creadas en el panel y no declaradas ahí. Por eso `APP_ORIGIN` aparece en el panel como variable de texto: no borrarla ni duplicarla como Secret; se cambia en `wrangler.jsonc`. Nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
+3. `DATABASE_URL`, `NEON_AUTH_BASE_URL`, `NEON_AUTH_COOKIE_SECRET` y `AUTOMATION_API_TOKEN` se cargan en Cloudflare como **Secret** (nunca como texto). `APP_ORIGIN` no es secreto y vive en `vars` de `wrangler.jsonc`: cada despliegue automático ejecuta `wrangler deploy`, que borra las variables de texto creadas en el panel y no declaradas ahí. Por eso `APP_ORIGIN` aparece en el panel como variable de texto: no borrarla ni duplicarla como Secret; se cambia en `wrangler.jsonc`. Nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
 4. El CRM exige correo verificado y una asignación de staff activa por ID de usuario, con denegación por defecto (ver [Acceso al CRM](#acceso-al-crm)); Access puede ser una defensa adicional.
 5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
-Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los procesará con reintentos mediante API privada. No hay formulario, outbox ni integración WhatsApp API implementados todavía.
+La outbox en Neon, la API privada y el workflow de n8n local que la procesa con reintentos ya están implementados (ver [Automatización (outbox y n8n)](#automatización-outbox-y-n8n)); la migración `0003` sigue pendiente de aplicar. Los futuros leads de la landing y su evento se confirmarán juntos en Neon cuando exista el formulario protegido con Turnstile, que sigue pendiente, igual que la integración con la API de WhatsApp.
 
 ## Acceso al CRM
 
@@ -346,6 +347,85 @@ El CRM no permite cambiar la cuenta vinculada. Si el equipo escribió mal el cor
   ```
 
 Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` falla por `bookings_trip_email_active_uq`: revisar cuál de las dos es la buena y cancelar la otra desde el CRM. El cambio se aplica en la siguiente petición: la cuenta anterior deja de ver la reserva, porque la autorización se lee de la base en cada carga. No se tocan tablas de `neon_auth` ni filas de `profiles` o `staff_*`.
+
+## Automatización (outbox y n8n)
+
+Especificado en [`automation-outbox.md`](docs/specs/automation-outbox.md). Objetivo: que ningún aviso de un lead nuevo se pierda aunque n8n esté apagado, se reinicie o falle a mitad de un envío.
+
+- **Outbox en Neon.** Cada evento es una fila de `automation_events`, guardada en la misma transacción (`db.batch([...])`) que el dato que lo origina. Hoy solo hay un tipo: **`lead.created`, versión de payload 1**, con `{ leadId, tripSlug, source: "landing_contact" }` (`tripSlug` puede ser `null`). El payload no lleva datos de contacto ni secretos, y un mismo lead no genera dos `lead.created`. Hasta que exista el formulario protegido de la landing, los eventos solo se crean con el [seed de datos ficticios](#scripts-del-outbox).
+- **Entrega al menos una vez.** n8n Community, en local, reclama eventos con un **lease de 5 minutos** y un token por intento, y los confirma (`ack`) o informa del fallo (`fail`). Un fallo vuelve a `pending` con backoff exponencial con jitter (de 15–30 s tras el intento 1 a 16–32 min tras el intento 7); una lease vencida sin respuesta se reclama de nuevo. Tras **8 intentos** el evento pasa a `dead` y solo vuelve a `pending` con el [reenvío auditado](#scripts-del-outbox). Como un evento puede llegar dos veces, n8n deduplica por `eventId`.
+- **n8n no se expone a Internet** ni recibe `DATABASE_URL` o `DATABASE_MIGRATION_URL`: solo hace peticiones salientes a la API privada.
+
+### API privada
+
+Tres rutas, solo `POST`, con `Authorization: Bearer <AUTOMATION_API_TOKEN>` (sensible a mayúsculas, comparado en tiempo constante):
+
+| Ruta | Body | Respuesta correcta |
+|---|---|---|
+| `/api/automation/events/claim` | `{ "limit": 1–25 }` (por defecto 10) | `200 { events: [...] }`, cada uno con `eventId`, `type`, `payloadVersion`, `payload`, `attempt`, `occurredAt`, `leaseToken` y `leaseExpiresAt` |
+| `/api/automation/events/<id>/ack` | `{ "leaseToken": "<uuid>" }` | `200 { status: "succeeded" }` (repetirlo con el mismo token también responde 200) |
+| `/api/automation/events/<id>/fail` | `{ "leaseToken": "<uuid>", "errorCode": "<código>" }` (`^[a-z0-9_]{1,64}$`) | `200 { status: "pending", retryAt }` o `200 { status: "dead" }` |
+
+Errores, siempre `{ error: "<código>" }` con `Cache-Control: no-store` y sin detalles de SQL, entrada ni entorno:
+
+| Código | Cuándo |
+|---|---|
+| `503 unavailable` | `AUTOMATION_API_TOKEN` ausente o con menos de 32 caracteres (sin indicar qué falta), o error de la base |
+| `401 unauthorized` | Falta la cabecera `Authorization` o el token no coincide |
+| `404 not_found` | `<id>` no es un UUID |
+| `413 payload_too_large` | Body JSON de más de 4 KiB |
+| `400 invalid_request` | Body inválido, campos extra o `limit` fuera de 1–25 |
+| `409 lease_conflict` | `ack`/`fail` con token antiguo, lease vencida o evento inexistente |
+
+El secreto se valida solo en estas rutas y al recibir la petición: su ausencia no afecta al resto de la aplicación ni a `npm run build`. Para generarlo en tu equipo, por ejemplo, `openssl rand -base64 48`. En local va en `AUTOMATION_API_TOKEN` de `.env.local` (y de `.dev.vars` para Wrangler); en producción, como Cloudflare Secret (ver [Continuar desde Neon y Cloudflare](#continuar-desde-neon-y-cloudflare)). El mismo valor se guarda en la credencial Header Auth de n8n como `Bearer <token>`. Nunca en `wrangler.jsonc`, variables `NEXT_PUBLIC_*`, el JSON del workflow ni el repositorio.
+
+### Aviso por correo al equipo
+
+Por cada `lead.created` v1, n8n envía un correo (credencial SMTP de n8n) a los destinatarios configurados en el workflow (`TEAM_EMAILS`). El asunto es `Nuevo lead para <tripSlug>` (o `Nuevo lead sin viaje`), y el cuerpo, en texto, lleva el viaje, la fecha del evento y el enlace `<APP_BASE_URL>/crm/leads/<leadId>`, con la indicación de que los datos de contacto solo se ven en el CRM. **No incluye nombre, correo ni WhatsApp del interesado.** El enlace abrirá la ficha cuando exista la vista de leads del CRM. Solo se hace `ack` si el envío tuvo éxito; si falla, `fail` con `email_send_failed`, y un evento desconocido se marca `unsupported_event`.
+
+### Importar el workflow en n8n
+
+La guía completa está en [`n8n/README.md`](n8n/README.md): importar [`n8n/workflows/automation-outbox-poller.json`](n8n/workflows/automation-outbox-poller.json), crear las credenciales Header Auth y SMTP, rellenar `APP_BASE_URL`, `TEAM_EMAILS` y `FROM_EMAIL`, activar el workflow y probarlo con datos ficticios. El JSON no contiene secretos ni direcciones reales.
+
+### Migración del outbox
+
+Pendiente de aplicar por el usuario. **Primero en una rama de desarrollo de Neon**; en `production`, solo después de revisarla y con autorización explícita de la operación remota. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production`.
+
+1. Revisar `drizzle/0005_abnormal_gladiator.sql`: solo crea, en `public`, el enum `automation_event_status`, las tablas `automation_events` (seis CHECK, el índice único `automation_events_type_lead_uq` y los índices parciales `automation_events_pending_idx` y `automation_events_lease_idx`) y `automation_event_redrives` (un CHECK y dos claves foráneas `ON DELETE restrict`, hacia `automation_events` y `profiles`). `lead_id` no tiene clave foránea todavía. No hay cambios en las tablas existentes. `grep -inE 'neon_auth|drop|create schema' drizzle/0005_abnormal_gladiator.sql` no devuelve nada.
+2. Orden: si faltan en esa rama, aplicar antes `0001`, `0002_tough_warpath` (leads, ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) `0003_talented_skin` (reservas, ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `0004_sloppy_bushwacker` (campos de carrera, ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)); después, `0005`. Comprobarlo con `SELECT to_regclass('public.profiles'), to_regclass('public.leads'), to_regclass('public.bookings');` (ninguno debe ser `NULL`). El outbox no depende de las reservas ni de los campos de carrera, pero se respeta el orden del journal de Drizzle.
+3. Aplicar `0005` con el mismo procedimiento y la misma comprobación de `neon_auth` que en [Migración de las tablas de staff](#migración-de-las-tablas-de-staff) (pasos 3 a 5): guardar el estado de `neon_auth`, pegar el archivo entre `BEGIN;` y `COMMIT;` en el SQL Editor de Neon con la rama correcta seleccionada (o `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0005_abnormal_gladiator.sql`) y comprobar que el volcado de `neon_auth` es idéntico (`diff` vacío). Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar.
+4. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.automation_events'::regclass, 'public.automation_event_redrives'::regclass) AND contype <> 'n' ORDER BY 1, 2;` lista 11 restricciones (dos `*_pkey`, siete `*_chk` y dos `*_fk`; el filtro `contype <> 'n'` excluye los `NOT NULL`, que PostgreSQL 18 también guarda como restricciones), y `SELECT count(*) FROM automation_events;` devuelve 0.
+
+**GRANT.** Hoy `DATABASE_URL` usa el rol owner y no necesita GRANT. Si pasa a un rol de aplicación con permisos mínimos, ese rol necesita exactamente `SELECT, INSERT, UPDATE` en `automation_events` (sin `DELETE`) y ningún permiso en `automation_event_redrives`, que solo escribe el script de reenvío con `DATABASE_MIGRATION_URL`. Se conceden con la credencial administrativa, primero en la rama de desarrollo:
+
+```sql
+GRANT SELECT, INSERT, UPDATE ON automation_events TO <rol_de_la_app>;
+```
+
+No hay script `migrate` ni migración automática.
+
+### Scripts del outbox
+
+Se ejecutan con psql y `DATABASE_MIGRATION_URL` (nunca la URL de runtime del Worker ni de n8n), cada uno en una transacción y con `ON_ERROR_STOP`. Requieren la migración `0003` aplicada en esa rama. Las instrucciones completas están en la cabecera de cada archivo.
+
+- **Datos ficticios** ([`scripts/sql/seed-automation-demo.sql`](scripts/sql/seed-automation-demo.sql)). **Solo en una rama de desarrollo de Neon, nunca en `production`**: comprobar en la consola que la cadena de conexión apunta a esa rama. Inserta cuatro eventos `lead.created` `pending` con UUID fijos (prefijo `de000000`) y slugs ficticios (`maraton-demo-2027`, `media-maraton-demo`, `trail-demo-2027` y uno sin viaje). Es idempotente: repetirlo no duplica eventos. Con `-v cleanup=on` borra exactamente esos eventos y sus filas de reenvío, sin tocar otros.
+
+  ```sh
+  psql "$DATABASE_MIGRATION_URL" -f scripts/sql/seed-automation-demo.sql
+  psql "$DATABASE_MIGRATION_URL" -v cleanup=on -f scripts/sql/seed-automation-demo.sql
+  ```
+
+- **Reenvío auditado de un evento `dead`** ([`scripts/sql/redrive-automation-event.sql`](scripts/sql/redrive-automation-event.sql)). `event_id` es el id del evento en `automation_events` (el `eventId` que ve n8n), no el `lead_id`; `performed_by` es el `user_id` de un staff con asignación activa; `reason` sigue el formato `<operador>: <motivo>` (1–500 caracteres). En una sola sentencia inserta la fila de auditoría en `automation_event_redrives` y devuelve el evento a `pending` con `attempts = 0` y sin lease; si el evento no está `dead` o `performed_by` no es staff activo, no cambia nada. Siempre devuelve una fila con `applied`, `previous_status`, `current_status`, `performed_by_is_staff` y `redrive_id`. Primero en una rama de desarrollo; en `production`, solo con autorización explícita.
+
+  ```sh
+  psql "$DATABASE_MIGRATION_URL" -v event_id='<id del evento>' \
+    -v performed_by='<user_id del staff>' -v reason='<operador>: <motivo>' \
+    -f scripts/sql/redrive-automation-event.sql
+  ```
+
+### Checklist manual de la Fase 3
+
+La ejecuta el usuario, con su autorización (los agentes no tienen acceso a Neon), en una rama Neon de desarrollo con la migración y el seed aplicados, `npm run dev` apuntando a esa rama y una dirección de prueba como destinataria, nunca la del equipo real. La lista y cómo comprobar cada punto están en [Checklist de la Fase 3 de `n8n/README.md`](n8n/README.md#checklist-de-la-fase-3).
 
 ## Reglas de colaboración
 
