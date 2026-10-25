@@ -24,7 +24,10 @@ export default async function EditLeadPage({ params }: PageProps<"/crm/leads/[id
   const [lead, { tripOptions }] = await Promise.all([getLeadById(id), getLeadFormOptions()]);
   if (!lead) notFound();
   // Only the editable fields reach the client component.
-  const { fullName, phone, email, location, trip, destinationText } = lead;
+  const {
+    fullName, phone, email, location, trip, destinationText,
+    channel, originDetail, referredBy, referralPermission, contactPreference,
+  } = lead;
 
   return (
     <section className="flex flex-col gap-6">
@@ -40,7 +43,10 @@ export default async function EditLeadPage({ params }: PageProps<"/crm/leads/[id
         </>
       ) : (
         <LeadForm
-          lead={{ id: lead.id, fullName, phone, email, location, trip, destinationText }}
+          lead={{
+            id: lead.id, fullName, phone, email, location, trip, destinationText,
+            channel, originDetail, referredBy, referralPermission, contactPreference,
+          }}
           tripOptions={tripOptions}
         />
       )}
