@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildInquiryMessage,
+  buildTripInquiryMessage,
   buildWhatsAppUrl,
   parseDestinationId,
   WHATSAPP_NUMBER,
@@ -42,6 +43,21 @@ describe("buildInquiryMessage", () => {
       ]);
     },
   );
+});
+
+describe("buildTripInquiryMessage", () => {
+  it("devuelve el texto exacto con título, fecha y lugar, sin precio", () => {
+    const message = buildTripInquiryMessage({
+      title: "Maratón de Lima 2027",
+      raceDate: "16 de mayo de 2027",
+      location: "Lima, Perú",
+    });
+    expect(message).toBe(
+      "Hola, me interesa el viaje Maratón de Lima 2027 (16 de mayo de 2027, Lima, Perú). Quisiera conocer disponibilidad, inclusiones y condiciones finales.\n" +
+        "Entiendo que esta consulta no constituye reserva ni pago.",
+    );
+    expect(message).not.toContain("US$");
+  });
 });
 
 describe("buildWhatsAppUrl", () => {

@@ -26,6 +26,33 @@ const validForm = {
   priceUsd: "1990",
   capacity: "100",
   imageUrl: "https://example.com/santiago.jpg",
+  officialUrl: " https://maratondesantiago.cl/ ",
+  installmentsPriceUsd: "1799",
+  depositUsd: "300",
+  companionPriceUsd: "1300",
+  paymentTerms: "  Reserva con US$ 300.\nSaldo en cuotas.  ",
+  excludes: "Vuelos internos\n\n  Gastos personales \r\n",
+  notes: " Horario de salida por confirmar. ",
+};
+
+const NEW_OPTIONAL_FIELDS = [
+  "officialUrl",
+  "installmentsPriceUsd",
+  "depositUsd",
+  "companionPriceUsd",
+  "paymentTerms",
+  "excludes",
+  "notes",
+] as const;
+
+const EMPTY_NEW_FIELDS = {
+  officialUrl: null,
+  installmentsPriceUsd: null,
+  depositUsd: null,
+  companionPriceUsd: null,
+  paymentTerms: null,
+  excludes: [],
+  notes: null,
 };
 
 const parse = (overrides: Record<string, string>) =>
@@ -65,6 +92,13 @@ describe("tripFormSchema", () => {
       priceUsd: 1990,
       capacity: 100,
       imageUrl: "https://example.com/santiago.jpg",
+      officialUrl: "https://maratondesantiago.cl/",
+      installmentsPriceUsd: 1799,
+      depositUsd: 300,
+      companionPriceUsd: 1300,
+      paymentTerms: "Reserva con US$ 300.\nSaldo en cuotas.",
+      excludes: ["Vuelos internos", "Gastos personales"],
+      notes: "Horario de salida por confirmar.",
     });
   });
 
@@ -76,6 +110,13 @@ describe("tripFormSchema", () => {
       priceUsd: "",
       capacity: "",
       imageUrl: "",
+      officialUrl: " ",
+      installmentsPriceUsd: "",
+      depositUsd: "",
+      companionPriceUsd: "  ",
+      paymentTerms: "  \n ",
+      excludes: "\n \n",
+      notes: "",
     });
 
     expect(result.success).toBe(true);
@@ -86,12 +127,21 @@ describe("tripFormSchema", () => {
       priceUsd: null,
       capacity: null,
       imageUrl: null,
+      ...EMPTY_NEW_FIELDS,
     });
   });
 
   it("treats missing optional keys as blank, without English type errors", () => {
     const required: Partial<typeof validForm> = { ...validForm };
-    for (const key of ["startDate", "endDate", "includes", "priceUsd", "capacity", "imageUrl"] as const) {
+    for (const key of [
+      "startDate",
+      "endDate",
+      "includes",
+      "priceUsd",
+      "capacity",
+      "imageUrl",
+      ...NEW_OPTIONAL_FIELDS,
+    ] as const) {
       delete required[key];
     }
     const result = tripFormSchema.safeParse(required);
@@ -104,6 +154,7 @@ describe("tripFormSchema", () => {
       priceUsd: null,
       capacity: null,
       imageUrl: null,
+      ...EMPTY_NEW_FIELDS,
     });
   });
 
@@ -255,6 +306,73 @@ describe("tripFormSchema", () => {
     });
   });
 
+  describe("officialUrl", () => {
+    it.each(["http://maratondesantiago.cl/", "ftp://maratondesantiago.cl/", "no-es-url", `https://example.com/${"a".repeat(2040)}`])(
+      "rejects %j",
+      (officialUrl) => {
+        expectErrorOn({ officialUrl }, "officialUrl");
+      },
+    );
+
+    it("answers in Spanish for an http URL", () => {
+      expect(parse({ officialUrl: "http://maratondesantiago.cl/" }).error?.issues[0]?.message).toBe(
+        "Indica una URL que empiece por https://.",
+      );
+    });
+  });
+
+  describe.each(["installmentsPriceUsd", "depositUsd", "companionPriceUsd"] as const)("%s", (field) => {
+    it.each(["-1", "12.5", "abc", "1000001"])("rejects %j", (value) => {
+      expectErrorOn({ [field]: value }, field);
+    });
+
+    it("uses the price message for decimals and negatives", () => {
+      for (const value of ["12.5", "-1"]) {
+        expect(parse({ [field]: value }).error?.issues[0]?.message).toBe(
+          "Indica un precio en dólares, sin decimales.",
+        );
+      }
+    });
+
+    it.each([
+      ["0", 0],
+      ["1000000", 1_000_000],
+    ])("parses %j as %d", (value, expected) => {
+      expect(parse({ [field]: value }).data?.[field]).toBe(expected);
+    });
+  });
+
+  describe("excludes", () => {
+    it("rejects 21 items in Spanish", () => {
+      const result = parse({ excludes: Array.from({ length: 21 }, (_, i) => `Item ${i}`).join("\n") });
+      expect(issueFields(result)).toEqual(["excludes"]);
+      expect(result.error?.issues[0]?.message).toBe("Indica como máximo 20 elementos.");
+    });
+
+    it("rejects an item longer than 160 characters in Spanish", () => {
+      const result = parse({ excludes: `Corto\n${"a".repeat(161)}` });
+      expect(issueFields(result)).toEqual(["excludes"]);
+      expect(result.error?.issues[0]?.message).toBe("Cada elemento puede tener hasta 160 caracteres.");
+    });
+
+    it("accepts 20 items", () => {
+      const excludes = Array.from({ length: 20 }, (_, i) => `Item ${i}`).join("\n");
+      expect(parse({ excludes }).data?.excludes).toHaveLength(20);
+    });
+  });
+
+  describe.each(["paymentTerms", "notes"] as const)("%s", (field) => {
+    it("rejects more than 1000 characters in Spanish", () => {
+      const result = parse({ [field]: "a".repeat(1001) });
+      expect(issueFields(result)).toEqual([field]);
+      expect(result.error?.issues[0]?.message).toBe("Puede tener hasta 1000 caracteres.");
+    });
+
+    it("accepts 1000 characters after trimming", () => {
+      expect(parse({ [field]: ` ${"a".repeat(1000)} ` }).data?.[field]).toHaveLength(1000);
+    });
+  });
+
   describe("dates", () => {
     it.each(["", "25/04/2027", "2027-02-30"])("rejects the race date %j", (raceDate) => {
       expectErrorOn({ raceDate }, "raceDate");
@@ -304,6 +422,24 @@ describe("updateTripSchema", () => {
     const result = updateTripSchema.safeParse({ ...validForm, id: "abc" });
     expect(issueFields(result)).toEqual(["id"]);
     expect(result.error?.issues[0]?.message).toBe("El viaje no es válido.");
+  });
+
+  it("accepts the new trip fields", () => {
+    const result = updateTripSchema.safeParse({ ...validForm, id: TRIP_ID });
+    expect(result.data).toMatchObject({
+      officialUrl: "https://maratondesantiago.cl/",
+      installmentsPriceUsd: 1799,
+      depositUsd: 300,
+      companionPriceUsd: 1300,
+      paymentTerms: "Reserva con US$ 300.\nSaldo en cuotas.",
+      excludes: ["Vuelos internos", "Gastos personales"],
+      notes: "Horario de salida por confirmar.",
+    });
+  });
+
+  it("rejects an invalid new field on its own key", () => {
+    const result = updateTripSchema.safeParse({ ...validForm, id: TRIP_ID, depositUsd: "12.5" });
+    expect(issueFields(result)).toEqual(["depositUsd"]);
   });
 
   it("keeps the travel date rules", () => {

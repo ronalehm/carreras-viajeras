@@ -1,268 +1,9 @@
 {
-  "id": "4bb0070d-ecb5-4ce8-9b16-c8f237f68055",
+  "id": "cfd31f1f-0eed-4a16-9dbd-029d244c3b49",
   "prevId": "44660d44-81be-4a18-b5fa-d0b786d60358",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.automation_event_redrives": {
-      "name": "automation_event_redrives",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "performed_by": {
-          "name": "performed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "automation_event_redrives_event_id_automation_events_id_fk": {
-          "name": "automation_event_redrives_event_id_automation_events_id_fk",
-          "tableFrom": "automation_event_redrives",
-          "tableTo": "automation_events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "automation_event_redrives_performed_by_profiles_user_id_fk": {
-          "name": "automation_event_redrives_performed_by_profiles_user_id_fk",
-          "tableFrom": "automation_event_redrives",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "performed_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "automation_event_redrives_reason_chk": {
-          "name": "automation_event_redrives_reason_chk",
-          "value": "char_length(\"automation_event_redrives\".\"reason\") BETWEEN 1 AND 500"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.automation_events": {
-      "name": "automation_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lead_id": {
-          "name": "lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_version": {
-          "name": "payload_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "automation_event_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "available_at": {
-          "name": "available_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_token": {
-          "name": "lease_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_code": {
-          "name": "last_error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "automation_events_type_lead_uq": {
-          "name": "automation_events_type_lead_uq",
-          "columns": [
-            {
-              "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lead_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "automation_events_pending_idx": {
-          "name": "automation_events_pending_idx",
-          "columns": [
-            {
-              "expression": "available_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "automation_events_lease_idx": {
-          "name": "automation_events_lease_idx",
-          "columns": [
-            {
-              "expression": "lease_until",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'processing'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "automation_events_type_chk": {
-          "name": "automation_events_type_chk",
-          "value": "\"automation_events\".\"type\" IN ('lead.created')"
-        },
-        "automation_events_payload_version_chk": {
-          "name": "automation_events_payload_version_chk",
-          "value": "\"automation_events\".\"payload_version\" > 0"
-        },
-        "automation_events_attempts_chk": {
-          "name": "automation_events_attempts_chk",
-          "value": "\"automation_events\".\"attempts\" BETWEEN 0 AND 8"
-        },
-        "automation_events_last_error_code_chk": {
-          "name": "automation_events_last_error_code_chk",
-          "value": "\"automation_events\".\"last_error_code\" IS NULL OR \"automation_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,64}$'"
-        },
-        "automation_events_processing_lease_chk": {
-          "name": "automation_events_processing_lease_chk",
-          "value": "\"automation_events\".\"status\" <> 'processing' OR (\"automation_events\".\"lease_token\" IS NOT NULL AND \"automation_events\".\"lease_until\" IS NOT NULL)"
-        },
-        "automation_events_processed_at_chk": {
-          "name": "automation_events_processed_at_chk",
-          "value": "(\"automation_events\".\"status\" = 'succeeded') = (\"automation_events\".\"processed_at\" IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.booking_payments": {
       "name": "booking_payments",
       "schema": "",
@@ -1723,6 +1464,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "official_url": {
+          "name": "official_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "installments_price_usd": {
+          "name": "installments_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deposit_usd": {
+          "name": "deposit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "companion_price_usd": {
+          "name": "companion_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_terms": {
+          "name": "payment_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "excludes": {
+          "name": "excludes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "trip_status",
@@ -1795,22 +1579,32 @@
         "trips_image_url_chk": {
           "name": "trips_image_url_chk",
           "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
+        },
+        "trips_official_url_chk": {
+          "name": "trips_official_url_chk",
+          "value": "\"trips\".\"official_url\" IS NULL OR \"trips\".\"official_url\" LIKE 'https://%'"
+        },
+        "trips_installments_price_usd_chk": {
+          "name": "trips_installments_price_usd_chk",
+          "value": "\"trips\".\"installments_price_usd\" IS NULL OR \"trips\".\"installments_price_usd\" >= 0"
+        },
+        "trips_deposit_usd_chk": {
+          "name": "trips_deposit_usd_chk",
+          "value": "\"trips\".\"deposit_usd\" IS NULL OR \"trips\".\"deposit_usd\" >= 0"
+        },
+        "trips_companion_price_usd_chk": {
+          "name": "trips_companion_price_usd_chk",
+          "value": "\"trips\".\"companion_price_usd\" IS NULL OR \"trips\".\"companion_price_usd\" >= 0"
+        },
+        "trips_excludes_chk": {
+          "name": "trips_excludes_chk",
+          "value": "cardinality(\"trips\".\"excludes\") <= 20"
         }
       },
       "isRLSEnabled": false
     }
   },
   "enums": {
-    "public.automation_event_status": {
-      "name": "automation_event_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "processing",
-        "succeeded",
-        "dead"
-      ]
-    },
     "public.booking_status": {
       "name": "booking_status",
       "schema": "public",
