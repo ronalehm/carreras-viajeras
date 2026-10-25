@@ -1,7 +1,7 @@
 # Orígenes del lead: canales de la estrategia comercial, detalle y filtro por origen
 
 - Módulo: crm
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `crm-leads-pipeline.md` (aprobada): tablas `leads` y `lead_activities`, alta manual, ficha, edición, historial, lista con embudo y filtros, permiso `leads.manage`. Sus F2–F6 están en ronalehm/carreras-viajeras#12 (rama `claude/determined-cannon-bxoqo1`, `977f916`), **aún sin integrar en `main`** (`0b5f723`).
   - `crm-leads-capture.md` (aprobada; F1–F2 en el mismo PR #12): origen `web_form`, migración `drizzle/0004_fluffy_prodigy.sql`, evento `lead.created` con payload `{ "source": <origen> }` y lectura del lead para n8n.
