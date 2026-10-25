@@ -1,7 +1,7 @@
 # Captura automática de leads (formulario web → CRM) y outbox para n8n
 
 - Módulo: crm (también `integrations`, nuevo, y `landing`)
-- Estado: borrador
+- Estado: aprobado
 - Estado de la implementación (2026-10-18): F1 y F2 implementadas y aprobadas por el reviewer; F3, F4 y F5 pendientes.
 - Enmienda (2026-10-18), marcada con "(enmienda 2)": (1) destinos de consulta alineados con `main`: Panamá y Medellín se sustituyen por Río de Janeiro (`rio`) y Roma (`roma`), con el mismo modelo (Santiago con el slug del catálogo → `trip_id` si está publicado; Río y Roma sin slug → `destination_text`); (2) la F4 se ajusta al código real de la landing en `main` (página del viaje que lee el catálogo publicado, `catalogTrip.ts` y su test, cuenta del runner y menú móvil) y exige la rama sincronizada con `main`; (3) la migración de captura y outbox es `drizzle/0004_fluffy_prodigy.sql` (antes `0003`), porque `main` ya tiene `0003_talented_skin.sql` (reservas); orden `0001 → 0002 → 0003 (reservas) → 0004 (outbox, dos bloques)`; (4) la F5 y su guía de n8n se alinean con la guía implementada en la F2 (bucle "Uno a uno", nodos con nombre, deduplicación por `event_id`), sin cambiar el contrato de la API. Las demás decisiones del usuario no cambian.
 - Depende de:
