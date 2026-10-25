@@ -2,6 +2,7 @@ import { formatDateTime } from "@/lib/dates";
 import type { LeadActivity } from "../types/leads.types";
 import {
   LEAD_ACTIVITY_LABELS,
+  LEAD_SOURCE_LABELS,
   LEAD_STAGE_LABELS,
   SYSTEM_ACTOR_LABELS,
   UNASSIGNED_OWNER_LABEL,
@@ -11,7 +12,8 @@ type LeadTimelineProps = {
   activities: LeadActivity[];
 };
 
-// "Etapa: Nuevo → Contactado", "Responsable: Sin asignar → b@…" or the type label.
+// "Etapa: Nuevo → Contactado", "Responsable: Sin asignar → b@…",
+// "Cambió el origen: Desconocido → Instagram" or the type label.
 function activityTitle(activity: LeadActivity): string {
   const label = LEAD_ACTIVITY_LABELS[activity.type];
   if (activity.type === "stage_changed" && activity.stageFrom && activity.stageTo) {
@@ -21,6 +23,9 @@ function activityTitle(activity: LeadActivity): string {
     const from = activity.ownerFrom?.email ?? UNASSIGNED_OWNER_LABEL;
     const to = activity.ownerTo?.email ?? UNASSIGNED_OWNER_LABEL;
     return `${label}: ${from} → ${to}`;
+  }
+  if (activity.type === "source_changed" && activity.sourceFrom && activity.sourceTo) {
+    return `${label}: ${LEAD_SOURCE_LABELS[activity.sourceFrom]} → ${LEAD_SOURCE_LABELS[activity.sourceTo]}`;
   }
   return label;
 }

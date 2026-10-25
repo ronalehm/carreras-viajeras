@@ -16,6 +16,7 @@ import {
   LEAD_STAGE_LABELS,
   LeadDetails,
   LeadOwnerForm,
+  LeadSourceForm,
   LeadStageForm,
   LeadTimeline,
   listLeadActivities,
@@ -101,6 +102,10 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Responsable</h2>
           <LeadOwnerForm leadId={lead.id} ownerUserId={lead.owner?.userId ?? null} ownerOptions={ownerOptions} />
+        </section>
+        <section className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold">Origen</h2>
+          <LeadSourceForm leadId={lead.id} source={lead.source} sourceDetail={lead.sourceDetail} />
         </section>
       </div>
       <section className="flex flex-col gap-3">

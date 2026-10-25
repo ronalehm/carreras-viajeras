@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { LeadDetail } from "../types/leads.types";
-import { LEAD_SOURCE_LABELS, leadOwnerLabel, leadTripLabel, SYSTEM_ACTOR_LABELS } from "../utils/leadDisplay";
+import { leadOwnerLabel, leadSourceLabel, leadTripLabel, SYSTEM_ACTOR_LABELS } from "../utils/leadDisplay";
 
 type LeadDetailsProps = {
   lead: Pick<
@@ -13,6 +13,7 @@ type LeadDetailsProps = {
     | "trip"
     | "destinationText"
     | "source"
+    | "sourceDetail"
     | "consentVersion"
     | "createdBy"
     | "owner"
@@ -77,7 +78,7 @@ export function LeadDetails({ lead }: LeadDetailsProps) {
       <DetailCard
         title="Registro"
         items={[
-          { label: "Origen", value: LEAD_SOURCE_LABELS[lead.source] },
+          { label: "Origen", value: leadSourceLabel(lead.source, lead.sourceDetail) },
           { label: "Consentimiento", value: `Versión ${lead.consentVersion}` },
           { label: "Registrado por", value: lead.createdBy?.email ?? SYSTEM_ACTOR_LABELS.created },
         ]}
