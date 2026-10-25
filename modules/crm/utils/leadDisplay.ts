@@ -117,3 +117,10 @@ const TRIP_STATUS_SUFFIXES: Record<LeadTripOption["status"], string> = {
 export function leadTripLabel(trip: Pick<LeadTripOption, "title" | "status">): string {
   return `${trip.title}${TRIP_STATUS_SUFFIXES[trip.status]}`;
 }
+
+// A cohort month (YYYY-MM) as shown in the report filter and caption: "octubre de 2026". Read in
+// UTC so the month never shifts.
+const cohortFormat = new Intl.DateTimeFormat("es", { month: "long", year: "numeric", timeZone: "UTC" });
+export function formatCohort(cohort: string): string {
+  return cohortFormat.format(new Date(`${cohort}-01T00:00:00Z`));
+}

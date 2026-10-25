@@ -1,10 +1,11 @@
 import "server-only";
-import { and, asc, count, desc, eq, gte, isNotNull, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, isNull, lt, ne, sql, type SQL } from "drizzle-orm";
 import { CRM_TIME_ZONE } from "@/lib/dates";
 import { getDb } from "@/lib/db";
-import { leads, trips } from "@/lib/db-schema";
+import { leads } from "@/lib/db-schema";
 import { leadChannelSchema, leadStageSchema } from "../schemas/leads.schema";
 import type { LeadReport, LeadReportFilters, LeadReportRow, LeadStage } from "../types/leads.types";
+import { tripOptionsQuery } from "./leads.service";
 
 // Months offered by the cohort filter.
 const COHORT_MONTHS = 24;
@@ -76,11 +77,7 @@ export async function getLeadReport(filters: LeadReportFilters): Promise<LeadRep
       .groupBy(cohortOfLead)
       .orderBy(desc(cohortOfLead))
       .limit(COHORT_MONTHS),
-    db
-      .select({ id: trips.id, title: trips.title, status: trips.status })
-      .from(trips)
-      .where(ne(trips.status, "archived"))
-      .orderBy(asc(trips.raceDate), asc(trips.title)),
+    tripOptionsQuery(db),
   ]);
 
   const byChannel = new Map(counts.map((row) => [row.channel, row]));

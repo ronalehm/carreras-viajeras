@@ -10,19 +10,12 @@ import {
 } from "@/components/ui/table";
 import { leadStageSchema } from "../schemas/leads.schema";
 import type { LeadReport, LeadReportFilters, LeadReportRow } from "../types/leads.types";
-import { LEAD_CHANNEL_LABELS, LEAD_STAGE_LABELS } from "../utils/leadDisplay";
+import { formatCohort, LEAD_CHANNEL_LABELS, LEAD_STAGE_LABELS } from "../utils/leadDisplay";
 
 type LeadReportTableProps = {
   report: Pick<LeadReport, "rows" | "totals" | "tripOptions">;
   filters: LeadReportFilters;
 };
-
-// A cohort month (YYYY-MM) as shown in the filter and the caption: "octubre de 2026". Read in UTC
-// so the month never shifts.
-const cohortFormat = new Intl.DateTimeFormat("es", { month: "long", year: "numeric", timeZone: "UTC" });
-export function formatCohort(cohort: string): string {
-  return cohortFormat.format(new Date(`${cohort}-01T00:00:00Z`));
-}
 
 const NUMBER_CELL = "text-right tabular-nums";
 
@@ -47,9 +40,8 @@ export function LeadReportTable({ report, filters }: LeadReportTableProps) {
   if (report.rows.length === 0) {
     return <p className="text-muted-foreground">No hay leads en esta cohorte.</p>;
   }
-  const trip = filters.tripId
-    ? (report.tripOptions.find((option) => option.id === filters.tripId)?.title ?? "Viaje no disponible")
-    : "Todos los viajes";
+  // The page only passes a trip that is among the options.
+  const trip = report.tripOptions.find((option) => option.id === filters.tripId)?.title ?? "Todos los viajes";
   const imported = filters.onlyImported ? "solo importados" : "sin importados";
   return (
     <Table>

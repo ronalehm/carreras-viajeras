@@ -16,12 +16,18 @@ export default async function CrmHomePage({ searchParams }: PageProps<"/crm">) {
   }
 
   const query = leadReportQuerySchema.parse(await searchParams);
-  const filters = {
+  let filters = {
     cohort: query.cohort ?? getTodayDate().slice(0, 7),
     tripId: query.tripId,
     onlyImported: query.onlyImported,
   };
-  const report = await getLeadReport(filters);
+  let report = await getLeadReport(filters);
+  // A trip that no longer exists or is archived is not offered: discard it, so the counts, the
+  // trip filter and the caption show every trip.
+  if (filters.tripId && !report.tripOptions.some((trip) => trip.id === filters.tripId)) {
+    filters = { ...filters, tripId: undefined };
+    report = await getLeadReport(filters);
+  }
   return (
     <section className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold">Leads por origen y etapa</h1>

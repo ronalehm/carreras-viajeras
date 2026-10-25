@@ -4,8 +4,7 @@ import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import type { leadReportQuerySchema } from "../schemas/leads.schema";
 import type { LeadReport, LeadReportFilters as ReportFilters } from "../types/leads.types";
-import { leadTripLabel } from "../utils/leadDisplay";
-import { formatCohort } from "./LeadReportTable";
+import { formatCohort, leadTripLabel } from "../utils/leadDisplay";
 
 type LeadReportFiltersProps = {
   filters: ReportFilters;

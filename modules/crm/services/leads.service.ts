@@ -69,6 +69,15 @@ function ownerOptionsQuery(db: Db) {
     .orderBy(asc(profiles.email), asc(profiles.userId));
 }
 
+// Every trip that is not archived (drafts included): lead form and report filter.
+export function tripOptionsQuery(db: Db) {
+  return db
+    .select({ id: trips.id, title: trips.title, status: trips.status })
+    .from(trips)
+    .where(ne(trips.status, "archived"))
+    .orderBy(asc(trips.raceDate), asc(trips.title));
+}
+
 // "mine" is the session user and "unassigned" the leads without owner (web form).
 function ownerCondition(owner: LeadListFilters["owner"], currentUserId: string) {
   if (owner === undefined) return undefined;
@@ -162,11 +171,7 @@ export async function getLeadFormOptions(): Promise<{
   const db = getDb();
   const [ownerOptions, tripOptions] = await db.batch([
     ownerOptionsQuery(db),
-    db
-      .select({ id: trips.id, title: trips.title, status: trips.status })
-      .from(trips)
-      .where(ne(trips.status, "archived"))
-      .orderBy(asc(trips.raceDate), asc(trips.title)),
+    tripOptionsQuery(db),
   ]);
   return { ownerOptions, tripOptions };
 }

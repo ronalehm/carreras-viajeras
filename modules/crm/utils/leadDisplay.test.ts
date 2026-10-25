@@ -7,6 +7,7 @@ import {
 } from "../schemas/leads.schema";
 import {
   CONTACT_PREFERENCE_LABELS,
+  formatCohort,
   LEAD_ACTIVITY_LABELS,
   LEAD_CHANNEL_LABELS,
   LEAD_SOURCE_LABELS,
@@ -105,5 +106,24 @@ describe("leadTripLabel", () => {
     expect(leadTripLabel({ title: "Maratón de Santiago 2027", status: "archived" })).toBe(
       "Maratón de Santiago 2027 (archivado)",
     );
+  });
+});
+
+describe("formatCohort", () => {
+  it("shows the month name and the year", () => {
+    expect(formatCohort("2026-10")).toBe("octubre de 2026");
+    expect(formatCohort("2027-01")).toBe("enero de 2027");
+    expect(formatCohort("2026-12")).toBe("diciembre de 2026");
+  });
+
+  // The first instant of each month in UTC is still the previous month west of UTC (America/Lima).
+  it("formats in UTC, without shifting to the previous month", () => {
+    const months = [
+      "enero", "febrero", "marzo", "abril", "mayo", "junio",
+      "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    ];
+    months.forEach((name, index) => {
+      expect(formatCohort(`2026-${String(index + 1).padStart(2, "0")}`)).toBe(`${name} de 2026`);
+    });
   });
 });
