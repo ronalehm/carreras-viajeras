@@ -21,7 +21,7 @@ export type FollowUpStage = Extract<LeadStage, "new" | "contacted" | "quoted">;
 // Payload version 1: minimal, never personal data.
 export type OutboxEventPayload =
   | { source: LeadSource; bulk?: boolean } // lead.created (bulk: one-off import, from F3)
-  | { stageFrom: LeadStage; stageTo: LeadStage } // lead.stage_changed
+  | { stageFrom: LeadStage; stageTo: LeadStage; trigger?: "booking" } // lead.stage_changed (trigger: confirmed booking, from F5)
   | { stage: FollowUpStage; dueOn: string } // lead.follow_up_due (dueOn: YYYY-MM-DD next action date)
   | { stageFrom: LeadStage }; // lead.opted_out (stage before the opt-out)
 

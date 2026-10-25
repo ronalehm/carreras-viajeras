@@ -10,10 +10,12 @@ import { createBooking, setBookingStatus, updateBooking } from "../services/book
 import type { BookingActionState } from "../types/bookings.types";
 
 const BOOKINGS_PATH = "/crm/reservas";
+const LEADS_PATH = "/crm/leads";
 type ErrorState = Extract<BookingActionState, { status: "error" }>;
 type ErrorCode = ErrorState["code"];
-// A successful mutation names the booking it touched, to revalidate (and, on create, open) it.
-type Mutation = { bookingId: string; message: string } | ErrorState;
+// A successful mutation names the booking it touched, to revalidate (and, on create, open) it, and
+// the lead it is linked to, whose page shows it.
+type Mutation = { bookingId: string; message: string; leadId?: string | null } | ErrorState;
 
 const ERROR_MESSAGES: Record<ErrorCode, string> = {
   unauthorized: "Tu sesión no es válida. Vuelve a iniciar sesión.",
@@ -24,6 +26,8 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = {
   email_locked: "La cuenta ya está vinculada; el correo no se puede cambiar.",
   not_found: "La reserva ya no existe o está cancelada. Recarga la página.",
   invalid_transition: "La reserva ya no está en ese estado. Recarga la página.",
+  invalid_lead: "El lead ya no existe o está archivado. Crea la reserva sin vincular o recarga la página.",
+  lead_taken: "Ese lead ya tiene una reserva activa.",
 };
 
 // Field that shows each service result under its input.
@@ -88,6 +92,7 @@ async function runBookingAction<Input>(
 
   revalidatePath(BOOKINGS_PATH);
   revalidatePath(`${BOOKINGS_PATH}/${result.bookingId}`);
+  if (result.leadId) revalidatePath(`${LEADS_PATH}/${result.leadId}`);
   return { state: { status: "success", message: result.message }, bookingId: result.bookingId };
 }
 
@@ -98,9 +103,8 @@ export async function createBookingAction(
   const { state, bookingId } = await runBookingAction(formData, bookingFormSchema,
     async (input, values, actorUserId) => {
       const result = await createBooking(input, actorUserId);
-      return typeof result === "string"
-        ? failure(result, values)
-        : { bookingId: result.id, message: "Reserva creada." };
+      if (typeof result === "string") return failure(result, values);
+      return { bookingId: result.id, message: "Reserva creada.", leadId: input.leadId };
     });
   // Next's redirect throws; it must stay outside the mutation's catch.
   if (bookingId) redirect(`${BOOKINGS_PATH}/${bookingId}`);
@@ -124,10 +128,16 @@ export async function changeBookingStatusAction(
   formData: FormData,
 ): Promise<BookingActionState> {
   const { state } = await runBookingAction(formData, bookingStatusChangeSchema,
-    async ({ bookingId, status }) => {
-      const result = await setBookingStatus(bookingId, status);
+    async ({ bookingId, status }, _values, actorUserId) => {
+      const result = await setBookingStatus(bookingId, status, actorUserId);
       if (result !== "changed") return failure(result);
       return { bookingId, message: status === "confirmed" ? "Reserva confirmada." : "Reserva cancelada." };
     });
+  // setBookingStatus does not say which lead (if any) is linked: confirming may move it to reserved
+  // and either change updates its "Ver reserva", so the list and every lead page refresh.
+  if (state.status === "success") {
+    revalidatePath(LEADS_PATH);
+    revalidatePath(`${LEADS_PATH}/[id]`, "page");
+  }
   return state;
 }
