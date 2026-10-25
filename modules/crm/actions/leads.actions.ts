@@ -136,7 +136,9 @@ function revalidateLead(leadId: string) {
   revalidatePath(leadDetailPath(leadId));
 }
 
-// Contact data only: stage, owner, author or any other submitted key are dropped by the schema.
+// Contact and origin data: the session user is the author of the 'channel_changed' activity.
+// Source, stage, owner, author, the UTM fields, contactOptOutAt or any other submitted key are
+// dropped by the schema.
 export async function updateLeadAction(
   _prev: LeadActionState,
   formData: FormData,
@@ -148,7 +150,7 @@ export async function updateLeadAction(
   const parsed = updateLeadSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
 
-  const result = await runService(() => updateLead(parsed.data));
+  const result = await runService(() => updateLead(parsed.data, actor.id));
   if (result === "not_found") return failure(result, values);
   if (result === "invalid_trip") {
     return failure(result, values, { tripId: [ERROR_MESSAGES.invalid_trip] });

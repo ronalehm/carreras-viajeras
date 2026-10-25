@@ -323,6 +323,11 @@ describe("createLead", () => {
     ownerUserId: "user-2",
     note: "Quiere la 21K.",
     consent: "on",
+    channel: "referral",
+    originDetail: "Media Maratón de Lima 2026",
+    referredBy: "Club Runners Lima",
+    referralPermission: true,
+    contactPreference: "call",
   };
 
   it("inserts the lead, its created activity and its lead.created event in a single statement", async () => {
@@ -338,10 +343,10 @@ describe("createLead", () => {
       /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok, \(\$4::uuid IS NULL OR EXISTS \( SELECT 1 FROM trips WHERE trips\.id = \$5::uuid AND trips\.status <> 'archived' \)\) AS trip_ok \)/,
     );
     expect(statement).toContain(
-      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15 FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
+      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by, channel, origin_detail, referred_by, referral_permission, contact_preference ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15, $16::lead_channel, $17, $18, $19::boolean, $20::contact_preference FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
     );
     expect(statement).toContain(
-      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $16, $17 FROM inserted",
+      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $21, $22 FROM inserted",
     );
     // status, attempts and available_at take their defaults (pending, 0, now()); payload { source }
     // is built from the inserted lead (no personal data).
@@ -365,9 +370,37 @@ describe("createLead", () => {
       "user-2",
       "crm-manual-v1",
       "user-1",
+      "referral",
+      "Media Maratón de Lima 2026",
+      "Club Runners Lima",
+      true,
+      "call",
       "Quiere la 21K.",
       "user-1",
     ]);
+  });
+
+  it("sends the unknown origin and the empty optional origin fields as given", async () => {
+    const fake = useFakeDb({ responses: [[{ id: "lead-1", owner_ok: true, trip_ok: true }]] });
+    await createLead(
+      { ...input, channel: "unknown", originDetail: null, referredBy: null, referralPermission: false, contactPreference: null },
+      "user-1",
+    );
+
+    expect(fake.queries[0].params.slice(15, 20)).toEqual(["unknown", null, null, false, null]);
+  });
+
+  it("never writes the UTM fields nor contact_opt_out_at, and the event payload stays { source }", async () => {
+    const fake = useFakeDb({ responses: [[{ id: "lead-1", owner_ok: true, trip_ok: true }]] });
+    const extra = { utmSource: "instagram", utmMedium: "social", utmCampaign: "santiago-2027", contactOptOutAt: new Date() };
+    await createLead({ ...input, ...extra } as CreateLeadInput, "user-1");
+
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).not.toMatch(/utm_|opt_out/);
+    expect(fake.queries[0].params).not.toContain("instagram");
+    expect(fake.queries[0].params).not.toContain(extra.contactOptOutAt);
+    expect(statement).toContain("jsonb_build_object('source', source) FROM inserted");
+    expect(statement).not.toMatch(/jsonb_build_object\('source', source, /);
   });
 
   it("never sends the stage: the column default applies", async () => {
@@ -397,7 +430,8 @@ describe("createLead", () => {
 // Detail row in select order (array mode): id, full_name, phone, email, location, stage,
 // lost_reason, source, trip id/title/status, destination_text, owner user_id/email/active,
 // consent_version, consented_at, creator email, created_at, next_action_date/note,
-// archived_at, archiver email.
+// archived_at, archiver email, channel, origin_detail, utm_source/medium/campaign, referred_by,
+// referral_permission, contact_preference, contact_opt_out_at.
 function detailRow(overrides: Record<number, unknown> = {}) {
   const row: unknown[] = [
     LEAD_ID,
@@ -421,6 +455,15 @@ function detailRow(overrides: Record<number, unknown> = {}) {
     "2026-10-18 14:00:00+00",
     null,
     null,
+    null,
+    null,
+    "unknown",
+    null,
+    null,
+    null,
+    null,
+    null,
+    false,
     null,
     null,
   ];
@@ -463,12 +506,24 @@ describe("getLeadById", () => {
       nextActionNote: null,
       archivedAt: null,
       archivedBy: null,
+      channel: "unknown",
+      originDetail: null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      referredBy: null,
+      referralPermission: false,
+      contactPreference: null,
+      contactOptOutAt: null,
     });
 
     expect(fake.queries).toHaveLength(1);
     const statement = normalize(fake.queries[0].sql);
     expect(statement).toContain(
       'from "leads" left join "profiles" "owner" on "owner"."user_id" = "leads"."owner_user_id" left join "profiles" "creator" on "creator"."user_id" = "leads"."created_by" left join "profiles" "archiver" on "archiver"."user_id" = "leads"."archived_by" left join "trips" on "trips"."id" = "leads"."trip_id"',
+    );
+    expect(statement).toContain(
+      '"leads"."channel", "leads"."origin_detail", "leads"."utm_source", "leads"."utm_medium", "leads"."utm_campaign", "leads"."referred_by", "leads"."referral_permission", "leads"."contact_preference", "leads"."contact_opt_out_at" from "leads"',
     );
     expect(statement).toMatch(/where "leads"\."id" = \$\d+ limit \$\d+$/);
     // Archived leads are read too: the detail shows them read-only.
@@ -492,6 +547,38 @@ describe("getLeadById", () => {
       archivedBy: null,
     });
   });
+
+  it("returns the origin, the campaign, the referral, the preference and the opt-out date", async () => {
+    useFakeDb({
+      responses: [
+        [
+          detailRow({
+            23: "event",
+            24: "Media Maratón de Lima 2026",
+            25: "instagram",
+            26: "social",
+            27: "santiago-2027",
+            28: "Club Runners Lima",
+            29: true,
+            30: "call",
+            31: "2026-10-20 15:30:00+00",
+          }),
+        ],
+      ],
+    });
+
+    await expect(getLeadById(LEAD_ID)).resolves.toMatchObject({
+      channel: "event",
+      originDetail: "Media Maratón de Lima 2026",
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: "santiago-2027",
+      referredBy: "Club Runners Lima",
+      referralPermission: true,
+      contactPreference: "call",
+      contactOptOutAt: new Date("2026-10-20T15:30:00Z"),
+    });
+  });
 });
 
 describe("updateLead", () => {
@@ -503,42 +590,101 @@ describe("updateLead", () => {
     location: null,
     tripId: TRIP_ID,
     destinationText: null,
+    channel: "instagram",
+    originDetail: "Reel de la 42K",
+    referredBy: "Club Runners Lima",
+    referralPermission: true,
+    contactPreference: "whatsapp",
   };
 
-  it("updates and checks the lead in one batch; an archived trip is accepted if it does not change", async () => {
-    const fake = useFakeDb({ responses: [[[LEAD_ID]], [[LEAD_ID]]] });
+  const TARGET = "WITH target AS ( SELECT id, channel, trip_id FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE )";
+  const SET =
+    "UPDATE leads SET full_name = $2, phone = $3, email = $4, location = $5, trip_id = $6::uuid, destination_text = $7, " +
+    "channel = $8::lead_channel, origin_detail = $9, referred_by = $10, referral_permission = $11::boolean, " +
+    "contact_preference = $12::contact_preference, updated_at = now() FROM target";
 
-    await expect(updateLead(input)).resolves.toBe("updated");
+  it("updates contact and origin and logs channel_changed in a single statement; an archived trip is accepted if it does not change", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, updated: true }]] });
 
-    expect(fake.transaction).toHaveBeenCalledTimes(1);
-    const [update, check] = fake.queries;
-    expect(normalize(update.sql)).toBe(
-      'update "leads" set "full_name" = $1, "phone" = $2, "email" = $3, "location" = $4, "trip_id" = $5, "destination_text" = $6, "updated_at" = now() where (("leads"."id" = $7 and "leads"."archived_at" is null) and ("leads"."trip_id" = $8 or exists (select 1 from "trips" where ("trips"."id" = $9 and "trips"."status" <> $10)))) returning "id"',
+    await expect(updateLead(input, "user-1")).resolves.toBe("updated");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement.match(/;/g)).toBeNull();
+    expect(statement).toBe(
+      `${TARGET}, ` +
+        `updated AS ( ${SET} WHERE leads.id = target.id AND (target.trip_id = $13::uuid OR EXISTS ( SELECT 1 FROM trips WHERE trips.id = $14::uuid AND trips.status <> 'archived' )) RETURNING leads.id, target.channel AS channel_from ), ` +
+        "activity AS ( INSERT INTO lead_activities (lead_id, type, channel_from, channel_to, actor_user_id) SELECT id, 'channel_changed', channel_from, $15::lead_channel, $16 FROM updated WHERE channel_from <> $17::lead_channel ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS updated",
     );
-    expect(update.params).toEqual([
-      "Ana Pérez", "+51999888777", null, null, TRIP_ID, null, LEAD_ID, TRIP_ID, TRIP_ID, "archived",
+    expect(fake.queries[0].params).toEqual([
+      LEAD_ID,
+      "Ana Pérez", "+51999888777", null, null, TRIP_ID, null,
+      "instagram", "Reel de la 42K", "Club Runners Lima", true, "whatsapp",
+      TRIP_ID, TRIP_ID,
+      "instagram", "user-1", "instagram",
     ]);
-    expect(normalize(check.sql)).toBe(
-      'select "id" from "leads" where ("leads"."id" = $1 and "leads"."archived_at" is null)',
+  });
+
+  it("origin change: the activity records the locked previous origin, the new one and the session user", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, updated: true }]] });
+    await updateLead({ ...input, channel: "event" }, "session-user");
+
+    const statement = normalize(fake.queries[0].sql);
+    // channel_from is the value read under FOR UPDATE, before the UPDATE replaced it.
+    expect(statement).toContain("RETURNING leads.id, target.channel AS channel_from");
+    expect(statement).toContain(
+      "SELECT id, 'channel_changed', channel_from, $15::lead_channel, $16 FROM updated WHERE channel_from <> $17::lead_channel",
     );
+    expect(fake.queries[0].params.slice(14)).toEqual(["event", "session-user", "event"]);
+  });
+
+  it("same origin: the activity insert is filtered out, so editing only contact or detail logs nothing", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, updated: true }]] });
+    await expect(updateLead({ ...input, originDetail: "Otro reel" }, "user-1")).resolves.toBe("updated");
+
+    const statement = normalize(fake.queries[0].sql);
+    // channel_changed is the only activity this statement can insert, and only when the origin differs.
+    expect(statement.match(/INSERT INTO lead_activities/g)).toHaveLength(1);
+    expect(statement).toMatch(/FROM updated WHERE channel_from <> \$17::lead_channel \)/);
+    expect(statement).not.toMatch(/body|stage|owner_from/);
+    expect(fake.queries[0].params[16]).toBe("instagram");
   });
 
   it("does not check any trip when it is removed", async () => {
-    const fake = useFakeDb({ responses: [[[LEAD_ID]], [[LEAD_ID]]] });
-    await updateLead({ ...input, tripId: null });
+    const fake = useFakeDb({ responses: [[{ found: true, updated: true }]] });
+    await updateLead({ ...input, tripId: null }, "user-1");
 
-    expect(normalize(fake.queries[0].sql)).toContain(
-      'where ("leads"."id" = $7 and "leads"."archived_at" is null) returning',
-    );
-    expect(normalize(fake.queries[0].sql)).not.toContain("trips");
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toContain("FROM target WHERE leads.id = target.id RETURNING leads.id");
+    expect(statement).not.toContain("trips");
+    expect(fake.queries[0].params.slice(12)).toEqual(["instagram", "user-1", "instagram"]);
+  });
+
+  it("never writes the UTM fields, contact_opt_out_at, source, stage or owner", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, updated: true }]] });
+    const extra = { utmSource: "instagram-ads", contactOptOutAt: new Date(), source: "web_form", stage: "paid", ownerUserId: "intruder" };
+    await updateLead({ ...input, ...extra } as UpdateLeadInput, "user-1");
+
+    expect(normalize(fake.queries[0].sql)).not.toMatch(/utm_|opt_out|source|stage|owner_user_id/);
+    for (const value of Object.values(extra)) expect(fake.queries[0].params).not.toContain(value);
   });
 
   it.each<[unknown[], string]>([
-    [[[LEAD_ID]], "invalid_trip"],
+    [[{ found: true, updated: true }], "updated"],
+    [[{ found: true, updated: false }], "invalid_trip"],
+    [[{ found: false, updated: false }], "not_found"],
     [[], "not_found"],
-  ])("without an updated row and lead rows %j returns %s", async (found, expected) => {
-    useFakeDb({ responses: [[], found] });
-    await expect(updateLead(input)).resolves.toBe(expected);
+  ])("maps rows %j to %s", async (rows, expected) => {
+    useFakeDb({ responses: [rows] });
+    await expect(updateLead(input, "user-1")).resolves.toBe(expected);
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(updateLead(input, "user-1")).rejects.toMatchObject({ cause: failure });
   });
 });
 
@@ -723,10 +869,15 @@ describe("writes on an archived lead", () => {
     location: null,
     tripId: null,
     destinationText: null,
+    channel: "unknown",
+    originDetail: null,
+    referredBy: null,
+    referralPermission: false,
+    contactPreference: null,
   };
 
   it.each([
-    ["updateLead", () => updateLead(edit), [[], []]],
+    ["updateLead", () => updateLead(edit, "user-1"), [[{ found: false, updated: false }]]],
     ["changeLeadStage", () => changeLeadStage({ leadId: LEAD_ID, stage: "quoted", lostReason: null }, "user-1"), [[{ found: false, changed: false }]]],
     ["changeLeadOwner", () => changeLeadOwner({ leadId: LEAD_ID, ownerUserId: "user-2" }, "user-1"), [[{ found: false, changed: false, owner_ok: true }]]],
     ["setNextAction", () => setNextAction({ leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: null }), [[{ found: false, saved: false }]]],

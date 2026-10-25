@@ -13,7 +13,6 @@ import {
   lte,
   ne,
   notInArray,
-  or,
   sql,
   type SQLWrapper,
 } from "drizzle-orm";
@@ -173,7 +172,8 @@ export async function getLeadFormOptions(): Promise<{
 // One statement: the lead is inserted only if the owner is active and the trip (if any) is not
 // archived; its 'created' activity and its 'lead.created' outbox event (payload { source }, for
 // n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
-// and the consent version never come from the input.
+// and the consent version never come from the input. The origin fields come from the form; the
+// UTM fields (web capture only) and contact_opt_out_at are never written here.
 export async function createLead(
   input: CreateLeadInput,
   actorUserId: string,
@@ -190,12 +190,15 @@ export async function createLead(
     inserted AS (
       INSERT INTO leads (
         full_name, phone, email, location, trip_id, destination_text,
-        source, owner_user_id, consent_version, created_by
+        source, owner_user_id, consent_version, created_by,
+        channel, origin_detail, referred_by, referral_permission, contact_preference
       )
       SELECT
         ${input.fullName}, ${input.phone}, ${input.email}, ${input.location}, ${input.tripId}::uuid,
         ${input.destinationText}, ${input.source}::lead_source, ${input.ownerUserId},
-        ${MANUAL_CONSENT_VERSION}, ${actorUserId}
+        ${MANUAL_CONSENT_VERSION}, ${actorUserId},
+        ${input.channel}::lead_channel, ${input.originDetail}, ${input.referredBy},
+        ${input.referralPermission}::boolean, ${input.contactPreference}::contact_preference
       FROM checks
       WHERE owner_ok AND trip_ok
       RETURNING id, source
@@ -249,6 +252,15 @@ export async function getLeadById(id: string): Promise<LeadDetail | null> {
       nextActionNote: leads.nextActionNote,
       archivedAt: leads.archivedAt,
       archivedBy: { email: archiver.email },
+      channel: leads.channel,
+      originDetail: leads.originDetail,
+      utmSource: leads.utmSource,
+      utmMedium: leads.utmMedium,
+      utmCampaign: leads.utmCampaign,
+      referredBy: leads.referredBy,
+      referralPermission: leads.referralPermission,
+      contactPreference: leads.contactPreference,
+      contactOptOutAt: leads.contactOptOutAt,
     })
     .from(leads)
     .leftJoin(owner, eq(owner.userId, leads.ownerUserId))
@@ -260,45 +272,50 @@ export async function getLeadById(id: string): Promise<LeadDetail | null> {
   return lead ?? null;
 }
 
-// One batch (one transaction, one round-trip). The UPDATE decides with its WHERE: the lead exists,
-// is not archived and the trip is none, the one already linked (even if archived since) or a
-// trip that is not archived. The SELECT tells "not_found" from "invalid_trip".
-export async function updateLead(input: UpdateLeadInput): Promise<"updated" | "not_found" | "invalid_trip"> {
-  const db = getDb();
-  const editable = and(eq(leads.id, input.leadId), isNull(leads.archivedAt));
-  const [updated, found] = await db.batch([
-    db
-      .update(leads)
-      .set({
-        fullName: input.fullName,
-        phone: input.phone,
-        email: input.email,
-        location: input.location,
-        tripId: input.tripId,
-        destinationText: input.destinationText,
-        updatedAt: sql`now()`,
-      })
-      .where(
-        and(
-          editable,
-          input.tripId === null
-            ? undefined
-            : or(
-                eq(leads.tripId, input.tripId),
-                exists(
-                  db
-                    .select({ one: sql`1` })
-                    .from(trips)
-                    .where(and(eq(trips.id, input.tripId), ne(trips.status, "archived"))),
-                ),
-              ),
-        ),
-      )
-      .returning({ id: leads.id }),
-    db.select({ id: leads.id }).from(leads).where(editable),
-  ]);
-  if (updated.length > 0) return "updated";
-  return found.length > 0 ? "invalid_trip" : "not_found";
+// One statement. The target CTE locks the lead (FOR UPDATE) so the previous origin written in the
+// activity is the one the UPDATE replaced, even under concurrent changes. The UPDATE decides with
+// its WHERE: the lead exists, is not archived and the trip is none, the one already linked (even
+// if archived since) or a trip that is not archived. The 'channel_changed' activity (session user
+// as author) is inserted only when the origin really changes; contact data alone records nothing.
+// found tells "not_found" (missing or archived) from "invalid_trip".
+export async function updateLead(
+  input: UpdateLeadInput,
+  actorUserId: string,
+): Promise<"updated" | "not_found" | "invalid_trip"> {
+  const tripAllowed =
+    input.tripId === null
+      ? sql``
+      : sql` AND (target.trip_id = ${input.tripId}::uuid OR EXISTS (
+          SELECT 1 FROM trips WHERE trips.id = ${input.tripId}::uuid AND trips.status <> 'archived'
+        ))`;
+  const result = await getDb().execute<{ found: boolean; updated: boolean }>(sql`
+    WITH target AS (
+      SELECT id, channel, trip_id FROM leads
+      WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET full_name = ${input.fullName}, phone = ${input.phone}, email = ${input.email},
+        location = ${input.location}, trip_id = ${input.tripId}::uuid, destination_text = ${input.destinationText},
+        channel = ${input.channel}::lead_channel, origin_detail = ${input.originDetail},
+        referred_by = ${input.referredBy}, referral_permission = ${input.referralPermission}::boolean,
+        contact_preference = ${input.contactPreference}::contact_preference, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id${tripAllowed}
+      RETURNING leads.id, target.channel AS channel_from
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, channel_from, channel_to, actor_user_id)
+      SELECT id, 'channel_changed', channel_from, ${input.channel}::lead_channel, ${actorUserId}
+      FROM updated
+      WHERE channel_from <> ${input.channel}::lead_channel
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS updated
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  return row.updated ? "updated" : "invalid_trip";
 }
 
 type ChangeResult = { found: boolean; changed: boolean };

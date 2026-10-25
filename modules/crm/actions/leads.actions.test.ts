@@ -56,6 +56,10 @@ const VALID = {
   ownerUserId: "staff-1",
   note: "",
   consent: "on",
+  channel: "referral",
+  originDetail: "",
+  referredBy: "",
+  contactPreference: "",
 };
 
 function form(values: Record<string, string>) {
@@ -150,6 +154,45 @@ describe("createLeadAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("sin origen devuelve «Elige el origen del lead.» y conserva los campos de origen escritos", async () => {
+    const values: Record<string, string> = {
+      ...VALID,
+      originDetail: "Media Maratón de Lima 2026",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "call",
+    };
+    delete values.channel;
+    const data = form({ ...values, utmSource: "instagram", contactOptOutAt: "2026-10-25" });
+
+    expect(await createLeadAction(IDLE, data)).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { channel: ["Elige el origen del lead."] },
+      values,
+    });
+    expect(createLead).not.toHaveBeenCalled();
+  });
+
+  it("con origen, detalle, referente, permiso y preferencia los envía al service", async () => {
+    const data = form({
+      ...VALID,
+      originDetail: " Media Maratón de Lima 2026 ",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "call",
+    });
+    await expect(createLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
+    expect(vi.mocked(createLead).mock.calls[0][0]).toMatchObject({
+      channel: "referral",
+      originDetail: "Media Maratón de Lima 2026",
+      referredBy: "Club Runners Lima",
+      referralPermission: true,
+      contactPreference: "call",
+    });
+  });
+
   it("omite archivos al devolver los valores", async () => {
     const data = form({ ...VALID, fullName: "A" });
     data.set("note", new File(["x"], "note.txt"));
@@ -237,6 +280,10 @@ const EDIT = {
   location: "",
   tripId: TRIP_ID,
   destinationText: "",
+  channel: "unknown",
+  originDetail: "",
+  referredBy: "",
+  contactPreference: "",
 };
 const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
@@ -318,21 +365,45 @@ describe("acciones de la ficha: permisos y errores del service", () => {
 });
 
 describe("updateLeadAction", () => {
-  it("guarda solo los datos de contacto, revalida la lista y la ficha y redirige a la ficha", async () => {
+  it("guarda contacto y origen con el id de la sesión como autor, descarta campos extra, revalida y redirige", async () => {
+    signIn("session-user");
     vi.mocked(updateLead).mockResolvedValue("updated");
-    const data = form({ ...EDIT, stage: "paid", ownerUserId: "intruder", actorUserId: "intruder", source: "web_form" });
+    const data = form({
+      ...EDIT,
+      channel: "instagram",
+      originDetail: " Reel de la 42K ",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "whatsapp",
+      stage: "paid",
+      ownerUserId: "intruder",
+      actorUserId: "intruder",
+      source: "web_form",
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: "santiago-2027",
+      contactOptOutAt: "2026-10-25T10:00:00Z",
+    });
 
     await expect(updateLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
 
-    expect(updateLead).toHaveBeenCalledExactlyOnceWith({
-      leadId: LEAD_ID,
-      fullName: "Ana Pérez",
-      phone: "+51999888777",
-      email: null,
-      location: null,
-      tripId: TRIP_ID,
-      destinationText: null,
-    });
+    expect(updateLead).toHaveBeenCalledExactlyOnceWith(
+      {
+        leadId: LEAD_ID,
+        fullName: "Ana Pérez",
+        phone: "+51999888777",
+        email: null,
+        location: null,
+        tripId: TRIP_ID,
+        destinationText: null,
+        channel: "instagram",
+        originDetail: "Reel de la 42K",
+        referredBy: "Club Runners Lima",
+        referralPermission: true,
+        contactPreference: "whatsapp",
+      },
+      "session-user",
+    );
     expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
     expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
     expect(redirect).toHaveBeenCalledExactlyOnceWith(`/crm/leads/${LEAD_ID}`);
@@ -345,6 +416,33 @@ describe("updateLeadAction", () => {
       code: "invalid_input",
       message: "Revisa los campos marcados.",
       fieldErrors: { email: ["Introduce un correo válido."] },
+      values,
+    });
+    expect(updateLead).not.toHaveBeenCalled();
+  });
+
+  it("sin casilla de permiso envía referralPermission: false y las preferencias vacías como null", async () => {
+    vi.mocked(updateLead).mockResolvedValue("updated");
+    await expect(updateLeadAction(IDLE, form(EDIT))).rejects.toBeInstanceOf(RedirectSignal);
+    expect(updateLead).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        channel: "unknown",
+        originDetail: null,
+        referredBy: null,
+        referralPermission: false,
+        contactPreference: null,
+      }),
+      "staff-1",
+    );
+  });
+
+  it("con permiso y sin referente devuelve «Indica quién lo refirió.» y conserva los campos de origen", async () => {
+    const values = { ...EDIT, channel: "referral", originDetail: "Club", referralPermission: "on", contactPreference: "call" };
+    expect(await updateLeadAction(IDLE, form({ ...values, utmSource: "instagram" }))).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { referredBy: ["Indica quién lo refirió."] },
       values,
     });
     expect(updateLead).not.toHaveBeenCalled();
