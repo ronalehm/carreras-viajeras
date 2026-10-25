@@ -235,7 +235,7 @@ describe("changeBookingStatusAction", () => {
   it("revalida la lista de leads y todas las fichas (el vínculo lo conoce solo la base)", async () => {
     await changeBookingStatusAction(IDLE, form(STATUS));
     expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
-    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads/[id]", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/(protected)/leads/[id]", "page");
   });
 
   it("rechaza una transición no permitida sin revalidar", async () => {

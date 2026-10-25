@@ -577,9 +577,9 @@ Ampliar esta lista exige tu decisión explícita y un cambio de la spec. Ten en 
 | `quoted` (Cotizado) | Recordar que tiene una cotización y ofrecer ayuda para reservar. |
 | `reserved` (Reservado) | Agradece la reserva y transmite que desde ahora le acompañamos en cada paso; sin cifras, sin ofrecer otros viajes ni promociones. |
 | `paid` (Pagado) | Agradece la confianza y da la bienvenida al viaje; anuncia que le compartiremos la preparación y el itinerario; sin ofrecer otros viajes. |
+| `lost` (Perdido) | Despedirse con cordialidad y dejar la puerta abierta a próximos viajes. |
 
 Desde `reserved` la comunicación es de **acompañamiento**, no de venta: por eso los objetivos de `reserved` y `paid` no ofrecen nada y no hay recordatorios automáticos en esas etapas (apartado 12).
-| `lost` (Perdido) | Despedirse con cordialidad y dejar la puerta abierta a próximos viajes. |
 
 #### 5. Plantillas fijas de respaldo
 
@@ -841,6 +841,7 @@ Especificado en [`runner-portal.md`](docs/specs/runner-portal.md). El equipo reg
 - **Permiso `bookings.manage`:** lo tienen `admin` y `commercial`. Una cuenta sin rol de staff (runner) no tiene ningún permiso del CRM.
 - **Importes en USD enteros**, sin centavos ni columna de moneda: `bookings.total_usd` (`>= 0`) y `booking_payments.amount_usd` (`> 0`) son `integer`, como `trips.price_usd`, y se muestran con `formatTripPrice` ("US$ 1,499"). El saldo (`total_usd` menos los pagos no anulados) se calcula al leer; no se guarda.
 - **Sin borrado físico:** las reservas se cancelan y los pagos se anulan (`voided_at` y `voided_by`).
+- **Confirmar una reserva solo tras recibir el pago y la aceptación de las condiciones por parte del corredor.** El CRM todavía no lo comprueba. Desde [`crm-journey-automation.md`](docs/specs/crm-journey-automation.md) F5, confirmar una reserva vinculada a un lead pasa ese lead a Reservado y dispara el correo de n8n ("Reserva confirmada"). Las condiciones de la reserva (monto, plazo, reembolso) siguen pendientes: Pregunta abierta 2 de esa spec.
 - **El runner nunca recibe** `participant_email`, `internal_note`, `created_by`, `recorded_by`, pagos anulados ni hitos con `runner_visible = false`. Los hitos de nivel viaje (`booking_id` nulo) y los avisos los ven todos los participantes del viaje.
 
 ### Migración de las tablas de reservas

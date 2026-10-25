@@ -11,6 +11,7 @@ import type { BookingActionState } from "../types/bookings.types";
 
 const BOOKINGS_PATH = "/crm/reservas";
 const LEADS_PATH = "/crm/leads";
+const LEAD_PAGE_ROUTE = "/crm/(protected)/leads/[id]";
 type ErrorState = Extract<BookingActionState, { status: "error" }>;
 type ErrorCode = ErrorState["code"];
 // A successful mutation names the booking it touched, to revalidate (and, on create, open) it, and
@@ -134,10 +135,12 @@ export async function changeBookingStatusAction(
       return { bookingId, message: status === "confirmed" ? "Reserva confirmada." : "Reserva cancelada." };
     });
   // setBookingStatus does not say which lead (if any) is linked: confirming may move it to reserved
-  // and either change updates its "Ver reserva", so the list and every lead page refresh.
+  // and either change updates its "Ver reserva", so the list and every lead page refresh. A dynamic
+  // pattern must name the page file's route, route group included (Next 16 revalidatePath docs):
+  // "/crm/leads/[id]" would match no page and invalidate nothing.
   if (state.status === "success") {
     revalidatePath(LEADS_PATH);
-    revalidatePath(`${LEADS_PATH}/[id]`, "page");
+    revalidatePath(LEAD_PAGE_ROUTE, "page");
   }
   return state;
 }

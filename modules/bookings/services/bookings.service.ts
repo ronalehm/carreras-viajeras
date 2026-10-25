@@ -140,6 +140,11 @@ export async function createBooking(
   if (!row?.trip_ok) return "invalid_trip";
   if (!row.lead_ok) return "invalid_lead";
   if (!row.lead_free) return "lead_taken";
+  // Known ambiguity, kept on purpose: with a leadId, a no-op here may also be a concurrent request
+  // that just took the same lead (bookings_lead_active_uq), and it reads as "duplicate" (the email
+  // message). This statement cannot tell the two apart: its subqueries share the snapshot taken
+  // before the competing insert committed, so neither index's winner is visible. Telling them apart
+  // would need a second query; the race needs two people booking the same lead at once.
   return "duplicate";
 }
 
