@@ -12,6 +12,7 @@ vi.mock("../services/leads.service", () => ({
   updateLead: vi.fn(),
   changeLeadStage: vi.fn(),
   changeLeadOwner: vi.fn(),
+  changeLeadSource: vi.fn(),
   setNextAction: vi.fn(),
 }));
 vi.mock("../services/activities.service", () => ({ addLeadActivity: vi.fn() }));
@@ -26,6 +27,7 @@ import { addLeadActivity } from "../services/activities.service";
 import {
   archiveLead,
   changeLeadOwner,
+  changeLeadSource,
   changeLeadStage,
   createLead,
   setNextAction,
@@ -36,6 +38,7 @@ import {
   addLeadActivityAction,
   archiveLeadAction,
   changeLeadOwnerAction,
+  changeLeadSourceAction,
   changeLeadStageAction,
   createLeadAction,
   setNextActionAction,
@@ -158,6 +161,27 @@ describe("createLeadAction", () => {
     if (result.status === "error") expect(result.values).not.toHaveProperty("note");
   });
 
+  it("pasa el detalle del origen ya normalizado al service", async () => {
+    signIn("session-user");
+    const data = form({ ...VALID, source: "event", sourceDetail: "  Maratón de Lima 2026  " });
+    await expect(createLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
+    expect(createLead).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ source: "event", sourceDetail: "Maratón de Lima 2026" }),
+      "session-user",
+    );
+  });
+
+  it("con un detalle del origen inválido lo marca en su campo sin repetirlo y lo conserva en values", async () => {
+    const result = await createLeadAction(IDLE, form({ ...VALID, sourceDetail: "Z" }));
+    expect(result).toMatchObject({
+      code: "invalid_input",
+      fieldErrors: { sourceDetail: [expect.any(String)] },
+      values: { sourceDetail: "Z" },
+    });
+    if (result.status === "error") expect(JSON.stringify(result.fieldErrors)).not.toContain('"Z"');
+    expect(createLead).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["invalid_owner", "ownerUserId", "Ese responsable ya no tiene acceso. Elige otro."],
     ["invalid_trip", "tripId", "Ese viaje ya no está disponible."],
@@ -240,6 +264,7 @@ const EDIT = {
 };
 const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
+const SOURCE = { leadId: LEAD_ID, source: "event", sourceDetail: "Maratón de Lima 2026" };
 const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
 const NEXT_ACTION = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
 const ARCHIVE = { leadId: LEAD_ID };
@@ -250,6 +275,7 @@ const DETAIL_ACTIONS = [
   ["updateLeadAction", updateLeadAction, EDIT, updateLead],
   ["changeLeadStageAction", changeLeadStageAction, STAGE, changeLeadStage],
   ["changeLeadOwnerAction", changeLeadOwnerAction, OWNER, changeLeadOwner],
+  ["changeLeadSourceAction", changeLeadSourceAction, SOURCE, changeLeadSource],
   ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
   ["setNextActionAction", setNextActionAction, NEXT_ACTION, setNextAction],
   ["archiveLeadAction", archiveLeadAction, ARCHIVE, archiveLead],
@@ -450,6 +476,109 @@ describe("changeLeadOwnerAction", () => {
     expect(await changeLeadOwnerAction(IDLE, form(OWNER))).toMatchObject({
       code: "no_change", message: "No hay cambios.",
     });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("changeLeadSourceAction", () => {
+  it("cambia el origen con el id de la sesión como autor, ignora claves extra y revalida la lista y la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(changeLeadSource).mockResolvedValue("updated");
+    const data = form({ ...SOURCE, sourceDetail: "  Maratón de Lima 2026 ", actorUserId: "intruder", stage: "paid" });
+
+    expect(await changeLeadSourceAction(IDLE, data)).toEqual({ status: "success", message: "Origen actualizado." });
+    expect(changeLeadSource).toHaveBeenCalledExactlyOnceWith({
+      leadId: LEAD_ID,
+      source: "event",
+      sourceDetail: "Maratón de Lima 2026",
+      actorUserId: "session-user",
+    });
+    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("un detalle vacío se envía como null y web_form llega al service (la regla la aplica el service)", async () => {
+    vi.mocked(changeLeadSource).mockResolvedValue("updated");
+    await changeLeadSourceAction(IDLE, form({ ...SOURCE, source: "web_form", sourceDetail: "   " }));
+    expect(changeLeadSource).toHaveBeenCalledExactlyOnceWith({
+      leadId: LEAD_ID, source: "web_form", sourceDetail: null, actorUserId: "staff-1",
+    });
+  });
+
+  it("el mismo origen y detalle no es un error: «No hay cambios.» sin revalidar", async () => {
+    vi.mocked(changeLeadSource).mockResolvedValue("unchanged");
+    expect(await changeLeadSourceAction(IDLE, form(SOURCE))).toEqual({
+      status: "success", message: "No hay cambios.",
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("con source_locked devuelve el mensaje fijo en el campo del origen y no revalida", async () => {
+    vi.mocked(changeLeadSource).mockResolvedValue("source_locked");
+    const message = "El origen de un lead del formulario web no se puede cambiar.";
+    expect(await changeLeadSourceAction(IDLE, form(SOURCE))).toEqual({
+      status: "error", code: "invalid_input", message, fieldErrors: { source: [message] }, values: SOURCE,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("con un lead archivado devuelve el mensaje fijo y no revalida", async () => {
+    vi.mocked(changeLeadSource).mockResolvedValue("archived");
+    expect(await changeLeadSourceAction(IDLE, form(SOURCE))).toEqual({
+      status: "error",
+      code: "closed",
+      message: "El lead está archivado: su origen ya no se puede cambiar.",
+      values: SOURCE,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("sin origen muestra «Elige el origen del lead.» y no llama al service", async () => {
+    const result = await changeLeadSourceAction(IDLE, form({ ...SOURCE, source: "" }));
+    expect(result).toMatchObject({
+      code: "invalid_input",
+      fieldErrors: { source: ["Elige el origen del lead."] },
+      values: { ...SOURCE, source: "" },
+    });
+    expect(changeLeadSource).not.toHaveBeenCalled();
+  });
+
+  it("un detalle inválido se marca en su campo sin repetir lo escrito, que vuelve solo en values", async () => {
+    const values = { ...SOURCE, sourceDetail: "x".repeat(121) };
+    const result = await changeLeadSourceAction(IDLE, form(values));
+    expect(result).toMatchObject({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { sourceDetail: [expect.any(String)] },
+      values,
+    });
+    if (result.status === "error") {
+      expect(JSON.stringify(result.fieldErrors)).not.toContain("x".repeat(121));
+      expect(result.message).not.toContain("xxx");
+    }
+    expect(changeLeadSource).not.toHaveBeenCalled();
+  });
+
+  it("si el service lanza un error de Drizzle con el detalle, lanza el texto fijo sin el detalle", async () => {
+    const original = new DrizzleQueryError(
+      'with target as (...) update "leads" set "source_detail" = $1',
+      ["Maratón de Lima 2026"],
+      new Error("connection reset"),
+    );
+    expect(original.message).toContain("Maratón de Lima 2026");
+    vi.mocked(changeLeadSource).mockRejectedValue(original);
+    let thrown: unknown;
+    try {
+      await changeLeadSourceAction(IDLE, form(SOURCE));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toEqual(new Error("lead action failed"));
+    expect(thrown).not.toHaveProperty("cause");
+    expect((thrown as Error).stack ?? "").not.toContain("Maratón");
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

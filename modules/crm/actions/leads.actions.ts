@@ -10,6 +10,7 @@ import {
   leadActivityFormSchema,
   leadIdSchema,
   leadOwnerChangeSchema,
+  leadSourceChangeSchema,
   leadStageChangeSchema,
   nextActionSchema,
   updateLeadSchema,
@@ -18,6 +19,7 @@ import { addLeadActivity } from "../services/activities.service";
 import {
   archiveLead,
   changeLeadOwner,
+  changeLeadSource,
   changeLeadStage,
   createLead,
   setNextAction,
@@ -41,10 +43,14 @@ const ERROR_MESSAGES: Record<LeadActionErrorCode, string> = {
   closed: "El lead está cerrado o archivado.",
 };
 
+const SOURCE_LOCKED_MESSAGE = "El origen de un lead del formulario web no se puede cambiar.";
+const ARCHIVED_SOURCE_MESSAGE = "El lead está archivado: su origen ya no se puede cambiar.";
+
 const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
 const UPDATE_LEAD_FIELDS = Object.keys(updateLeadSchema.shape);
 const STAGE_CHANGE_FIELDS = Object.keys(leadStageChangeSchema.in.shape);
 const OWNER_CHANGE_FIELDS = Object.keys(leadOwnerChangeSchema.shape);
+const SOURCE_CHANGE_FIELDS = Object.keys(leadSourceChangeSchema.shape);
 const ACTIVITY_FIELDS = Object.keys(leadActivityFormSchema.shape);
 const NEXT_ACTION_FIELDS = Object.keys(nextActionSchema.shape);
 const LEAD_ID_FIELDS = Object.keys(leadIdSchema.shape);
@@ -53,11 +59,12 @@ function failure(
   code: LeadActionErrorCode,
   values?: Record<string, string>,
   fieldErrors?: Record<string, string[]>,
+  message = ERROR_MESSAGES[code],
 ): LeadActionState {
   return {
     status: "error",
     code,
-    message: ERROR_MESSAGES[code],
+    message,
     ...(values && { values }),
     ...(fieldErrors && { fieldErrors }),
   };
@@ -195,6 +202,32 @@ export async function changeLeadOwnerAction(
 
   revalidateLead(parsed.data.leadId);
   return { status: "success", message: "Responsable actualizado." };
+}
+
+// Source and its detail. The schema admits every source; the service refuses to move a lead to or
+// from web_form ("source_locked") and leaves archived leads untouched. Same source and detail is
+// not an error. The author of the 'source_changed' activity is the session user.
+export async function changeLeadSourceAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, SOURCE_CHANGE_FIELDS);
+  const parsed = leadSourceChangeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => changeLeadSource({ ...parsed.data, actorUserId: actor.id }));
+  if (result === "unchanged") return { status: "success", message: "No hay cambios." };
+  if (result === "source_locked") {
+    return failure("invalid_input", values, { source: [SOURCE_LOCKED_MESSAGE] }, SOURCE_LOCKED_MESSAGE);
+  }
+  if (result === "archived") return failure("closed", values, undefined, ARCHIVED_SOURCE_MESSAGE);
+  if (result === "not_found") return failure(result, values);
+
+  revalidateLead(parsed.data.leadId);
+  return { status: "success", message: "Origen actualizado." };
 }
 
 // Manual follow-up (note, call or message). The schema rejects system types; the author is the

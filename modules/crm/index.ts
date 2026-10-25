@@ -9,6 +9,7 @@ export {
   addLeadActivityAction,
   archiveLeadAction,
   changeLeadOwnerAction,
+  changeLeadSourceAction,
   changeLeadStageAction,
   createLeadAction,
   setNextActionAction,
