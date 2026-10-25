@@ -1,7 +1,7 @@
 # Orígenes del lead: canales de la estrategia comercial, detalle y filtro por origen
 
 - Módulo: crm
-- Estado: borrador
+- Estado: aprobado
 - Enmienda (2026-10-25): el cambio de origen acepta `web_form` en el schema y el service decide con `"source_locked"` (opción A elegida por el usuario), para que un lead del formulario web pueda editar su detalle desde la ficha. Cambian el Requisito 4, los criterios de `leadSourceChangeSchema`, `changeLeadSource` y del formulario de la ficha, y el Diseño técnico.
 - Depende de:
   - `crm-leads-pipeline.md` (aprobada): tablas `leads` y `lead_activities`, alta manual, ficha, edición, historial, lista con embudo y filtros, permiso `leads.manage`. Sus F2–F6 están en ronalehm/carreras-viajeras#12 (rama `claude/determined-cannon-bxoqo1`, `977f916`), **aún sin integrar en `main`** (`0b5f723`).
