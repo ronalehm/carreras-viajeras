@@ -18,7 +18,9 @@ import {
 } from "../services/staff.service";
 import type { StaffActionState } from "../types/staff.types";
 
-const ADMIN_USERS_PATH = "/crm/admin/usuarios";
+const USER_LIST_PATH = "/crm/admin/usuarios";
+// Route pattern: refreshes every user detail page (no layout.tsx in that segment, so "page").
+const USER_DETAIL_ROUTE = "/crm/admin/usuarios/[id]";
 
 type StaffActionErrorCode = Extract<StaffActionState, { status: "error" }>["code"];
 
@@ -81,7 +83,10 @@ async function runAdminAction<Input>(
     // Fixed text, no cause: the original database message never reaches responses or logs.
     throw new Error("staff action failed");
   }
-  if (state.status === "success") revalidatePath(ADMIN_USERS_PATH);
+  if (state.status === "success") {
+    revalidatePath(USER_LIST_PATH);
+    revalidatePath(USER_DETAIL_ROUTE, "page");
+  }
   return state;
 }
 

@@ -9,7 +9,7 @@ import { getDb } from "@/lib/db";
 import {
   createInvitation,
   grantStaffRole,
-  listStaffOverview,
+  listPendingInvitations,
   revokeInvitation,
   revokeStaffRole,
 } from "./staff.service";
@@ -35,28 +35,25 @@ const PENDING = '("staff_invitations"."accepted_at" is null and "staff_invitatio
 
 beforeEach(() => vi.mocked(getDb).mockReset());
 
-describe("listStaffOverview", () => {
-  it("reads active staff and pending invitations in one batch of two SELECTs", async () => {
+describe("listPendingInvitations", () => {
+  it("reads pending invitations in a single SELECT with the expiry computed by the database", async () => {
     const fake = useFakeDb();
-    await listStaffOverview();
+    await listPendingInvitations();
 
-    expect(fake.transaction).toHaveBeenCalledTimes(1);
-    expect(fake.queries).toHaveLength(2);
-    const [staff, invitations] = fake.queries.map((query) => normalize(query.sql));
-    expect(staff).toMatch(/^select .* from "staff_assignments" inner join "profiles" on "profiles"\."user_id" = "staff_assignments"\."user_id"/);
-    expect(staff).toContain('where "staff_assignments"."revoked_at" is null');
-    expect(invitations).toMatch(/^select .*"expires_at" <= now\(\) from "staff_invitations"/);
-    expect(invitations).toContain(`where ${PENDING}`);
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toBe(
+      'select "id", "email", "role", "expires_at", "expires_at" <= now() from "staff_invitations" ' +
+        `where ${PENDING} order by "staff_invitations"."created_at" asc`,
+    );
+    expect(statement).not.toMatch(/staff_assignments|profiles/);
+    expect(fake.queries[0].params).toEqual([]);
   });
 
-  it("groups roles by user and keeps the database expiry flag", async () => {
+  it("maps rows and keeps the database expiry flag", async () => {
     useFakeDb({
       responses: [
-        [
-          ["user-1", "ana@example.com", "admin", "2026-10-01 10:00:00+00"],
-          ["user-1", "ana@example.com", "commercial", "2026-10-02 10:00:00+00"],
-          ["user-2", "luis@example.com", "commercial", "2026-10-03 10:00:00+00"],
-        ],
         [
           ["inv-1", "old@example.com", "commercial", "2026-10-10 10:00:00+00", true],
           ["inv-2", "new@example.com", "admin", "2026-10-25 10:00:00+00", false],
@@ -64,32 +61,21 @@ describe("listStaffOverview", () => {
       ],
     });
 
-    await expect(listStaffOverview()).resolves.toEqual({
-      staff: [
-        {
-          userId: "user-1",
-          email: "ana@example.com",
-          roles: [
-            { role: "admin", grantedAt: new Date("2026-10-01T10:00:00Z") },
-            { role: "commercial", grantedAt: new Date("2026-10-02T10:00:00Z") },
-          ],
-        },
-        {
-          userId: "user-2",
-          email: "luis@example.com",
-          roles: [{ role: "commercial", grantedAt: new Date("2026-10-03T10:00:00Z") }],
-        },
-      ],
-      invitations: [
-        { id: "inv-1", email: "old@example.com", role: "commercial", expiresAt: new Date("2026-10-10T10:00:00Z"), expired: true },
-        { id: "inv-2", email: "new@example.com", role: "admin", expiresAt: new Date("2026-10-25T10:00:00Z"), expired: false },
-      ],
-    });
+    await expect(listPendingInvitations()).resolves.toEqual([
+      { id: "inv-1", email: "old@example.com", role: "commercial", expiresAt: new Date("2026-10-10T10:00:00Z"), expired: true },
+      { id: "inv-2", email: "new@example.com", role: "admin", expiresAt: new Date("2026-10-25T10:00:00Z"), expired: false },
+    ]);
   });
 
-  it("returns empty lists when there is nothing", async () => {
+  it("returns an empty list when there is nothing pending", async () => {
     useFakeDb();
-    await expect(listStaffOverview()).resolves.toEqual({ staff: [], invitations: [] });
+    await expect(listPendingInvitations()).resolves.toEqual([]);
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(listPendingInvitations()).rejects.toMatchObject({ cause: failure });
   });
 });
 

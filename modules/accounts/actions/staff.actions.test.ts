@@ -139,15 +139,19 @@ describe.each(actions)("$name called directly", ({ action, service, valid }) => 
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "error", code: "forbidden" });
     expect(service).not.toHaveBeenCalled();
+    expect(revalidate).not.toHaveBeenCalled();
   });
 
-  it("succeeds for a verified admin with valid data and revalidates the admin page", async () => {
+  it("succeeds for a verified admin with valid data and revalidates the user list and every user page", async () => {
     signedInAdmin();
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "success" });
     expect(service).toHaveBeenCalledTimes(1);
     expect(service.mock.calls[0][1]).toBe("admin-1");
-    expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+    expect(revalidate.mock.calls).toEqual([
+      ["/crm/admin/usuarios"],
+      ["/crm/admin/usuarios/[id]", "page"],
+    ]);
   });
 
   it("returns invalid_input with fieldErrors for an empty form, without calling the service", async () => {
