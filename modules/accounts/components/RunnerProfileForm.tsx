@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, type FormEvent } from "react";
+import { startTransition, useActionState, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { Alert, AlertTitle } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -31,6 +31,8 @@ type ProfileField = {
   type?: "text" | "tel" | "date";
   hint?: string;
   required?: boolean;
+  // Single-line inputs only: a textarea counts a newline as 1 but multipart sends CRLF (2),
+  // so its length limit is left to the schema.
   maxLength?: number;
   autoComplete?: string;
   // Native date limit set to `today`: "max" (not in the future) or "min" (not expired).
@@ -82,7 +84,7 @@ const GROUPS: ProfileGroup[] = [
     fields: [
       { name: "emergencyContactName", label: "Nombre", maxLength: 120 },
       { name: "emergencyContactPhone", label: "Teléfono", type: "tel" },
-      { name: "medicalNotes", label: "Alergias o condiciones médicas", rows: 3, maxLength: 500 },
+      { name: "medicalNotes", label: "Alergias o condiciones médicas", rows: 3 },
     ],
   },
 ];
@@ -118,8 +120,16 @@ type RunnerProfileFormProps = {
 
 // The action never returns `values` (Decision 8): submitting through onSubmit + startTransition
 // keeps React from resetting the fields, so what was typed stays after an error.
+// Consent is asked again on every save (Decision 9): the box is unchecked after each success
+// and keeps its state after an error.
 export function RunnerProfileForm({ profile, today }: RunnerProfileFormProps) {
   const [state, formAction, pending] = useActionState(saveRunnerProfileAction, INITIAL_STATE);
+  const [consented, setConsented] = useState(false);
+  const [handledState, setHandledState] = useState(state);
+  if (state !== handledState) {
+    setHandledState(state);
+    if (state.status === "success") setConsented(false);
+  }
   const errors = state.status === "error" ? state.fieldErrors : undefined;
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -193,6 +203,8 @@ export function RunnerProfileForm({ profile, today }: RunnerProfileFormProps) {
             id={CONSENT_ID}
             type="checkbox"
             name="consent"
+            checked={consented}
+            onChange={(event) => setConsented(event.target.checked)}
             disabled={pending}
             aria-invalid={errors?.consent ? true : undefined}
             aria-describedby={describedBy(errors?.consent && `${CONSENT_ID}-error`)}
