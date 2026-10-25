@@ -8,8 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import { createLeadAction, updateLeadAction } from "../actions/leads.actions";
-import { manualLeadSourceSchema } from "../schemas/leads.schema";
+import {
+  contactPreferenceSchema,
+  leadChannelSchema,
+  manualLeadSourceSchema,
+} from "../schemas/leads.schema";
 import type {
   CreateLeadInput,
   LeadActionState,
@@ -17,15 +22,31 @@ import type {
   LeadOwnerOption,
   LeadTripOption,
 } from "../types/leads.types";
-import { LEAD_SOURCE_LABELS, leadTripLabel } from "../utils/leadDisplay";
+import {
+  CONTACT_PREFERENCE_LABELS,
+  LEAD_CHANNEL_LABELS,
+  LEAD_SOURCE_LABELS,
+  leadTripLabel,
+} from "../utils/leadDisplay";
 import { LEAD_LIST_PATH } from "../utils/leadListQuery";
 
 type EditableLead = Pick<
   LeadDetail,
-  "id" | "fullName" | "phone" | "email" | "location" | "trip" | "destinationText"
+  | "id"
+  | "fullName"
+  | "phone"
+  | "email"
+  | "location"
+  | "trip"
+  | "destinationText"
+  | "channel"
+  | "originDetail"
+  | "referredBy"
+  | "referralPermission"
+  | "contactPreference"
 >;
 
-// Without lead: manual creation (every field). With lead: contact data edit only.
+// Without lead: manual creation (every field). With lead: contact and origin data edit only.
 type LeadFormProps =
   | { tripOptions: LeadTripOption[]; ownerOptions: LeadOwnerOption[]; defaultOwnerId: string; lead?: undefined }
   | { tripOptions: LeadTripOption[]; lead: EditableLead };
@@ -66,6 +87,12 @@ export function LeadForm(props: LeadFormProps) {
     };
   }
 
+  function fieldError(name: FieldName) {
+    return errors?.[name] && (
+      <p id={`lead-${name}-error`} role="alert" className="text-sm text-destructive">{errors[name][0]}</p>
+    );
+  }
+
   function field(name: FieldName, label: string, control: ReactNode, hint?: string, className?: string) {
     const id = `lead-${name}`;
     return (
@@ -73,22 +100,40 @@ export function LeadForm(props: LeadFormProps) {
         <Label htmlFor={id}>{label}</Label>
         {control}
         {hint && <p id={`${id}-help`} className="text-sm text-muted-foreground">{hint}</p>}
-        {errors?.[name] && (
-          <p id={`${id}-error`} role="alert" className="text-sm text-destructive">{errors[name][0]}</p>
-        )}
+        {fieldError(name)}
+      </div>
+    );
+  }
+
+  // The checkbox sends "on" only when checked.
+  function checkboxField(
+    name: FieldName,
+    label: string,
+    options: { defaultChecked: boolean; required?: boolean; className?: string },
+  ) {
+    return (
+      <div className={cn("flex flex-col gap-2", options.className)}>
+        <div className="flex items-start gap-3">
+          <Checkbox {...fieldProps(name)} required={options.required}
+            defaultChecked={options.defaultChecked} className="mt-0.5" />
+          <Label htmlFor={`lead-${name}`} className="leading-snug">{label}</Label>
+        </div>
+        {fieldError(name)}
       </div>
     );
   }
 
   const phoneHint = "Con código de país, p. ej. +51 938 127 170.";
+  const originDetailHint =
+    "Nombre del evento, aliado, campaña o publicación. No escribas datos personales de otras personas.";
   const submitLabel = lead
     ? { idle: "Guardar cambios", pending: "Guardando…" }
     : { idle: "Registrar lead", pending: "Registrando…" };
 
-  // Source, owner, initial note and consent only exist when the lead is created.
+  // Entry path and owner only exist when the lead is created.
   const creationFields = !props.lead && (
     <>
-      {field("source", "Origen *",
+      {field("source", "Vía de entrada *",
         <NativeSelect {...fieldProps("source")} className="w-full" defaultValue={values?.source ?? "whatsapp"}>
           {manualLeadSourceSchema.options.map((source) => (
             <NativeSelectOption key={source} value={source}>{LEAD_SOURCE_LABELS[source]}</NativeSelectOption>
@@ -101,21 +146,57 @@ export function LeadForm(props: LeadFormProps) {
             <NativeSelectOption key={owner.userId} value={owner.userId}>{owner.email}</NativeSelectOption>
           ))}
         </NativeSelect>)}
+    </>
+  );
+
+  // Origin (how the person found us): no default on creation, so WhatsApp is never recorded by
+  // inertia; on edit it starts on the lead's current values.
+  const originFields = (
+    <>
+      {field("channel", "Origen *",
+        <NativeSelect {...fieldProps("channel")} className="w-full" required
+          defaultValue={values?.channel ?? lead?.channel ?? ""}>
+          {!lead && <NativeSelectOption value="">Elige el origen</NativeSelectOption>}
+          {leadChannelSchema.options.map((channel) => (
+            <NativeSelectOption key={channel} value={channel}>{LEAD_CHANNEL_LABELS[channel]}</NativeSelectOption>
+          ))}
+        </NativeSelect>)}
+      {field("originDetail", "Detalle del origen",
+        <Input {...fieldProps("originDetail", originDetailHint)} maxLength={120} autoComplete="off"
+          defaultValue={values?.originDetail ?? lead?.originDetail ?? undefined} />,
+        originDetailHint)}
+      <div className="flex flex-col gap-3">
+        {field("referredBy", "Referido por",
+          <Input {...fieldProps("referredBy")} maxLength={120} autoComplete="off"
+            defaultValue={values?.referredBy ?? lead?.referredBy ?? undefined} />)}
+        {checkboxField("referralPermission", "El referente autorizó que lo mencionemos", {
+          defaultChecked: values ? values.referralPermission === "on" : (lead?.referralPermission ?? false),
+        })}
+      </div>
+      {field("contactPreference", "Prefiere que lo contactemos por",
+        <NativeSelect {...fieldProps("contactPreference")} className="w-full"
+          defaultValue={values?.contactPreference ?? lead?.contactPreference ?? ""}>
+          <NativeSelectOption value="">Sin preferencia</NativeSelectOption>
+          {contactPreferenceSchema.options.map((preference) => (
+            <NativeSelectOption key={preference} value={preference}>
+              {CONTACT_PREFERENCE_LABELS[preference]}
+            </NativeSelectOption>
+          ))}
+        </NativeSelect>)}
+    </>
+  );
+
+  // Initial note and consent only exist when the lead is created.
+  const creationNoteFields = !props.lead && (
+    <>
       {field("note", "Nota inicial",
         <Textarea {...fieldProps("note")} rows={4} maxLength={2000} defaultValue={values?.note} />,
         undefined, "flex flex-col gap-2 sm:col-span-2")}
-      <div className="flex flex-col gap-2 sm:col-span-2">
-        <div className="flex items-start gap-3">
-          <Checkbox {...fieldProps("consent")} required defaultChecked={values?.consent === "on"}
-            className="mt-0.5" />
-          <Label htmlFor="lead-consent" className="leading-snug">
-            El contacto aceptó que guardemos sus datos para atender su consulta. *
-          </Label>
-        </div>
-        {errors?.consent && (
-          <p id="lead-consent-error" role="alert" className="text-sm text-destructive">{errors.consent[0]}</p>
-        )}
-      </div>
+      {checkboxField("consent", "El contacto aceptó que guardemos sus datos para atender su consulta. *", {
+        defaultChecked: values?.consent === "on",
+        required: true,
+        className: "sm:col-span-2",
+      })}
     </>
   );
 
@@ -152,6 +233,8 @@ export function LeadForm(props: LeadFormProps) {
           <Input {...fieldProps("destinationText")} maxLength={120} autoComplete="off"
             defaultValue={values?.destinationText ?? lead?.destinationText ?? undefined} />)}
         {creationFields}
+        {originFields}
+        {creationNoteFields}
       </fieldset>
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={pending}>{pending ? submitLabel.pending : submitLabel.idle}</Button>
