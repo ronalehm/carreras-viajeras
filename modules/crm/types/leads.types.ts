@@ -51,3 +51,25 @@ export type LeadList = {
   stageCounts: Record<LeadStage, number>;
   ownerOptions: LeadOwnerOption[];
 };
+
+// Result of the lead Server Actions, compatible with useActionState. values only returns what the
+// same user typed, to restore the form after an error.
+export type LeadActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | {
+      status: "error";
+      // not_found and no_change from F3, closed from F5.
+      code:
+        | "unauthorized"
+        | "forbidden"
+        | "invalid_input"
+        | "invalid_owner"
+        | "invalid_trip"
+        | "not_found"
+        | "no_change"
+        | "closed";
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+      values?: Record<string, string>;
+    };
