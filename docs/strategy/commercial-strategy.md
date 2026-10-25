@@ -15,6 +15,7 @@
 8. [Cómo medir y decidir](#8-cómo-medir-y-decidir)
 9. [Decisiones para activar](#9-decisiones-para-activar)
 10. [Base, referencias y límites](#10-base-referencias-y-límites)
+11. [Alineación con la plataforma](#11-alineación-con-la-plataforma)
 
 ---
 
@@ -189,7 +190,7 @@ Posicionarse en todos lados significa presencia coherente y adaptada, no gastar 
 
 ### Web y Google Forms
 
-- **Papel:** centro de información y registro. Forms existe; la web actual es un demo de hackatón.
+- **Papel:** centro de información y registro. Forms existe; la web actual es un demo de hackatón (el formulario de `/contacto` prepara la consulta pero no la envía; ver §11).
 - **Táctica:** ordenar una sola versión de total, inclusiones, exclusiones, responsables, evidencia y condiciones. Mantener Forms si resuelve el registro; evitar una cuenta obligatoria antes de aportar valor.
 - **Conexión:** consulta y evaluación de reserva cuando sus términos estén aprobados.
 - **Medir:** registros válidos y avance.
@@ -430,3 +431,49 @@ Lo compartido por Ronald por WhatsApp el 23 de octubre de 2026, sus notas y el r
 - La trayectoria de MAZ no equivale a resultados del nuevo paquete.
 - Logos, métricas, influencers y testimonios requieren evidencia y permiso antes de usarse como respaldo.
 - Ninguna integración o automatización se da por existente.
+
+---
+
+## 11. Alineación con la plataforma
+
+Cruce entre esta estrategia y lo que el repositorio define en `docs/specs/` y en el código de `main` (revisado el 25 de octubre de 2026). Que algo esté en el código no significa que esté desplegado ni en uso: el build de Workers está fallando y la operación integrada no está comprobada (§10).
+
+### Qué ya cubre la plataforma
+
+| Necesidad de la estrategia | Dónde está | Estado en el repo |
+|---|---|---|
+| Oferta única: viaje, fechas, distancias, "incluye" y precio | Catálogo de viajes (`trips-catalog.md`): `/crm/viajes` y `/viajes/<slug>` | En `main` |
+| Ficha única con responsable, carrera de interés, consentimiento, próxima acción y motivo de pérdida | Leads (`crm-leads-pipeline.md`) | Datos y servicio (F1) en `main`; pantallas `/crm/leads` aún no |
+| Reserva por participante, con total, fecha límite de saldo y estado | Reservas (`runner-portal.md` F2): `/crm/reservas` | En `main` |
+| Pagos confirmados y saldo verificable | Pagos manuales (`runner-portal.md` F3) | En revisión (ronalehm/carreras-viajeras#19) |
+| Separar captación de atención al comprador: itinerario, hitos y avisos | Portal del corredor `/mis-carreras` (`runner-portal.md` F4–F6) | Pendiente |
+| Acceso según función, denegado por defecto | Roles `admin` y `commercial` (`accounts-roles-permissions.md`) | En `main` |
+
+### Cómo se leen las definiciones del §8 en la plataforma
+
+| Definición de la estrategia | Dato en la plataforma | Advertencia |
+|---|---|---|
+| Contacto válido | Un registro en `leads` | No hay detección de duplicados: la deduplicación es manual. |
+| Habilitado | `consent_version` / `consented_at` | Ese consentimiento es para guardar datos y atender la consulta; no equivale a permiso de seguimiento ni de campañas. |
+| Conversación calificada | Sin equivalente | Las etapas son Nuevo, Contactado, Cotizado, Reservado, Pagado y Perdido; "calificada" debe registrarse aparte. |
+| Reserva | Propuesta: `bookings` con estado `confirmed` y al menos un pago registrado | La etapa "Reservado" del lead la marca el comercial a mano y no prueba pago ni aceptación de términos. |
+| Cliente pagado | Saldo ≤ 0 en la reserva (total − pagos no anulados) | Depende de que los pagos se registren solo tras confirmarlos (Administración). |
+| Viajero | Sin equivalente | La reserva "terminada" se deriva de las fechas del viaje; no confirma asistencia real. |
+| Motivo de pérdida | `lost_reason` (texto libre) | Conviene acordar una lista corta de motivos para poder sumarlos. |
+
+### Brechas a resolver antes de medir por canal y cohorte
+
+1. **Origen:** el CRM solo distingue `whatsapp`, `web_form` y `other`. Los canales del §3 (evento, aliado/club, referido, Instagram, Facebook, TikTok, YouTube, Google Ads, estados de WhatsApp, Luma) no tienen valor propio. Mientras no haya una spec que lo amplíe, registrar el canal real en la nota de alta con un formato fijo (por ejemplo, `Origen: evento – <nombre>`).
+2. **Lead ↔ reserva:** no están vinculados (decisión 19 de `runner-portal.md`). Las tasas por cohorte (§8) exigen cruzarlos a mano hasta que una spec lo resuelva.
+3. **Ficha comercial:** necesidad o persona, duda principal, preferencia de contacto, permiso de seguimiento y versión de propuesta enviada no tienen campo; van en notas del historial con etiquetas acordadas.
+4. **Términos de reserva:** el catálogo guarda un precio "desde" en USD y la lista de inclusiones; no hay campos para exclusiones, monto de reserva (US$200 mencionado), cancelación ni responsables. Esos términos se publican como contenido fijo cuando MAZ los apruebe.
+5. **Captura web:** el formulario de `/contacto` prepara la consulta pero no la envía ni crea leads; la captura automática (outbox y n8n) es una spec futura. Google Forms sigue siendo el registro.
+6. **Tablero semanal:** las specs excluyen paneles y métricas; el tablero del §8 empieza como hoja de cálculo alimentada por el CRM.
+7. **Funciones del §7:** la plataforma solo tiene los roles `admin` y `commercial`. Contenido, Operaciones y Administración usan uno de esos roles o trabajan fuera del CRM; MAZ decide quién recibe acceso.
+8. **Moneda:** la plataforma registra importes en USD enteros. Los costos en soles necesitan un tipo de cambio explícito antes de calcular margen o costo por cliente.
+
+### Coincidencias que conviene conservar
+
+- Una reserva por participante: el corredor que va acompañado tiene su propia reserva y sus datos no se comparten con el grupo.
+- La próxima acción se calcula con el "hoy" de `America/Lima`, coherente con la meta de responder el mismo día hábil.
+- Sin integración con WhatsApp, notificaciones ni pagos en línea: la plataforma acompaña un proceso atendido, tal como propone la estrategia.
