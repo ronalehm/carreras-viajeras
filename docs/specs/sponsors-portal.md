@@ -516,11 +516,11 @@ Cada fase se ejecuta en una sesión y termina con `npm run lint`, `npx vitest ru
 
 ### Fase 2 — CRM: marcas de patrocinadores (5 tareas, 14 archivos)
 Requisito previo: Fase 1 cerrada (y la migración aplicada en la rama de Neon que se use para probar).
-- [ ] T1 — Schemas y tipos de marcas con test · archivos: `modules/sponsors/schemas/sponsors.schema.ts`, `modules/sponsors/schemas/sponsors.schema.test.ts`, `modules/sponsors/types/sponsors.types.ts` · depende de: Fase 1 · secuencial
-- [ ] T2 — Service de marcas (CRM y lectura pública) con tests · archivos: `modules/sponsors/services/sponsors.service.ts`, `modules/sponsors/services/sponsors.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions de marcas con tests · archivos: `modules/sponsors/actions/sponsors.actions.ts`, `modules/sponsors/actions/sponsors.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `SponsorForm` (cliente) y `SponsorTable` (Server) · archivos: `modules/sponsors/components/SponsorForm.tsx`, `modules/sponsors/components/SponsorTable.tsx` · depende de: T3 · secuencial
-- [ ] T5 — API pública, navegación y páginas · archivos: `modules/sponsors/index.ts`, `modules/accounts/components/CrmShell.tsx`, `app/crm/(protected)/admin/patrocinadores/page.tsx`, `app/crm/(protected)/admin/patrocinadores/nuevo/page.tsx`, `app/crm/(protected)/admin/patrocinadores/[id]/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — Schemas y tipos de marcas con test · archivos: `modules/sponsors/schemas/sponsors.schema.ts`, `modules/sponsors/schemas/sponsors.schema.test.ts`, `modules/sponsors/types/sponsors.types.ts` · depende de: Fase 1 · secuencial
+- [x] T2 — Service de marcas (CRM y lectura pública) con tests · archivos: `modules/sponsors/services/sponsors.service.ts`, `modules/sponsors/services/sponsors.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions de marcas con tests · archivos: `modules/sponsors/actions/sponsors.actions.ts`, `modules/sponsors/actions/sponsors.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `SponsorForm` (cliente) y `SponsorTable` (Server) · archivos: `modules/sponsors/components/SponsorForm.tsx`, `modules/sponsors/components/SponsorTable.tsx` · depende de: T3 · secuencial
+- [x] T5 — API pública, navegación y páginas · archivos: `modules/sponsors/index.ts`, `modules/accounts/components/CrmShell.tsx`, `app/crm/(protected)/admin/patrocinadores/page.tsx`, `app/crm/(protected)/admin/patrocinadores/nuevo/page.tsx`, `app/crm/(protected)/admin/patrocinadores/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 3 — CRM: personas de cada marca y audiencia de acceso (5 tareas, 13 archivos)
 - [ ] T1 — Schemas y tipos de invitación y revocación de patrocinadores con tests · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/types/staff.types.ts` · depende de: Fase 2 · secuencial
