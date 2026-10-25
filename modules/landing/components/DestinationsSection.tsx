@@ -36,7 +36,7 @@ const DESTINATIONS = [
     location: "Río de Janeiro, Brasil",
     tags: [],
     note: "Sin carrera, fecha ni precio confirmados",
-    action: "Avísame cuando esté disponible",
+    action: "Ver el viaje",
     active: false,
   },
   {
@@ -52,7 +52,7 @@ const DESTINATIONS = [
     location: "Roma, Italia",
     tags: [],
     note: "Sin carrera, fecha ni precio confirmados",
-    action: "Avísame cuando esté disponible",
+    action: "Ver el viaje",
     active: false,
   },
 ];
