@@ -43,14 +43,15 @@ const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const TODAY = "2026-10-18";
 const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2)';
 
-// List row in select order (array mode): id, full_name, phone, stage, source, trip id/title,
-// destination_text, owner user_id/email/active, next_action_date/note.
+// List row in select order (array mode): id, full_name, phone, stage, source, channel,
+// trip id/title, destination_text, owner user_id/email/active, next_action_date/note.
 function listRow(index: number, overrides: unknown[] = []) {
   const row = [
     `lead-${index}`,
     `Lead ${index}`,
     "+51938127170",
     "new",
+    "whatsapp",
     "whatsapp",
     null,
     null,
@@ -132,6 +133,44 @@ describe("getLeadList", () => {
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null) group by "leads"."stage"',
     );
     expect(counts.params).toEqual([]);
+  });
+
+  it("selects the channel next to the source", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ page: 1 }, "user-1", TODAY);
+    expect(normalize(fake.queries[0].sql)).toContain('"leads"."source", "leads"."channel", "trips"."id"');
+  });
+
+  it("filters by channel in the list and in the funnel counts, in the same batch", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "new", owner: "unassigned", channel: "event", page: 1 }, "user-1", TODAY);
+
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    expect(fake.queries).toHaveLength(3);
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null and "leads"."channel" = $3) and "leads"."stage" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "event", "new", 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null and "leads"."channel" = $1) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["event"]);
+  });
+
+  it("archived with a channel: the list and the funnel counts both apply it", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "archived", channel: "instagram", page: 1 }, "user-1", TODAY);
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where ("leads"."archived_at" is not null and "leads"."channel" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "instagram", 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."channel" = $1) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["instagram"]);
   });
 
   it("selects the next action date and note", async () => {
@@ -222,10 +261,10 @@ describe("getLeadList", () => {
     useFakeDb({
       responses: [
         [
-          listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", TRIP_ID, "Maratón de Santiago 2027", "Panamá", undefined, undefined, undefined, "2026-10-25", "Enviar la cotización."]),
-          listRow(2, [undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "user-9", "ex@example.com", false]),
+          listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", "unknown", TRIP_ID, "Maratón de Santiago 2027", "Panamá", undefined, undefined, undefined, "2026-10-25", "Enviar la cotización."]),
+          listRow(2, [undefined, undefined, undefined, undefined, undefined, "event", undefined, undefined, undefined, "user-9", "ex@example.com", false]),
           // Web form lead without owner: the LEFT JOIN returns NULL owner columns.
-          listRow(3, [undefined, "Bea Web", undefined, undefined, "web_form", undefined, undefined, "Panamá", null, null, false]),
+          listRow(3, [undefined, "Bea Web", undefined, undefined, "web_form", "web", undefined, undefined, "Panamá", null, null, false]),
         ],
         [
           ["quoted", 1],
@@ -243,6 +282,7 @@ describe("getLeadList", () => {
           phone: "+51938127170",
           stage: "quoted",
           source: "other",
+          channel: "unknown",
           trip: { id: TRIP_ID, title: "Maratón de Santiago 2027" },
           destinationText: "Panamá",
           owner: { userId: "user-1", email: "ana@example.com", active: true },
@@ -255,6 +295,7 @@ describe("getLeadList", () => {
           phone: "+51938127170",
           stage: "new",
           source: "whatsapp",
+          channel: "event",
           trip: null,
           destinationText: null,
           owner: { userId: "user-9", email: "ex@example.com", active: false },
@@ -267,6 +308,7 @@ describe("getLeadList", () => {
           phone: "+51938127170",
           stage: "new",
           source: "web_form",
+          channel: "web",
           trip: null,
           destinationText: "Panamá",
           owner: null,

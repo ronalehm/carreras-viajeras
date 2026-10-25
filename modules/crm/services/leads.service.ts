@@ -97,10 +97,11 @@ export async function getLeadList(
   const db = getDb();
   const byOwner = ownerCondition(filters.owner, currentUserId);
   const byFollowUp = followUpCondition(filters.followUp, today);
-  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp);
+  const byChannel = filters.channel === undefined ? undefined : eq(leads.channel, filters.channel);
+  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp, byChannel);
   const listed =
     filters.stage === "archived"
-      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp)
+      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp, byChannel)
       : and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage));
   const newestFirst = [desc(leads.createdAt), desc(leads.id)];
   const order = filters.followUp ? [asc(leads.nextActionDate), ...newestFirst] : newestFirst;
@@ -113,6 +114,7 @@ export async function getLeadList(
         phone: leads.phone,
         stage: leads.stage,
         source: leads.source,
+        channel: leads.channel,
         trip: { id: trips.id, title: trips.title },
         destinationText: leads.destinationText,
         owner: {
