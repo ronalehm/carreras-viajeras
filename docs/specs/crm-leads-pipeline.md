@@ -572,15 +572,15 @@ Cada fase cierra con `npm run lint`, `npx vitest run`, `npm run build` (lo ejecu
 
 ### Fase 2: alta manual y lista (5 tareas, 16 archivos: 2 generados por el CLI de shadcn)
 Requisitos previos: Fase 1 cerrada y `landing-lead-capture` F1 cerrada (migración `0006` generada, `modules/crm/index.ts` creado y `getLeadList` con responsable opcional). Para la prueba manual: `0001`, `0002` y `0006` aplicadas en la rama de desarrollo, y el seed del outbox cargado si se quieren ver leads web.
-- [ ] T1 — Base compartida:
+- [x] T1 — Base compartida:
   - `npx shadcn@latest add checkbox pagination`, sin sobrescribir archivos existentes (`textarea` ya está instalado);
   - enlace "Leads" en `CrmShell`.
 
   Archivos: `components/ui/checkbox.tsx`, `components/ui/pagination.tsx`, `modules/accounts/components/CrmShell.tsx` · depende de: Fase 1, `landing-lead-capture` F1 · secuencial (base)
-- [ ] T2 — `LeadActionState` y filtro `sin-asignar` en la query de la lista, con tests · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T1 · secuencial (tipos y query que usan T3 y T4)
-- [ ] T3 — `createLeadAction`, con tests de llamada directa · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — Componentes de la lista ("Sin asignar" en `LeadTable` y `LeadFilters`) · archivos: `modules/crm/components/LeadStageSummary.tsx`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadPagination.tsx` · depende de: T2 · paralelo (con T3)
-- [ ] T5 — `LeadForm`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadForm.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/nuevo/page.tsx` · depende de: T3, T4 · secuencial
+- [x] T2 — `LeadActionState` y filtro `sin-asignar` en la query de la lista, con tests · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T1 · secuencial (tipos y query que usan T3 y T4)
+- [x] T3 — `createLeadAction`, con tests de llamada directa · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · paralelo (con T4)
+- [x] T4 — Componentes de la lista ("Sin asignar" en `LeadTable` y `LeadFilters`) · archivos: `modules/crm/components/LeadStageSummary.tsx`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadPagination.tsx` · depende de: T2 · paralelo (con T3)
+- [x] T5 — `LeadForm`, API pública y páginas; medir el Worker · archivos: `modules/crm/components/LeadForm.tsx`, `modules/crm/index.ts`, `app/crm/(protected)/leads/page.tsx`, `app/crm/(protected)/leads/nuevo/page.tsx` · depende de: T3, T4 · secuencial
 
 ### Fase 3: ficha, edición, etapa y responsable (5 tareas, 15 archivos)
 Incluye la asignación de leads "Sin asignar" (`changeLeadOwner` desde `NULL`, `LeadOwnerForm` con "Asignar responsable") y "Formulario web" como autor en `LeadDetails`, sin archivos adicionales. Al cerrarla, el enlace del correo de n8n abre la ficha.
