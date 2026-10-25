@@ -1,7 +1,7 @@
 # Landing minimalista por carrera
 
 - Módulo: trips (Fase 1) · landing (Fase 2)
-- Estado: aprobado
+- Estado: borrador
 - Base: `trips-catalog.md` (aprobada; catálogo y contrato de lectura pública) y `landing-public-site.md` (aprobada; F4 lee el catálogo en `/viajes/[slug]`). Esta spec **sustituye** en `/viajes/[slug]` la combinación de contenido fijo (`TRIPS`) + catálogo de `landing-public-site.md` F4. Esa spec excluía expresamente "una plantilla genérica para viajes sin contenido fijo", que es justo lo que se pide ahora. No modifica otras specs.
 - Decisiones del usuario (2026-10-25): (1) la información de cada carrera sale **del CRM**, ampliando el catálogo con los campos que hoy solo existen como contenido fijo de Santiago, aunque eso exija una migración aplicada a mano en Neon; (2) Santiago usa **la misma plantilla minimalista** que el resto y su contenido fijo de la página del viaje se elimina del código.
 
@@ -70,7 +70,7 @@ Se busca que **cada carrera publicada en el CRM tenga su propia landing** en `/v
 - [ ] (F1) Dado `listPublishedTrips` / `getPublishedTripBySlug`, entonces seleccionan exactamente las columnas de `PublicTrip` (los siete campos nuevos incluidos, sin `id`, `status` ni fechas de auditoría), y `createTrip`/`updateTrip` guardan los siete campos (unit test).
 - [ ] (F1) Dado un `commercial` en `/crm/viajes/<id>`, cuando rellena los campos nuevos y guarda, entonces vuelve a la lista y al reabrir el viaje ve los valores guardados (precios como números, `excludes` uno por línea). Cuando un campo nuevo es inválido, ve el error junto al campo y conserva lo que escribió (unit test de `TripForm` para un campo nuevo).
 - [ ] (F1) Dado el README, entonces documenta cómo revisar y aplicar a mano la migración `0004` y que debe aplicarse **antes** de desplegar el código de F1 (si no, las lecturas de `trips` fallan por columnas inexistentes), y lista los campos nuevos en "Lectura pública para la landing".
-- [ ] (F1) Dado el diff, entonces solo toca los archivos del plan de F1; no modifica `modules/landing/**`, `app/viajes/**`, otras tablas ni otras specs.
+- [ ] (F1) Dado el diff, entonces solo toca los archivos del plan de F1; no modifica `modules/landing/**` (salvo el fixture de `modules/landing/utils/catalogTrip.test.ts`, ver F1-T2), `app/viajes/**`, otras tablas ni otras specs.
 - [ ] (F1) `npm run lint`, `npx vitest run` y `npm run build` sin errores.
 
 ### Fase 2 — Plantilla minimalista
@@ -154,7 +154,7 @@ Verificación manual con `npm run dev` contra una rama de Neon con la migración
 ## Plan de tareas
 ### Fase 1 — Campos nuevos en el catálogo (`trips`)
 - [ ] T1 — Columnas y checks en `trips`; generar la migración en local · archivos: `lib/db-schema.ts`, `drizzle/0004_*.sql`, `drizzle/meta/0004_snapshot.json`, `drizzle/meta/_journal.json` · depende de: — · secuencial (base)
-- [ ] T2 — Schema zod y tipos con tests · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts` · depende de: T1 · secuencial
+- [ ] T2 — Schema zod y tipos con tests · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts`, `modules/landing/utils/catalogTrip.test.ts` (solo añadir al objeto `published: PublicTrip` los siete campos nuevos vacíos —`null` y `excludes: []`— para que `npm run build` compile al ampliar `PublicTrip`; F2-T1 reescribe ese test) · depende de: T1 · secuencial
 - [ ] T3 — Service: columnas públicas y editables, con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo con T4
 - [ ] T4 — Formulario del CRM con tests · archivos: `modules/trips/components/TripForm.tsx`, `modules/trips/components/TripForm.test.tsx` · depende de: T2 · paralelo con T3
 - [ ] T5 — README (migración `0004` y contrato) · archivos: `README.md` · depende de: T3 · secuencial
