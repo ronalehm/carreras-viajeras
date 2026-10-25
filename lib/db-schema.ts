@@ -157,7 +157,23 @@ export const leadStageEnum = pgEnum("lead_stage", [
   "paid",
   "lost",
 ]);
-export const leadSourceEnum = pgEnum("lead_source", ["whatsapp", "web_form", "other"]);
+// New values are appended (ALTER TYPE … ADD VALUE): the UI order comes from leadSourceSchema.
+export const leadSourceEnum = pgEnum("lead_source", [
+  "whatsapp",
+  "web_form",
+  "other",
+  "event",
+  "partner",
+  "referral",
+  "whatsapp_status",
+  "instagram",
+  "facebook",
+  "tiktok",
+  "youtube",
+  "google_ads",
+  "luma",
+  "unknown",
+]);
 export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "created",
   "stage_changed",
@@ -167,6 +183,7 @@ export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "call",
   "message",
   "automation",
+  "source_changed",
 ]);
 
 // Leads are archived, never deleted. paid and lost are closed stages: no next action there.
@@ -182,6 +199,8 @@ export const leads = pgTable(
     tripId: uuid("trip_id").references(() => trips.id, { onDelete: "restrict" }),
     destinationText: text("destination_text"),
     source: leadSourceEnum("source").notNull(),
+    // Event, partner, campaign or piece name. Never sent to n8n or logged.
+    sourceDetail: text("source_detail"),
     stage: leadStageEnum("stage").notNull().default("new"),
     lostReason: text("lost_reason"),
     // NULL = unassigned (web form leads); the CRM assigns the first owner by hand.
@@ -233,6 +252,10 @@ export const leads = pgTable(
       sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
     ),
     check("leads_archived_chk", sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`),
+    check(
+      "leads_source_detail_chk",
+      sql`${table.sourceDetail} IS NULL OR char_length(${table.sourceDetail}) BETWEEN 2 AND 120`,
+    ),
     check("leads_created_by_chk", sql`${table.createdBy} IS NOT NULL OR ${table.source} = 'web_form'`),
     check(
       "leads_submission_chk",
@@ -310,6 +333,8 @@ export const leadActivities = pgTable(
     stageTo: leadStageEnum("stage_to"),
     ownerFrom: text("owner_from").references(() => profiles.userId, { onDelete: "restrict" }),
     ownerTo: text("owner_to").references(() => profiles.userId, { onDelete: "restrict" }),
+    sourceFrom: leadSourceEnum("source_from"),
+    sourceTo: leadSourceEnum("source_to"),
     // NULL only for system activities: created (web form) and automation (n8n).
     actorUserId: text("actor_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
     // The outbox event an automation activity comes from (one activity per event).
@@ -333,6 +358,10 @@ export const leadActivities = pgTable(
     check(
       "lead_activities_owner_chk",
       sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} IS DISTINCT FROM ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+    ),
+    check(
+      "lead_activities_source_chk",
+      sql`CASE WHEN ${table.type} = 'source_changed' THEN ${table.sourceFrom} IS NOT NULL AND ${table.sourceTo} IS NOT NULL AND ${table.sourceFrom} <> ${table.sourceTo} ELSE ${table.sourceFrom} IS NULL AND ${table.sourceTo} IS NULL END`,
     ),
     check(
       "lead_activities_actor_chk",

@@ -22,6 +22,8 @@ export async function listLeadActivities(leadId: string): Promise<LeadActivity[]
       body: leadActivities.body,
       stageFrom: leadActivities.stageFrom,
       stageTo: leadActivities.stageTo,
+      sourceFrom: leadActivities.sourceFrom,
+      sourceTo: leadActivities.sourceTo,
       ownerFrom: { email: previousOwner.email },
       ownerTo: { email: newOwner.email },
       actor: { email: actor.email },

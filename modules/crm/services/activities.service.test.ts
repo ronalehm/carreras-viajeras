@@ -29,10 +29,22 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 
-// Activity row in select order (array mode): id, type, body, stage_from, stage_to,
-// previous owner email, new owner email, actor email, created_at.
+// Activity row in select order (array mode): id, type, body, stage_from, stage_to, source_from,
+// source_to, previous owner email, new owner email, actor email, created_at.
 function activityRow(values: Partial<Record<number, unknown>>) {
-  const row: unknown[] = ["activity-1", "note", null, null, null, null, null, "agent@example.com", "2026-10-18 14:00:00+00"];
+  const row: unknown[] = [
+    "activity-1",
+    "note",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    "agent@example.com",
+    "2026-10-18 14:00:00+00",
+  ];
   for (const [position, value] of Object.entries(values)) row[Number(position)] = value;
   return row;
 }
@@ -52,7 +64,7 @@ describe("listLeadActivities", () => {
 
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
-      'select "lead_activities"."id", "lead_activities"."type", "lead_activities"."body", "lead_activities"."stage_from", "lead_activities"."stage_to", "previous_owner"."email", "new_owner"."email", "actor"."email", "lead_activities"."created_at" ' +
+      'select "lead_activities"."id", "lead_activities"."type", "lead_activities"."body", "lead_activities"."stage_from", "lead_activities"."stage_to", "lead_activities"."source_from", "lead_activities"."source_to", "previous_owner"."email", "new_owner"."email", "actor"."email", "lead_activities"."created_at" ' +
         'from "lead_activities" ' +
         'left join "profiles" "actor" on "actor"."user_id" = "lead_activities"."actor_user_id" ' +
         'left join "profiles" "previous_owner" on "previous_owner"."user_id" = "lead_activities"."owner_from" ' +
@@ -69,7 +81,7 @@ describe("listLeadActivities", () => {
         [
           activityRow({ 0: "a3", 1: "call", 2: "Llamó por la 21K." }),
           activityRow({ 0: "a2", 1: "stage_changed", 2: "Eligió otra agencia", 3: "quoted", 4: "lost" }),
-          activityRow({ 0: "a1", 1: "owner_changed", 5: "agent@example.com", 6: "other@example.com" }),
+          activityRow({ 0: "a1", 1: "owner_changed", 7: "agent@example.com", 8: "other@example.com" }),
         ],
       ],
     });
@@ -81,6 +93,8 @@ describe("listLeadActivities", () => {
         body: "Llamó por la 21K.",
         stageFrom: null,
         stageTo: null,
+        sourceFrom: null,
+        sourceTo: null,
         ownerFrom: null,
         ownerTo: null,
         actor: { email: "agent@example.com" },
@@ -92,6 +106,8 @@ describe("listLeadActivities", () => {
         body: "Eligió otra agencia",
         stageFrom: "quoted",
         stageTo: "lost",
+        sourceFrom: null,
+        sourceTo: null,
         ownerFrom: null,
         ownerTo: null,
         actor: { email: "agent@example.com" },
@@ -103,6 +119,8 @@ describe("listLeadActivities", () => {
         body: null,
         stageFrom: null,
         stageTo: null,
+        sourceFrom: null,
+        sourceTo: null,
         ownerFrom: { email: "agent@example.com" },
         ownerTo: { email: "other@example.com" },
         actor: { email: "agent@example.com" },
@@ -115,9 +133,9 @@ describe("listLeadActivities", () => {
     useFakeDb({
       responses: [
         [
-          activityRow({ 0: "a3", 1: "automation", 2: "Borrador para la etapa Cotizado enviado por correo al usuario.", 7: null }),
-          activityRow({ 0: "a2", 1: "owner_changed", 6: "agent@example.com" }),
-          activityRow({ 0: "a1", 1: "created", 7: null }),
+          activityRow({ 0: "a3", 1: "automation", 2: "Borrador para la etapa Cotizado enviado por correo al usuario.", 9: null }),
+          activityRow({ 0: "a2", 1: "owner_changed", 8: "agent@example.com" }),
+          activityRow({ 0: "a1", 1: "created", 9: null }),
         ],
       ],
     });

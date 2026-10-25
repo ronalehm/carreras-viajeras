@@ -14,6 +14,7 @@ export const QUERY_KEYS = {
   stage: "etapa",
   owner: "responsable",
   followUp: "seguimiento",
+  source: "origen",
   page: "pagina",
 } as const satisfies Record<keyof LeadListFilters, keyof LeadListQuery>;
 // Stage filters with their own URL value; a lead stage travels as itself.

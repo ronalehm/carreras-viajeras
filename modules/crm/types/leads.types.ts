@@ -5,6 +5,7 @@ import type {
   leadActivityFormSchema,
   leadActivityTypeSchema,
   leadOwnerChangeSchema,
+  leadSourceChangeSchema,
   leadSourceSchema,
   leadStageChangeSchema,
   leadStageSchema,
@@ -18,6 +19,12 @@ export type CreateLeadInput = z.output<typeof createLeadSchema>;
 export type UpdateLeadInput = z.output<typeof updateLeadSchema>;
 export type LeadStageChangeInput = z.output<typeof leadStageChangeSchema>;
 export type LeadOwnerChangeInput = z.output<typeof leadOwnerChangeSchema>;
+// changeLeadSource input: the validated form plus the session user. source admits every value
+// (web_form included): a web_form lead keeps its source and only its detail changes.
+export type LeadSourceChangeInput = Omit<z.output<typeof leadSourceChangeSchema>, "source"> & {
+  source: LeadSource;
+  actorUserId: string;
+};
 export type LeadActivityType = z.infer<typeof leadActivityTypeSchema>;
 export type LeadActivityInput = z.output<typeof leadActivityFormSchema>;
 export type NextActionInput = z.output<typeof nextActionSchema>;
@@ -25,11 +32,12 @@ export type NextActionInput = z.output<typeof nextActionSchema>;
 // stage: a lead stage (non-archived leads in it) or "archived" (archived leads only, any stage).
 // owner: "mine" is the session user, "unassigned" the leads without owner;
 // any other value is a staff user id. followUp: open leads with a next action before today
-// ("overdue") or up to today ("pending").
+// ("overdue") or up to today ("pending"). source: leads with that source only.
 export type LeadListFilters = {
   stage?: LeadStage | "archived";
   owner?: "mine" | "unassigned" | string;
   followUp?: "overdue" | "pending";
+  source?: LeadSource;
   page: number;
 };
 
@@ -47,6 +55,7 @@ export type LeadListItem = {
   phone: string;
   stage: LeadStage;
   source: LeadSource;
+  sourceDetail: string | null;
   trip: { id: string; title: string } | null;
   destinationText: string | null;
   // null: unassigned (web form leads). active = false: the owner lost every role with
@@ -81,12 +90,15 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
 
 // History entry. actor is null only for system activities: created of a web form lead and
 // automation (n8n). ownerFrom is null when the first owner is assigned (web form lead).
+// sourceFrom/sourceTo are set only on source_changed.
 export type LeadActivity = {
   id: string;
   type: LeadActivityType;
   body: string | null;
   stageFrom: LeadStage | null;
   stageTo: LeadStage | null;
+  sourceFrom: LeadSource | null;
+  sourceTo: LeadSource | null;
   ownerFrom: { email: string } | null;
   ownerTo: { email: string } | null;
   actor: { email: string } | null;

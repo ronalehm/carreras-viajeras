@@ -21,10 +21,22 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   lost: "Perdido",
 };
 
+// In the order of leadSourceSchema (Requirement 1).
 export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
-  whatsapp: "WhatsApp",
+  event: "Feria, carrera o activación",
+  partner: "Club, gimnasio o aliado",
+  referral: "Referido",
+  whatsapp: "WhatsApp (mensaje directo)",
+  whatsapp_status: "Estado de WhatsApp",
+  instagram: "Instagram",
+  facebook: "Facebook",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  google_ads: "Google Ads",
+  luma: "Luma",
   web_form: "Formulario web",
   other: "Otro",
+  unknown: "Desconocido",
 };
 
 export const LEAD_STAGE_BADGE_VARIANTS: Record<LeadStage, BadgeVariant> = {
@@ -36,7 +48,7 @@ export const LEAD_STAGE_BADGE_VARIANTS: Record<LeadStage, BadgeVariant> = {
   lost: "outline",
 };
 
-// History labels. Stage and owner changes add "A → B" after the label.
+// History labels. Stage, owner and source changes add "A → B" after the label.
 export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   created: "Lead creado",
   stage_changed: "Etapa",
@@ -46,6 +58,7 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   call: "Llamada",
   message: "Mensaje",
   automation: "Automatización (n8n)",
+  source_changed: "Cambió el origen",
 };
 
 // Author of the activities without one: the web form (created) and n8n (automation).
@@ -65,6 +78,12 @@ export const UNASSIGNED_OWNER_LABEL = "Sin asignar";
 export function leadOwnerLabel(owner: LeadListItem["owner"]): string {
   if (!owner) return UNASSIGNED_OWNER_LABEL;
   return owner.active ? owner.email : `${owner.email} (sin acceso)`;
+}
+
+// Source as shown in the detail: "Label · detail", or the label alone without a detail.
+export function leadSourceLabel(source: LeadSource, detail: string | null): string {
+  const label = LEAD_SOURCE_LABELS[source];
+  return detail ? `${label} · ${detail}` : label;
 }
 
 const TRIP_STATUS_SUFFIXES: Record<LeadTripOption["status"], string> = {

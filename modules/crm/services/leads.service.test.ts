@@ -43,7 +43,7 @@ const TODAY = "2026-10-18";
 const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2)';
 
 // List row in select order (array mode): id, full_name, phone, stage, source, trip id/title,
-// destination_text, owner user_id/email/active, next_action_date/note.
+// destination_text, owner user_id/email/active, next_action_date/note, source_detail.
 function listRow(index: number, overrides: unknown[] = []) {
   const row = [
     `lead-${index}`,
@@ -57,6 +57,7 @@ function listRow(index: number, overrides: unknown[] = []) {
     "user-1",
     "ana@example.com",
     true,
+    null,
     null,
     null,
   ];
@@ -137,7 +138,7 @@ describe("getLeadList", () => {
     const fake = useFakeDb();
     await getLeadList({ page: 1 }, "user-1", TODAY);
     expect(normalize(fake.queries[0].sql)).toContain(
-      '"leads"."next_action_date", "leads"."next_action_note" from "leads"',
+      '"leads"."next_action_date", "leads"."next_action_note", "leads"."source_detail" from "leads"',
     );
   });
 
@@ -247,6 +248,7 @@ describe("getLeadList", () => {
           owner: { userId: "user-1", email: "ana@example.com", active: true },
           nextActionDate: "2026-10-25",
           nextActionNote: "Enviar la cotización.",
+          sourceDetail: null,
         },
         {
           id: "lead-2",
@@ -259,6 +261,7 @@ describe("getLeadList", () => {
           owner: { userId: "user-9", email: "ex@example.com", active: false },
           nextActionDate: null,
           nextActionNote: null,
+          sourceDetail: null,
         },
         {
           id: "lead-3",
@@ -271,6 +274,7 @@ describe("getLeadList", () => {
           owner: null,
           nextActionDate: null,
           nextActionNote: null,
+          sourceDetail: null,
         },
       ],
       hasNextPage: false,
@@ -320,6 +324,7 @@ describe("createLead", () => {
     tripId: TRIP_ID,
     destinationText: null,
     source: "whatsapp",
+    sourceDetail: null,
     ownerUserId: "user-2",
     note: "Quiere la 21K.",
     consent: "on",
@@ -397,7 +402,7 @@ describe("createLead", () => {
 // Detail row in select order (array mode): id, full_name, phone, email, location, stage,
 // lost_reason, source, trip id/title/status, destination_text, owner user_id/email/active,
 // consent_version, consented_at, creator email, created_at, next_action_date/note,
-// archived_at, archiver email.
+// archived_at, archiver email, source_detail.
 function detailRow(overrides: Record<number, unknown> = {}) {
   const row: unknown[] = [
     LEAD_ID,
@@ -419,6 +424,7 @@ function detailRow(overrides: Record<number, unknown> = {}) {
     "2026-10-18 14:00:00+00",
     "agent@example.com",
     "2026-10-18 14:00:00+00",
+    null,
     null,
     null,
     null,
@@ -463,6 +469,7 @@ describe("getLeadById", () => {
       nextActionNote: null,
       archivedAt: null,
       archivedBy: null,
+      sourceDetail: null,
     });
 
     expect(fake.queries).toHaveLength(1);

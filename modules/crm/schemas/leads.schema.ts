@@ -2,7 +2,23 @@ import { z } from "zod";
 
 // Same values as the lead_* enums in lib/db-schema.ts (kept in sync by leads.schema.test.ts).
 export const leadStageSchema = z.enum(["new", "contacted", "quoted", "reserved", "paid", "lost"]);
-export const leadSourceSchema = z.enum(["whatsapp", "web_form", "other"]);
+// The UI order of forms, filters and lists (Requirement 1); the database enum only has the same set.
+export const leadSourceSchema = z.enum([
+  "event",
+  "partner",
+  "referral",
+  "whatsapp",
+  "whatsapp_status",
+  "instagram",
+  "facebook",
+  "tiktok",
+  "youtube",
+  "google_ads",
+  "luma",
+  "web_form",
+  "other",
+  "unknown",
+]);
 export const leadActivityTypeSchema = z.enum([
   "created",
   "stage_changed",
@@ -12,10 +28,12 @@ export const leadActivityTypeSchema = z.enum([
   "call",
   "message",
   "automation",
+  "source_changed",
 ]);
 
-// web_form is reserved for the future automatic capture: the manual form never offers it.
-export const manualLeadSourceSchema = z.enum(["whatsapp", "other"], {
+// web_form is assigned only by the automatic capture: the manual form and the source change never
+// offer or accept it.
+export const manualLeadSourceSchema = leadSourceSchema.exclude(["web_form"], {
   error: "Elige el origen del lead.",
 });
 
@@ -41,6 +59,14 @@ export const phoneSchema = z
   .transform((value) => value.replace(/[\s().-]/g, ""))
   .pipe(z.string().regex(/^\+[1-9]\d{7,14}$/, PHONE_MESSAGE));
 
+const SOURCE_DETAIL_LENGTH = "El detalle debe tener entre 2 y 120 caracteres.";
+
+// Event, partner, campaign or piece name: optional, trimmed, blank = null. Shared by the manual
+// form and the source change.
+export const sourceDetailSchema = blankToNull(
+  z.string().min(2, SOURCE_DETAIL_LENGTH).max(120, SOURCE_DETAIL_LENGTH),
+);
+
 const ownerUserIdSchema = z
   .string({ error: "Elige un responsable." })
   .min(1, "Elige un responsable.")
@@ -61,6 +87,7 @@ export const createLeadSchema = z.object({
   tripId: blankToNull(z.uuid({ error: "Elige un viaje del catálogo." })),
   destinationText: blankToNull(z.string().max(120, "El destino puede tener hasta 120 caracteres.")),
   source: manualLeadSourceSchema,
+  sourceDetail: sourceDetailSchema,
   ownerUserId: ownerUserIdSchema,
   note: blankToNull(z.string().max(2000, "La nota puede tener hasta 2000 caracteres.")),
   consent: z.literal("on", { error: CONSENT_MESSAGE }),
@@ -117,6 +144,14 @@ export const leadOwnerChangeSchema = z.object({
   ownerUserId: ownerUserIdSchema,
 });
 
+// Source change from the lead detail: a manual source (never web_form) and its detail. Any other key
+// (actorUserId, stage…) is dropped: the author is always the session user.
+export const leadSourceChangeSchema = z.object({
+  leadId: leadUuidSchema,
+  source: manualLeadSourceSchema,
+  sourceDetail: sourceDetailSchema,
+});
+
 const ACTIVITY_BODY_REQUIRED = "Escribe el texto del seguimiento.";
 const ACTIVITY_BODY_LENGTH = "El texto puede tener hasta 2000 caracteres.";
 
@@ -159,6 +194,7 @@ export const leadListQuerySchema = z.object({
   etapa: stageParamSchema.optional().catch(undefined),
   responsable: z.string().min(1).max(255).optional().catch(undefined),
   seguimiento: followUpParamSchema.optional().catch(undefined),
+  origen: leadSourceSchema.optional().catch(undefined),
   pagina: z
     .string()
     .regex(/^\d+$/)

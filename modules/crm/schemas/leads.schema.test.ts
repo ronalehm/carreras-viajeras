@@ -8,11 +8,14 @@ import {
   leadIdSchema,
   leadListQuerySchema,
   leadOwnerChangeSchema,
+  leadSourceChangeSchema,
   leadSourceSchema,
   leadStageChangeSchema,
   leadStageSchema,
+  manualLeadSourceSchema,
   nextActionSchema,
   phoneSchema,
+  sourceDetailSchema,
   updateLeadSchema,
 } from "./leads.schema";
 
@@ -39,16 +42,81 @@ function fieldErrors(input: Record<string, unknown>, schema: z.ZodType = createL
   return z.flattenError(result.error).fieldErrors as Record<string, string[] | undefined>;
 }
 
+const SOURCES_IN_UI_ORDER = [
+  "event",
+  "partner",
+  "referral",
+  "whatsapp",
+  "whatsapp_status",
+  "instagram",
+  "facebook",
+  "tiktok",
+  "youtube",
+  "google_ads",
+  "luma",
+  "web_form",
+  "other",
+  "unknown",
+];
+
 describe("lead enums", () => {
   it("match the database enums", () => {
     expect(leadStageSchema.options).toEqual(leadStageEnum.enumValues);
-    expect(leadSourceSchema.options).toEqual(leadSourceEnum.enumValues);
     expect(leadActivityTypeSchema.options).toEqual(leadActivityTypeEnum.enumValues);
   });
 
-  it("include the automation activity type (n8n)", () => {
-    expect(leadActivityTypeSchema.options).toContain("automation");
-    expect(leadActivityTypeEnum.enumValues).toContain("automation");
+  it("include the automation and source_changed activity types", () => {
+    for (const type of ["automation", "source_changed"]) {
+      expect(leadActivityTypeSchema.options).toContain(type);
+      expect(leadActivityTypeEnum.enumValues).toContain(type);
+    }
+  });
+});
+
+describe("lead sources", () => {
+  it("lists the 14 sources in the order of Requirement 1", () => {
+    expect(leadSourceSchema.options).toEqual(SOURCES_IN_UI_ORDER);
+  });
+
+  it("has the same set of values as the database enum (its order may differ)", () => {
+    expect(leadSourceEnum.enumValues).toHaveLength(leadSourceSchema.options.length);
+    expect(new Set(leadSourceSchema.options)).toEqual(new Set(leadSourceEnum.enumValues));
+  });
+
+  it("offers every source but web_form for manual use, in the same order", () => {
+    expect(manualLeadSourceSchema.options).toEqual(SOURCES_IN_UI_ORDER.filter((source) => source !== "web_form"));
+    expect(manualLeadSourceSchema.options).toHaveLength(13);
+  });
+
+  it.each([["web_form"], [""], ["whatsapp_business"], [undefined]])("rejects the manual source %j", (source) => {
+    const result = manualLeadSourceSchema.safeParse(source);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe("Elige el origen del lead.");
+  });
+});
+
+describe("sourceDetailSchema", () => {
+  it.each([
+    ["missing", undefined, null],
+    ["empty", "", null],
+    ["blank", "   ", null],
+    ["2 characters", " 5K ", "5K"],
+    ["120 characters", "a".repeat(120), "a".repeat(120)],
+    ["a name", "  Maratón de Lima 2026 ", "Maratón de Lima 2026"],
+  ])("normalizes a %s detail", (_, input, expected) => {
+    expect(sourceDetailSchema.parse(input)).toBe(expected);
+  });
+
+  it.each([
+    ["1 character", " a "],
+    ["121 characters", "a".repeat(121)],
+  ])("rejects a detail of %s without repeating it", (_, input) => {
+    const result = sourceDetailSchema.safeParse(input);
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
+      "El detalle debe tener entre 2 y 120 caracteres.",
+    ]);
+    expect(JSON.stringify(result.error?.issues.map((issue) => issue.message))).not.toContain("aaa");
   });
 });
 
@@ -79,6 +147,7 @@ describe("createLeadSchema", () => {
       tripId: null,
       destinationText: null,
       source: "whatsapp",
+      sourceDetail: null,
       ownerUserId: "user-1",
       note: null,
       consent: "on",
@@ -112,7 +181,7 @@ describe("createLeadSchema", () => {
   });
 
   it("turns missing optional keys into null without errors", () => {
-    const optionalKeys = ["email", "location", "tripId", "destinationText", "note"];
+    const optionalKeys = ["email", "location", "tripId", "destinationText", "sourceDetail", "note"];
     const required = Object.fromEntries(Object.entries(validForm).filter(([key]) => !optionalKeys.includes(key)));
     const result = createLeadSchema.safeParse(required);
 
@@ -122,6 +191,7 @@ describe("createLeadSchema", () => {
       location: null,
       tripId: null,
       destinationText: null,
+      sourceDetail: null,
       note: null,
     });
   });
@@ -156,6 +226,23 @@ describe("createLeadSchema", () => {
 
   it("rejects the web_form source in the manual form", () => {
     expect(fieldErrors({ ...validForm, source: "web_form" }).source).toEqual(["Elige el origen del lead."]);
+  });
+
+  it.each([["missing", undefined], ["empty (no default)", ""]])("requires the source: %s", (_, source) => {
+    expect(fieldErrors({ ...validForm, source }).source).toEqual(["Elige el origen del lead."]);
+  });
+
+  it("accepts unknown and keeps a trimmed source detail", () => {
+    expect(createLeadSchema.parse({ ...validForm, source: "unknown", sourceDetail: "  Maratón de Lima 2026 " })).toMatchObject({
+      source: "unknown",
+      sourceDetail: "Maratón de Lima 2026",
+    });
+  });
+
+  it.each(["a", "a".repeat(121)])("rejects a source detail of %#: outside 2–120 characters, on its field", (sourceDetail) => {
+    expect(fieldErrors({ ...validForm, source: "event", sourceDetail })).toEqual({
+      sourceDetail: ["El detalle debe tener entre 2 y 120 caracteres."],
+    });
   });
 
   it.each([
@@ -227,6 +314,19 @@ describe("leadListQuerySchema", () => {
         seguimiento: undefined,
         pagina: 1,
       });
+    },
+  );
+});
+
+describe("leadListQuerySchema: origen", () => {
+  it.each(SOURCES_IN_UI_ORDER)("parses origen=%s", (origen) => {
+    expect(leadListQuerySchema.parse({ origen }).origen).toBe(origen);
+  });
+
+  it.each([["foo"], ["Instagram"], [""], [["instagram", "instagram"]], [["instagram", "event"]]])(
+    "treats an invalid or repeated origen %j as no filter",
+    (origen) => {
+      expect(leadListQuerySchema.parse({ origen, etapa: "new" })).toEqual({ etapa: "new", origen: undefined, pagina: 1 });
     },
   );
 });
@@ -354,6 +454,40 @@ describe("leadOwnerChangeSchema", () => {
   });
 });
 
+describe("leadSourceChangeSchema", () => {
+  const valid = { leadId: LEAD_ID, source: "event", sourceDetail: "  Maratón de Lima 2026 " };
+
+  it("accepts a manual source with its detail and drops other keys", () => {
+    expect(leadSourceChangeSchema.parse({ ...valid, actorUserId: "intruder", stage: "paid" })).toEqual({
+      leadId: LEAD_ID,
+      source: "event",
+      sourceDetail: "Maratón de Lima 2026",
+    });
+  });
+
+  it.each([["missing", undefined], ["empty", ""]])("turns a %s detail into null", (_, sourceDetail) => {
+    expect(leadSourceChangeSchema.parse({ ...valid, source: "unknown", sourceDetail })).toEqual({
+      leadId: LEAD_ID,
+      source: "unknown",
+      sourceDetail: null,
+    });
+  });
+
+  it.each([["web_form"], [""], [undefined]])("rejects the target source %j", (source) => {
+    expect(fieldErrors({ ...valid, source }, leadSourceChangeSchema).source).toEqual(["Elige el origen del lead."]);
+  });
+
+  it.each(["a", "a".repeat(121)])("rejects a detail of %#: outside 2–120 characters", (sourceDetail) => {
+    expect(fieldErrors({ ...valid, sourceDetail }, leadSourceChangeSchema)).toEqual({
+      sourceDetail: ["El detalle debe tener entre 2 y 120 caracteres."],
+    });
+  });
+
+  it("rejects a leadId that is not a UUID", () => {
+    expect(fieldErrors({ ...valid, leadId: "abc" }, leadSourceChangeSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
 describe("leadActivityFormSchema", () => {
   const valid = { leadId: LEAD_ID, type: "call", body: "  Llamó para preguntar por el viaje.  " };
 
@@ -372,7 +506,7 @@ describe("leadActivityFormSchema", () => {
     }
   });
 
-  it.each(["created", "stage_changed", "owner_changed", "archived", "automation", ""])(
+  it.each(["created", "stage_changed", "owner_changed", "archived", "automation", "source_changed", ""])(
     "rejects the system type %j",
     (type) => {
       expect(fieldErrors({ ...valid, type }, leadActivityFormSchema).type).toEqual(["Elige el tipo de seguimiento."]);

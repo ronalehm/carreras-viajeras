@@ -123,6 +123,7 @@ export async function getLeadList(
         },
         nextActionDate: leads.nextActionDate,
         nextActionNote: leads.nextActionNote,
+        sourceDetail: leads.sourceDetail,
       })
       .from(leads)
       .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
@@ -249,6 +250,7 @@ export async function getLeadById(id: string): Promise<LeadDetail | null> {
       nextActionNote: leads.nextActionNote,
       archivedAt: leads.archivedAt,
       archivedBy: { email: archiver.email },
+      sourceDetail: leads.sourceDetail,
     })
     .from(leads)
     .leftJoin(owner, eq(owner.userId, leads.ownerUserId))
