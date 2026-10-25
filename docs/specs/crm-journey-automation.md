@@ -491,7 +491,7 @@ Amplía la sección "Automatizaciones con n8n" sin rehacerla: mismo bucle "Uno a
    - `paid`: "Hola {firstName}, ¡tu viaje a {viaje} ya está completo! Gracias por tu confianza. Te iremos compartiendo la preparación y el itinerario. Equipo Carreras Viajeras"
 
 ### Relación con otras specs
-- **`crm-lead-sources.md`** (rama `origin/claude/upbeat-keller-44l07z`, marcada aprobada allí; no está en esta rama): resuelve el origen ampliando `lead_source` a 14 valores, con `source_detail` y `source_changed`, y también genera una `0005`. **No pueden convivir.** Esta spec adopta sus decisiones de negocio (Decisión 6) con el modelo de dos dimensiones (Decisión 1). Hace falta que el usuario la dé por sustituida y no la integre (Pregunta abierta 1); el agente no la edita.
+- **`crm-lead-sources.md`** (rama `origin/claude/upbeat-keller-44l07z`, marcada aprobada allí; no está en esta rama): resuelve el origen ampliando `lead_source` a 14 valores, con `source_detail` y `source_changed`, y también genera una `0005`. **No pueden convivir.** Esta spec adopta sus decisiones de negocio (Decisión 6) con el modelo de dos dimensiones (Decisión 1). **Sustituida por esta spec** (decisión del usuario, 2026-10-25): no se implementa ni se integra en `main`. Retirarla de la rama del PR #18 lo decide el usuario; el agente no la edita.
 - **`crm-leads-capture.md`** (enmiendas declaradas, no aplicadas):
   1. Contrato: `source` de `lead.created` y de `GET …/leads/{id}` admite `google_form` e `import`; `lead.created` gana `bulk`; `lead.stage_changed` gana `trigger` (F5); hay dos tipos de evento nuevos y cinco campos nuevos en la lectura. Todo aditivo, `payload_version` 1.
   2. Requisito 12: el aviso de "nuevo lead" también se envía para `google_form`; los `lead.created` con `bulk: true` no generan correo; los leads con `doNotContact` no generan borrador. La lista de datos hacia Gemini no cambia.
@@ -543,7 +543,7 @@ Los de servidor con `// @vitest-environment node` y `vi.mock("server-only", () =
 Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los ejecuta el reviewer) y con la medición del Worker. Nadie aplica migraciones, despliega ni hace commits.
 
 ### Fase 1: modelo y origen en el alta y la edición (5 tareas, 15 archivos: 2 generados por drizzle-kit)
-Requisitos previos: Pregunta abierta 1 resuelta (esta spec sustituye a `crm-lead-sources.md`).
+Requisito previo cumplido: esta spec sustituye a `crm-lead-sources.md` (decisión del usuario, 2026-10-25).
 - [ ] T1 — Schema y migración `0005` (enums, columnas, CHECK, índices y FK de las siete fases); `npm run db:generate`; añadir a mano los dos `UPDATE` de relleno y revisar el SQL · archivos: `lib/db-schema.ts`, `drizzle/0005_*.sql` (generado), `drizzle/meta/0005_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
 - [ ] T2 — Schemas, tipos y etiquetas de origen, vía, preferencia y actividades, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadDisplay.ts`, `modules/crm/utils/leadDisplay.test.ts` · depende de: T1 · secuencial
 - [ ] T3 — `createLead`, `updateLead` (CTE con `channel_changed`) y `getLeadById`; `updateLeadAction` con el actor; con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts` · depende de: T2 · paralelo (con T4 y T5)
@@ -596,8 +596,11 @@ Requisitos previos: `crm-leads-capture` F3 y F4 cerradas; Pregunta abierta 6 res
 - [ ] T4 — README: enlaces y QR con origen, lista de slugs · archivos: `README.md` · depende de: T1 · paralelo (con T2 y T3)
 
 ## Preguntas abiertas
+Resueltas por el usuario (2026-10-25):
+- **`crm-lead-sources.md`:** queda sustituida por esta spec y no se integra. Las dos generaban la `0005` con modelos distintos; sus decisiones de negocio ya están aquí (Decisión 6).
+
 Pendientes del usuario:
-1. **(Bloqueante para aprobar.) `crm-lead-sources.md`.** Está marcada aprobada en la rama `origin/claude/upbeat-keller-44l07z` y choca con esta spec (las dos generan la `0005` con modelos distintos). Recomendación: darla por sustituida por esta spec y no integrarla. Sus decisiones de negocio ya están aquí (Decisión 6).
+1. **(Antes numerada 1, ya resuelta; se conserva la numeración del resto.)**
 2. **Condiciones de la reserva de US$200:** monto definitivo, plazo, si es reembolsable y si la preventa de US$1,499 tiene fecha límite. Además, ¿"Confirmar reserva" debe exigir que el pago de la reserva esté registrado? La estrategia (§5 y §8) dice "no marcar reservado hasta confirmar pago y condiciones aceptadas". Recomendación: hasta que existan los pagos (`runner-portal` F3), el equipo confirma la reserva solo tras recibir el pago y la aceptación de condiciones; el README lo indica. Cuando existan, decidir si se bloquea en código.
 3. **Textos legales (Ley 29733)** de `google-form-v1` (el consentimiento del Google Forms actual o nuevo) y de `import-mml-v1` (lo que aceptaron los 180 en el módulo de la Media Maratón de Lima). Deben cubrir el seguimiento comercial (no solo guardar los datos) y a los encargados: n8n en tu computadora, Google (hoja de respuestas), tu proveedor de correo y Gemini (solo nombre de pila y viaje). Si un registro de los 180 no tiene un consentimiento que cubra el contacto, no se importa. Requisito previo para activar los workflows de la F3.
 4. **Campos reales del Google Forms:** nombres de las columnas de la hoja de respuestas, formato del teléfono, si hay pregunta de origen ("¿Cómo nos conociste?") y de preferencia de contacto, y cómo se marca el consentimiento. Y de los 180: columnas del CSV, nombre exacto del evento para `originDetail` y fecha de cada registro. Con eso se completa el *Code* "Normalizar" de la guía.
