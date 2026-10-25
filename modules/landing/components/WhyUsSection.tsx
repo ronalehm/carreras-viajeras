@@ -82,17 +82,23 @@ export function WhyUsSection() {
           con nosotros?
         </h2>
         <ul className="grid gap-4 sm:grid-cols-3 sm:gap-6">
-          {KEY_POINTS.map(({ glyph, title, text }) => (
-            <li key={title} className="flex items-start gap-3.5 sm:block">
-              <span aria-hidden className="block w-6 shrink-0 text-xl sm:mb-3 sm:text-2xl">
-                {glyph}
-              </span>
-              <div>
-                <strong className="mb-1 block text-sm">{title}</strong>
-                <p className="text-xs leading-relaxed">{text}</p>
-              </div>
-            </li>
-          ))}
+          {KEY_POINTS.map(({ glyph, title, text }, index) => {
+            const tone = index % 2 === 0 ? "text-highlight" : "text-primary";
+            return (
+              <li key={title} className="flex items-start gap-3.5 sm:block">
+                <span
+                  aria-hidden
+                  className={`block w-6 shrink-0 text-xl sm:mb-3 sm:text-2xl ${tone}`}
+                >
+                  {glyph}
+                </span>
+                <div>
+                  <strong className={`mb-1 block text-sm ${tone}`}>{title}</strong>
+                  <p className="text-xs leading-relaxed">{text}</p>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -105,21 +111,29 @@ export function WhyUsSection() {
         </summary>
         <div className="pt-6">
           <div className="grid grid-cols-2 gap-x-4.5 gap-y-6 md:grid-cols-3 md:gap-x-9">
-            {CARDS.map(({ icon: Icon, title, summary, detail }) => (
-              <article key={title} className="border-t border-primary/15 pt-4 sm:pt-5">
-                <Icon aria-hidden className="mb-3.5 size-6 stroke-[1.5] sm:mb-4 sm:size-7" />
-                <h3 className="mb-2 text-sm font-bold sm:text-base">{title}</h3>
-                <p className="mb-2 max-w-72 text-xs">{summary}</p>
-                <details className="group/card pt-2">
-                  <summary
-                    className={`${SUMMARY_CLASS} max-w-72 text-xs font-medium group-open/card:after:content-['−']`}
-                  >
-                    Ver detalle
-                  </summary>
-                  <p className="mt-3 text-xs leading-loose">{detail}</p>
-                </details>
-              </article>
-            ))}
+            {CARDS.map(({ icon: Icon, title, summary, detail }, index) => {
+              const isBlue = index % 2 === 0;
+              const tone = isBlue ? "text-primary" : "text-highlight";
+              const border = isBlue ? "border-primary/15" : "border-highlight/40";
+              return (
+                <article key={title} className={`border-t pt-4 sm:pt-5 ${border}`}>
+                  <Icon
+                    aria-hidden
+                    className={`mb-3.5 size-6 stroke-[1.5] sm:mb-4 sm:size-7 ${tone}`}
+                  />
+                  <h3 className={`mb-2 text-sm font-bold sm:text-base ${tone}`}>{title}</h3>
+                  <p className="mb-2 max-w-72 text-xs">{summary}</p>
+                  <details className="group/card pt-2">
+                    <summary
+                      className={`${SUMMARY_CLASS} max-w-72 text-xs font-medium group-open/card:after:content-['−']`}
+                    >
+                      Ver detalle
+                    </summary>
+                    <p className="mt-3 text-xs leading-loose">{detail}</p>
+                  </details>
+                </article>
+              );
+            })}
           </div>
           <div className="mt-6 border-t border-primary/15 pt-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
             <Link

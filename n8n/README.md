@@ -8,7 +8,7 @@ Workflow de n8n Community que procesa la outbox `automation_events` por la API p
 ## Requisitos
 
 - n8n Community reciente (1.x o posterior), local (npm o Docker). **No se expone a Internet**: solo hace peticiones salientes a la app.
-- La app con la migración del outbox (`drizzle/0003_right_mantis.sql`) aplicada en su rama de Neon y `AUTOMATION_API_TOKEN` configurado (Cloudflare Secret en producción, `.env.local` con `npm run dev`). Ver el README raíz.
+- La app con la migración del outbox (`drizzle/0004_classy_tenebrous.sql`) aplicada en su rama de Neon y `AUTOMATION_API_TOKEN` configurado (Cloudflare Secret en producción, `.env.local` con `npm run dev`). Ver el README raíz.
 - Una cuenta SMTP para enviar los avisos (Gmail, Zoho, Brevo u otra).
 - n8n nunca recibe `DATABASE_URL` ni `DATABASE_MIGRATION_URL`: solo habla con la API.
 
@@ -124,7 +124,7 @@ Los eventos viven en Neon, no en n8n. Con n8n apagado, los nuevos eventos se que
 
 Nunca en `production`: los agentes no tienen acceso a Neon y la prueba la ejecuta el usuario, con su permiso.
 
-1. **Rama de desarrollo.** En la consola de Neon, crea o elige una rama de desarrollo y aplica en ella las migraciones pendientes hasta `drizzle/0003_right_mantis.sql`, como indica el README raíz. Copia su cadena administrativa (`DATABASE_MIGRATION_URL` de esa rama) y comprueba que no es la de `production`.
+1. **Rama de desarrollo.** En la consola de Neon, crea o elige una rama de desarrollo y aplica en ella las migraciones pendientes hasta `drizzle/0004_classy_tenebrous.sql`, como indica el README raíz. Copia su cadena administrativa (`DATABASE_MIGRATION_URL` de esa rama) y comprueba que no es la de `production`.
 2. **App local.** En `.env.local`: `DATABASE_URL` de la rama de desarrollo, `APP_ORIGIN=http://localhost:3000` y un `AUTOMATION_API_TOKEN` aleatorio de al menos 32 caracteres. Arranca con `npm run dev`.
 3. **n8n.** Credencial Header Auth con `Bearer <el mismo token de .env.local>`; en Config, `APP_BASE_URL=http://localhost:3000` (o `http://host.docker.internal:3000` desde Docker) y `TEAM_EMAILS` con una **dirección de prueba**.
 4. **Seed.** Carga cuatro eventos `lead.created` ficticios (tres con viaje, entre ellos `maraton-demo-2027`, y uno sin viaje):

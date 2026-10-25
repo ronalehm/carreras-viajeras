@@ -13,5 +13,6 @@ export { StorySection } from "./components/StorySection";
 export { TripDetail } from "./components/TripDetail";
 export { TripFacts } from "./components/TripFacts";
 export { WhyUsSection } from "./components/WhyUsSection";
-export { getTrip, TRIPS } from "./utils/trips";
+export { getCatalogTrip } from "./utils/catalogTrip";
+export { TRIPS } from "./utils/trips";
 export type { Trip } from "./utils/trips";

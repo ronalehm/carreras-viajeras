@@ -1,27 +1,28 @@
 import type { ReactNode } from "react";
 import Image from "next/image";
 import { ArrowUpRight } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { type Tip, TipList } from "./TipList";
 
 const REFERENTS = [
   {
     name: "Daniela\nZarfati",
-    image: "/images/running-road.jpg",
-    alt: "Escena de running ilustrativa; no representa un influencer confirmado",
-    disclaimer: "FOTO ILUSTRATIVA · NO ES DANIELA",
+    image: "/images/daniela-zafarti.webp",
+    alt: "Daniela Zarfati",
+    disclaimer: "FOTO REAL DE DANIELA",
   },
   {
     name: "Karla\nMedina",
-    image: "/images/running-training.jpg",
-    alt: "Escena deportiva ilustrativa; no representa un influencer confirmado",
-    disclaimer: "FOTO ILUSTRATIVA · NO ES KARLA",
+    image: "/images/carla-medina.webp",
+    alt: "Karla Medina",
+    disclaimer: "FOTO REAL DE KARLA",
   },
 ];
 
 const TIPS: Tip[] = [
   {
     category: "empezar",
-    image: "/images/running-road.jpg",
+    image: "/images/running-road.webp",
     eyebrow: "TU PRIMERA CARRERA · 45 S",
     title: "Antes del 42K,\nencuentra tu punto de partida.",
     summary: "Tu primera carrera y tu primera maratón pueden ser etapas distintas.",
@@ -33,7 +34,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "empezar",
-    image: "/images/running-team.jpg",
+    image: "/images/running-team.webp",
     eyebrow: "TU MOTIVACIÓN · 30 S",
     title: "¿Por qué correr\nuna maratón?",
     summary: "Un reto personal. Una ciudad nueva. Una historia compartida.",
@@ -45,7 +46,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "preparar",
-    image: "/images/running-training.jpg",
+    image: "/images/running-training.webp",
     eyebrow: "PREPARACIÓN · 45 S",
     title: "Un plan que\nse adapte a ti.",
     summary: "La constancia también incluye recuperar.",
@@ -57,7 +58,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "viajar",
-    image: "/images/santiago.jpg",
+    image: "/images/santiago.webp",
     eyebrow: "TU PRIMERA INTERNACIONAL · 45 S",
     title: "La carrera empieza\nantes del avión.",
     summary: "Documentos, kit, horarios y regreso: prepara también el viaje.",
@@ -69,7 +70,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "preparar",
-    image: "/images/running-road.jpg",
+    image: "/images/running-road.webp",
     eyebrow: "CUIDAR EL PROCESO · 30 S",
     title: "Escuchar también\nes entrenar.",
     summary: "No conviertas el dolor en una meta que superar.",
@@ -81,7 +82,7 @@ const TIPS: Tip[] = [
   },
   {
     category: "despues",
-    image: "/images/running-team.jpg",
+    image: "/images/running-team.webp",
     eyebrow: "DESPUÉS DE LA META · 30 S",
     title: "Tu experiencia\nabre el camino.",
     summary: "Una foto, un consejo honesto y lo que mejorarías.",
@@ -136,10 +137,13 @@ export function BlogSection() {
           </p>
           <Fold closed="Conocer referentes" open="Cerrar referentes">
             <div className="grid gap-4">
-              {REFERENTS.map(({ name, image, alt, disclaimer }) => (
+              {REFERENTS.map(({ name, image, alt, disclaimer }, index) => (
                 <article
                   key={name}
-                  className="relative isolate min-h-85 overflow-hidden rounded-sm bg-primary text-primary-foreground"
+                  className={cn(
+                    "relative isolate min-h-85 overflow-hidden rounded-sm text-primary-foreground",
+                    index % 2 === 0 ? "bg-primary" : "bg-highlight",
+                  )}
                 >
                   <Image
                     src={image}
@@ -149,26 +153,46 @@ export function BlogSection() {
                     loading="lazy"
                     className="-z-20 object-cover"
                   />
-                  <div className="absolute inset-0 -z-10 bg-linear-to-b from-primary/10 from-35% to-primary/90" />
-                  <span className="absolute top-4 left-4 rounded-sm border border-primary-foreground/50 bg-primary/45 px-2.5 py-1.5 text-xs tracking-widest">
+                  <div
+                    className={cn(
+                      "absolute inset-0 -z-10 bg-linear-to-b from-35%",
+                      index % 2 === 0 ? "from-primary/10 to-primary/90" : "from-highlight/10 to-highlight/90",
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "absolute top-4 left-4 rounded-sm border border-primary-foreground/50 px-2.5 py-1.5 text-xs tracking-widest",
+                      index % 2 === 0 ? "bg-primary/45" : "bg-highlight/45",
+                    )}
+                  >
                     PARTICIPACIÓN POR CONFIRMAR
                   </span>
                   <div className="absolute inset-x-5 bottom-6">
-                    <span className="text-xs tracking-widest text-highlight">{disclaimer}</span>
+                    <span
+                      className={cn(
+                        "text-xs tracking-widest",
+                        index % 2 === 0 ? "text-highlight" : "text-primary-foreground",
+                      )}
+                    >
+                      {disclaimer}
+                    </span>
                     <h4 className="mt-3 mr-9 font-heading text-5xl leading-none font-bold tracking-tight whitespace-pre-line">
                       {name}
                     </h4>
                     <ArrowUpRight
                       aria-hidden
-                      className="absolute right-0 bottom-0 size-8 text-highlight"
+                      className={cn(
+                        "absolute right-0 bottom-0 size-8",
+                        index % 2 === 0 ? "text-highlight" : "text-primary-foreground",
+                      )}
                     />
                   </div>
                 </article>
               ))}
             </div>
             <p className="mt-5 max-w-xl text-xs">
-              Imágenes ilustrativas. Daniela Zarfati y Karla Medina son los perfiles propuestos.
-              Participación, fotografías reales y redes pendientes de confirmar.
+              Las fotos de Daniela Zarfati y Karla Medina son reales.
+              Redes sociales pendientes de confirmar.
             </p>
           </Fold>
         </div>

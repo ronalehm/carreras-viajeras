@@ -7,7 +7,7 @@ export function AccountSection() {
     <div className="grid text-primary md:min-h-[calc(100vh-6rem)] md:grid-cols-2">
       <div className="relative isolate flex min-h-65 items-end bg-primary text-primary-foreground md:min-h-162">
         <Image
-          src="/images/running-team.jpg"
+          src="/images/running-team.webp"
           alt="Corredores juntos, imagen ilustrativa"
           fill
           preload

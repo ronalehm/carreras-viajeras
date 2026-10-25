@@ -21,8 +21,8 @@ describe("buildInquiryMessage", () => {
   });
 
   it.each([
-    ["panama", "Panamá"],
-    ["medellin", "Medellín"],
+    ["rio", "Río de Janeiro"],
+    ["roma", "Roma"],
   ] as const)("%s usa su nombre y la cláusula sin precios", (destination, name) => {
     const message = buildInquiryMessage({ ...contact, destination });
     expect(message.split("\n")[0]).toBe(
@@ -31,7 +31,7 @@ describe("buildInquiryMessage", () => {
     expect(message).not.toContain("US$");
   });
 
-  it.each(["santiago-2027", "panama", "medellin"] as const)(
+  it.each(["santiago-2027", "rio", "roma"] as const)(
     "%s incluye correo, WhatsApp y el aviso final",
     (destination) => {
       const lines = buildInquiryMessage({ ...contact, destination }).split("\n");
@@ -58,10 +58,10 @@ describe("buildWhatsAppUrl", () => {
   });
 
   it("codifica acentos y saltos de línea", () => {
-    const text = "Me interesa Panamá\nCorreo: a@b.pe";
+    const text = "Me interesa Río de Janeiro\nCorreo: a@b.pe";
     const url = buildWhatsAppUrl(WHATSAPP_NUMBER, text);
     expect(url).toBe(`https://wa.me/51938127170?text=${encodeURIComponent(text)}`);
-    expect(url).toContain("Panam%C3%A1%0ACorreo");
+    expect(url).toContain("R%C3%ADo%20de%20Janeiro%0ACorreo");
   });
 
   it.each(["", "123456789", "1234567890123456"])("devuelve null con %j", (number) => {
@@ -71,10 +71,10 @@ describe("buildWhatsAppUrl", () => {
 
 describe("parseDestinationId", () => {
   it("acepta un id válido", () => {
-    expect(parseDestinationId("panama")).toBe("panama");
+    expect(parseDestinationId("rio")).toBe("rio");
   });
 
-  it.each([undefined, "xyz", ["panama"]])("cae a santiago-2027 con %j", (value) => {
+  it.each([undefined, "xyz", ["rio"]])("cae a santiago-2027 con %j", (value) => {
     expect(parseDestinationId(value)).toBe("santiago-2027");
   });
 });

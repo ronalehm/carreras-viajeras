@@ -1,7 +1,7 @@
 # Eventos, outbox persistente y API privada para n8n
 
 - Módulo: automation
-- Estado: aprobado
+- Estado: borrador
 - Rama: `feat/automation-outbox` (roadmap 3 · Captura y n8n)
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, schema en `lib/db-schema.ts`), `lib/env.ts` con validación diferida, migraciones generadas con `npm run db:generate` y aplicadas a mano. Esta spec es la "Fase 3: captura durable mínima" que esa spec deja a una spec separada, salvo el formulario protegido (ver Alcance).
@@ -102,7 +102,7 @@ Que ningún aviso de un lead nuevo se pierda aunque n8n esté apagado, se reinic
 
   Checks: `status = 'processing'` ⇒ `lease_token` y `lease_until` no nulos; `status = 'succeeded'` ⇔ `processed_at` no nulo. Índices: único `(type, lead_id)`; parcial `(available_at, id) WHERE status = 'pending'`; parcial `(lease_until) WHERE status = 'processing'`.
 - `automation_event_redrives`: `id` uuid PK, `event_id` uuid FK → `automation_events.id` (`restrict`), `performed_by` text FK → `profiles.user_id` (`restrict`), `reason` text not null (check 1–500 caracteres), `created_at` timestamptz default now().
-- Migración generada `drizzle/0003_right_mantis.sql` (+ `meta/0003_snapshot.json`, `meta/_journal.json`; va después de `0002_tough_warpath` de leads), aplicada a mano por el usuario, primero en una rama de desarrollo. Si `DATABASE_URL` usa un rol distinto del owner, necesita `SELECT, INSERT, UPDATE` en `automation_events`; `automation_event_redrives` solo la escribe el script manual con `DATABASE_MIGRATION_URL`.
+- Migración generada `drizzle/0004_classy_tenebrous.sql` (+ `meta/0004_snapshot.json`, `meta/_journal.json`; va después de `0002_tough_warpath` de leads y `0003_talented_skin` de reservas), aplicada a mano por el usuario, primero en una rama de desarrollo. Si `DATABASE_URL` usa un rol distinto del owner, necesita `SELECT, INSERT, UPDATE` en `automation_events`; `automation_event_redrives` solo la escribe el script manual con `DATABASE_MIGRATION_URL`.
 
 ### Módulo `modules/automation/` (server-only salvo tipos)
 - `schemas/automation.schema.ts`: `leadCreatedPayloadSchema` (estricto, reutiliza `tripSlugSchema`, que pasa a exportarse desde la API pública `@/modules/trips`), `claimRequestSchema`, `ackRequestSchema`, `failRequestSchema`, `eventIdSchema`; constantes `MAX_ATTEMPTS = 8`, `LEASE_SECONDS = 300`, `MAX_CLAIM_LIMIT = 25`, `DEFAULT_CLAIM_LIMIT = 10`.
@@ -173,7 +173,7 @@ type FailRequest = { leaseToken: string; errorCode: string }; // ^[a-z0-9_]{1,64
 
 ## Plan de tareas
 ### Fase 1 — Outbox y eventos
-Entregable: tablas y migración revisable, contrato del evento y servicios probados, sin rutas. Total: 13 archivos. Hecha; tras fusionar `main` (tabla `leads`, migración `0002_tough_warpath`), la migración del outbox es `drizzle/0003_right_mantis.sql`.
+Entregable: tablas y migración revisable, contrato del evento y servicios probados, sin rutas. Total: 13 archivos. Hecha; tras fusionar `main` (tabla `leads`, migración `0002_tough_warpath`), la migración del outbox es `drizzle/0004_classy_tenebrous.sql` (tras fusionar también las reservas, `0003_talented_skin`).
 - [x] T1 — Schema, migración y export de `tripSlugSchema` · archivos: `lib/db-schema.ts`, `drizzle/0002_*.sql`, `drizzle/meta/0002_snapshot.json`, `drizzle/meta/_journal.json`, `modules/trips/index.ts` · depende de: — · secuencial (base)
 - [x] T2 — Schemas, tipos y backoff con tests · archivos: `modules/automation/schemas/automation.schema.ts`, `modules/automation/schemas/automation.schema.test.ts`, `modules/automation/types/automation.types.ts`, `modules/automation/utils/retryDelay.ts`, `modules/automation/utils/retryDelay.test.ts` · depende de: T1 (export de `tripSlugSchema`) · secuencial
 - [x] T3 — Servicio con test · archivos: `modules/automation/services/automation.service.ts`, `modules/automation/services/automation.service.test.ts` · depende de: T1, T2 · secuencial

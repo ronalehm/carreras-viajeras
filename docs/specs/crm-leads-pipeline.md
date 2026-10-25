@@ -463,12 +463,12 @@ Todas heredan el layout protegido (`NoCrmAccess` sin rol de staff, `CrmShell`, `
 Las páginas importan solo desde `@/modules/crm`, `@/modules/accounts` (`getCrmAccess`) y `@/lib/dates`.
 
 ### Discrepancia de destinos con la landing
-- `modules/landing/utils/inquiry.ts` usa `DESTINATION_IDS = ["santiago-2027", "panama", "medellin"]`, pero el catálogo usa el slug `maraton-santiago-2027` (`trips-catalog.md`, Requisito 3) y no tiene viajes para Panamá ni Medellín ("Quiero novedades").
-- **En esta spec** no hay mapeo automático: el comercial elige el viaje en el selector y escribe el destino libre si no está en el catálogo (p. ej. "Panamá").
+- `modules/landing/utils/inquiry.ts` usa `DESTINATION_IDS = ["santiago-2027", "rio", "roma"]`, pero el catálogo usa el slug `maraton-santiago-2027` (`trips-catalog.md`, Requisito 3) y no tiene viajes para Río ni Roma ("Quiero novedades").
+- **En esta spec** no hay mapeo automático: el comercial elige el viaje en el selector y escribe el destino libre si no está en el catálogo (p. ej. "Río de Janeiro").
 - **Propuesta para la captura automática** (spec futura, Pregunta abierta 10):
   1. la landing usa como valor del destino el slug del catálogo (`maraton-santiago-2027`) en lugar de `santiago-2027`;
   2. el servidor resuelve `slug → trips.id`, solo si el viaje está publicado, y lo guarda en `trip_id`;
-  3. un destino sin viaje en el catálogo (`panama`, `medellin`) se guarda en `destination_text` con su nombre visible.
+  3. un destino sin viaje en el catálogo (`rio`, `roma`) se guarda en `destination_text` con su nombre visible.
 
   Así no hace falta una tabla de equivalencias y el `id` sigue siendo el único vínculo estable.
 
@@ -598,6 +598,6 @@ Todas resueltas por el usuario ("ok a todo", 2026-10-18), con la recomendación 
 7. **Teléfono:** obligatorio con código de país (E.164), sin asumir `+51`.
 8. **Duplicados:** no se detectan en el MVP.
 9. **Zona horaria:** `America/Lima`.
-10. **Destinos de la landing:** la futura captura usará el slug del catálogo (`maraton-santiago-2027`); `destination_text` para destinos sin viaje en el catálogo (Panamá, Medellín). Hay que avisar a la rama de la landing, que hoy usa `santiago-2027`.
+10. **Destinos de la landing:** la futura captura usará el slug del catálogo (`maraton-santiago-2027`); `destination_text` para destinos sin viaje en el catálogo (Río de Janeiro, Roma). Hay que avisar a la rama de la landing, que hoy usa `santiago-2027`.
 11. **Orden con `trips-catalog` F2:** se cierra primero `trips-catalog` F2 y después la F2 de esta spec.
 12. **Tamaño de página:** 25 leads por página.

@@ -127,8 +127,8 @@ export function ContactForm({ defaultDestination }: { defaultDestination: Destin
           <NativeSelectOption value="santiago-2027">
             Santiago 2027 · Maratón 42K · Desde US$1,499
           </NativeSelectOption>
-          <NativeSelectOption value="panama">Panamá · Quiero novedades</NativeSelectOption>
-          <NativeSelectOption value="medellin">Medellín · Quiero novedades</NativeSelectOption>
+          <NativeSelectOption value="rio">Río de Janeiro · Quiero novedades</NativeSelectOption>
+          <NativeSelectOption value="roma">Roma · Quiero novedades</NativeSelectOption>
         </NativeSelect>
       </Label>
 

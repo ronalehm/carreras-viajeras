@@ -1,11 +1,11 @@
 {
-  "id": "c911fe6e-6f24-4af9-b0a8-7601d04c2543",
+  "id": "44660d44-81be-4a18-b5fa-d0b786d60358",
   "prevId": "beae813c-20cd-47d9-9123-d5f684aa9c55",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.automation_event_redrives": {
-      "name": "automation_event_redrives",
+    "public.booking_payments": {
+      "name": "booking_payments",
       "schema": "",
       "columns": {
         "id": {
@@ -15,20 +15,32 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "event_id": {
-          "name": "event_id",
+        "booking_id": {
+          "name": "booking_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "performed_by": {
-          "name": "performed_by",
+        "amount_usd": {
+          "name": "amount_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "paid_on": {
+          "name": "paid_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "concept": {
+          "name": "concept",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "reason": {
-          "name": "reason",
+        "recorded_by": {
+          "name": "recorded_by",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -39,16 +51,44 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
+        },
+        "voided_at": {
+          "name": "voided_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "voided_by": {
+          "name": "voided_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "booking_payments_booking_idx": {
+          "name": "booking_payments_booking_idx",
+          "columns": [
+            {
+              "expression": "booking_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
-        "automation_event_redrives_event_id_automation_events_id_fk": {
-          "name": "automation_event_redrives_event_id_automation_events_id_fk",
-          "tableFrom": "automation_event_redrives",
-          "tableTo": "automation_events",
+        "booking_payments_booking_id_bookings_id_fk": {
+          "name": "booking_payments_booking_id_bookings_id_fk",
+          "tableFrom": "booking_payments",
+          "tableTo": "bookings",
           "columnsFrom": [
-            "event_id"
+            "booking_id"
           ],
           "columnsTo": [
             "id"
@@ -56,12 +96,25 @@
           "onDelete": "restrict",
           "onUpdate": "no action"
         },
-        "automation_event_redrives_performed_by_profiles_user_id_fk": {
-          "name": "automation_event_redrives_performed_by_profiles_user_id_fk",
-          "tableFrom": "automation_event_redrives",
+        "booking_payments_recorded_by_profiles_user_id_fk": {
+          "name": "booking_payments_recorded_by_profiles_user_id_fk",
+          "tableFrom": "booking_payments",
           "tableTo": "profiles",
           "columnsFrom": [
-            "performed_by"
+            "recorded_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "booking_payments_voided_by_profiles_user_id_fk": {
+          "name": "booking_payments_voided_by_profiles_user_id_fk",
+          "tableFrom": "booking_payments",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "voided_by"
           ],
           "columnsTo": [
             "user_id"
@@ -74,15 +127,23 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "automation_event_redrives_reason_chk": {
-          "name": "automation_event_redrives_reason_chk",
-          "value": "char_length(\"automation_event_redrives\".\"reason\") BETWEEN 1 AND 500"
+        "booking_payments_amount_usd_chk": {
+          "name": "booking_payments_amount_usd_chk",
+          "value": "\"booking_payments\".\"amount_usd\" > 0"
+        },
+        "booking_payments_concept_chk": {
+          "name": "booking_payments_concept_chk",
+          "value": "char_length(\"booking_payments\".\"concept\") BETWEEN 1 AND 80"
+        },
+        "booking_payments_voided_chk": {
+          "name": "booking_payments_voided_chk",
+          "value": "(\"booking_payments\".\"voided_at\" IS NULL) = (\"booking_payments\".\"voided_by\" IS NULL)"
         }
       },
       "isRLSEnabled": false
     },
-    "public.automation_events": {
-      "name": "automation_events",
+    "public.bookings": {
+      "name": "bookings",
       "schema": "",
       "columns": {
         "id": {
@@ -92,69 +153,73 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lead_id": {
-          "name": "lead_id",
+        "trip_id": {
+          "name": "trip_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": true
         },
-        "payload_version": {
-          "name": "payload_version",
-          "type": "integer",
+        "participant_name": {
+          "name": "participant_name",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
+        "participant_email": {
+          "name": "participant_email",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "runner_user_id": {
+          "name": "runner_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "status": {
           "name": "status",
-          "type": "automation_event_status",
+          "type": "booking_status",
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true,
           "default": "'pending'"
         },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
+        "package_label": {
+          "name": "package_label",
+          "type": "text",
           "primaryKey": false,
-          "notNull": true,
-          "default": 0
+          "notNull": true
         },
-        "available_at": {
-          "name": "available_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_token": {
-          "name": "lease_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_code": {
-          "name": "last_error_code",
+        "distance": {
+          "name": "distance",
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "total_usd": {
+          "name": "total_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "balance_due_on": {
+          "name": "balance_due_on",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "internal_note": {
+          "name": "internal_note",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -163,102 +228,340 @@
           "notNull": true,
           "default": "now()"
         },
-        "processed_at": {
-          "name": "processed_at",
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {
-        "automation_events_type_lead_uq": {
-          "name": "automation_events_type_lead_uq",
+        "bookings_trip_email_active_uq": {
+          "name": "bookings_trip_email_active_uq",
           "columns": [
             {
-              "expression": "type",
+              "expression": "trip_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             },
             {
-              "expression": "lead_id",
+              "expression": "participant_email",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": true,
+          "where": "\"bookings\".\"status\" <> 'cancelled'",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "automation_events_pending_idx": {
-          "name": "automation_events_pending_idx",
+        "bookings_runner_user_idx": {
+          "name": "bookings_runner_user_idx",
           "columns": [
             {
-              "expression": "available_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
+              "expression": "runner_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'pending'",
           "concurrently": false,
           "method": "btree",
           "with": {}
         },
-        "automation_events_lease_idx": {
-          "name": "automation_events_lease_idx",
+        "bookings_unlinked_email_idx": {
+          "name": "bookings_unlinked_email_idx",
           "columns": [
             {
-              "expression": "lease_until",
+              "expression": "participant_email",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
             }
           ],
           "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'processing'",
+          "where": "\"bookings\".\"runner_user_id\" IS NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "bookings_trip_id_trips_id_fk": {
+          "name": "bookings_trip_id_trips_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_created_by_profiles_user_id_fk": {
+          "name": "bookings_created_by_profiles_user_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "bookings_id_trip_uq": {
+          "name": "bookings_id_trip_uq",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "trip_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "bookings_participant_name_chk": {
+          "name": "bookings_participant_name_chk",
+          "value": "char_length(\"bookings\".\"participant_name\") BETWEEN 2 AND 120"
+        },
+        "bookings_participant_email_chk": {
+          "name": "bookings_participant_email_chk",
+          "value": "\"bookings\".\"participant_email\" = lower(\"bookings\".\"participant_email\") AND char_length(\"bookings\".\"participant_email\") <= 254"
+        },
+        "bookings_package_label_chk": {
+          "name": "bookings_package_label_chk",
+          "value": "char_length(\"bookings\".\"package_label\") BETWEEN 1 AND 80"
+        },
+        "bookings_distance_chk": {
+          "name": "bookings_distance_chk",
+          "value": "\"bookings\".\"distance\" IS NULL OR char_length(\"bookings\".\"distance\") <= 20"
+        },
+        "bookings_total_usd_chk": {
+          "name": "bookings_total_usd_chk",
+          "value": "\"bookings\".\"total_usd\" >= 0"
+        },
+        "bookings_internal_note_chk": {
+          "name": "bookings_internal_note_chk",
+          "value": "\"bookings\".\"internal_note\" IS NULL OR char_length(\"bookings\".\"internal_note\") <= 2000"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.itinerary_items": {
+      "name": "itinerary_items",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "booking_id": {
+          "name": "booking_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "itinerary_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "itinerary_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "location": {
+          "name": "location",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_time": {
+          "name": "start_time",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "start_time_zone": {
+          "name": "start_time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_time": {
+          "name": "end_time",
+          "type": "time",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "end_time_zone": {
+          "name": "end_time_zone",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "runner_visible": {
+          "name": "runner_visible",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "itinerary_items_trip_idx": {
+          "name": "itinerary_items_trip_idx",
+          "columns": [
+            {
+              "expression": "trip_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "itinerary_items_booking_idx": {
+          "name": "itinerary_items_booking_idx",
+          "columns": [
+            {
+              "expression": "booking_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "itinerary_items_trip_id_trips_id_fk": {
+          "name": "itinerary_items_trip_id_trips_id_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "itinerary_items_booking_trip_fk": {
+          "name": "itinerary_items_booking_trip_fk",
+          "tableFrom": "itinerary_items",
+          "tableTo": "bookings",
+          "columnsFrom": [
+            "booking_id",
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id",
+            "trip_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "automation_events_type_chk": {
-          "name": "automation_events_type_chk",
-          "value": "\"automation_events\".\"type\" IN ('lead.created')"
+        "itinerary_items_title_chk": {
+          "name": "itinerary_items_title_chk",
+          "value": "char_length(\"itinerary_items\".\"title\") BETWEEN 1 AND 120"
         },
-        "automation_events_payload_version_chk": {
-          "name": "automation_events_payload_version_chk",
-          "value": "\"automation_events\".\"payload_version\" > 0"
+        "itinerary_items_details_chk": {
+          "name": "itinerary_items_details_chk",
+          "value": "\"itinerary_items\".\"details\" IS NULL OR char_length(\"itinerary_items\".\"details\") <= 1000"
         },
-        "automation_events_attempts_chk": {
-          "name": "automation_events_attempts_chk",
-          "value": "\"automation_events\".\"attempts\" BETWEEN 0 AND 8"
+        "itinerary_items_location_chk": {
+          "name": "itinerary_items_location_chk",
+          "value": "\"itinerary_items\".\"location\" IS NULL OR char_length(\"itinerary_items\".\"location\") <= 160"
         },
-        "automation_events_last_error_code_chk": {
-          "name": "automation_events_last_error_code_chk",
-          "value": "\"automation_events\".\"last_error_code\" IS NULL OR \"automation_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,64}$'"
+        "itinerary_items_start_time_zone_chk": {
+          "name": "itinerary_items_start_time_zone_chk",
+          "value": "\"itinerary_items\".\"start_time_zone\" IS NULL OR (\"itinerary_items\".\"start_time_zone\" ~ '^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$' AND char_length(\"itinerary_items\".\"start_time_zone\") <= 64)"
         },
-        "automation_events_processing_lease_chk": {
-          "name": "automation_events_processing_lease_chk",
-          "value": "\"automation_events\".\"status\" <> 'processing' OR (\"automation_events\".\"lease_token\" IS NOT NULL AND \"automation_events\".\"lease_until\" IS NOT NULL)"
+        "itinerary_items_end_time_zone_chk": {
+          "name": "itinerary_items_end_time_zone_chk",
+          "value": "\"itinerary_items\".\"end_time_zone\" IS NULL OR (\"itinerary_items\".\"end_time_zone\" ~ '^[A-Za-z]+(/[A-Za-z0-9_+-]+)+$' AND char_length(\"itinerary_items\".\"end_time_zone\") <= 64)"
         },
-        "automation_events_processed_at_chk": {
-          "name": "automation_events_processed_at_chk",
-          "value": "(\"automation_events\".\"status\" = 'succeeded') = (\"automation_events\".\"processed_at\" IS NOT NULL)"
+        "itinerary_items_schedule_chk": {
+          "name": "itinerary_items_schedule_chk",
+          "value": "(\"itinerary_items\".\"start_time\" IS NULL OR \"itinerary_items\".\"start_date\" IS NOT NULL) AND (\"itinerary_items\".\"end_time\" IS NULL OR \"itinerary_items\".\"end_date\" IS NOT NULL) AND (\"itinerary_items\".\"start_time\" IS NULL) = (\"itinerary_items\".\"start_time_zone\" IS NULL) AND (\"itinerary_items\".\"end_time\" IS NULL) = (\"itinerary_items\".\"end_time_zone\" IS NULL) AND (\"itinerary_items\".\"end_date\" IS NULL OR (\"itinerary_items\".\"start_date\" IS NOT NULL AND \"itinerary_items\".\"end_date\" >= \"itinerary_items\".\"start_date\"))"
         }
       },
       "isRLSEnabled": false
@@ -962,6 +1265,115 @@
       },
       "isRLSEnabled": false
     },
+    "public.trip_updates": {
+      "name": "trip_updates",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "trip_id": {
+          "name": "trip_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "body": {
+          "name": "body",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "published_at": {
+          "name": "published_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "trip_updates_trip_published_idx": {
+          "name": "trip_updates_trip_published_idx",
+          "columns": [
+            {
+              "expression": "trip_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "published_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "trip_updates_trip_id_trips_id_fk": {
+          "name": "trip_updates_trip_id_trips_id_fk",
+          "tableFrom": "trip_updates",
+          "tableTo": "trips",
+          "columnsFrom": [
+            "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "trip_updates_created_by_profiles_user_id_fk": {
+          "name": "trip_updates_created_by_profiles_user_id_fk",
+          "tableFrom": "trip_updates",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "trip_updates_title_chk": {
+          "name": "trip_updates_title_chk",
+          "value": "char_length(\"trip_updates\".\"title\") BETWEEN 3 AND 120"
+        },
+        "trip_updates_body_chk": {
+          "name": "trip_updates_body_chk",
+          "value": "char_length(\"trip_updates\".\"body\") BETWEEN 1 AND 2000"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.trips": {
       "name": "trips",
       "schema": "",
@@ -1130,14 +1542,38 @@
     }
   },
   "enums": {
-    "public.automation_event_status": {
-      "name": "automation_event_status",
+    "public.booking_status": {
+      "name": "booking_status",
       "schema": "public",
       "values": [
         "pending",
-        "processing",
-        "succeeded",
-        "dead"
+        "confirmed",
+        "cancelled"
+      ]
+    },
+    "public.itinerary_kind": {
+      "name": "itinerary_kind",
+      "schema": "public",
+      "values": [
+        "document",
+        "registration",
+        "flight",
+        "transfer",
+        "hotel",
+        "activity",
+        "race",
+        "return"
+      ]
+    },
+    "public.itinerary_status": {
+      "name": "itinerary_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "provisional",
+        "confirmed",
+        "completed",
+        "cancelled"
       ]
     },
     "public.lead_activity_type": {

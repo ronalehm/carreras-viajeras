@@ -1,4 +1,4 @@
-export const DESTINATION_IDS = ["santiago-2027", "panama", "medellin"] as const;
+export const DESTINATION_IDS = ["santiago-2027", "rio", "roma"] as const;
 export type DestinationId = (typeof DESTINATION_IDS)[number];
 
 // Dato público del canal comercial (+51 938 127 170).
@@ -6,8 +6,8 @@ export const WHATSAPP_NUMBER = "51938127170";
 
 const DESTINATION_NAMES: Record<DestinationId, string> = {
   "santiago-2027": "Maratón de Santiago 42K 2027",
-  panama: "Panamá",
-  medellin: "Medellín",
+  rio: "Río de Janeiro",
+  roma: "Roma",
 };
 
 /** `?destino=` → id válido o "santiago-2027". */

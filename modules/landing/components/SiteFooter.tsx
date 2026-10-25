@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CalendarCheck, Flag, Globe, Users } from "lucide-react";
 import { SiteBrand } from "./SiteHeader";
 
 const SOCIAL_LINKS = [
@@ -20,8 +20,30 @@ const PROVIDER_INFO = [
 ];
 
 const MAZ_METRICS = [
-  { value: "+15", label: "Maratones internacionales" },
-  { value: "+500", label: "Runners" },
+  {
+    value: "+25 Años",
+    label: "Experiencia en producción de maratones",
+    Icon: CalendarCheck,
+    tone: "bg-highlight/10 text-highlight border-highlight/30",
+  },
+  {
+    value: "+70",
+    label: "Carreras producidas",
+    Icon: Flag,
+    tone: "bg-primary/10 text-primary border-primary/30",
+  },
+  {
+    value: "+500",
+    label: "Runners",
+    Icon: Users,
+    tone: "bg-highlight/10 text-highlight border-highlight/30",
+  },
+  {
+    value: "+15",
+    label: "Maratones internacionales",
+    Icon: Globe,
+    tone: "bg-primary/10 text-primary border-primary/30",
+  },
 ];
 
 export function SiteFooter() {
@@ -31,7 +53,7 @@ export function SiteFooter() {
         aria-label="Respaldo de MAZ Producciones"
         className="mx-[6%] mb-5 grid gap-5 border-y border-primary/25 bg-background py-6 text-primary sm:mx-[8%] sm:mb-8 sm:grid-cols-2 lg:grid-cols-[1.35fr_1fr] lg:gap-x-6"
       >
-        <div className="flex items-center gap-4 sm:col-span-2 sm:gap-5 lg:col-span-1">
+        <div className="flex items-center gap-4 sm:col-span-2 sm:gap-5">
           <Image
             src="/images/maz-producciones.webp"
             alt="MAZ Producciones"
@@ -52,15 +74,24 @@ export function SiteFooter() {
         <div
           role="group"
           aria-label="Trayectoria de MAZ Producciones en 2025"
-          className="grid grid-cols-2 gap-5"
+          className="grid grid-cols-1 gap-4 sm:col-span-2 sm:grid-cols-2 sm:gap-5 lg:grid-cols-4"
         >
-          {MAZ_METRICS.map(({ value, label }) => (
-            <div key={value}>
-              <strong className="block text-3xl leading-tight font-bold tracking-tight">
+          {MAZ_METRICS.map(({ value, label, Icon, tone }) => (
+            <div
+              key={value}
+              className="rounded-2xl border border-primary/20 bg-white p-6 text-center transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-lg"
+            >
+              <div
+                className={`mx-auto mb-4 flex size-12 items-center justify-center rounded-xl border ${tone}`}
+              >
+                <Icon aria-hidden className="size-5" />
+              </div>
+              <div className="mb-1.5 text-3xl font-black tracking-tight text-primary sm:text-4xl">
                 {value}
-              </strong>
-              <span className="mt-1 block text-xs">{label}</span>
-              <small className="text-xs">2025</small>
+              </div>
+              <p className="text-xs leading-snug font-bold text-slate-600 sm:text-sm">
+                {label}
+              </p>
             </div>
           ))}
         </div>
@@ -77,7 +108,7 @@ export function SiteFooter() {
         className="bg-primary px-[6%] pt-12 pb-8 text-primary-foreground max-sm:pb-28"
       >
         <div className="flex flex-wrap items-center justify-between gap-6 border-b border-primary-foreground/20 pb-9">
-          <SiteBrand />
+          <SiteBrand variant="mark" />
           <span className="text-xs max-sm:hidden">Corre. Viaja. Conecta.</span>
           <div role="group" aria-label="Redes sociales" className="flex gap-2.5 max-sm:w-full">
             {SOCIAL_LINKS.map(({ href, glyph, label }) => (

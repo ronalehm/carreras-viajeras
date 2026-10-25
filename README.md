@@ -62,7 +62,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cuatro migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) y `drizzle/0003_right_mantis.sql` crea la outbox de automatización (pendiente, después de `0002`; ver [Migración del outbox](#migración-del-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), y `drizzle/0004_classy_tenebrous.sql` crea la outbox de automatización (pendiente, después de `0003`; ver [Migración del outbox](#migración-del-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -178,7 +178,7 @@ Prueba manual opcional de las restricciones, **solo en una rama de desarrollo de
 
 ### Lectura pública para la landing
 
-La landing (otra rama) lee el catálogo con funciones de servidor, sin API HTTP (no existe `GET /api/trips`):
+El catálogo se lee con funciones de servidor, sin API HTTP (no existe `GET /api/trips`):
 
 ```ts
 import {
@@ -197,8 +197,34 @@ import {
 - Ambas consultan Neon en cada petición (`connection()`): la página nunca se prerenderiza con datos de la base. No usar `generateStaticParams` sobre el catálogo ni `revalidatePath`; un viaje publicado aparece en la siguiente carga.
 - `PublicTrip` solo tiene campos públicos: `slug`, `title`, `city`, `country`, `raceDate`, `startDate`, `endDate`, `distances`, `summary`, `includes`, `priceUsd`, `capacity` e `imageUrl` (sin `id`, `status` ni fechas de auditoría). Las fechas son `YYYY-MM-DD`; `startDate` y `endDate` vienen las dos o ninguna.
 - Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" y `formatTripPrice(null)` → "Precio a consultar". Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
-- Llamar a `getPublishedTripBySlug` en `generateMetadata` y en la página son dos consultas; la landing puede envolverla con `cache` de React en su propio módulo. Los errores de la base se propagan al `error.tsx` de la página.
-- **Cuándo cambiar al catálogo:** hasta que esta Fase 1 esté en `main`, la migración aplicada y "Maratón de Santiago 2027" creado y publicado desde `/crm/viajes` (Fase 2), la landing mantiene su contenido fijo; si cambiara antes, `/viajes/maraton-santiago-2027` devolvería 404. Mientras tanto, sus tests pueden simular `@/modules/trips`. Lo que no está en `PublicTrip` (itinerario, hotel, FAQ, testimonios, WhatsApp, `/contacto`) sigue como contenido fijo.
+#### Qué usa hoy la landing
+
+Especificado en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4).
+
+- **`/viajes/[slug]`** se renderiza en cada petición: `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y combina el resultado con el contenido fijo de `TRIPS`. Del catálogo salen el título (`h1` y `<title>`), el resumen (meta description), la fecha de la carrera, el precio "desde" (`formatTripPrice`, en "EL PAQUETE" y "AL CONTADO") y los cupos ("100 cupos definidos", o "Cupos por confirmar" si no hay). El resto (portada, ruta, destacados, cuotas, reserva, acompañante, incluidos, pendientes, enlace oficial y CTA) sigue como contenido fijo de la landing. No se muestran `imageUrl`, `includes`, `distances`, `city`, `country` ni las fechas de viaje.
+- **404:** un slug sin contenido fijo en `TRIPS` devuelve `null` sin consultar Neon; si el viaje no existe, está en borrador o archivado, `getPublishedTripBySlug` devuelve `null`. En ambos casos, `notFound()` responde con estado `404`. No hay `loading.tsx`, para que el estado no quede en `200`.
+- **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado.
+- **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
+- **`/` no consulta Neon:** sigue estática y conserva su propia copia de fecha, precio y cupos en `TRIPS` (`modules/landing/utils/trips.ts`), igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de consulta. **Si el equipo cambia la fecha, el precio o los cupos en el CRM, hay que editar a mano esa copia en la landing**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
+- `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` aparece como dinámica (`ƒ`).
+
+#### Precondición operativa (antes de mergear)
+
+Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a leer `production`; si el despliegue es manual, se comprueba antes de `npm run deploy`. En la rama `production` de Neon:
+
+1. **Migración `0001` aplicada** (ver "Migración de la tabla de viajes"). Comprobación: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, la página responde **500**.
+2. **Viaje creado en `/crm/viajes/nuevo` y publicado**, con:
+   - slug `maraton-santiago-2027` (exacto);
+   - título "Maratón de Santiago 42K 2027";
+   - ciudad "Santiago" y país "Chile";
+   - fecha de la carrera 2027-05-16 y distancias "42K";
+   - resumen: "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.";
+   - precio desde 1499 y cupos 100;
+   - sin fechas de viaje ni imagen (no se muestran).
+
+   Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página responde **404** y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a un 404.
+3. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
+4. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
 
 ## Leads (CRM comercial)
 
@@ -227,6 +253,76 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 - una actividad `note` sin `body` y una `stage_changed` sin `stage_from`/`stage_to`.
 
 Un lead válido (`'+51938127170'`, email en minúsculas, `source = 'whatsapp'`, `consent_version = 'crm-manual-v1'`) y su actividad `created` sí se insertan.
+
+## Reservas y portal del runner
+
+Especificado en [`runner-portal.md`](docs/specs/runner-portal.md). El equipo registra en el CRM las reservas, los pagos confirmados, el itinerario y los avisos de cada viaje, y el runner los consulta en una página privada de solo lectura, `/mis-carreras`. La Fase 1 añade las tablas, el permiso y las lecturas del runner; las páginas del CRM y `/mis-carreras` llegan en las fases siguientes.
+
+- **Una reserva por participante.** Cada persona que viaja, incluido un acompañante, tiene su propia reserva con su propio correo (`participant_email`, en minúsculas). El titular no ve las reservas de sus acompañantes. El paquete se distingue con `package_label` (p. ej. "Paquete acompañante").
+- **Vínculo por correo verificado, autorización por `user_id`.** En cada carga de `/mis-carreras` con el correo verificado, una sola sentencia vincula las reservas sin cuenta de ese correo (`runner_user_id IS NULL`) al `user.id` de la sesión. Desde entonces el runner solo lee filas con `runner_user_id = <su user.id>`; el correo no vuelve a usarse. Con el correo sin verificar no se vincula ni se lee nada. El correo de la reserva solo se edita mientras no está vinculada. Vincular no crea filas en `profiles` ni `staff_*`.
+- **Permiso `bookings.manage`:** lo tienen `admin` y `commercial`. Una cuenta sin rol de staff (runner) no tiene ningún permiso del CRM.
+- **Importes en USD enteros**, sin centavos ni columna de moneda: `bookings.total_usd` (`>= 0`) y `booking_payments.amount_usd` (`> 0`) son `integer`, como `trips.price_usd`, y se muestran con `formatTripPrice` ("US$ 1,499"). El saldo (`total_usd` menos los pagos no anulados) se calcula al leer; no se guarda.
+- **Sin borrado físico:** las reservas se cancelan y los pagos se anulan (`voided_at` y `voided_by`).
+- **El runner nunca recibe** `participant_email`, `internal_note`, `created_by`, `recorded_by`, pagos anulados ni hitos con `runner_visible = false`. Los hitos de nivel viaje (`booking_id` nulo) y los avisos los ven todos los participantes del viaje.
+
+### Migración de las tablas de reservas
+
+> **Numeración.** Los PR abiertos #12 y #8 también generan una migración `0003`. Si alguno se integra antes, esta se regenera con `npm run db:generate` sobre lo que haya en `main` y pasa a ser la `0004` (con otro nombre). **No aplicar nada hasta que la rama `feat/runner-portal` esté en `main`**, y usar entonces el nombre de archivo definitivo en los pasos siguientes. Una migración ya aplicada nunca se edita.
+
+Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon que la necesite). **Orden: después de `0001` (viajes) y `0002` (leads).** Las tablas nuevas referencian `trips` y `profiles`. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production` y crearía de nuevo las tablas de staff.
+
+1. Revisar `drizzle/0003_talented_skin.sql`: solo crea, en `public`, los enums `booking_status`, `itinerary_kind` e `itinerary_status`, las tablas `bookings` (seis CHECK y la restricción única `bookings_id_trip_uq`), `booking_payments` (tres CHECK), `itinerary_items` (seis CHECK, incluido `itinerary_items_schedule_chk`) y `trip_updates` (dos CHECK), sus nueve claves foráneas (`ON DELETE restrict`, hacia `trips`, `profiles` y `bookings`, incluida la compuesta `itinerary_items_booking_trip_fk`) y siete índices (entre ellos el único parcial `bookings_trip_email_active_uq`). `total_usd` y `amount_usd` son `integer`. No hay cambios en `profiles`, `staff_*`, `trips`, `leads` ni `lead_activities`. `grep -inE 'neon_auth|drop|create schema' drizzle/0003_talented_skin.sql` no devuelve nada.
+2. Comprobar que las anteriores están aplicadas en esa rama: `SELECT to_regclass('public.trips'), to_regclass('public.leads');` no devuelve `NULL`. Si falta alguna, aplicarla antes siguiendo [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes) y [Migración de la tabla de leads](#migración-de-la-tabla-de-leads).
+3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0003` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0003_talented_skin.sql`.
+5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.bookings'::regclass, 'public.booking_payments'::regclass, 'public.itinerary_items'::regclass, 'public.trip_updates'::regclass) ORDER BY 1, 2;` lista 31 restricciones (cuatro `*_pkey`, `bookings_id_trip_uq`, diecisiete `*_chk` y nueve `*_fk`), y `SELECT count(*) FROM bookings;` devuelve 0.
+
+No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+### Pruebas manuales de la Fase 1
+
+**Solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;`, con un perfil de staff y dos viajes de prueba creados en esa misma transacción. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`. La base debe rechazar:
+
+- un `participant_email` con mayúsculas;
+- un `total_usd` negativo o con decimales. **El decimal se pasa como texto**, igual que lo envía el driver: `total_usd = '1499.5'` falla con `invalid input syntax for type integer`. Sin comillas (`1499.5`), Postgres lo redondea a 1500 al guardarlo en una columna `integer` y la prueba no demuestra nada;
+- dos reservas no canceladas del mismo viaje y correo (`bookings_trip_email_active_uq`). Tras cancelar la primera (`status = 'cancelled'`), la segunda sí se inserta;
+- un pago con `amount_usd = 0`, o con `voided_at` sin `voided_by`;
+- un hito con hora sin fecha, con hora sin zona, con `end_date < start_date`, o con un `booking_id` de una reserva de **otro** viaje (FK compuesta `itinerary_items_booking_trip_fk`);
+- un aviso (`trip_updates`) con título vacío;
+- un `trip_id` inexistente en `bookings`, `itinerary_items` o `trip_updates`.
+
+Sí se insertan: una reserva válida (`'ana@example.com'`, `total_usd = '1499'`) y la de su acompañante en el mismo viaje con otro correo; un pago de `'300'`; un hito de viaje sin `booking_id`; un vuelo de reserva con salida `2027-05-14 01:30` `America/Lima` y llegada `2027-05-14 06:55` `America/Santiago`; y un aviso con título y mensaje.
+
+### Desvincular o reasignar una reserva
+
+El CRM no permite cambiar la cuenta vinculada. Si el equipo escribió mal el correo y otra cuenta verificada con ese correo llegó a vincular la reserva, se corrige a mano con psql y `DATABASE_MIGRATION_URL`, primero en una rama de desarrollo y en `production` solo con autorización explícita. El `user_id` y el correo de una cuenta se copian de la consola de Neon (Auth → Users).
+
+- **Desvincular** (la persona correcta aún no tiene cuenta, o la vinculará ella misma). Hay que corregir también el correo: si sigue siendo el de la cuenta equivocada, esa cuenta volvería a vincular la reserva en su siguiente visita a `/mis-carreras`.
+
+  ```sql
+  BEGIN;
+  UPDATE bookings
+     SET runner_user_id = NULL, participant_email = lower('<correo correcto>'), updated_at = now()
+   WHERE id = '<booking_id>' AND runner_user_id = '<user_id vinculado por error>'
+  RETURNING id, trip_id, status, runner_user_id;
+  -- Revisar la salida: 1 fila → COMMIT;  0 filas (no existe o ya no tiene esa cuenta) → ROLLBACK;
+  ```
+
+  La persona correcta queda vinculada al cargar `/mis-carreras` con ese correo verificado.
+
+- **Reasignar** a una cuenta concreta que ya existe con el correo verificado:
+
+  ```sql
+  BEGIN;
+  UPDATE bookings
+     SET runner_user_id = '<user_id nuevo>', participant_email = lower('<correo de esa cuenta>'), updated_at = now()
+   WHERE id = '<booking_id>' AND runner_user_id = '<user_id actual>'
+  RETURNING id, trip_id, status, runner_user_id;
+  -- Revisar la salida: 1 fila → COMMIT;  0 filas → ROLLBACK;
+  ```
+
+Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` falla por `bookings_trip_email_active_uq`: revisar cuál de las dos es la buena y cancelar la otra desde el CRM. El cambio se aplica en la siguiente petición: la cuenta anterior deja de ver la reserva, porque la autorización se lee de la base en cada carga. No se tocan tablas de `neon_auth` ni filas de `profiles` o `staff_*`.
 
 ## Automatización (outbox y n8n)
 
@@ -271,9 +367,9 @@ La guía completa está en [`n8n/README.md`](n8n/README.md): importar [`n8n/work
 
 Pendiente de aplicar por el usuario. **Primero en una rama de desarrollo de Neon**; en `production`, solo después de revisarla y con autorización explícita de la operación remota. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production`.
 
-1. Revisar `drizzle/0003_right_mantis.sql`: solo crea, en `public`, el enum `automation_event_status`, las tablas `automation_events` (seis CHECK, el índice único `automation_events_type_lead_uq` y los índices parciales `automation_events_pending_idx` y `automation_events_lease_idx`) y `automation_event_redrives` (un CHECK y dos claves foráneas `ON DELETE restrict`, hacia `automation_events` y `profiles`). `lead_id` no tiene clave foránea todavía. No hay cambios en las tablas existentes. `grep -inE 'neon_auth|drop|create schema' drizzle/0003_right_mantis.sql` no devuelve nada.
-2. Orden: si faltan en esa rama, aplicar antes `0001` y `0002_tough_warpath` (leads) siguiendo [Migración de la tabla de leads](#migración-de-la-tabla-de-leads); después, `0003`. Comprobarlo con `SELECT to_regclass('public.profiles'), to_regclass('public.leads');` (ninguno debe ser `NULL`).
-3. Aplicar `0003` con el mismo procedimiento y la misma comprobación de `neon_auth` que en [Migración de las tablas de staff](#migración-de-las-tablas-de-staff) (pasos 3 a 5): guardar el estado de `neon_auth`, pegar el archivo entre `BEGIN;` y `COMMIT;` en el SQL Editor de Neon con la rama correcta seleccionada (o `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0003_right_mantis.sql`) y comprobar que el volcado de `neon_auth` es idéntico (`diff` vacío). Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar.
+1. Revisar `drizzle/0004_classy_tenebrous.sql`: solo crea, en `public`, el enum `automation_event_status`, las tablas `automation_events` (seis CHECK, el índice único `automation_events_type_lead_uq` y los índices parciales `automation_events_pending_idx` y `automation_events_lease_idx`) y `automation_event_redrives` (un CHECK y dos claves foráneas `ON DELETE restrict`, hacia `automation_events` y `profiles`). `lead_id` no tiene clave foránea todavía. No hay cambios en las tablas existentes. `grep -inE 'neon_auth|drop|create schema' drizzle/0004_classy_tenebrous.sql` no devuelve nada.
+2. Orden: si faltan en esa rama, aplicar antes `0001`, `0002_tough_warpath` (leads, ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) y `0003_talented_skin` (reservas, ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)); después, `0004`. Comprobarlo con `SELECT to_regclass('public.profiles'), to_regclass('public.leads'), to_regclass('public.bookings');` (ninguno debe ser `NULL`). El outbox no depende de las reservas, pero se respeta el orden del journal de Drizzle.
+3. Aplicar `0004` con el mismo procedimiento y la misma comprobación de `neon_auth` que en [Migración de las tablas de staff](#migración-de-las-tablas-de-staff) (pasos 3 a 5): guardar el estado de `neon_auth`, pegar el archivo entre `BEGIN;` y `COMMIT;` en el SQL Editor de Neon con la rama correcta seleccionada (o `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0004_classy_tenebrous.sql`) y comprobar que el volcado de `neon_auth` es idéntico (`diff` vacío). Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar.
 4. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.automation_events'::regclass, 'public.automation_event_redrives'::regclass) ORDER BY 1, 2;` lista 11 restricciones (dos `*_pkey`, siete `*_chk` y dos `*_fk`), y `SELECT count(*) FROM automation_events;` devuelve 0.
 
 **GRANT.** Hoy `DATABASE_URL` usa el rol owner y no necesita GRANT. Si pasa a un rol de aplicación con permisos mínimos, ese rol necesita exactamente `SELECT, INSERT, UPDATE` en `automation_events` (sin `DELETE`) y ningún permiso en `automation_event_redrives`, que solo escribe el script de reenvío con `DATABASE_MIGRATION_URL`. Se conceden con la credencial administrativa, primero en la rama de desarrollo:
