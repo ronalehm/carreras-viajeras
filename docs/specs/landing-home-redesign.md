@@ -1,7 +1,7 @@
 # Rediseño visual de la portada
 
 - Módulo: landing
-- Estado: aprobado
+- Estado: borrador
 - Base: `landing-public-site.md` (aprobada; estructura, secciones y textos de `/`) y `landing-race-pages.md` (aprobada; `TRIPS` solo alimenta `/`). Esta spec **solo cambia la presentación** de `/`: no cambia rutas, datos, enlaces, comportamiento ni textos, salvo lo indicado en el Requisito 6.
 - Decisiones del usuario (2026-10-25): se rediseña **la portada (`/`)**; se **mantiene la marca** (azul `#0244a9`, verde `#63ae27`, logo y textos) y se replantean tipografía, jerarquía, layout y ritmo de las secciones.
 - Maqueta de referencia (no es código del repo): hero con el dorsal y sección del paquete, en escritorio y móvil, compartida en la conversación del 2026-10-25.
@@ -48,7 +48,7 @@ El rediseño le da a la portada una identidad propia del mundo del running, sin 
    - franja inferior verde con barras de chip de cronometraje (decorativas, `aria-hidden`);
    - dos agujeros de imperdible en las esquinas superiores.
 
-   Se ubica en el hero, a la derecha en escritorio (≥ 1024 px), girado −3°, y debajo del titular en móvil (máx. 360 px de ancho, sin desbordar). Animación de entrada única, de ≤ 1 s, que se anula con `motion-reduce`. Los textos `routeNote` y `capacityNote` siguen visibles en tamaño pequeño dentro de su talón.
+   Se ubica en el hero, a la derecha en escritorio (≥ 1024 px), girado −3°, y debajo del titular en móvil (máx. 360 px de ancho, sin desbordar). Animación de entrada única, de ≤ 1 s, que se anula con `motion-reduce`. Los textos `routeNote` y `capacityNote` siguen visibles en tamaño pequeño dentro de su talón. La nota "Preventa · al contado" de la franja anterior se elimina: "Preventa" pasa a la franja superior y "al contado" a la etiqueta del talón.
 4. **Secciones (F1–F2).** Principios comunes, verificables por el reviewer:
    - Sin etiquetas en MAYÚSCULAS con tracking ancho (`uppercase` + `tracking-[…]`/`tracking-widest`) en los componentes de la portada. Si la etiqueta aporta información, pasa a minúsculas normales (sentence case) en `text-sm`; si solo repite el título, se elimina (Requisito 6).
    - Sin palabras resaltadas en otro color o en cursiva dentro de un titular (se elimina `em` de `HeroCarousel` y el subrayado de `CommunitySection`).
@@ -58,7 +58,7 @@ El rediseño le da a la portada una identidad propia del mundo del running, sin 
    - Radios: 14–18 px en fotos y dorsal, `rounded-full` en botones; nada de un radio único para todo.
    - Botones: CTA principal verde (`bg-highlight`), secundarios azules o como enlace subrayado. Se mantiene el icono `ArrowUpRight` donde ya existe.
 5. **Por sección:**
-   - **Cabecera (F1):** fondo blanco sólido (el logo es una imagen con fondo blanco). Más aire vertical, nav en `text-sm` con estado activo y botones con la nueva forma. Se comparte con `/contacto`, `/cuenta` y `/viajes/*`.
+   - **Cabecera (F1):** fondo blanco sólido (el logo es una imagen con fondo blanco). Más aire vertical, nav en `text-sm` con estados hover y foco visibles (sin marcar la página actual: requeriría un `"use client"` nuevo o tocar páginas fuera del plan) y botones con la nueva forma. Se comparte con `/contacto`, `/cuenta` y `/viajes/*`.
    - **Hero (F1):** foto a sangre en duotono sobre `--night`, titular en display blanco, CTA y dorsal (Requisito 3). El carrusel conserva sus 3 diapositivas, sus controles y su accesibilidad; el dorsal no cambia entre diapositivas.
    - **Historia (F1):** foto grande + titular display; sin el pie "CORRE, VIAJA, CONECTA." en mayúsculas espaciadas (pasa a sentence case).
    - **Paquete (F1):** sin marco de tarjeta. Foto vertical a la izquierda; a la derecha, titular, lista de destacados en filas con viñeta verde, precio en display grande, cuotas y reserva en texto secundario, CTA y aviso. "Ver más: paquete completo" se mantiene como enlace.
