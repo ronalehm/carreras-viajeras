@@ -43,6 +43,13 @@
       "when": 1792895009295,
       "tag": "0005_abnormal_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792899066152,
+      "tag": "0006_puzzling_gamma_corps",
+      "breakpoints": true
     }
   ]
 }
