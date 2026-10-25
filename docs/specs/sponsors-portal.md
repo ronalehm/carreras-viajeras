@@ -1,7 +1,7 @@
 # Patrocinadores: rol `sponsor`, portal de eventos con revisión del equipo y promoción pública
 
 - Módulo: sponsors (con cambios en `accounts`, `trips` y `landing`)
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `accounts-roles-permissions.md` (aprobada, implementada): enum `staff_role`, `profiles`, `staff_assignments`, `staff_invitations`, aceptación atómica en `getCurrentUser`, matriz `can()`, `/crm/admin/usuarios`. Esa spec ya prevé roles nuevos "como valores nuevos del enum `staff_role` (`ALTER TYPE … ADD VALUE`) y entradas nuevas en la matriz".
   - `accounts-auth-ui.md` (aprobada, F1–F4 implementadas): `AccessPanel`, `SignInForm`/`VerifyEmailForm` con destinos cerrados, `SignOutButton`, `getCrmAccess`, `NoCrmAccess`, layout `app/crm/(protected)/`.

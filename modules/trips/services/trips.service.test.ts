@@ -200,7 +200,7 @@ describe("listTrips", () => {
 
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toMatch(
-      /^select "id", .*"status", "created_at", "updated_at" from "trips" order by "trips"\."status" = 'archived', "trips"\."race_date" asc, "trips"\."slug" asc$/,
+      /^select "id", .*"status", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at" from "trips" order by "trips"\."status" = 'archived', "trips"\."race_date" asc, "trips"\."slug" asc$/,
     );
     expect(connection).not.toHaveBeenCalled();
   });
@@ -230,10 +230,10 @@ describe("createTrip", () => {
 
     expect(fake.queries).toHaveLength(1);
     const [insert] = fake.queries;
-    // id, status, created_at and updated_at are left to the column defaults.
+    // id, status, sponsor_id, featured, review_status, review_note, created_at and updated_at are left to the column defaults.
     expect(normalize(insert.sql)).toBe(
-      'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", "status", "created_at", "updated_at") ' +
-        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, default, default, default) " +
+      'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", "status", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at") ' +
+        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, default, default, default, default, default, default, default) " +
         'on conflict ("slug") do nothing returning "id"',
     );
     expect(insert.params).toEqual(inputParams);
