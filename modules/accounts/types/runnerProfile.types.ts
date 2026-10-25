@@ -34,3 +34,15 @@ export type RunnerProfile = {
 };
 
 export type ProfileSection = "personal" | "document" | "race" | "emergency";
+
+// Never carries `values`: the form keeps what was typed without the document or medical
+// notes travelling back in the response (Decision 8).
+export type RunnerProfileActionState =
+  | { status: "idle" }
+  | { status: "success"; message: string }
+  | {
+      status: "error";
+      code: "unauthorized" | "forbidden" | "invalid_input" | "save_failed";
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+    };
