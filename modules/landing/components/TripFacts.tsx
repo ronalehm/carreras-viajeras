@@ -13,7 +13,7 @@ function ChipBars() {
         <span
           key={i}
           className={cn(
-            "block h-4.5 w-0.75 bg-white/75",
+            "block h-4.5 w-0.75 bg-primary-foreground/75",
             (i + 1) % 3 === 0 && "w-1.5",
             (i + 1) % 4 === 0 && "h-2.5",
           )}
@@ -24,7 +24,7 @@ function ChipBars() {
 }
 
 const PIN_HOLE =
-  "absolute top-3.5 size-3 rounded-full bg-night shadow-[inset_0_2px_3px_rgb(0_0_0/0.4)]";
+  "absolute top-3.5 size-3 rounded-full bg-night shadow-[inset_0_2px_3px_color-mix(in_oklab,var(--foreground)_40%,transparent)]";
 
 /** The trip's key facts as a race bib: pinned on load, still with prefers-reduced-motion. */
 export function TripFacts({ trip }: { trip: TripContent }) {
@@ -59,7 +59,7 @@ export function TripFacts({ trip }: { trip: TripContent }) {
   return (
     <section
       aria-label="Datos del viaje"
-      className="relative mx-auto w-full max-w-90 -rotate-3 overflow-hidden rounded-xl bg-background text-primary shadow-[0_30px_60px_-20px_rgb(1_20_60/0.55)] animate-in fill-mode-both fade-in slide-in-from-top-10 -spin-in-6 delay-150 duration-800 ease-out motion-reduce:animate-none lg:max-w-110"
+      className="relative mx-auto w-full max-w-90 -rotate-3 overflow-hidden rounded-xl bg-background text-primary shadow-[0_30px_60px_-20px_color-mix(in_oklab,var(--night)_55%,transparent)] animate-in fill-mode-both fade-in slide-in-from-top-10 -spin-in-6 delay-150 duration-800 ease-out motion-reduce:animate-none lg:max-w-110"
     >
       <span aria-hidden className={cn(PIN_HOLE, "left-3.5")} />
       <span aria-hidden className={cn(PIN_HOLE, "right-3.5")} />

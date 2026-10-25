@@ -65,7 +65,7 @@ export function SiteHeader() {
           <Link
             key={href}
             href={href}
-            className="py-2 no-underline decoration-highlight decoration-2 underline-offset-8 hover:underline active:text-night"
+            className="py-2 no-underline decoration-highlight decoration-2 underline-offset-8 hover:underline focus-visible:underline"
           >
             {label}
           </Link>

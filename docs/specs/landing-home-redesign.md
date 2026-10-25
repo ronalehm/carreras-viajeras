@@ -113,11 +113,11 @@ Cambio solo de presentación: según `docs/SETUP.md`, los componentes presentaci
 
 ## Plan de tareas
 ### Fase 1 — Sistema visual y primer pantallazo
-- [ ] T1 — Tokens, fuente display y utilidad de titulares · archivos: `app/globals.css`, `app/layout.tsx` · depende de: — · secuencial (base)
-- [ ] T2 — Cabecera y menú móvil · archivos: `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/MobileMenu.tsx` · depende de: T1 · paralelo con T3 y T4
-- [ ] T3 — Hero y dorsal · archivos: `modules/landing/components/HeroCarousel.tsx`, `modules/landing/components/TripFacts.tsx`, `app/page.tsx` · depende de: T1 · paralelo con T2 y T4
-- [ ] T4 — Historia y paquete · archivos: `modules/landing/components/StorySection.tsx`, `modules/landing/components/PackageSection.tsx` · depende de: T1 · paralelo con T2 y T3
-- [ ] T5 — Verificación visual (capturas antes/después, 360 px, `/contacto`, `/cuenta`, `/viajes/*`) · archivos: — · depende de: T2, T3, T4 · secuencial
+- [x] T1 — Tokens, fuente display y utilidad de titulares · archivos: `app/globals.css`, `app/layout.tsx` · depende de: — · secuencial (base)
+- [x] T2 — Cabecera y menú móvil · archivos: `modules/landing/components/SiteHeader.tsx`, `modules/landing/components/MobileMenu.tsx` · depende de: T1 · paralelo con T3 y T4
+- [x] T3 — Hero y dorsal · archivos: `modules/landing/components/HeroCarousel.tsx`, `modules/landing/components/TripFacts.tsx`, `app/page.tsx` · depende de: T1 · paralelo con T2 y T4
+- [x] T4 — Historia y paquete · archivos: `modules/landing/components/StorySection.tsx`, `modules/landing/components/PackageSection.tsx` · depende de: T1 · paralelo con T2 y T3
+- [x] T5 — Verificación visual (capturas antes/después, 360 px, `/contacto`, `/cuenta`, `/viajes/*`) · archivos: — · depende de: T2, T3, T4 · secuencial
 
 ### Fase 2 — Resto de la portada
 - [ ] T1 — Comunidad y por qué viajar · archivos: `modules/landing/components/CommunitySection.tsx`, `modules/landing/components/WhyUsSection.tsx` · depende de: Fase 1 · paralelo

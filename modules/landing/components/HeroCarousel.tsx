@@ -115,6 +115,18 @@ export function HeroCarousel({ children }: { children?: ReactNode }) {
       aria-roledescription="carrusel"
       aria-label="Descubre Carreras Viajeras"
       className="relative isolate overflow-hidden bg-night text-primary-foreground"
+      onTouchStart={(e) => {
+        const t = e.changedTouches[0];
+        touchStart.current = { x: t.clientX, y: t.clientY };
+      }}
+      onTouchEnd={(e) => {
+        if (!touchStart.current) return;
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touchStart.current.x;
+        const dy = t.clientY - touchStart.current.y;
+        touchStart.current = null;
+        if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(index + (dx < 0 ? 1 : -1));
+      }}
     >
       {/* lg min-height fits the tallest slide (4 display lines + CTA + dots) so slides don't shift the page. */}
       <div className="grid gap-10 px-[6%] pt-9 pb-12 sm:px-[8%] sm:pt-20 sm:pb-16 lg:min-h-[max(calc(min(37vw,37rem)+19.5rem),calc(100svh-6.5rem))] lg:grid-cols-[1.25fr_0.75fr] lg:items-end lg:gap-12 lg:py-20">
@@ -123,18 +135,6 @@ export function HeroCarousel({ children }: { children?: ReactNode }) {
             className="flex flex-col justify-end max-lg:min-h-72 sm:max-lg:min-h-96"
             onFocus={() => setFocused(true)}
             onBlur={(e) => setFocused(e.currentTarget.contains(e.relatedTarget))}
-            onTouchStart={(e) => {
-              const t = e.changedTouches[0];
-              touchStart.current = { x: t.clientX, y: t.clientY };
-            }}
-            onTouchEnd={(e) => {
-              if (!touchStart.current) return;
-              const t = e.changedTouches[0];
-              const dx = t.clientX - touchStart.current.x;
-              const dy = t.clientY - touchStart.current.y;
-              touchStart.current = null;
-              if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(index + (dx < 0 ? 1 : -1));
-            }}
           >
             {SLIDES.map((slide, i) => {
               const Heading = i === 0 ? "h1" : "h2";
