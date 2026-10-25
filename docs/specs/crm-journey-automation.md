@@ -552,10 +552,10 @@ Requisito previo cumplido: esta spec sustituye a `crm-lead-sources.md` (decisió
 
 ### Fase 2: ficha, historial y «Pidió no seguir» (4 tareas, 11 archivos)
 Requisitos previos: Fase 1 cerrada y `0005` aplicada en la rama de pruebas.
-- [ ] T1 — Tipos, `listLeadActivities` con origen, `optOutLead` y `setNextAction` con baja, con tests · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: Fase 1 · secuencial
-- [ ] T2 — `optOutLeadAction` y `setNextActionAction` con `opted_out`, con tests; export en la API pública · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/index.ts` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — `LeadDetails` (registro y baja) y `LeadTimeline` (origen, baja y autor por vía) · archivos: `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadTimeline.tsx` · depende de: T1 · paralelo (con T2)
-- [ ] T4 — Ficha: botón "Pidió no seguir", aviso de baja y `leadSource` del historial; medir el Worker · archivos: `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T2, T3 · secuencial
+- [x] T1 — Tipos, `listLeadActivities` con origen, `optOutLead` y `setNextAction` con baja, con tests · archivos: `modules/crm/types/leads.types.ts`, `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: Fase 1 · secuencial
+- [x] T2 — `optOutLeadAction` y `setNextActionAction` con `opted_out`, con tests; export en la API pública · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/index.ts` · depende de: T1 · paralelo (con T3)
+- [x] T3 — `LeadDetails` (registro y baja) y `LeadTimeline` (origen, baja y autor por vía) · archivos: `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadTimeline.tsx` · depende de: T1 · paralelo (con T2)
+- [x] T4 — Ficha: botón "Pidió no seguir", aviso de baja y `leadSource` del historial; medir el Worker · archivos: `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T2, T3 · secuencial
 
 ### Fase 3: entrada por Google Forms e importación (5 tareas, 13 archivos)
 Requisitos previos: Fase 1 cerrada y `0005` aplicada en la rama de pruebas. Para **activar** los workflows o importar (no para el código): Preguntas abiertas 3 y 4 respondidas.
@@ -567,10 +567,10 @@ Requisitos previos: Fase 1 cerrada y `0005` aplicada en la rama de pruebas. Para
 
 ### Fase 4: recordatorios y baja en n8n (4 tareas, 8 archivos)
 Requisitos previos: Fases 2 y 3 cerradas.
-- [ ] T1 — `enqueueRequestSchema` y payloads de `lead.follow_up_due` y `lead.opted_out`, con tests · archivos: `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/types/integrations.types.ts` · depende de: Fase 3 · secuencial
-- [ ] T2 — `enqueueFollowUps` con tests · archivos: `modules/integrations/services/followUps.service.ts`, `modules/integrations/services/followUps.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Export y `POST /api/integrations/n8n/follow-ups/enqueue`; medir el Worker · archivos: `modules/integrations/index.ts`, `app/api/integrations/n8n/follow-ups/enqueue/route.ts` · depende de: T2 · secuencial
-- [ ] T4 — README: "Recordatorios diarios", Switch "Tipo de evento", recordatorios y aviso de baja (Guía de n8n, apartados 4–5) · archivos: `README.md` · depende de: T1 · paralelo (con T2 y T3)
+- [x] T1 — `enqueueRequestSchema` y payloads de `lead.follow_up_due` y `lead.opted_out`, con tests · archivos: `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/types/integrations.types.ts` · depende de: Fase 3 · secuencial
+- [x] T2 — `enqueueFollowUps` con tests · archivos: `modules/integrations/services/followUps.service.ts`, `modules/integrations/services/followUps.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Export y `POST /api/integrations/n8n/follow-ups/enqueue`; medir el Worker · archivos: `modules/integrations/index.ts`, `app/api/integrations/n8n/follow-ups/enqueue/route.ts` · depende de: T2 · secuencial
+- [x] T4 — README: "Recordatorios diarios", Switch "Tipo de evento", recordatorios y aviso de baja (Guía de n8n, apartados 4–5) · archivos: `README.md` · depende de: T1 · paralelo (con T2 y T3)
 
 ### Fase 5: reserva ↔ lead (5 tareas, 14 archivos)
 Requisitos previos: Fase 1 cerrada (`bookings.lead_id`) y `crm-leads-capture` F5 cerrada (`lead.stage_changed` y su guía de n8n).
