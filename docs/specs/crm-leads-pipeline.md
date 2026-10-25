@@ -630,8 +630,6 @@ Decisiones del usuario en la revisión del 2026-10-25:
 
 13. **Leads web:** nacen "Sin asignar", sin responsable ni creador; la actividad de alta no tiene autor y se muestra "Formulario web".
 14. **Alcance de este trabajo:** se implementan F2 (lista, alta manual y enlace "Leads") y F3 (ficha, edición, etapa y asignación o reasignación), adaptadas a responsable opcional. F4–F6 quedan para después.
-
-Pendiente de confirmar:
-
-15. **Primera asignación en el historial:** se propone registrarla como cambio de responsable "Sin asignar → a@…" (`owner_changed` con `owner_from` nulo) en lugar de un tipo de actividad nuevo. ¿Te parece bien?
-16. **Volver a "Sin asignar":** se propone no permitirlo (una vez asignado, solo se reasigna). ¿Lo necesitas?
+15. **Primera asignación en el historial:** se registra como `owner_changed` "Sin asignar → persona" (`owner_from` nulo), sin tipo de actividad nuevo.
+16. **Volver a "Sin asignar":** no se permite; un lead asignado solo se reasigna a otra persona.
+17. **Destinos de la landing sin viaje publicado (Río, Roma):** se guardan como destino en texto y el correo de n8n dice "Nuevo lead sin viaje" (sin evento v2). Sustituye a la propuesta de la Pregunta 10 (ver "Leads del formulario web").

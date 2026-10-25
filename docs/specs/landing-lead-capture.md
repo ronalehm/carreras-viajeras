@@ -24,14 +24,16 @@ Usuarios: visitantes de la landing (sin cuenta) y, en el CRM, staff con `leads.m
   - (F1) Subschemas compartidos de nombre, teléfono E.164 y correo exportados desde `@/modules/crm`; `createWebLead` (lead + actividad + evento en un `db.batch`, idempotente) y la adaptación de `getLeadList` a leads sin responsable (`leftJoin` y filtro `unassigned`), para que el contrato del service siga siendo correcto tras la migración.
   - (F1) Seed de la outbox adaptado a la FK y documentación de la migración.
   - (F2) Configuración de Turnstile (`TURNSTILE_SITE_KEY` pública y `TURNSTILE_SECRET_KEY` secreta), schema del formulario, verificación Siteverify y Server Action `submitLeadAction`.
-  - (F3) Widget Turnstile, nuevo envío del `ContactForm` y retirada de los textos de demostración; documentación operativa (README y `n8n/README.md`) y checklist de punta a punta.
+  - (F3) Widget Turnstile, nuevo envío del `ContactForm` y retirada de los textos de demostración; página pública `/privacidad`, enlazada desde el consentimiento; documentación operativa (README y `n8n/README.md`) y checklist de punta a punta.
 - No incluye:
   - Lista, ficha, asignación de responsable ni historial en el CRM: son `crm-leads-pipeline` F2–F4.
   - Correo o WhatsApp automático al interesado; integración con WhatsApp Business. El enlace `wa.me` sigue siendo manual y secundario.
   - Cambios en el payload del evento (`lead.created` v1 sin destino en texto) ni en el workflow de n8n: si el destino no está publicado en el catálogo, el correo dice "Nuevo lead sin viaje".
   - Límite de peticiones propio, IP del visitante (`remoteip`) o cualquier dato técnico del visitante: no se envía ni se guarda.
   - Detección de duplicados entre envíos distintos (otra clave = otro lead).
-  - Campos nuevos en el formulario (ciudad, mensaje libre) y página de política de privacidad.
+  - Campos nuevos en el formulario (ciudad, mensaje libre).
+  - Asesoría o redacción legal: `/privacidad` es un texto sencillo que el usuario puede revisar y ajustar. Tampoco hay un procedimiento técnico para atender las solicitudes de acceso, rectificación o cancelación (el CRM no borra leads): las atiende el equipo a mano.
+  - Enlazar `/privacidad` desde el pie u otras páginas.
   - Modo de prueba o bypass de Turnstile por variable de entorno.
   - Aplicar migraciones o desplegar: lo hace el usuario a mano.
 
@@ -78,7 +80,17 @@ Usuarios: visitantes de la landing (sin cuenta) y, en el CRM, staff con `leads.m
    - `TURNSTILE_SECRET_KEY` es secreta: Cloudflare Secret (`npx wrangler secret put TURNSTILE_SECRET_KEY`) y `.env.local`/`.dev.vars` en local. Nunca en `wrangler.jsonc`, ejemplos con valor ni el repositorio.
    - Ambas se validan de forma diferida (en la petición), nunca en el build.
    - Sin clave pública válida, `/contacto` muestra el formulario deshabilitado con un aviso y el enlace a WhatsApp, en lugar de fallar.
-10. **Textos.** Se quitan los textos de demostración ("VISTA DE DEMOSTRACIÓN…", "La consulta no se envía desde esta demostración.", "Preparar mi consulta", el consentimiento de demo y el flujo "Copiar consulta"). Consentimiento propuesto para `web-form-v1` (a validar por el usuario, Pregunta abierta 1): "Acepto que Carreras Viajeras guarde mis datos de contacto para responder a esta consulta y escribirme sobre este viaje por WhatsApp o correo."
+10. **Textos.** Se quitan los textos de demostración ("VISTA DE DEMOSTRACIÓN…", "La consulta no se envía desde esta demostración.", "Preparar mi consulta", el consentimiento de demo y el flujo "Copiar consulta"). Consentimiento `web-form-v1` (aprobado por el usuario): "Acepto que Carreras Viajeras guarde mis datos de contacto para responder a esta consulta y escribirme sobre este viaje por WhatsApp o correo." Debajo de la casilla, el enlace "Cómo usamos tus datos" a `/privacidad`.
+11. **Página `/privacidad`.** Pública, estática (sin datos de la base ni `searchParams`) e indexable, con `SiteHeader` y `SiteFooter` como `/contacto`. Texto sencillo en español, sin citas legales, que el usuario puede revisar:
+    - **Responsable:** Carreras Viajeras; contacto `Contacto@mazproducciones.com` (enlace `mailto:`).
+    - **Qué datos:** nombre, correo, WhatsApp y destino de interés que envías en el formulario de contacto.
+    - **Para qué:** responder a tu consulta y escribirte sobre ese viaje.
+    - **Por qué canales:** WhatsApp y correo.
+    - **Quién los ve:** solo el equipo de Carreras Viajeras, en su sistema interno de gestión de consultas.
+    - **Tus derechos:** puedes pedir acceso, rectificación o cancelación de tus datos escribiendo a `Contacto@mazproducciones.com`.
+    - Una línea final con la fecha de la última actualización.
+
+    Si cambia la finalidad o los canales, se actualiza esta página y el consentimiento pasa a una versión nueva (`web-form-v2`).
 
 ## Criterios de aceptación
 
@@ -138,7 +150,7 @@ Usuarios: visitantes de la landing (sin cuenta) y, en el CRM, staff con `leads.m
 - [ ] (F2) Lint, tests y build sin errores; `npm run build:worker` en Linux/WSL y tamaño del Worker medido y registrado (procedimiento de `crm-leads-pipeline.md`, "Tamaño del Worker").
 
 ### Fase 3 — Formulario, widget y operación
-- [ ] (F3) Dado `/contacto` con clave pública configurada, entonces veo el formulario con Nombre, Correo, WhatsApp, Destino, el consentimiento `web-form-v1`, el widget de Turnstile y el botón "Enviar mi consulta". No aparecen "VISTA DE DEMOSTRACIÓN", "La consulta no se envía desde esta demostración." ni "Copiar consulta".
+- [ ] (F3) Dado `/contacto` con clave pública configurada, entonces veo el formulario con Nombre, Correo, WhatsApp, Destino, el consentimiento `web-form-v1` con el enlace "Cómo usamos tus datos" a `/privacidad`, el widget de Turnstile y el botón "Enviar mi consulta". No aparecen "VISTA DE DEMOSTRACIÓN", "La consulta no se envía desde esta demostración." ni "Copiar consulta".
 - [ ] (F3) Dado `ContactForm` con la acción simulada, entonces (unit test):
   - al enviar llama a la acción con un `FormData` que incluye los campos y un `idempotencyKey` UUID;
   - mientras espera, el botón dice "Enviando…" y está deshabilitado;
@@ -147,14 +159,22 @@ Usuarios: visitantes de la landing (sin cuenta) y, en el CRM, staff con `leads.m
   - un reintento sin cambios reutiliza la misma clave; tras editar un campo o tras `conflict`, la clave es nueva;
   - con `turnstile`, `unavailable` o `conflict`, aparece su mensaje (con `unavailable`, también el enlace a WhatsApp) y el widget se vuelve a montar;
   - sin clave pública: aviso "El formulario no está disponible en este momento…", enlace a WhatsApp y botón deshabilitado.
+- [ ] (F3) Dado `/privacidad`, entonces veo el título "Privacidad", al responsable (Carreras Viajeras), el enlace `mailto:` a `Contacto@mazproducciones.com`, qué datos se guardan, para qué, los canales (WhatsApp y correo), quién los ve y cómo pedir acceso, rectificación o cancelación por ese correo; la página tiene `metadata.title = "Privacidad"` y se genera estática en `npm run build` (sin `searchParams` ni consultas).
 - [ ] (F3) Dado `TurnstileWidget` con `window.turnstile` simulado, entonces renderiza con `sitekey`, `action` y `response-field-name` recibidos, y al desmontarse llama a `turnstile.remove` (unit test).
-- [ ] (F3) Dado el README, entonces documenta la creación del widget para `carreras-viajeras.mentec.dev`, la clave pública en `wrangler.jsonc`, `npx wrangler secret put TURNSTILE_SECRET_KEY`, las claves de prueba oficiales para desarrollo (citando la doc de Cloudflare) y la checklist de punta a punta (rama de desarrollo y después producción). `n8n/README.md` indica cuándo activar el workflow de producción y que el enlace `/crm/leads/<id>` abre la ficha (`app/crm/(protected)/leads/[id]/page.tsx`).
-- [ ] (F3, manual del usuario) Checklist de punta a punta en una rama de desarrollo de Neon con `npm run dev`:
+- [ ] (F3) Dado el README, entonces documenta:
+  - los dos widgets que crea el usuario: producción (hostname `carreras-viajeras.mentec.dev`; clave pública en `wrangler.jsonc` y secreto con `npx wrangler secret put TURNSTILE_SECRET_KEY`) y desarrollo (hostname `localhost`; su clave pública y su secreto van en `.env.local` y `.dev.vars`, nunca en el repositorio);
+  - que el hostname se valida contra `new URL(APP_ORIGIN).hostname` (`localhost` con `npm run dev`; `carreras-viajeras.mentec.dev` en producción);
+  - las claves de prueba de Cloudflare ("siempre pasa", "siempre falla") solo como apoyo para verificar el rechazo, comprobadas antes contra la doc oficial;
+  - la checklist de punta a punta (rama de desarrollo y después producción). `n8n/README.md` indica cuándo activar el workflow de producción y que el enlace `/crm/leads/<id>` abre la ficha (`app/crm/(protected)/leads/[id]/page.tsx`).
+- [ ] (F3, manual del usuario) Checklist de punta a punta en una rama de desarrollo de Neon con `npm run dev`, `APP_ORIGIN=http://localhost:3000` y las claves del widget de `localhost`:
   - [ ] envío válido → aparece en `/crm/leads` primero, en "Nuevo", con Responsable "Sin asignar" y Origen "Formulario web"; la ficha muestra nombre, correo, WhatsApp, interés y consentimiento `web-form-v1`;
   - [ ] `automation_events` tiene un `lead.created` `pending` con ese `lead_id`; con n8n activo llega el correo de prueba y su enlace abre la ficha (con sesión de staff);
   - [ ] doble clic o reintento tras cortar la red → un solo lead y un solo evento;
-  - [ ] token rechazado (clave secreta de prueba que siempre falla) → mensaje de verificación y nada insertado;
-  - [ ] después, en producción (tras aprobar el despliegue): un único envío real controlado (Pregunta abierta 4) y el correo al equipo.
+  - [ ] token rechazado (secreto de prueba "siempre falla", verificado antes contra la doc oficial) → mensaje de verificación y nada insertado.
+- [ ] (F3, manual del usuario) Checklist de producción, tras aprobar el despliegue, con `0006` aplicada, el widget de producción y el workflow de n8n activo:
+  - [ ] un único envío real desde `https://carreras-viajeras.mentec.dev/contacto` con los datos del usuario → aparece en `/crm/leads` como "Sin asignar" / "Formulario web";
+  - [ ] llega el correo al equipo y su enlace abre la ficha;
+  - [ ] en la ficha, el lead se marca como "Perdido" con el motivo "Prueba interna". No se crean más datos de prueba en `production`.
 - [ ] (F3) Lint, tests y build sin errores; Worker medido.
 
 ## Diseño técnico
@@ -167,7 +187,9 @@ Usuarios: visitantes de la landing (sin cuenta) y, en el CRM, staff con `leads.m
 - **Primera asignación de responsable** (para `crm-leads-pipeline` F3): se registra como `owner_changed` con `owner_from = NULL`. Se relaja `lead_activities_owner_chk` en `0006` en lugar de añadir un valor al enum (KISS; sin `ALTER TYPE`).
 - **Turnstile sin dependencias:** script oficial `https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit` con `next/script` y un tipo mínimo de `window.turnstile` declarado en el componente. shadcn no tiene un componente de captcha/Turnstile (`npx shadcn@latest search @shadcn -q turnstile` y `-q captcha`: sin resultados).
 - **CSP:** no hay `headers()` en `next.config.ts`, ni `proxy.ts`/`middleware.ts`, ni cabeceras CSP en el repo; nada bloquea el script ni el iframe de `challenges.cloudflare.com`. Si en el futuro se añade una CSP, debe permitir `script-src` y `frame-src https://challenges.cloudflare.com`.
-- **`npm run preview`** usa `APP_ORIGIN` de producción con el Worker en `localhost:8787`: el hostname de Siteverify no coincidirá y el envío dará `turnstile`. Es esperado (preview es solo una prueba de vida); la prueba de envío se hace con `npm run dev` y en producción.
+- **Turnstile en local con un widget propio** (decisión del usuario): un segundo widget con hostname `localhost`, cuyas claves van en `.env.local`/`.dev.vars`. Así la misma validación (`hostname === new URL(APP_ORIGIN).hostname`) funciona en desarrollo sin bypass. Las claves de prueba de Cloudflare solo se usan para comprobar el rechazo.
+- **`/privacidad` como Server Component estático** en `modules/landing/components/PrivacyPolicy.tsx` (no existe nada parecido en el proyecto ni en shadcn: es texto). La ruta solo compone, como `/contacto`.
+- **`npm run preview`** usa `APP_ORIGIN` de producción con el Worker en `localhost:8787`: el hostname de Siteverify no coincidirá y el envío dará `turnstile`. Es esperado (preview es solo una prueba de vida); la prueba de envío se hace con `npm run dev` (widget de `localhost`) y en producción.
 
 ### Base de datos: `lib/db-schema.ts` (modificar, F1)
 | Cambio | Definición |
@@ -280,19 +302,22 @@ Migración: `npm run db:generate` → `drizzle/0006_<nombre>.sql`, `drizzle/meta
   - Al desmontar, `window.turnstile.remove(widgetId)`.
   - El token llega al `FormData` por el campo oculto que crea Turnstile dentro del `<form>`.
 - `components/ContactForm.tsx` (modificar, F3): props `{ defaultDestination: DestinationId; siteKey: string | null }`.
-  - Campos `fullName` (`autoComplete="name"`, `maxLength` 120), `email` (`maxLength` 254), `phone` y `destination` (mismas opciones y estilos), consentimiento nativo (`<input type="checkbox" name="consent">`, como hoy) con el texto `web-form-v1` y `<TurnstileWidget key={attempt} … />` si hay `siteKey`.
+  - Campos `fullName` (`autoComplete="name"`, `maxLength` 120), `email` (`maxLength` 254), `phone` y `destination` (mismas opciones y estilos), consentimiento nativo (`<input type="checkbox" name="consent">`, como hoy) con el texto `web-form-v1` y el enlace `next/link` "Cómo usamos tus datos" a `/privacidad` y `<TurnstileWidget key={attempt} … />` si hay `siteKey`.
   - `noValidate`; envío con `onSubmit` + `startTransition(() => formAction(formData))` y `useActionState`, como `InviteStaffForm`.
   - Clave en un `useRef<string | null>`: `onChange` del formulario la pone a `null`; al enviar, `??= crypto.randomUUID()` y `formData.set("idempotencyKey", …)`; con `conflict` vuelve a `null`. No se genera en el render, para no desajustar la hidratación.
   - Tras cada respuesta que no sea `success`, `attempt + 1` vuelve a montar el widget.
   - Botón "Enviar mi consulta" / "Enviando…" (deshabilitado si `pending` o sin `siteKey`).
   - Errores bajo cada campo (`<p id role="alert">`, `aria-invalid`, `aria-describedby`); el mensaje general, bajo el botón.
   - Con `success`, el formulario se sustituye por un bloque `role="status"` con el mensaje y el enlace "Abrir WhatsApp" (`buildWhatsAppUrl(WHATSAPP_NUMBER, buildInquiryMessage(lo enviado))`, si no es `null`). El mismo enlace aparece con `unavailable` y en el aviso sin `siteKey`.
+- `components/PrivacyPolicy.tsx` (nuevo, F3, Server, solo presentación): el contenido del Requisito 11 con encabezados y párrafos y los tokens del tema, en la misma columna de diseño que `ContactSection`. El correo de contacto es una constante del componente (`PRIVACY_CONTACT_EMAIL`).
+- `index.ts` (modificar, F3): exporta `PrivacyPolicy`.
+- `app/privacidad/page.tsx` (nuevo, F3): `metadata` (`title: "Privacidad"`, `description`), y compone `SiteHeader`, `<main><PrivacyPolicy /></main>` y `SiteFooter`. Sin `searchParams`: estática.
 - `components/ContactSection.tsx` (modificar, F3): quita el bloque "VISTA DE DEMOSTRACIÓN", lee `getTurnstileSiteKey()` (Server Component; `/contacto` ya es dinámica por `searchParams`) y lo pasa a `ContactForm`. `app/contacto/page.tsx` no cambia.
 
 ### Entorno (F2)
 - `lib/env.ts`: `getTurnstileSecret()` (como `getAutomationApiToken()`) y `getTurnstileSiteKey(): string | null`, ambos con `z.string().regex(/^[0-9A-Za-z_-]{20,100}$/)`. Separados de `getEnv()` para que su ausencia solo afecte al formulario.
-- `wrangler.jsonc` `vars`: `"TURNSTILE_SITE_KEY": "<clave pública del widget de producción>"` (Pregunta abierta 2). Si aún no existe, se deja `""` y el formulario muestra el aviso de no disponible.
-- `.env.example` / `.dev.vars.example`: `TURNSTILE_SITE_KEY=` y `TURNSTILE_SECRET_KEY=` vacíos, con comentario (pública en `vars`; secreta como Cloudflare Secret; claves de prueba en el README). `scripts/strip-env-secrets.mjs` ya elimina del Worker los valores no `NEXT_PUBLIC_*` copiados de `.env*`: la producción usa `vars` y Secrets.
+- `wrangler.jsonc` `vars`: `"TURNSTILE_SITE_KEY": "<clave pública del widget de producción>"`. El usuario crea el widget de producción (Managed, hostname `carreras-viajeras.mentec.dev`) y aporta la clave pública; si aún no existe al implementar, se deja `""` (el formulario muestra el aviso de no disponible) y el README indica rellenarla antes de desplegar.
+- `.env.example` / `.dev.vars.example`: `TURNSTILE_SITE_KEY=` y `TURNSTILE_SECRET_KEY=` vacíos, con comentario (en local, las claves del widget de `localhost`; en producción, la pública en `vars` y la secreta como Cloudflare Secret). `scripts/strip-env-secrets.mjs` ya elimina del Worker los valores no `NEXT_PUBLIC_*` copiados de `.env*`: la producción usa `vars` y Secrets.
 - `cloudflare-env.d.ts`: regenerado con `npm run cf-typegen` (CLAUDE.md).
 
 ### Contrato
@@ -308,8 +333,10 @@ Evento: sin cambios (`lead.created` v1, `{ leadId, tripSlug: string | null, sour
 ### Seed y documentación
 - `scripts/sql/seed-automation-demo.sql` (F1): la tabla temporal añade los datos del lead ficticio. La carga inserta antes 4 leads `web_form` (`full_name` "Lead demo N", `phone` `+5190000000N`, `email` `demoN@example.com`, `destination_text` "Destino demo", `consent_version` `web-form-v1`, `idempotency_key` fijas con prefijo `de000000`, `request_hash = encode(sha256(convert_to('demo-N', 'UTF8')), 'hex')`) y su actividad `created`, con `ON CONFLICT DO NOTHING`. La limpieza borra reenvíos → eventos → actividades → leads de esos ids. Se actualiza la cabecera (requiere `0006`; no tocar el resto). Estos leads sirven también para probar la lista y la ficha del CRM en la rama de desarrollo.
 - `README.md`: (F1) la lista de migraciones del apartado "Workers y migraciones" (pasan a ser siete) y la sección "Migración de la captura web (`0006`)" dentro de "Leads (CRM comercial)"; (F3) la sección "Formulario de contacto (Turnstile)", con el widget, las claves, los secretos y la checklist.
-  - Claves de prueba para desarrollo, según https://developers.cloudflare.com/turnstile/troubleshooting/testing/: clave de sitio que siempre pasa `1x00000000000000000000AA` y que siempre bloquea `2x00000000000000000000AB`; secretos que siempre pasan `1x0000000000000000000000000000000AA`, que siempre fallan `2x0000000000000000000000000000000AA` y de "token ya usado" `3x0000000000000000000000000000000AA`.
-  - El agente de specs no pudo abrir la doc desde su entorno: el developer debe comprobar los valores y qué `hostname`/`action` devuelve Siteverify con el secreto de prueba antes de escribirlos (Pregunta abierta 3).
+  - Desarrollo: widget de `localhost` creado por el usuario; su clave pública (`TURNSTILE_SITE_KEY`) y su secreto (`TURNSTILE_SECRET_KEY`) van en `.env.local` (`npm run dev`) y `.dev.vars` (Wrangler). Con `APP_ORIGIN=http://localhost:3000`, el hostname esperado es `localhost`.
+  - Apoyo para verificar el rechazo (no para el flujo normal), según https://developers.cloudflare.com/turnstile/troubleshooting/testing/: clave de sitio que siempre pasa `1x00000000000000000000AA` y que siempre bloquea `2x00000000000000000000AB`; secretos que siempre pasan `1x0000000000000000000000000000000AA`, que siempre fallan `2x0000000000000000000000000000000AA` y de "token ya usado" `3x0000000000000000000000000000000AA`.
+  - El agente de specs no pudo abrir la doc desde su entorno: el developer comprueba esos valores contra la doc oficial antes de escribirlos en el README; si no puede comprobarlos, no los documenta.
+  - Producción: checklist con un único envío real del usuario, marcado después como "Perdido" con motivo "Prueba interna".
 - `n8n/README.md` (F3): activar el workflow de producción solo con el formulario desplegado, `0006` aplicada y la checklist superada; `APP_BASE_URL=https://carreras-viajeras.mentec.dev`; el enlace `/crm/leads/<id>` coincide con la ruta de la ficha de `crm-leads-pipeline` F3. Se quita "El enlace abrirá la ficha cuando exista la vista de leads del CRM" en ambos README.
 
 ### Orden con `crm-leads-pipeline`
@@ -324,6 +351,7 @@ Evento: sin cambios (`lead.created` v1, `{ leadId, tripSlug: string | null, sour
 - `getLeadList` existente (se adapta, no se reescribe) y `LEAD_SOURCE_LABELS.web_form` = "Formulario web" (ya existe en `leadDisplay.ts`).
 - `DESTINATION_IDS`, `DESTINATION_NAMES`, `parseDestinationId`, `WHATSAPP_NUMBER`, `buildInquiryMessage` y `buildWhatsAppUrl` de `modules/landing/utils/inquiry.ts`.
 - Patrón `onSubmit` + `startTransition` de `InviteStaffForm`; patrón de getters diferidos de `lib/env.ts` (`getAutomationApiToken`); fake del cliente Neon HTTP de `leads.service.test.ts`.
+- `SiteHeader` y `SiteFooter` de la landing para `/privacidad`, con la misma composición que `app/contacto/page.tsx`.
 - shadcn ya instalados: `button` (`buttonVariants`), `input`, `label`, `native-select`. No se instala nada. Sin dependencias nuevas.
 
 ## Tests
@@ -337,7 +365,7 @@ Evento: sin cambios (`lead.created` v1, `{ leadId, tripSlug: string | null, sour
 - `modules/landing/components/ContactForm.test.tsx` (F3; mocks de `../actions/lead.actions` y `./TurnstileWidget`): casos del criterio.
 - `modules/landing/components/TurnstileWidget.test.tsx` (F3; mock de `next/script` que invoca `onReady`, y `window.turnstile` simulado).
 - `modules/landing/utils/inquiry.test.ts`: sin cambios; debe seguir pasando (el mapa nuevo son constantes).
-- Sin unit test: `lib/db-schema.ts` (lo cubren la migración y la prueba manual), tipos, `ContactSection` (compone), el seed SQL y los README (checklist manual).
+- Sin unit test: `lib/db-schema.ts` (lo cubren la migración y la prueba manual), tipos, `ContactSection` (compone), `PrivacyPolicy` y `app/privacidad/page.tsx` (presentación estática), el seed SQL y los README (checklist manual).
 - Atomicidad real, la `UNIQUE` con dos envíos simultáneos, la FK y el correo de n8n: checklist manual en la rama de desarrollo.
 
 ## Plan de tareas
@@ -357,15 +385,17 @@ Requisito previo: Fase 1 cerrada.
 - [ ] T3 — Verificación Siteverify con test · archivos: `modules/landing/services/turnstile.service.ts`, `modules/landing/services/turnstile.service.test.ts` · depende de: T1 · paralelo (con T2)
 - [ ] T4 — `submitLeadAction` con tests; medir el Worker · archivos: `modules/landing/actions/lead.actions.ts`, `modules/landing/actions/lead.actions.test.ts` · depende de: T2, T3 · secuencial
 
-### Fase 3 — Formulario, widget y operación (3 tareas, 7 archivos)
-Requisito previo: Fase 2 cerrada y `crm-leads-pipeline` F3 cerrada (ficha `/crm/leads/<id>`). Antes de mergear o desplegar esta fase: `0006` aplicada en `production` y Turnstile configurado (Pregunta abierta 2).
-- [ ] T1 — `TurnstileWidget` con test · archivos: `modules/landing/components/TurnstileWidget.tsx`, `modules/landing/components/TurnstileWidget.test.tsx` · depende de: Fase 2 · paralelo (con T3)
-- [ ] T2 — Nuevo `ContactForm` y `ContactSection` sin textos de demo, con test; medir el Worker · archivos: `modules/landing/components/ContactForm.tsx`, `modules/landing/components/ContactForm.test.tsx`, `modules/landing/components/ContactSection.tsx` · depende de: T1 · secuencial
-- [ ] T3 — Documentación operativa: Turnstile, secretos, checklist de punta a punta y activación de n8n · archivos: `README.md`, `n8n/README.md` · depende de: Fase 2 · paralelo (con T1)
+### Fase 3 — Formulario, widget, privacidad y operación (4 tareas, 10 archivos)
+Requisito previo: Fase 2 cerrada y `crm-leads-pipeline` F3 cerrada (ficha `/crm/leads/<id>`). Antes de mergear o desplegar esta fase: `0006` aplicada en `production` y los widgets de Turnstile creados (clave pública de producción en `wrangler.jsonc` y secreto cargado).
+- [ ] T1 — Página `/privacidad` · archivos: `modules/landing/components/PrivacyPolicy.tsx`, `modules/landing/index.ts`, `app/privacidad/page.tsx` · depende de: Fase 2 · secuencial (base: `index.ts` del módulo)
+- [ ] T2 — `TurnstileWidget` con test · archivos: `modules/landing/components/TurnstileWidget.tsx`, `modules/landing/components/TurnstileWidget.test.tsx` · depende de: T1 · paralelo (con T4)
+- [ ] T3 — Nuevo `ContactForm` (con el enlace a `/privacidad`) y `ContactSection` sin textos de demo, con test; medir el Worker · archivos: `modules/landing/components/ContactForm.tsx`, `modules/landing/components/ContactForm.test.tsx`, `modules/landing/components/ContactSection.tsx` · depende de: T2 · secuencial
+- [ ] T4 — Documentación operativa: widgets de producción y `localhost`, secretos, checklist de desarrollo y de producción, activación de n8n · archivos: `README.md`, `n8n/README.md` · depende de: T1 · paralelo (con T2 y T3)
 
 ## Preguntas abiertas
-1. **Texto del consentimiento `web-form-v1`.** Propuesta: "Acepto que Carreras Viajeras guarde mis datos de contacto para responder a esta consulta y escribirme sobre este viaje por WhatsApp o correo." ¿Lo validas tal cual? La Ley 29733 suele exigir identificar al responsable y enlazar una política de privacidad, que hoy no existe (el pie dice "Pendientes de completar"). Cambiar el texto después solo requiere una versión nueva (`web-form-v2`).
-2. **Widget de producción.** ¿Creas tú el widget Turnstile (modo Managed, hostname `carreras-viajeras.mentec.dev`) y nos pasas la clave **pública** para `wrangler.jsonc`? El secreto lo cargas tú con `npx wrangler secret put TURNSTILE_SECRET_KEY`; nunca va al repositorio ni al chat.
-3. **Prueba local con las claves de prueba.** Si Siteverify con el secreto de prueba no devuelve `hostname = "localhost"` y `action = "lead_submit"` (lo comprueba el developer), el envío local dará siempre `turnstile`, porque no se añade ningún bypass. Alternativas: (a) un segundo widget de desarrollo con hostname `localhost`, si Cloudflare lo permite; (b) probar el envío de punta a punta solo en producción. ¿Cuál prefieres?
-4. **Prueba en producción.** La base técnica pide no crear datos de prueba en `production`, y los leads no se borran (el archivo es la F6 del CRM). Propuesta: un único envío real controlado por el equipo, marcado después como "Perdido" con motivo "Prueba interna". ¿Te parece bien u omitimos la prueba de envío en producción?
-5. **Destinos no publicados.** Si Río o Roma no están publicados en el catálogo, el lead guarda el destino como texto y el correo de n8n dice "Nuevo lead sin viaje". Mostrar el destino en el correo exigiría el payload v2 del evento (fuera de alcance). ¿Te basta así?
+Todas resueltas por el usuario (2026-10-25):
+1. **Consentimiento `web-form-v1`:** se usa el texto propuesto, y se añade la página `/privacidad` (Requisito 11), enlazada desde la casilla, con texto sencillo que el usuario puede revisar.
+2. **Widgets de Turnstile:** el usuario crea el de producción (`carreras-viajeras.mentec.dev`) y uno adicional para `localhost`. Las claves de este último van en `.env.local`/`.dev.vars`; el hostname se valida contra `new URL(APP_ORIGIN).hostname`. Las claves de prueba de Cloudflare solo sirven de apoyo para verificar el rechazo, comprobadas antes contra la doc oficial.
+3. **Prueba en producción:** un único envío real con los datos del usuario, que después se marca en el CRM como "Perdido" con motivo "Prueba interna" (checklist de producción de F3).
+4. **Destinos no publicados (Río, Roma):** aceptado que el correo diga "Nuevo lead sin viaje"; no hay evento v2.
+5. **Primera asignación:** `owner_changed` "Sin asignar → persona" (`owner_from = NULL`), sin tipo nuevo; un lead asignado se puede reasignar, pero no vuelve a "Sin asignar" (`crm-leads-pipeline`, Requisito 5).
