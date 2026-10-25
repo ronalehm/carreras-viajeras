@@ -574,11 +574,11 @@ Requisitos previos: Fases 2 y 3 cerradas.
 
 ### Fase 5: reserva ↔ lead (5 tareas, 14 archivos)
 Requisitos previos: Fase 1 cerrada (`bookings.lead_id`) y `crm-leads-capture` F5 cerrada (`lead.stage_changed` y su guía de n8n).
-- [ ] T1 — `leadId` en el schema de reservas y tipos, con tests · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: — · secuencial
-- [ ] T2 — `createBooking` con lead, `getBookingById` con lead, `getLeadBooking` y `setBookingStatus` con avance del lead, con tests · archivos: `modules/bookings/services/bookings.service.ts`, `modules/bookings/services/bookings.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Acciones de reservas (actor, `invalid_lead`, `lead_taken`), con tests · archivos: `modules/bookings/actions/bookings.actions.ts`, `modules/bookings/actions/bookings.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `BookingForm` con `prefill`, export, páginas (nueva reserva, ficha de la reserva, ficha del lead) y `trigger` en el tipo del payload; medir el Worker · archivos: `modules/bookings/components/BookingForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/page.tsx`, `modules/integrations/types/integrations.types.ts` · depende de: T3 · secuencial
-- [ ] T5 — README: acompañamiento en `reserved` y `paid` y asunto de la reserva confirmada (Guía de n8n, apartado 6) · archivos: `README.md` · depende de: T1 · paralelo (con T2, T3 y T4)
+- [x] T1 — `leadId` en el schema de reservas y tipos, con tests · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: — · secuencial
+- [x] T2 — `createBooking` con lead, `getBookingById` con lead, `getLeadBooking` y `setBookingStatus` con avance del lead, con tests · archivos: `modules/bookings/services/bookings.service.ts`, `modules/bookings/services/bookings.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Acciones de reservas (actor, `invalid_lead`, `lead_taken`), con tests · archivos: `modules/bookings/actions/bookings.actions.ts`, `modules/bookings/actions/bookings.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `BookingForm` con `prefill`, export, páginas (nueva reserva, ficha de la reserva, ficha del lead) y `trigger` en el tipo del payload; medir el Worker · archivos: `modules/bookings/components/BookingForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx`, `app/crm/(protected)/leads/[id]/page.tsx`, `modules/integrations/types/integrations.types.ts` · depende de: T3 · secuencial
+- [x] T5 — README: acompañamiento en `reserved` y `paid` y asunto de la reserva confirmada (Guía de n8n, apartado 6) · archivos: `README.md` · depende de: T1 · paralelo (con T2, T3 y T4)
 
 ### Fase 6: medición por origen y etapa (5 tareas, 15 archivos)
 Requisitos previos: Fase 2 cerrada.
