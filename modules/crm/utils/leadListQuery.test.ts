@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { leadListHref, parseLeadListQuery } from "./leadListQuery";
+import { isCanonicalLeadListQuery, leadListHref, parseLeadListQuery } from "./leadListQuery";
 
 describe("parseLeadListQuery", () => {
   it("returns the defaults without filters", () => {
@@ -69,5 +69,61 @@ describe("leadListHref", () => {
       new URL(leadListHref(filters, filters.page), "https://x.test").searchParams,
     );
     expect(parseLeadListQuery(params)).toEqual(filters);
+  });
+});
+
+describe("isCanonicalLeadListQuery", () => {
+  const canonical = (searchParams: Record<string, string | string[] | undefined>) =>
+    isCanonicalLeadListQuery(searchParams, parseLeadListQuery(searchParams));
+
+  it("accepts the empty query", () => {
+    expect(canonical({})).toBe(true);
+  });
+
+  it("accepts the canonical query of each filter", () => {
+    expect(canonical({ etapa: "quoted" })).toBe(true);
+    expect(canonical({ responsable: "sin-asignar" })).toBe(true);
+    expect(canonical({ etapa: "new", responsable: "mios", pagina: "2" })).toBe(true);
+    expect(canonical({ responsable: "user-7", pagina: "3" })).toBe(true);
+  });
+
+  it("rejects the empty values sent by the GET filter form", () => {
+    expect(canonical({ etapa: "", responsable: "" })).toBe(false);
+    expect(canonical({ etapa: "", responsable: "mios" })).toBe(false);
+  });
+
+  it("rejects the default page", () => {
+    expect(canonical({ pagina: "1" })).toBe(false);
+    expect(canonical({ etapa: "new", pagina: "1" })).toBe(false);
+  });
+
+  it("rejects repeated values", () => {
+    expect(canonical({ etapa: ["new", "new"] })).toBe(false);
+    expect(canonical({ responsable: ["mios", "user-7"] })).toBe(false);
+  });
+
+  it("rejects the parameters in another order", () => {
+    expect(canonical({ responsable: "mios", etapa: "new" })).toBe(false);
+    expect(canonical({ pagina: "2", etapa: "new" })).toBe(false);
+  });
+
+  it("rejects unknown keys and invalid values", () => {
+    expect(canonical({ extra: "x" })).toBe(false);
+    expect(canonical({ etapa: "new", utm: "x" })).toBe(false);
+    expect(canonical({ etapa: "foo" })).toBe(false);
+  });
+
+  it.each([
+    {},
+    { etapa: "", responsable: "" },
+    { pagina: "1" },
+    { etapa: ["new", "new"], responsable: "mios" },
+    { responsable: "sin-asignar", etapa: "lost", pagina: "4" },
+    { extra: "x", responsable: "user-7" },
+  ])("redirects %o to a canonical URL in one step", (searchParams) => {
+    const filters = parseLeadListQuery(searchParams);
+    const params = Object.fromEntries(new URL(leadListHref(filters, filters.page), "https://x.test").searchParams);
+    expect(parseLeadListQuery(params)).toEqual(filters);
+    expect(canonical(params)).toBe(true);
   });
 });

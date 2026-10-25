@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
 import {
   getLeadList,
+  isCanonicalLeadListQuery,
   LeadFilters,
   LeadPagination,
   LeadStageSummary,
@@ -14,18 +15,6 @@ import {
 } from "@/modules/crm";
 
 export const metadata: Metadata = { title: "Leads" };
-
-type SearchParams = Awaited<PageProps<"/crm/leads">["searchParams"]>;
-
-// The received query as leadListHref would write it, to compare with the canonical one.
-function currentHref(searchParams: SearchParams): string {
-  const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams)) {
-    for (const item of [value ?? []].flat()) params.append(key, item);
-  }
-  const query = params.toString();
-  return query ? `/crm/leads?${query}` : "/crm/leads";
-}
 
 export default async function LeadsPage({ searchParams }: PageProps<"/crm/leads">) {
   const access = await getCrmAccess("leads.manage");
@@ -43,10 +32,8 @@ export default async function LeadsPage({ searchParams }: PageProps<"/crm/leads"
 
   const query = await searchParams;
   const filters = parseLeadListQuery(query);
-  // The GET filter form also sends empty and default values (?etapa=&responsable=mios): go to the
-  // canonical URL. The canonical query parses back to the same filters, so this never loops.
-  const canonical = leadListHref(filters, filters.page);
-  if (currentHref(query) !== canonical) redirect(canonical);
+  // Empty, default, repeated or unknown parameters go to the canonical URL (it never loops).
+  if (!isCanonicalLeadListQuery(query, filters)) redirect(leadListHref(filters, filters.page));
 
   const { leads, hasNextPage, stageCounts, ownerOptions } = await getLeadList(filters, access.user.id);
   return (

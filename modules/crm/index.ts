@@ -3,7 +3,10 @@
 export { createWebLead, getLeadFormOptions, getLeadList } from "./services/leads.service";
 // Field rules shared with the landing form schema, so web and manual leads normalize the same way.
 export { leadEmailSchema, leadFullNameSchema, leadPhoneSchema } from "./schemas/leads.schema";
-export { leadListHref, parseLeadListQuery } from "./utils/leadListQuery";
+export { isCanonicalLeadListQuery, leadListHref, parseLeadListQuery } from "./utils/leadListQuery";
+// Only LeadForm (a client component) uses this action. Re-exported here so RSC also reach it and
+// Next does not bundle a second copy of its server code into the Worker.
+export { createLeadAction } from "./actions/leads.actions";
 export { LeadFilters } from "./components/LeadFilters";
 export { LeadForm } from "./components/LeadForm";
 export { LeadPagination } from "./components/LeadPagination";

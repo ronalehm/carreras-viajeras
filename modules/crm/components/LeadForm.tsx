@@ -21,6 +21,9 @@ const HINTS: Partial<Record<LeadField, string>> = {
   destinationText: "Si el viaje aún no está en el catálogo.",
 };
 
+// Required controls: marked with * and aria-required. Validation stays in the action (noValidate).
+const REQUIRED_FIELDS: ReadonlySet<LeadField> = new Set(["fullName", "phone", "source", "ownerUserId", "consent"]);
+
 const CONSENT_TEXT = "El contacto aceptó que guardemos sus datos para atender su consulta.";
 
 const INITIAL_STATE: LeadActionState = { status: "idle" };
@@ -52,17 +55,18 @@ export function LeadForm({ ownerOptions, tripOptions, defaultOwnerId }: LeadForm
     return {
       id,
       name,
+      "aria-required": REQUIRED_FIELDS.has(name) ? true : undefined,
       "aria-invalid": errors?.[name] ? true : undefined,
       "aria-describedby": [HINTS[name] && `${id}-help`, errors?.[name] && `${id}-error`]
         .filter(Boolean).join(" ") || undefined,
     };
   }
 
-  function field(name: LeadField, label: string, input: ReactNode, options: { required?: boolean; wide?: boolean } = {}) {
+  function field(name: LeadField, label: string, input: ReactNode, options: { wide?: boolean } = {}) {
     const id = `lead-${name}`;
     return (
       <div className={cn("flex flex-col gap-2", options.wide && "sm:col-span-2")}>
-        <Label htmlFor={id}>{label}{options.required ? " *" : ""}</Label>
+        <Label htmlFor={id}>{label}{REQUIRED_FIELDS.has(name) ? " *" : ""}</Label>
         {input}
         {HINTS[name] && <p id={`${id}-help`} className="text-sm text-muted-foreground">{HINTS[name]}</p>}
         {errors?.[name] && (
@@ -74,6 +78,7 @@ export function LeadForm({ ownerOptions, tripOptions, defaultOwnerId }: LeadForm
 
   return (
     <form noValidate onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-6">
+      <p className="text-sm text-muted-foreground">Los campos con * son obligatorios.</p>
       {state.status === "error" && (
         <p role="alert" className="text-sm text-destructive">{state.message}</p>
       )}
@@ -81,10 +86,10 @@ export function LeadForm({ ownerOptions, tripOptions, defaultOwnerId }: LeadForm
         <legend className="sr-only">Datos del lead</legend>
         {field("fullName", "Nombre", (
           <Input {...control("fullName")} defaultValue={values?.fullName ?? ""} maxLength={120} autoComplete="off" />
-        ), { required: true })}
+        ))}
         {field("phone", "WhatsApp o teléfono", (
           <Input {...control("phone")} type="tel" defaultValue={values?.phone ?? ""} autoComplete="off" />
-        ), { required: true })}
+        ))}
         {field("email", "Email", (
           <Input {...control("email")} type="email" defaultValue={values?.email ?? ""} maxLength={254} autoComplete="off" />
         ))}
@@ -110,14 +115,14 @@ export function LeadForm({ ownerOptions, tripOptions, defaultOwnerId }: LeadForm
               <NativeSelectOption key={source} value={source}>{LEAD_SOURCE_LABELS[source]}</NativeSelectOption>
             ))}
           </NativeSelect>
-        ), { required: true })}
+        ))}
         {field("ownerUserId", "Responsable", (
           <NativeSelect {...control("ownerUserId")} defaultValue={values?.ownerUserId ?? defaultOwnerId} className="w-full">
             {ownerOptions.map((owner) => (
               <NativeSelectOption key={owner.userId} value={owner.userId}>{owner.email}</NativeSelectOption>
             ))}
           </NativeSelect>
-        ), { required: true })}
+        ))}
         {field("note", "Nota inicial", (
           <Textarea {...control("note")} defaultValue={values?.note ?? ""} rows={4} maxLength={2000} />
         ), { wide: true })}
