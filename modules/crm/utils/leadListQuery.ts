@@ -67,16 +67,18 @@ export function parseLeadListQuery(searchParams: SearchParams): LeadListFilters 
     stage: stageFromParam(query[QUERY_KEYS.stage]),
     owner: ownerFromParam(query[QUERY_KEYS.owner]),
     followUp: followUpFromParam(query[QUERY_KEYS.followUp]),
+    source: query[QUERY_KEYS.source],
     page: query[QUERY_KEYS.page],
   };
 }
 
-// Default values (no stage, no owner, no follow-up, page 1) are left out of the URL.
+// Default values (no stage, no owner, no follow-up, no source, page 1) are left out of the URL.
 export function leadListHref(filters: LeadListFilters, page: number): string {
   const params = new URLSearchParams();
   if (filters.stage) params.set(QUERY_KEYS.stage, stageToParam(filters.stage));
   if (filters.owner) params.set(QUERY_KEYS.owner, ownerToParam(filters.owner));
   if (filters.followUp) params.set(QUERY_KEYS.followUp, FOLLOW_UP_PARAMS[filters.followUp]);
+  if (filters.source) params.set(QUERY_KEYS.source, filters.source);
   if (page > 1) params.set(QUERY_KEYS.page, String(page));
   const query = params.toString();
   return query ? `${LEAD_LIST_PATH}?${query}` : LEAD_LIST_PATH;

@@ -47,6 +47,27 @@ describe("parseLeadListQuery", () => {
     },
   );
 
+  it("maps origen to the source filter, combined with the other filters", () => {
+    expect(parseLeadListQuery({ origen: "instagram" })).toEqual({ source: "instagram", page: 1 });
+    const query = { origen: "event", etapa: "quoted", responsable: "mios", seguimiento: "vencidos", pagina: "2" };
+    expect(parseLeadListQuery(query)).toEqual({
+      stage: "quoted",
+      owner: "mine",
+      followUp: "overdue",
+      source: "event",
+      page: 2,
+    });
+  });
+
+  it.each([["foo"], [""], ["Instagram"], [["instagram", "instagram"]], [["instagram", "event"]]])(
+    "treats an invalid or repeated origen %j as no source filter",
+    (origen) => {
+      expect(() => parseLeadListQuery({ origen })).not.toThrow();
+      expect(parseLeadListQuery({ origen })).toEqual({ page: 1 });
+      expect(parseLeadListQuery({ origen }).source).toBeUndefined();
+    },
+  );
+
   it("maps etapa=archivados to the archived stage filter", () => {
     expect(parseLeadListQuery({ etapa: "archivados", responsable: "mios" })).toEqual({
       stage: "archived",
@@ -99,6 +120,29 @@ describe("leadListHref", () => {
       "/crm/leads?etapa=quoted&seguimiento=pendientes&pagina=2",
     );
   });
+
+  it("includes origen only with a source filter and keeps it when changing page or another filter", () => {
+    expect(leadListHref({ page: 1 }, 2)).not.toContain("origen");
+    expect(leadListHref({ source: "instagram", page: 1 }, 1)).toBe("/crm/leads?origen=instagram");
+    expect(leadListHref({ source: "event", page: 1 }, 3)).toBe("/crm/leads?origen=event&pagina=3");
+    expect(leadListHref({ stage: "quoted", owner: "mine", followUp: "pending", source: "event", page: 1 }, 2)).toBe(
+      "/crm/leads?etapa=quoted&responsable=mios&seguimiento=pendientes&origen=event&pagina=2",
+    );
+    const filters = { stage: "new", source: "unknown", page: 1 } as const;
+    expect(leadListHref({ ...filters, stage: "archived" }, 1)).toBe("/crm/leads?etapa=archivados&origen=unknown");
+    expect(leadListHref({ ...filters, owner: "user-7" }, 1)).toBe(
+      "/crm/leads?etapa=new&responsable=user-7&origen=unknown",
+    );
+  });
+
+  it.each(["instagram", "web_form", "unknown"] as const)(
+    "round-trips source %s through parseLeadListQuery",
+    (source) => {
+      const filters = { stage: "contacted", owner: "mine", followUp: "overdue", source, page: 2 } as const;
+      const params = Object.fromEntries(new URL(leadListHref(filters, 2), "https://x.test").searchParams);
+      expect(parseLeadListQuery(params)).toEqual(filters);
+    },
+  );
 
   it("builds the «Mis pendientes» preset of the CRM header", () => {
     expect(leadListHref({ owner: "mine", followUp: "pending", page: 1 }, 1)).toBe(
