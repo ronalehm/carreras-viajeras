@@ -1,7 +1,7 @@
 # Perfil del runner: `/cuenta/perfil` y fichas de corredores en el CRM
 
 - Módulo: accounts
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): Neon + Drizzle `neon-http` (`getDb()`), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano por el usuario. Datos personales fuera de logs y errores.
   - `accounts-roles-permissions.md` (aprobada, implementada): `getCurrentUser`, `requireVerifiedEmail`, `requirePermission`, `can()`, `getCrmAccess(permission)`, `UnauthorizedError`/`ForbiddenError`. `profiles` y `staff_*` son solo del staff. CRM denegado por defecto.

@@ -463,3 +463,105 @@ export const tripUpdates = pgTable(
     check("trip_updates_body_chk", sql`char_length(${table.body}) BETWEEN 1 AND 2000`),
   ],
 );
+
+export const travelDocumentTypeEnum = pgEnum("travel_document_type", [
+  "passport",
+  "national_id",
+  "foreign_id",
+]);
+export const shirtSizeEnum = pgEnum("shirt_size", ["xs", "s", "m", "l", "xl", "xxl"]);
+export const raceDistanceEnum = pgEnum("race_distance", ["5k", "10k", "21k", "42k", "ultra"]);
+
+// One runner profile per Neon Auth account (user_id, no cross-schema FK); staff can have one too.
+// email is a lowercase, display-only copy of the session's verified email: never used to authorize
+// or to link bookings. document_*, medical_notes (and by extension birth_date and the emergency
+// contact) are sensitive: never in logs or errors. updated_at and consented_at are set by the service.
+export const runnerProfiles = pgTable(
+  "runner_profiles",
+  {
+    userId: text("user_id").primaryKey(),
+    email: text("email").notNull(),
+    fullName: text("full_name").notNull(),
+    phone: text("phone").notNull(),
+    country: text("country"),
+    city: text("city"),
+    birthDate: date("birth_date", { mode: "string" }),
+    documentType: travelDocumentTypeEnum("document_type"),
+    documentNumber: text("document_number"),
+    documentExpiresOn: date("document_expires_on", { mode: "string" }),
+    shirtSize: shirtSizeEnum("shirt_size"),
+    preferredDistance: raceDistanceEnum("preferred_distance"),
+    personalBest: text("personal_best"),
+    club: text("club"),
+    emergencyContactName: text("emergency_contact_name"),
+    emergencyContactPhone: text("emergency_contact_phone"),
+    medicalNotes: text("medical_notes"),
+    consentVersion: text("consent_version").notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "runner_profiles_email_chk",
+      sql`${table.email} = lower(${table.email}) AND char_length(${table.email}) <= 254`,
+    ),
+    check("runner_profiles_full_name_chk", sql`char_length(${table.fullName}) BETWEEN 2 AND 120`),
+    check("runner_profiles_phone_chk", sql`${table.phone} ~ '^\\+[1-9][0-9]{7,14}$'`),
+    check(
+      "runner_profiles_country_chk",
+      sql`${table.country} IS NULL OR char_length(${table.country}) BETWEEN 2 AND 80`,
+    ),
+    check(
+      "runner_profiles_city_chk",
+      sql`${table.city} IS NULL OR char_length(${table.city}) BETWEEN 2 AND 80`,
+    ),
+    // "Not in the future" is validated by zod: a CHECK with current_date is not immutable.
+    check(
+      "runner_profiles_birth_date_chk",
+      sql`${table.birthDate} IS NULL OR ${table.birthDate} >= '1900-01-01'`,
+    ),
+    check(
+      "runner_profiles_document_number_chk",
+      sql`${table.documentNumber} IS NULL OR ${table.documentNumber} ~ '^[A-Z0-9]{4,20}$'`,
+    ),
+    check(
+      "runner_profiles_document_chk",
+      sql`(${table.documentType} IS NULL) = (${table.documentNumber} IS NULL) AND (${table.documentExpiresOn} IS NULL OR ${table.documentType} IS NOT NULL)`,
+    ),
+    check(
+      "runner_profiles_personal_best_chk",
+      sql`${table.personalBest} IS NULL OR char_length(${table.personalBest}) <= 60`,
+    ),
+    check(
+      "runner_profiles_club_chk",
+      sql`${table.club} IS NULL OR char_length(${table.club}) <= 80`,
+    ),
+    check(
+      "runner_profiles_emergency_contact_name_chk",
+      sql`${table.emergencyContactName} IS NULL OR char_length(${table.emergencyContactName}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "runner_profiles_emergency_contact_phone_chk",
+      sql`${table.emergencyContactPhone} IS NULL OR ${table.emergencyContactPhone} ~ '^\\+[1-9][0-9]{7,14}$'`,
+    ),
+    check(
+      "runner_profiles_emergency_chk",
+      sql`(${table.emergencyContactName} IS NULL) = (${table.emergencyContactPhone} IS NULL)`,
+    ),
+    check(
+      "runner_profiles_medical_notes_chk",
+      sql`${table.medicalNotes} IS NULL OR char_length(${table.medicalNotes}) <= 500`,
+    ),
+    check(
+      "runner_profiles_consent_version_chk",
+      sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
+    ),
+  ],
+);
