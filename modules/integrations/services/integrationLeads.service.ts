@@ -92,6 +92,9 @@ export async function createIntegrationLead(input: CreateIntegrationLeadInput): 
   ]);
   const bulk = input.source === "import";
 
+  // same_phone: phone dedup is not guaranteed under concurrency (requirement 16). There is no unique
+  // index on phone (decision 8 of crm-leads-pipeline), so concurrent requests with the same phone and
+  // a different externalId can both insert. Sending import rows one at a time, in sequence, avoids it.
   const result = await getDb().execute<CreateIntegrationLeadRow>(sql`
     WITH existing AS (
       SELECT id, submission_hash FROM leads WHERE idempotency_key = ${idempotencyKey}::uuid

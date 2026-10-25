@@ -470,7 +470,7 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
   | `fullName` | sí | 2 a 120 caracteres |
   | `phone` | sí | Con código de país (`+51 938 127 170`); la web quita espacios y guiones |
   | `email`, `tripSlug`, `destinationText`, `originDetail`, `referredBy`, `contactPreference` | no | `tripSlug` es el slug de un viaje del catálogo (`maraton-santiago-2027`); `originDetail` y `referredBy`, 2 a 120 caracteres; `contactPreference`, `whatsapp`, `email` o `call`. Una celda vacía (`""`) cuenta como sin dato |
-  | `channel` | no | El origen (`event`, `partner`, `referral`, `whatsapp`, `whatsapp_status`, `instagram`, `facebook`, `tiktok`, `youtube`, `google_ads`, `luma`, `web`, `other`); sin él, `unknown` |
+  | `channel` | no | El origen (`event`, `partner`, `referral`, `whatsapp`, `whatsapp_status`, `instagram`, `facebook`, `tiktok`, `youtube`, `google_ads`, `luma`, `web`, `other`, `unknown`); sin él, `unknown`. A diferencia de los campos de arriba, una celda vacía (`""`) o `null` da `400`: si no sabes el origen, omite el campo o envía `"unknown"` |
 
   Respuestas: `created` (lead nuevo; llega al workflow principal por su `lead.created`); `duplicate` (ese `externalId` ya se registró con los mismos datos: repetir una petición nunca duplica); `existing` (ya hay un lead con ese teléfono, también si está archivado tras pedir no seguir: no se crea otro y `leadId` es el existente); `409 { "error": "conflict" }` (ese `externalId` ya se registró con **otros** datos); `422 { "error": "unknown_trip" }` (el `tripSlug` no es un viaje del catálogo). Ninguna respuesta repite los datos enviados. Responsable, autor, etapa y `bulk` los decide la web: si la petición los trae, se ignoran.
 
@@ -715,8 +715,8 @@ Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lim
    });
    ```
 4. **Loop Over Items** "Fila a fila" con *Batch Size* = `1`. Su salida *loop* va a un **Wait** de 1 segundo y de ahí a:
-5. **HTTP Request** "Importar fila": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads` con la credencial *Header Auth* y cuerpo JSON `{{ JSON.stringify($('Fila a fila').item.json.body) }}`. En **Options** → *Response* activa *Include Response Headers and Status* y *Never Error*, para que un `409` o un `422` no detengan la importación.
-6. **Edit Fields (Set)** "Resultado", con *Include Other Input Fields* desactivado: `fila` = `{{ $('Fila a fila').item.json.fila }}` y `estado` = `{{ $json.body.status ?? $json.body.error ?? 'http_' + $json.statusCode }}`. Conecta su salida **de vuelta a la entrada de "Fila a fila"**.
+5. **HTTP Request** "Importar fila": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads` con la credencial *Header Auth* y cuerpo JSON `{{ JSON.stringify($('Fila a fila').item.json.body) }}`. En **Options** → *Response* activa *Include Response Headers and Status* y *Never Error*, para que un `409` o un `422` no detengan la importación. *Never Error* solo cubre las respuestas HTTP: en **Settings** → *On Error* elige además *Continue*, para que una caída de red o un timeout no corten el bucle y esa fila salga como error en el resumen.
+6. **Edit Fields (Set)** "Resultado", con *Include Other Input Fields* desactivado: `fila` = `{{ $('Fila a fila').item.json.fila }}` y `estado` = `{{ $json.body?.status ?? $json.body?.error ?? ($json.statusCode ? 'http_' + $json.statusCode : 'sin_respuesta') }}` (`sin_respuesta`: caída de red o timeout, sin respuesta de la web). Conecta su salida **de vuelta a la entrada de "Fila a fila"**.
 7. En la salida *done* de "Fila a fila", **Code** "Resumen" (modo *Run Once for All Items*) y un solo **Send Email** a ti con su texto. Solo lleva conteos y números de fila, nunca datos de las personas:
 
    ```js
@@ -730,11 +730,11 @@ Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lim
    return [{ json: { texto: `Importación terminada.\n${lineas.join('\n')}\nFilas con error: ${conError.join(', ') || 'ninguna'}` } }];
    ```
 
-   `created` son leads nuevos; `duplicate`, filas ya importadas en una ejecución anterior; `existing`, personas que ya estaban en el CRM con ese teléfono (no se tocan). Las filas con `conflict` (la fila cambió desde la importación anterior), `invalid_request` (algún dato no cumple el formato) o `unknown_trip` se revisan a mano.
+   `created` son leads nuevos; `duplicate`, filas ya importadas en una ejecución anterior; `existing`, personas que ya estaban en el CRM con ese teléfono (no se tocan). Las filas con `conflict` (la fila cambió desde la importación anterior), `invalid_request` (algún dato no cumple el formato) o `unknown_trip` se revisan a mano; las de `sin_respuesta` basta con volver a ejecutar el workflow.
 
 **Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0005` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
 
-**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0005` aplicada en producción. Repetirla por error no duplica personas.
+**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0005` aplicada en producción. Repetirla por error no duplica personas, siempre que las filas se envíen una a una y en secuencia, como hace el paso 4: dos peticiones simultáneas con el mismo teléfono y distinto `externalId` pueden crear dos leads.
 
 #### 12. Workflow "Recordatorios diarios"
 

@@ -28,7 +28,8 @@ export const failRequestSchema = z.object({
 export const eventIdSchema = z.uuid();
 export const leadIdSchema = z.uuid();
 
-// Consent text versions accepted per entry path (closed list; Ley 29733 texts confirmed by the user).
+// Consent text versions accepted per entry path (closed list; Ley 29733 legal texts pending user
+// confirmation, open question 3).
 export const INTEGRATION_CONSENT_VERSIONS = {
   google_form: ["google-form-v1"],
   import: ["import-mml-v1"],

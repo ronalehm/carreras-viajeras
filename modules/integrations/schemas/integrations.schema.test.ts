@@ -172,6 +172,8 @@ describe("createIntegrationLeadSchema", () => {
     ["an invalid email", { ...importRow, email: "ana@" }],
     ["an invalid trip slug", { ...importRow, tripSlug: "Maraton Santiago" }],
     ["an unknown channel", { ...importRow, channel: "foo" }],
+    ['an empty channel ("")', { ...importRow, channel: "" }],
+    ["a null channel", { ...importRow, channel: null }],
     ["an unknown contact preference", { ...importRow, contactPreference: "sms" }],
     ["an origin detail of 1 character", { ...importRow, originDetail: "x" }],
     ["a referrer of 121 characters", { ...importRow, referredBy: "x".repeat(121) }],

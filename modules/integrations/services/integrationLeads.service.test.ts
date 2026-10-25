@@ -337,12 +337,15 @@ describe("createIntegrationLead", () => {
   });
 
   it("hashes the same consent instant the same way whatever its offset, and changes with the data", async () => {
-    const utc = { ...input, consentedAt: "2026-09-14T13:12:00Z" };
-    expect(await expectedHash(utc)).toBe(await expectedHash(input));
-
-    const fake = useFakeDb({ responses: [[resultRow()], [resultRow()]] });
+    const fake = useFakeDb({ responses: [[resultRow()], [resultRow()], [resultRow()]] });
     await createIntegrationLead(input);
+    await createIntegrationLead({ ...input, consentedAt: "2026-09-14T13:12:00Z" });
     await createIntegrationLead({ ...input, originDetail: "Reel de Instagram" });
-    expect(fake.queries[0].params[16]).not.toBe(fake.queries[1].params[16]);
+
+    // params[14] is consented_at as received; params[16] is submission_hash.
+    expect(fake.queries[0].params[14]).toBe("2026-09-14T08:12:00-05:00");
+    expect(fake.queries[1].params[14]).toBe("2026-09-14T13:12:00Z");
+    expect(fake.queries[1].params[16]).toBe(fake.queries[0].params[16]);
+    expect(fake.queries[2].params[16]).not.toBe(fake.queries[0].params[16]);
   });
 });
