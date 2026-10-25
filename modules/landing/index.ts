@@ -15,4 +15,3 @@ export { TripFacts } from "./components/TripFacts";
 export { WhyUsSection } from "./components/WhyUsSection";
 export { getCatalogTrip } from "./utils/catalogTrip";
 export { TRIPS } from "./utils/trips";
-export type { Trip } from "./utils/trips";

@@ -1,6 +1,6 @@
 {
-  "id": "1fa515eb-7ea7-480e-979b-575b5889f704",
-  "prevId": "f3bfabdb-8e11-4192-b076-bb8fa48ca049",
+  "id": "dc2463e1-464b-4d21-a607-d169f527842e",
+  "prevId": "cfd31f1f-0eed-4a16-9dbd-029d244c3b49",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1205,127 +1205,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.sponsors": {
-      "name": "sponsors",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "slug": {
-          "name": "slug",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "logo_url": {
-          "name": "logo_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "website_url": {
-          "name": "website_url",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "sponsors_slug_uq": {
-          "name": "sponsors_slug_uq",
-          "columns": [
-            {
-              "expression": "slug",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "sponsors_created_by_profiles_user_id_fk": {
-          "name": "sponsors_created_by_profiles_user_id_fk",
-          "tableFrom": "sponsors",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "created_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "sponsors_slug_format_chk": {
-          "name": "sponsors_slug_format_chk",
-          "value": "\"sponsors\".\"slug\" ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(\"sponsors\".\"slug\") BETWEEN 3 AND 80"
-        },
-        "sponsors_name_chk": {
-          "name": "sponsors_name_chk",
-          "value": "char_length(\"sponsors\".\"name\") BETWEEN 2 AND 80"
-        },
-        "sponsors_logo_url_chk": {
-          "name": "sponsors_logo_url_chk",
-          "value": "\"sponsors\".\"logo_url\" IS NULL OR (\"sponsors\".\"logo_url\" LIKE 'https://%' AND char_length(\"sponsors\".\"logo_url\") <= 2048)"
-        },
-        "sponsors_website_url_chk": {
-          "name": "sponsors_website_url_chk",
-          "value": "\"sponsors\".\"website_url\" IS NULL OR (\"sponsors\".\"website_url\" LIKE 'https://%' AND char_length(\"sponsors\".\"website_url\") <= 2048)"
-        },
-        "sponsors_description_chk": {
-          "name": "sponsors_description_chk",
-          "value": "\"sponsors\".\"description\" IS NULL OR char_length(\"sponsors\".\"description\") BETWEEN 10 AND 500"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.staff_assignments": {
       "name": "staff_assignments",
       "schema": "",
@@ -1378,12 +1257,6 @@
         "revoked_by": {
           "name": "revoked_by",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sponsor_id": {
-          "name": "sponsor_id",
-          "type": "uuid",
           "primaryKey": false,
           "notNull": false
         }
@@ -1451,30 +1324,12 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
-        },
-        "staff_assignments_sponsor_id_sponsors_id_fk": {
-          "name": "staff_assignments_sponsor_id_sponsors_id_fk",
-          "tableFrom": "staff_assignments",
-          "tableTo": "sponsors",
-          "columnsFrom": [
-            "sponsor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "staff_assignments_sponsor_chk": {
-          "name": "staff_assignments_sponsor_chk",
-          "value": "(\"staff_assignments\".\"role\"::text = 'sponsor') = (\"staff_assignments\".\"sponsor_id\" IS NOT NULL)"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.staff_invitations": {
@@ -1544,12 +1399,6 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "sponsor_id": {
-          "name": "sponsor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
@@ -1609,19 +1458,6 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
-        },
-        "staff_invitations_sponsor_id_sponsors_id_fk": {
-          "name": "staff_invitations_sponsor_id_sponsors_id_fk",
-          "tableFrom": "staff_invitations",
-          "tableTo": "sponsors",
-          "columnsFrom": [
-            "sponsor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -1631,10 +1467,6 @@
         "staff_invitations_email_lowercase_chk": {
           "name": "staff_invitations_email_lowercase_chk",
           "value": "\"staff_invitations\".\"email\" = lower(\"staff_invitations\".\"email\")"
-        },
-        "staff_invitations_sponsor_chk": {
-          "name": "staff_invitations_sponsor_chk",
-          "value": "(\"staff_invitations\".\"role\"::text = 'sponsor') = (\"staff_invitations\".\"sponsor_id\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -1838,6 +1670,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "official_url": {
+          "name": "official_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "installments_price_usd": {
+          "name": "installments_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deposit_usd": {
+          "name": "deposit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "companion_price_usd": {
+          "name": "companion_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_terms": {
+          "name": "payment_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "excludes": {
+          "name": "excludes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "trip_status",
@@ -1845,32 +1720,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'draft'"
-        },
-        "sponsor_id": {
-          "name": "sponsor_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "featured": {
-          "name": "featured",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "review_status": {
-          "name": "review_status",
-          "type": "trip_review_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "review_note": {
-          "name": "review_note",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1902,38 +1751,9 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "trips_sponsor_idx": {
-          "name": "trips_sponsor_idx",
-          "columns": [
-            {
-              "expression": "sponsor_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
-      "foreignKeys": {
-        "trips_sponsor_id_sponsors_id_fk": {
-          "name": "trips_sponsor_id_sponsors_id_fk",
-          "tableFrom": "trips",
-          "tableTo": "sponsors",
-          "columnsFrom": [
-            "sponsor_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1966,17 +1786,25 @@
           "name": "trips_image_url_chk",
           "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
         },
-        "trips_featured_chk": {
-          "name": "trips_featured_chk",
-          "value": "NOT \"trips\".\"featured\" OR \"trips\".\"status\" = 'published'"
+        "trips_official_url_chk": {
+          "name": "trips_official_url_chk",
+          "value": "\"trips\".\"official_url\" IS NULL OR \"trips\".\"official_url\" LIKE 'https://%'"
         },
-        "trips_review_chk": {
-          "name": "trips_review_chk",
-          "value": "\"trips\".\"review_status\" IS NULL OR (\"trips\".\"sponsor_id\" IS NOT NULL AND \"trips\".\"status\" = 'draft')"
+        "trips_installments_price_usd_chk": {
+          "name": "trips_installments_price_usd_chk",
+          "value": "\"trips\".\"installments_price_usd\" IS NULL OR \"trips\".\"installments_price_usd\" >= 0"
         },
-        "trips_review_note_chk": {
-          "name": "trips_review_note_chk",
-          "value": "(\"trips\".\"review_status\" IS NOT DISTINCT FROM 'changes_requested') = (\"trips\".\"review_note\" IS NOT NULL) AND (\"trips\".\"review_note\" IS NULL OR char_length(\"trips\".\"review_note\") BETWEEN 3 AND 500)"
+        "trips_deposit_usd_chk": {
+          "name": "trips_deposit_usd_chk",
+          "value": "\"trips\".\"deposit_usd\" IS NULL OR \"trips\".\"deposit_usd\" >= 0"
+        },
+        "trips_companion_price_usd_chk": {
+          "name": "trips_companion_price_usd_chk",
+          "value": "\"trips\".\"companion_price_usd\" IS NULL OR \"trips\".\"companion_price_usd\" >= 0"
+        },
+        "trips_excludes_chk": {
+          "name": "trips_excludes_chk",
+          "value": "cardinality(\"trips\".\"excludes\") <= 20"
         }
       },
       "isRLSEnabled": false
@@ -2079,8 +1907,7 @@
       "schema": "public",
       "values": [
         "commercial",
-        "admin",
-        "sponsor"
+        "admin"
       ]
     },
     "public.travel_document_type": {
@@ -2090,14 +1917,6 @@
         "passport",
         "national_id",
         "foreign_id"
-      ]
-    },
-    "public.trip_review_status": {
-      "name": "trip_review_status",
-      "schema": "public",
-      "values": [
-        "in_review",
-        "changes_requested"
       ]
     },
     "public.trip_status": {

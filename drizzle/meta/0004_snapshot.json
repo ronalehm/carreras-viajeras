@@ -1,5 +1,5 @@
 {
-  "id": "f3bfabdb-8e11-4192-b076-bb8fa48ca049",
+  "id": "cfd31f1f-0eed-4a16-9dbd-029d244c3b49",
   "prevId": "44660d44-81be-4a18-b5fa-d0b786d60358",
   "version": "7",
   "dialect": "postgresql",
@@ -999,212 +999,6 @@
       },
       "isRLSEnabled": false
     },
-    "public.runner_profiles": {
-      "name": "runner_profiles",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "email": {
-          "name": "email",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "full_name": {
-          "name": "full_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "phone": {
-          "name": "phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "country": {
-          "name": "country",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "city": {
-          "name": "city",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "birth_date": {
-          "name": "birth_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "document_type": {
-          "name": "document_type",
-          "type": "travel_document_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "document_number": {
-          "name": "document_number",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "document_expires_on": {
-          "name": "document_expires_on",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "shirt_size": {
-          "name": "shirt_size",
-          "type": "shirt_size",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "preferred_distance": {
-          "name": "preferred_distance",
-          "type": "race_distance",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "personal_best": {
-          "name": "personal_best",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "club": {
-          "name": "club",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "emergency_contact_name": {
-          "name": "emergency_contact_name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "emergency_contact_phone": {
-          "name": "emergency_contact_phone",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "medical_notes": {
-          "name": "medical_notes",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "consent_version": {
-          "name": "consent_version",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "consented_at": {
-          "name": "consented_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "runner_profiles_email_chk": {
-          "name": "runner_profiles_email_chk",
-          "value": "\"runner_profiles\".\"email\" = lower(\"runner_profiles\".\"email\") AND char_length(\"runner_profiles\".\"email\") <= 254"
-        },
-        "runner_profiles_full_name_chk": {
-          "name": "runner_profiles_full_name_chk",
-          "value": "char_length(\"runner_profiles\".\"full_name\") BETWEEN 2 AND 120"
-        },
-        "runner_profiles_phone_chk": {
-          "name": "runner_profiles_phone_chk",
-          "value": "\"runner_profiles\".\"phone\" ~ '^\\+[1-9][0-9]{7,14}$'"
-        },
-        "runner_profiles_country_chk": {
-          "name": "runner_profiles_country_chk",
-          "value": "\"runner_profiles\".\"country\" IS NULL OR char_length(\"runner_profiles\".\"country\") BETWEEN 2 AND 80"
-        },
-        "runner_profiles_city_chk": {
-          "name": "runner_profiles_city_chk",
-          "value": "\"runner_profiles\".\"city\" IS NULL OR char_length(\"runner_profiles\".\"city\") BETWEEN 2 AND 80"
-        },
-        "runner_profiles_birth_date_chk": {
-          "name": "runner_profiles_birth_date_chk",
-          "value": "\"runner_profiles\".\"birth_date\" IS NULL OR \"runner_profiles\".\"birth_date\" >= '1900-01-01'"
-        },
-        "runner_profiles_document_number_chk": {
-          "name": "runner_profiles_document_number_chk",
-          "value": "\"runner_profiles\".\"document_number\" IS NULL OR \"runner_profiles\".\"document_number\" ~ '^[A-Z0-9]{4,20}$'"
-        },
-        "runner_profiles_document_chk": {
-          "name": "runner_profiles_document_chk",
-          "value": "(\"runner_profiles\".\"document_type\" IS NULL) = (\"runner_profiles\".\"document_number\" IS NULL) AND (\"runner_profiles\".\"document_expires_on\" IS NULL OR \"runner_profiles\".\"document_type\" IS NOT NULL)"
-        },
-        "runner_profiles_personal_best_chk": {
-          "name": "runner_profiles_personal_best_chk",
-          "value": "\"runner_profiles\".\"personal_best\" IS NULL OR char_length(\"runner_profiles\".\"personal_best\") <= 60"
-        },
-        "runner_profiles_club_chk": {
-          "name": "runner_profiles_club_chk",
-          "value": "\"runner_profiles\".\"club\" IS NULL OR char_length(\"runner_profiles\".\"club\") <= 80"
-        },
-        "runner_profiles_emergency_contact_name_chk": {
-          "name": "runner_profiles_emergency_contact_name_chk",
-          "value": "\"runner_profiles\".\"emergency_contact_name\" IS NULL OR char_length(\"runner_profiles\".\"emergency_contact_name\") BETWEEN 2 AND 120"
-        },
-        "runner_profiles_emergency_contact_phone_chk": {
-          "name": "runner_profiles_emergency_contact_phone_chk",
-          "value": "\"runner_profiles\".\"emergency_contact_phone\" IS NULL OR \"runner_profiles\".\"emergency_contact_phone\" ~ '^\\+[1-9][0-9]{7,14}$'"
-        },
-        "runner_profiles_emergency_chk": {
-          "name": "runner_profiles_emergency_chk",
-          "value": "(\"runner_profiles\".\"emergency_contact_name\" IS NULL) = (\"runner_profiles\".\"emergency_contact_phone\" IS NULL)"
-        },
-        "runner_profiles_medical_notes_chk": {
-          "name": "runner_profiles_medical_notes_chk",
-          "value": "\"runner_profiles\".\"medical_notes\" IS NULL OR char_length(\"runner_profiles\".\"medical_notes\") <= 500"
-        },
-        "runner_profiles_consent_version_chk": {
-          "name": "runner_profiles_consent_version_chk",
-          "value": "char_length(\"runner_profiles\".\"consent_version\") BETWEEN 1 AND 40"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.staff_assignments": {
       "name": "staff_assignments",
       "schema": "",
@@ -1670,6 +1464,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "official_url": {
+          "name": "official_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "installments_price_usd": {
+          "name": "installments_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deposit_usd": {
+          "name": "deposit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "companion_price_usd": {
+          "name": "companion_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_terms": {
+          "name": "payment_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "excludes": {
+          "name": "excludes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "trip_status",
@@ -1742,6 +1579,26 @@
         "trips_image_url_chk": {
           "name": "trips_image_url_chk",
           "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
+        },
+        "trips_official_url_chk": {
+          "name": "trips_official_url_chk",
+          "value": "\"trips\".\"official_url\" IS NULL OR \"trips\".\"official_url\" LIKE 'https://%'"
+        },
+        "trips_installments_price_usd_chk": {
+          "name": "trips_installments_price_usd_chk",
+          "value": "\"trips\".\"installments_price_usd\" IS NULL OR \"trips\".\"installments_price_usd\" >= 0"
+        },
+        "trips_deposit_usd_chk": {
+          "name": "trips_deposit_usd_chk",
+          "value": "\"trips\".\"deposit_usd\" IS NULL OR \"trips\".\"deposit_usd\" >= 0"
+        },
+        "trips_companion_price_usd_chk": {
+          "name": "trips_companion_price_usd_chk",
+          "value": "\"trips\".\"companion_price_usd\" IS NULL OR \"trips\".\"companion_price_usd\" >= 0"
+        },
+        "trips_excludes_chk": {
+          "name": "trips_excludes_chk",
+          "value": "cardinality(\"trips\".\"excludes\") <= 20"
         }
       },
       "isRLSEnabled": false
@@ -1816,44 +1673,12 @@
         "lost"
       ]
     },
-    "public.race_distance": {
-      "name": "race_distance",
-      "schema": "public",
-      "values": [
-        "5k",
-        "10k",
-        "21k",
-        "42k",
-        "ultra"
-      ]
-    },
-    "public.shirt_size": {
-      "name": "shirt_size",
-      "schema": "public",
-      "values": [
-        "xs",
-        "s",
-        "m",
-        "l",
-        "xl",
-        "xxl"
-      ]
-    },
     "public.staff_role": {
       "name": "staff_role",
       "schema": "public",
       "values": [
         "commercial",
         "admin"
-      ]
-    },
-    "public.travel_document_type": {
-      "name": "travel_document_type",
-      "schema": "public",
-      "values": [
-        "passport",
-        "national_id",
-        "foreign_id"
       ]
     },
     "public.trip_status": {

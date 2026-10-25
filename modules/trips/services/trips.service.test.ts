@@ -39,7 +39,8 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
 const PUBLIC_COLUMNS =
-  '"slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url"';
+  '"slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", ' +
+  '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes"';
 const INTERNAL_COLUMNS = /"id"|"status"|"created_at"|"updated_at"/;
 
 // Rows in select order (array mode), as the Neon HTTP driver returns them.
@@ -57,6 +58,13 @@ const santiagoRow = [
   1990,
   100,
   "https://example.com/santiago.jpg",
+  "https://maratondesantiago.cl/",
+  1799,
+  300,
+  1300,
+  "Reserva con US$ 300.",
+  ["Vuelos internos"],
+  "Horario por confirmar.",
 ];
 const santiago = {
   slug: "maraton-santiago-2027",
@@ -72,8 +80,36 @@ const santiago = {
   priceUsd: 1990,
   capacity: 100,
   imageUrl: "https://example.com/santiago.jpg",
+  officialUrl: "https://maratondesantiago.cl/",
+  installmentsPriceUsd: 1799,
+  depositUsd: 300,
+  companionPriceUsd: 1300,
+  paymentTerms: "Reserva con US$ 300.",
+  excludes: ["Vuelos internos"],
+  notes: "Horario por confirmar.",
 };
-const limaRow = ["maraton-lima-2027", "Maratón de Lima", "Lima", "Perú", "2027-05-16", null, null, ["42K"], "Viaje para correr en Lima.", [], null, null, null];
+const limaRow = [
+  "maraton-lima-2027",
+  "Maratón de Lima",
+  "Lima",
+  "Perú",
+  "2027-05-16",
+  null,
+  null,
+  ["42K"],
+  "Viaje para correr en Lima.",
+  [],
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  null,
+  [],
+  null,
+];
 
 const input: TripInput = {
   title: "Maratón de Santiago 2027",
@@ -89,6 +125,13 @@ const input: TripInput = {
   priceUsd: 1990,
   capacity: 100,
   imageUrl: "https://example.com/santiago.jpg",
+  officialUrl: "https://maratondesantiago.cl/",
+  installmentsPriceUsd: 1799,
+  depositUsd: 300,
+  companionPriceUsd: 1300,
+  paymentTerms: "Reserva con US$ 300.",
+  excludes: ["Vuelos internos"],
+  notes: "Horario por confirmar.",
 };
 const inputParams = [
   "maraton-santiago-2027",
@@ -104,6 +147,13 @@ const inputParams = [
   1990,
   100,
   "https://example.com/santiago.jpg",
+  "https://maratondesantiago.cl/",
+  1799,
+  300,
+  1300,
+  "Reserva con US$ 300.",
+  '{"Vuelos internos"}',
+  "Horario por confirmar.",
 ];
 
 beforeEach(() => {
@@ -152,6 +202,13 @@ describe("listPublishedTrips", () => {
         priceUsd: null,
         capacity: null,
         imageUrl: null,
+        officialUrl: null,
+        installmentsPriceUsd: null,
+        depositUsd: null,
+        companionPriceUsd: null,
+        paymentTerms: null,
+        excludes: [],
+        notes: null,
       },
     ]);
   });
@@ -232,8 +289,9 @@ describe("createTrip", () => {
     const [insert] = fake.queries;
     // id, status, sponsor_id, featured, review_status, review_note, created_at and updated_at are left to the column defaults.
     expect(normalize(insert.sql)).toBe(
-      'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", "status", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at") ' +
-        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, default, default, default, default, default, default, default) " +
+      'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", ' +
+        '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes", "status", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at") ' +
+        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, default, default, default, default, default, default, default) " +
         'on conflict ("slug") do nothing returning "id"',
     );
     expect(insert.params).toEqual(inputParams);
@@ -257,9 +315,11 @@ describe("updateTrip", () => {
     const [update, select] = fake.queries;
     expect(normalize(update.sql)).toBe(
       'update "trips" set "slug" = $1, "title" = $2, "city" = $3, "country" = $4, "race_date" = $5, "start_date" = $6, "end_date" = $7, ' +
-        '"distances" = $8, "summary" = $9, "includes" = $10, "price_usd" = $11, "capacity" = $12, "image_url" = $13, "updated_at" = now() ' +
-        'where ("trips"."id" = $14 and "trips"."status" <> $15 and ("trips"."status" = $16 or "trips"."slug" = $17) ' +
-        'and not exists (select 1 from "trips" "other" where ("other"."slug" = $18 and "other"."id" <> $19))) returning "id"',
+        '"distances" = $8, "summary" = $9, "includes" = $10, "price_usd" = $11, "capacity" = $12, "image_url" = $13, ' +
+        '"official_url" = $14, "installments_price_usd" = $15, "deposit_usd" = $16, "companion_price_usd" = $17, "payment_terms" = $18, ' +
+        '"excludes" = $19, "notes" = $20, "updated_at" = now() ' +
+        'where ("trips"."id" = $21 and "trips"."status" <> $22 and ("trips"."status" = $23 or "trips"."slug" = $24) ' +
+        'and not exists (select 1 from "trips" "other" where ("other"."slug" = $25 and "other"."id" <> $26))) returning "id"',
     );
     expect(update.params).toEqual([...inputParams, TRIP_ID, "archived", "draft", input.slug, input.slug, TRIP_ID]);
     expect(normalize(select.sql)).toBe('select "status", "slug" from "trips" where "trips"."id" = $1');
