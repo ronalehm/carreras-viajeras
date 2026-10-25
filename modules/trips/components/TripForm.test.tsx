@@ -39,7 +39,8 @@ it("edita un publicado con identificador de solo lectura y envía su id", async 
     id: "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91", title: "Santiago 2027", slug: "santiago-2027",
     city: "Santiago", country: "Chile", raceDate: "2027-04-25", startDate: null, endDate: null,
     distances: ["42K", "21K"], includes: ["Hotel", "Traslados"], summary: "Viaje a Santiago.",
-    priceUsd: 0, capacity: null, imageUrl: null, status: "published", createdAt: new Date(), updatedAt: new Date(),
+    priceUsd: 0, capacity: null, imageUrl: null, status: "published", sponsorId: null, featured: false,
+    reviewStatus: null, reviewNote: null, createdAt: new Date(), updatedAt: new Date(),
   };
   vi.mocked(updateTripAction).mockResolvedValue({ status: "error", code: "archived", message: "Archivado por otra persona." });
   render(<TripForm trip={trip} />);

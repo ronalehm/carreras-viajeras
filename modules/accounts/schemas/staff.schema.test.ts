@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { staffRoleEnum } from "@/lib/db-schema";
 import {
+  assignmentRoleSchema,
   invitationIdSchema,
   inviteStaffSchema,
   staffRoleChangeSchema,
@@ -11,9 +12,21 @@ import {
 const issuePaths = (result: { error?: { issues: { path: PropertyKey[] }[] } }) =>
   result.error?.issues.map((issue) => issue.path);
 
-describe("staffRoleSchema", () => {
+describe("assignmentRoleSchema", () => {
   it("matches the staff_role database enum", () => {
-    expect(staffRoleSchema.options).toEqual(staffRoleEnum.enumValues);
+    expect(assignmentRoleSchema.options).toEqual(staffRoleEnum.enumValues);
+  });
+});
+
+describe("staffRoleSchema", () => {
+  it("keeps only the team roles", () => {
+    expect(staffRoleSchema.options).toEqual(["commercial", "admin"]);
+  });
+
+  it("is a subset of the staff_role database enum", () => {
+    for (const role of staffRoleSchema.options) {
+      expect(staffRoleEnum.enumValues).toContain(role);
+    }
   });
 });
 

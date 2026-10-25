@@ -4,6 +4,7 @@ import type { StaffRole } from "@/lib/auth/permissions";
 export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   commercial: "Comercial",
   admin: "Admin",
+  sponsor: "Patrocinador",
 };
 
 // Provisional CRM time zone (spec accounts-roles-permissions, open question 5).
