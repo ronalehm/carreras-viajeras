@@ -1,7 +1,7 @@
 # Acceso del equipo al CRM (UI de autenticación)
 
 - Módulo: accounts
-- Estado: borrador
+- Estado: aprobado
 - Enmienda (2026-10-25): destinos cerrados ampliados (runner → `/mis-carreras`; audiencia `sponsor` → `/patrocinador`, salida a `/patrocinador/acceso`), enlaces "Ver mis carreras" y "Mi perfil" en `RunnerAccount`, export de `SignOutButton` y página `/patrocinador/acceso`, porque lo exigen `runner-portal.md`, `accounts-runner-profiles.md` y `sponsors-portal.md` (aprobadas). Esta spec no gana tareas: cada cambio lo implementan esas specs en la fase indicada en "Enmienda: qué implementa cada spec".
 - Depende de: accounts-roles-permissions.md (Fase 1 aprobada y desplegada en `main` eb75dd6), platform-neon-foundation.md (Fase 1 aprobada)
 - Fases 1–4 implementadas en `main`. La Fase 4 (audiencia runner) la consume `landing-public-site.md` F3 (`/cuenta`).
