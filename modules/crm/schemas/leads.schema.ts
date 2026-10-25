@@ -31,8 +31,7 @@ export const leadActivityTypeSchema = z.enum([
   "source_changed",
 ]);
 
-// web_form is assigned only by the automatic capture: the manual form and the source change never
-// offer or accept it.
+// web_form is assigned only by the automatic capture: the manual form never offers or accepts it.
 export const manualLeadSourceSchema = leadSourceSchema.exclude(["web_form"], {
   error: "Elige el origen del lead.",
 });
@@ -144,11 +143,12 @@ export const leadOwnerChangeSchema = z.object({
   ownerUserId: ownerUserIdSchema,
 });
 
-// Source change from the lead detail: a manual source (never web_form) and its detail. Any other key
-// (actorUserId, stage…) is dropped: the author is always the session user.
+// Source change from the lead detail: any of the 14 sources (web_form included, so a web_form lead
+// can edit its detail) and its detail. The web_form <-> manual rule lives in the service
+// ("source_locked"). Any other key (actorUserId, stage…) is dropped: the author is always the session user.
 export const leadSourceChangeSchema = z.object({
   leadId: leadUuidSchema,
-  source: manualLeadSourceSchema,
+  source: z.enum(leadSourceSchema.options, { error: "Elige el origen del lead." }),
   sourceDetail: sourceDetailSchema,
 });
 

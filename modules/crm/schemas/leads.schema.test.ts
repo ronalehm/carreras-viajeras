@@ -457,12 +457,22 @@ describe("leadOwnerChangeSchema", () => {
 describe("leadSourceChangeSchema", () => {
   const valid = { leadId: LEAD_ID, source: "event", sourceDetail: "  Maratón de Lima 2026 " };
 
-  it("accepts a manual source with its detail and drops other keys", () => {
+  it("accepts a source with its detail and drops other keys", () => {
     expect(leadSourceChangeSchema.parse({ ...valid, actorUserId: "intruder", stage: "paid" })).toEqual({
       leadId: LEAD_ID,
       source: "event",
       sourceDetail: "Maratón de Lima 2026",
     });
+  });
+
+  it.each(SOURCES_IN_UI_ORDER)("accepts the target source %s (the web_form rule lives in the service)", (source) => {
+    expect(leadSourceChangeSchema.parse({ ...valid, source }).source).toBe(source);
+  });
+
+  it("accepts web_form with a new detail (a web_form lead editing its detail)", () => {
+    expect(
+      leadSourceChangeSchema.parse({ leadId: LEAD_ID, source: "web_form", sourceDetail: " Dijo que nos vio en Instagram " }),
+    ).toEqual({ leadId: LEAD_ID, source: "web_form", sourceDetail: "Dijo que nos vio en Instagram" });
   });
 
   it.each([["missing", undefined], ["empty", ""]])("turns a %s detail into null", (_, sourceDetail) => {
@@ -473,7 +483,7 @@ describe("leadSourceChangeSchema", () => {
     });
   });
 
-  it.each([["web_form"], [""], [undefined]])("rejects the target source %j", (source) => {
+  it.each([[""], [undefined], ["whatsapp_business"], ["Instagram"]])("rejects the target source %j", (source) => {
     expect(fieldErrors({ ...valid, source }, leadSourceChangeSchema).source).toEqual(["Elige el origen del lead."]);
   });
 
