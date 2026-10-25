@@ -1,7 +1,7 @@
 # Patrocinadores: rol `sponsor`, portal de eventos con revisión del equipo y promoción pública
 
 - Módulo: sponsors (con cambios en `accounts`, `trips` y `landing`)
-- Estado: aprobado
+- Estado: borrador
 - Depende de:
   - `accounts-roles-permissions.md` (aprobada, implementada): enum `staff_role`, `profiles`, `staff_assignments`, `staff_invitations`, aceptación atómica en `getCurrentUser`, matriz `can()`, `/crm/admin/usuarios`. Esa spec ya prevé roles nuevos "como valores nuevos del enum `staff_role` (`ALTER TYPE … ADD VALUE`) y entradas nuevas en la matriz".
   - `accounts-auth-ui.md` (aprobada, F1–F4 implementadas): `AccessPanel`, `SignInForm`/`VerifyEmailForm` con destinos cerrados, `SignOutButton`, `getCrmAccess`, `NoCrmAccess`, layout `app/crm/(protected)/`.
@@ -488,7 +488,9 @@ Todas las Server Actions mantienen la firma de `useActionState`, `(prev, formDat
 - `modules/sponsors/actions/sponsors.actions.test.ts` (F2): sin sesión / `commercial` / `sponsor` → `unauthorized`/`forbidden` sin service; `invalid_input` con `fieldErrors` y `values`; alta → `redirect` a la marca; `slug_taken` en el campo; edición → mensaje de éxito y revalidación; el service lanza → "sponsor action failed".
 - `modules/sponsors/utils/sponsorAccess.test.ts` (F4): `connection()` primero; `UnauthorizedError` → `unauthenticated`; `ForbiddenError` → `forbidden`; marca inexistente → `forbidden`; `ok` con `sponsor` (`id`, `slug`, `name`).
 - `modules/trips/utils/tripDisplay.test.ts` (F4): las cinco combinaciones de `getTripStatusBadge`.
-- `modules/trips/services/trips.service.test.ts` (F4, F5, F6):
+- `modules/accounts/utils/staffDisplay.test.ts` (F1): las claves de `STAFF_ROLE_LABELS` coinciden con `assignmentRoleSchema.options` y las etiquetas son `{ commercial: "Comercial", admin: "Admin", sponsor: "Patrocinador" }`.
+- `modules/trips/services/trips.service.test.ts` (F1, F4, F5, F6):
+  - F1: las aserciones de SQL de `listTrips` y `createTrip` incluyen las columnas nuevas de `trips` (`sponsor_id`, `featured`, `review_status`, `review_note`) que Drizzle emite en `select()`/`insert()`; sin cambios de comportamiento;
   - F4: `listSponsorTrips` y `getSponsorTrip` (`sponsor_id` en el `WHERE`; id no UUID sin consulta);
   - F5: `createSponsorTrip` (`sponsor_id` de la entrada, sin `status`); `updateSponsorTrip` (un batch de 2 y los cuatro resultados); `submitSponsorTrip` (condiciones y `review_note = NULL`); `setTripStatus` (criterio F5);
   - F6: `listTrips` (join y orden); `requestTripChanges`; `setTripFeatured`; `listPublishedTrips` con cada filtro y `sponsor` anidado (o `null`); `getPublishedTripBySlug` con marca.
@@ -505,12 +507,12 @@ Todas las Server Actions mantienen la firma de `useActionState`, `(prev, formDat
 ## Plan de tareas
 Cada fase se ejecuta en una sesión y termina con `npm run lint`, `npx vitest run` y `npm run build` (los ejecuta el reviewer). Los developers en paralelo solo verifican sus archivos con `vitest`/`eslint`.
 
-### Fase 1 — Datos, permisos y guardas (5 tareas, 15 archivos: 2 generados por drizzle-kit)
-- [ ] T1 — Schema y migración: tabla `sponsors`, `sponsor` en `staff_role`, `trip_review_status`, columnas y CHECK (con `role::text`); `npm run db:generate` y revisión del SQL (solo objetos de `public`, sin `neon_auth` ni `DROP`) · archivos: `lib/db-schema.ts`, `drizzle/<NNNN>_*.sql` (generado), `drizzle/meta/<NNNN>_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — Permisos `sponsors.manage` y `sponsor.portal` con sus tests · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: T1 · secuencial (`lib/`)
-- [ ] T3 — Aceptación con `sponsor_id`, `loadSponsorId` y `requireSponsor` con tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts` · depende de: T2 · secuencial (`lib/`)
-- [ ] T4 — Ajustes que exige el enum ampliado: etiqueta "Patrocinador", `assignmentRoleSchema` con su test de sincronía y fixture de `Trip` con las columnas nuevas · archivos: `modules/accounts/utils/staffDisplay.ts`, `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/trips/components/TripForm.test.tsx` · depende de: T3 · paralelo (con T5)
-- [ ] T5 — README: migración de patrocinadores (prerrequisitos, una transacción, alternativa ante `unsafe use of new value`, irreversibilidad del valor del enum, verificación y aplicar antes de desplegar) y pruebas manuales de los CHECK · archivos: `README.md` · depende de: T3 · paralelo (con T4)
+### Fase 1 — Datos, permisos y guardas (5 tareas, 17 archivos: 2 generados por drizzle-kit)
+- [x] T1 — Schema y migración: tabla `sponsors`, `sponsor` en `staff_role`, `trip_review_status`, columnas y CHECK (con `role::text`); `npm run db:generate` y revisión del SQL (solo objetos de `public`, sin `neon_auth` ni `DROP`) · archivos: `lib/db-schema.ts`, `drizzle/<NNNN>_*.sql` (generado), `drizzle/meta/<NNNN>_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
+- [x] T2 — Permisos `sponsors.manage` y `sponsor.portal` con sus tests · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: T1 · secuencial (`lib/`)
+- [x] T3 — Aceptación con `sponsor_id`, `loadSponsorId` y `requireSponsor` con tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts` · depende de: T2 · secuencial (`lib/`)
+- [ ] T4 — Ajustes que exige el enum ampliado: etiqueta "Patrocinador", `assignmentRoleSchema` con su test de sincronía, test de etiquetas, fixture de `Trip` y aserciones SQL de `trips.service.test.ts` con las columnas nuevas · archivos: `modules/accounts/utils/staffDisplay.ts`, `modules/accounts/utils/staffDisplay.test.ts`, `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/trips/components/TripForm.test.tsx`, `modules/trips/services/trips.service.test.ts` · depende de: T3 · paralelo (con T5)
+- [x] T5 — README: migración de patrocinadores (prerrequisitos, una transacción, alternativa ante `unsafe use of new value`, irreversibilidad del valor del enum, verificación y aplicar antes de desplegar) y pruebas manuales de los CHECK · archivos: `README.md` · depende de: T3 · paralelo (con T4)
 
 ### Fase 2 — CRM: marcas de patrocinadores (5 tareas, 14 archivos)
 Requisito previo: Fase 1 cerrada (y la migración aplicada en la rama de Neon que se use para probar).
