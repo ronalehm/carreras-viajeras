@@ -1,7 +1,7 @@
 # Recorrido del corredor: origen, entrada por Google Forms, seguimiento con baja, reserva ↔ lead y medición
 
 - Módulo: crm (también `integrations`, `bookings` y `landing`)
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): Workers Free, Neon con Drizzle `neon-http` (escrituras atómicas con una CTE o `db.batch`), migraciones con `npm run db:generate` aplicadas a mano, sin Cron Triggers ni llamadas del Worker a n8n.
   - `crm-leads-pipeline.md` (aprobada; F1–F6 implementadas): `leads`, `lead_activities`, alta, ficha, edición, historial, próxima acción, archivo, lista con embudo y permiso `leads.manage`.
