@@ -559,11 +559,11 @@ Requisitos previos: Fase 1 cerrada y `0005` aplicada en la rama de pruebas.
 
 ### Fase 3: entrada por Google Forms e importación (5 tareas, 13 archivos)
 Requisitos previos: Fase 1 cerrada y `0005` aplicada en la rama de pruebas. Para **activar** los workflows o importar (no para el código): Preguntas abiertas 3 y 4 respondidas.
-- [ ] T1 — Base compartida: `phoneSchema` en `lib/phone.ts` (reexportado desde `leads.schema.ts`) y `sha256` exportado · archivos: `lib/phone.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/integrations/utils/integrationRequest.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
-- [ ] T2 — `createIntegrationLeadSchema`, tipos y `leadKeys`, con tests · archivos: `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/types/integrations.types.ts`, `modules/integrations/utils/leadKeys.ts`, `modules/integrations/utils/leadKeys.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — `createIntegrationLead` y los campos nuevos de `getIntegrationLead`, con tests · archivos: `modules/integrations/services/integrationLeads.service.ts`, `modules/integrations/services/integrationLeads.service.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — API pública del módulo y `POST /api/integrations/n8n/leads`; medir el Worker · archivos: `modules/integrations/index.ts`, `app/api/integrations/n8n/leads/route.ts` · depende de: T3 · secuencial
-- [ ] T5 — README: contrato, cambios del workflow principal y workflows "Alta desde Google Forms" e "Importación única" (Guía de n8n, apartados 1–3) · archivos: `README.md` · depende de: T2 · paralelo (con T3 y T4)
+- [x] T1 — Base compartida: `phoneSchema` en `lib/phone.ts` (reexportado desde `leads.schema.ts`) y `sha256` exportado · archivos: `lib/phone.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/integrations/utils/integrationRequest.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
+- [x] T2 — `createIntegrationLeadSchema`, tipos y `leadKeys`, con tests · archivos: `modules/integrations/schemas/integrations.schema.ts`, `modules/integrations/schemas/integrations.schema.test.ts`, `modules/integrations/types/integrations.types.ts`, `modules/integrations/utils/leadKeys.ts`, `modules/integrations/utils/leadKeys.test.ts` · depende de: T1 · secuencial
+- [x] T3 — `createIntegrationLead` y los campos nuevos de `getIntegrationLead`, con tests · archivos: `modules/integrations/services/integrationLeads.service.ts`, `modules/integrations/services/integrationLeads.service.test.ts` · depende de: T2 · secuencial
+- [x] T4 — API pública del módulo y `POST /api/integrations/n8n/leads`; medir el Worker · archivos: `modules/integrations/index.ts`, `app/api/integrations/n8n/leads/route.ts` · depende de: T3 · secuencial
+- [x] T5 — README: contrato, cambios del workflow principal y workflows "Alta desde Google Forms" e "Importación única" (Guía de n8n, apartados 1–3) · archivos: `README.md` · depende de: T2 · paralelo (con T3 y T4)
 
 ### Fase 4: recordatorios y baja en n8n (4 tareas, 8 archivos)
 Requisitos previos: Fases 2 y 3 cerradas.
