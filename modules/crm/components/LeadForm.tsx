@@ -81,19 +81,28 @@ export function LeadForm(props: LeadFormProps) {
   }
 
   const phoneHint = "Con código de país, p. ej. +51 938 127 170.";
+  const sourceDetailHint = "Nombre del evento, aliado o campaña. No escribas datos personales de otras personas.";
   const submitLabel = lead
     ? { idle: "Guardar cambios", pending: "Guardando…" }
     : { idle: "Registrar lead", pending: "Registrando…" };
 
-  // Source, owner, initial note and consent only exist when the lead is created.
+  // Source, source detail, owner, initial note and consent only exist when the lead is created.
+  // The source has no default value: the user must pick one (or "Desconocido") on purpose.
   const creationFields = !props.lead && (
     <>
-      {field("source", "Origen *",
-        <NativeSelect {...fieldProps("source")} className="w-full" defaultValue={values?.source ?? "whatsapp"}>
-          {manualLeadSourceSchema.options.map((source) => (
-            <NativeSelectOption key={source} value={source}>{LEAD_SOURCE_LABELS[source]}</NativeSelectOption>
-          ))}
-        </NativeSelect>)}
+      <div className="flex flex-col gap-5">
+        {field("source", "Origen *",
+          <NativeSelect {...fieldProps("source")} className="w-full" required defaultValue={values?.source ?? ""}>
+            <NativeSelectOption value="">Elige el origen</NativeSelectOption>
+            {manualLeadSourceSchema.options.map((source) => (
+              <NativeSelectOption key={source} value={source}>{LEAD_SOURCE_LABELS[source]}</NativeSelectOption>
+            ))}
+          </NativeSelect>)}
+        {field("sourceDetail", "Detalle del origen",
+          <Input {...fieldProps("sourceDetail", sourceDetailHint)} maxLength={120} autoComplete="off"
+            defaultValue={values?.sourceDetail} />,
+          sourceDetailHint)}
+      </div>
       {field("ownerUserId", "Responsable *",
         <NativeSelect {...fieldProps("ownerUserId")} className="w-full"
           defaultValue={values?.ownerUserId ?? props.defaultOwnerId}>
