@@ -546,10 +546,10 @@ Requisitos previos: Fase 1 cerrada y `0004` (enmienda 2: antes `0003`) aplicada 
 
 ### Fase 3: captura en servidor (4 tareas, 11 archivos)
 Requisitos previos: Fase 1 cerrada (enmienda 2: hecho; la Fase 2 también está cerrada). No depende de la landing de `main`: `lib/inquiryDestinations.ts` es nuevo y la landing no lo usa hasta la F4.
-- [ ] T1 — Destinos de consulta compartidos y schema/tipos del formulario web, con tests · archivos: `lib/inquiryDestinations.ts`, `modules/crm/schemas/webLeads.schema.ts`, `modules/crm/schemas/webLeads.schema.test.ts`, `modules/crm/types/webLeads.types.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
-- [ ] T2 — `verifyTurnstileToken` con tests · archivos: `modules/crm/services/turnstile.service.ts`, `modules/crm/services/turnstile.service.test.ts` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — `createWebLead` (CTE única, idempotencia, ventana de duplicados, slug) con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T1 · paralelo (con T2)
-- [ ] T4 — `submitWebLeadAction` con tests y export en la API pública; medir el Worker · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts`, `modules/crm/index.ts` · depende de: T2, T3 · secuencial
+- [x] T1 — Destinos de consulta compartidos y schema/tipos del formulario web, con tests · archivos: `lib/inquiryDestinations.ts`, `modules/crm/schemas/webLeads.schema.ts`, `modules/crm/schemas/webLeads.schema.test.ts`, `modules/crm/types/webLeads.types.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
+- [x] T2 — `verifyTurnstileToken` con tests · archivos: `modules/crm/services/turnstile.service.ts`, `modules/crm/services/turnstile.service.test.ts` · depende de: T1 · paralelo (con T3)
+- [x] T3 — `createWebLead` (CTE única, idempotencia, ventana de duplicados, slug) con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T1 · paralelo (con T2)
+- [x] T4 — `submitWebLeadAction` con tests y export en la API pública; medir el Worker · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts`, `modules/crm/index.ts` · depende de: T2, T3 · secuencial
 
 ### Fase 4: formulario de la landing conectado (3 tareas, 9 archivos)
 Requisitos previos: Fase 3 cerrada; **texto legal definitivo del consentimiento y de la nota de uso de datos confirmado por el usuario** (o el provisional aceptado expresamente); (enmienda 2) **la rama contiene la landing de `main`** (`modules/landing/` con los destinos `rio`/`roma`, `utils/catalogTrip.ts` y su test, `MobileMenu`, `AccountSection` y `app/viajes/[slug]/page.tsx` leyendo el catálogo); si no, el developer se detiene y lo consulta (ver Preguntas abiertas, Q1); ningún otro trabajo en curso sobre los archivos de esta fase.
