@@ -1,7 +1,7 @@
 # Landing minimalista por carrera
 
 - Módulo: trips (Fase 1) · landing (Fase 2)
-- Estado: borrador
+- Estado: aprobado
 - Base: `trips-catalog.md` (aprobada; catálogo y contrato de lectura pública) y `landing-public-site.md` (aprobada; F4 lee el catálogo en `/viajes/[slug]`). Esta spec **sustituye** en `/viajes/[slug]` la combinación de contenido fijo (`TRIPS`) + catálogo de `landing-public-site.md` F4. Esa spec excluía expresamente "una plantilla genérica para viajes sin contenido fijo", que es justo lo que se pide ahora. No modifica otras specs.
 - Decisiones del usuario (2026-10-25): (1) la información de cada carrera sale **del CRM**, ampliando el catálogo con los campos que hoy solo existen como contenido fijo de Santiago, aunque eso exija una migración aplicada a mano en Neon; (2) Santiago usa **la misma plantilla minimalista** que el resto y su contenido fijo de la página del viaje se elimina del código.
 
