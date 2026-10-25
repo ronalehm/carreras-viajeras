@@ -6,10 +6,21 @@ export type LeadStage = z.infer<typeof leadStageSchema>;
 export type LeadSource = z.infer<typeof leadSourceSchema>;
 export type CreateLeadInput = z.output<typeof createLeadSchema>;
 
-// owner: "mine" is the session user; any other value is a staff user id.
+// Input of createWebLead: already normalized by the landing form schema (leadFullNameSchema,
+// leadPhoneSchema, leadEmailSchema). The Turnstile token never reaches the CRM.
+export type WebLeadInput = {
+  fullName: string;
+  phone: string; // E.164
+  email: string; // lowercase
+  interest: { tripSlug: string; destinationName: string };
+  idempotencyKey: string; // uuid
+};
+
+// owner: "mine" is the session user, "unassigned" the leads without owner (web leads);
+// any other value is a staff user id.
 export type LeadListFilters = {
   stage?: LeadStage;
-  owner?: "mine" | string;
+  owner?: "mine" | "unassigned" | string;
   page: number;
 };
 
@@ -30,7 +41,8 @@ export type LeadListItem = {
   trip: { id: string; title: string } | null;
   destinationText: string | null;
   // active = false: the owner lost every role with leads.manage ("(sin acceso)").
-  owner: { userId: string; email: string; active: boolean };
+  // null: no owner yet ("Sin asignar"), only web leads.
+  owner: { userId: string; email: string; active: boolean } | null;
 };
 
 export type LeadList = {

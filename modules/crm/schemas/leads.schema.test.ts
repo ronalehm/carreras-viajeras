@@ -4,6 +4,9 @@ import { leadActivityTypeEnum, leadSourceEnum, leadStageEnum } from "@/lib/db-sc
 import {
   createLeadSchema,
   leadActivityTypeSchema,
+  leadEmailSchema,
+  leadFullNameSchema,
+  leadPhoneSchema,
   leadListQuerySchema,
   leadSourceSchema,
   leadStageSchema,
@@ -36,6 +39,54 @@ describe("lead enums", () => {
     expect(leadStageSchema.options).toEqual(leadStageEnum.enumValues);
     expect(leadSourceSchema.options).toEqual(leadSourceEnum.enumValues);
     expect(leadActivityTypeSchema.options).toEqual(leadActivityTypeEnum.enumValues);
+  });
+});
+
+function issues(schema: z.ZodType, input: unknown) {
+  const result = schema.safeParse(input);
+  if (result.success) throw new Error("expected a validation error");
+  return result.error.issues.map((issue) => issue.message);
+}
+
+describe("shared lead subschemas", () => {
+  it("leadFullNameSchema trims and accepts 2 to 120 characters", () => {
+    expect(leadFullNameSchema.parse("  Ana Pérez ")).toBe("Ana Pérez");
+    expect(leadFullNameSchema.parse("x".repeat(120))).toHaveLength(120);
+    for (const value of [" A ", "", "x".repeat(121), undefined]) {
+      expect(issues(leadFullNameSchema, value)).toEqual(["El nombre debe tener entre 2 y 120 caracteres."]);
+    }
+  });
+
+  it("leadPhoneSchema normalizes to E.164", () => {
+    expect(leadPhoneSchema.parse("+51 (938) 127-170")).toBe("+51938127170");
+    expect(leadPhoneSchema.parse("+56 9.1234.5678")).toBe("+56912345678");
+    for (const value of ["938 127 170", "+0938127170", "", undefined]) {
+      expect(issues(leadPhoneSchema, value)).toEqual([
+        "Escribe el número con código de país, p. ej. +51 938 127 170.",
+      ]);
+    }
+  });
+
+  it("leadEmailSchema trims and lowercases", () => {
+    expect(leadEmailSchema.parse(" Ana@Example.COM ")).toBe("ana@example.com");
+  });
+
+  it("leadEmailSchema accepts 254 characters and rejects 255", () => {
+    // Labels of at most 63 characters, so only the length limit decides.
+    const email = (firstLabel: number) =>
+      `${"a".repeat(64)}@${"b".repeat(firstLabel)}.${"c".repeat(60)}.${"d".repeat(63)}.com`;
+    expect(email(60)).toHaveLength(254);
+    expect(leadEmailSchema.parse(email(60))).toBe(email(60));
+    expect(issues(leadEmailSchema, email(61))).toEqual(["Introduce un correo válido."]);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["blank", "   "],
+    ["without domain", "ana@"],
+    ["missing", undefined],
+  ])("leadEmailSchema rejects an email %s", (_, value) => {
+    expect(issues(leadEmailSchema, value)).toEqual(["Introduce un correo válido."]);
   });
 });
 
