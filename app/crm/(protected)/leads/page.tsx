@@ -47,7 +47,10 @@ export default async function LeadsPage({ searchParams }: PageProps<"/crm/leads"
       <LeadTable
         leads={list.leads}
         hasFilters={
-          filters.stage !== undefined || filters.owner !== undefined || filters.followUp !== undefined
+          filters.stage !== undefined ||
+          filters.owner !== undefined ||
+          filters.followUp !== undefined ||
+          filters.source !== undefined
         }
         today={today}
       />

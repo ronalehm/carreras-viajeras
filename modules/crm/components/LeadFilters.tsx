@@ -2,9 +2,9 @@ import Link from "next/link";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
-import { leadStageSchema } from "../schemas/leads.schema";
+import { leadSourceSchema, leadStageSchema } from "../schemas/leads.schema";
 import type { LeadListFilters, LeadOwnerOption } from "../types/leads.types";
-import { LEAD_STAGE_LABELS, UNASSIGNED_OWNER_LABEL } from "../utils/leadDisplay";
+import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, UNASSIGNED_OWNER_LABEL } from "../utils/leadDisplay";
 import {
   FOLLOW_UP_PARAMS,
   LEAD_LIST_PATH,
@@ -67,6 +67,17 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
           <NativeSelectOption value="">Todos</NativeSelectOption>
           <NativeSelectOption value={FOLLOW_UP_PARAMS.overdue}>Vencidos</NativeSelectOption>
           <NativeSelectOption value={FOLLOW_UP_PARAMS.pending}>Pendientes (hoy o vencidos)</NativeSelectOption>
+        </NativeSelect>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="lead-filter-source">Origen</Label>
+        <NativeSelect id="lead-filter-source" name={QUERY_KEYS.source} defaultValue={filters.source ?? ""}>
+          <NativeSelectOption value="">Todos</NativeSelectOption>
+          {leadSourceSchema.options.map((source) => (
+            <NativeSelectOption key={source} value={source}>
+              {LEAD_SOURCE_LABELS[source]}
+            </NativeSelectOption>
+          ))}
         </NativeSelect>
       </div>
       <div className="flex gap-2">
