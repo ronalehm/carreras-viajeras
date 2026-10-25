@@ -1,7 +1,7 @@
 # Captura de leads desde `/contacto` (formulario web → CRM → aviso n8n)
 
 - Módulo: landing (formulario, Turnstile y Server Action) · crm (datos, migración y `createWebLead`)
-- Estado: borrador
+- Estado: aprobado
 - Rama: `claude/inspiring-edison-m3vgou`
 - Depende de:
   - `platform-neon-foundation.md` (aprobada), sección "Leads y procesamiento posterior": es el contrato de captura que esta spec implementa (zod, ≤ 16 KiB, consentimiento versionado, Turnstile Siteverify en servidor con `success`, hostname exacto y action `lead_submit`, token no persistido, lead + evento en una transacción, idempotency key única, confirmar solo tras commit).
