@@ -2,7 +2,8 @@ import "server-only";
 import { and, asc, count, desc, eq, exists, inArray, isNull, ne, sql, type SQLWrapper } from "drizzle-orm";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
-import { leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
+import { leadActivities, leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
+import { leadCreatedEventInsert } from "@/modules/automation";
 import { leadStageSchema } from "../schemas/leads.schema";
 import type {
   CreateLeadInput,
@@ -11,12 +12,16 @@ import type {
   LeadOwnerOption,
   LeadStage,
   LeadTripOption,
+  WebLeadInput,
 } from "../types/leads.types";
+import { webLeadRequestHash } from "../utils/webLeadHash";
 
 type Db = ReturnType<typeof getDb>;
 
 const LEAD_PAGE_SIZE = 25;
 const MANUAL_CONSENT_VERSION = "crm-manual-v1";
+// Changing the consent text of the web form requires a new version.
+export const WEB_FORM_CONSENT_VERSION = "web-form-v1";
 
 // Roles that may own leads: derived from the permission matrix, the only source of truth.
 const LEAD_OWNER_ROLES = staffRoleEnum.enumValues.filter((role) => can([role], "leads.manage"));
@@ -45,15 +50,18 @@ function ownerOptionsQuery(db: Db) {
     .orderBy(asc(profiles.email), asc(profiles.userId));
 }
 
+function ownerFilter(owner: LeadListFilters["owner"], currentUserId: string) {
+  if (owner === undefined) return undefined;
+  if (owner === "unassigned") return isNull(leads.ownerUserId);
+  return eq(leads.ownerUserId, owner === "mine" ? currentUserId : owner);
+}
+
 // One batch (one round-trip): the page plus one extra row (hasNextPage, no COUNT),
 // the funnel counts (every filter but the stage) and the owner options.
+// Web leads may have no owner yet: left join, and owner = null ("Sin asignar").
 export async function getLeadList(filters: LeadListFilters, currentUserId: string): Promise<LeadList> {
   const db = getDb();
-  const ownerUserId = filters.owner === "mine" ? currentUserId : filters.owner;
-  const visible = and(
-    isNull(leads.archivedAt),
-    ownerUserId === undefined ? undefined : eq(leads.ownerUserId, ownerUserId),
-  );
+  const visible = and(isNull(leads.archivedAt), ownerFilter(filters.owner, currentUserId));
 
   const [rows, counts, ownerOptions] = await db.batch([
     db
@@ -72,7 +80,7 @@ export async function getLeadList(filters: LeadListFilters, currentUserId: strin
         },
       })
       .from(leads)
-      .innerJoin(profiles, eq(profiles.userId, leads.ownerUserId))
+      .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
       .leftJoin(trips, eq(trips.id, leads.tripId))
       .where(and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage)))
       .orderBy(desc(leads.createdAt), desc(leads.id))
@@ -155,4 +163,60 @@ export async function createLead(
   const [row] = result.rows;
   if (row?.id) return { id: row.id };
   return row?.owner_ok ? "invalid_trip" : "invalid_owner";
+}
+
+// Web form lead (landing): no owner and no author. The lead, its 'created' activity and the
+// lead.created outbox event are written in one db.batch (one transaction). Idempotent by key: if
+// the batch fails and a lead with that key exists (retry, race or lost response after commit),
+// the same content returns that lead and a different one returns "conflict"; otherwise the
+// original error is rethrown. Nothing is logged: the input holds personal data.
+export async function createWebLead(input: WebLeadInput): Promise<{ id: string } | "conflict"> {
+  const db = getDb();
+  const { tripSlug, destinationName } = input.interest;
+
+  const [trip] = await db
+    .select({ id: trips.id })
+    .from(trips)
+    .where(and(eq(trips.slug, tripSlug), eq(trips.status, "published")))
+    .limit(1);
+
+  const id = crypto.randomUUID();
+  const requestHash = await webLeadRequestHash({
+    fullName: input.fullName,
+    phone: input.phone,
+    email: input.email,
+    tripSlug,
+    destinationName,
+    consentVersion: WEB_FORM_CONSENT_VERSION,
+  });
+
+  const statements = [
+    db.insert(leads).values({
+      id,
+      fullName: input.fullName,
+      phone: input.phone,
+      email: input.email,
+      tripId: trip?.id ?? null,
+      destinationText: trip ? null : destinationName,
+      source: "web_form",
+      consentVersion: WEB_FORM_CONSENT_VERSION,
+      idempotencyKey: input.idempotencyKey,
+      requestHash,
+    }),
+    db.insert(leadActivities).values({ leadId: id, type: "created" }),
+    leadCreatedEventInsert(db, { leadId: id, tripSlug: trip ? tripSlug : null, source: "landing_contact" }),
+  ] as const;
+
+  try {
+    await db.batch(statements);
+    return { id };
+  } catch (error) {
+    const [existing] = await db
+      .select({ id: leads.id, requestHash: leads.requestHash })
+      .from(leads)
+      .where(eq(leads.idempotencyKey, input.idempotencyKey))
+      .limit(1);
+    if (!existing) throw error;
+    return existing.requestHash === requestHash ? { id: existing.id } : "conflict";
+  }
 }

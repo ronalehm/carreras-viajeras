@@ -62,7 +62,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)) y `drizzle/0005_abnormal_gladiator.sql` crea la outbox de automatización (pendiente, después de `0004`; ver [Migración del outbox](#migración-del-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay siete migraciones (`0000`–`0006`, en ese orden) y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_abnormal_gladiator.sql` crea la outbox de automatización (pendiente, después de `0004`; ver [Migración del outbox](#migración-del-outbox)) y `drizzle/0006_puzzling_gamma_corps.sql` prepara los leads del formulario web y añade la clave foránea del outbox hacia `leads` (pendiente, después de `0005` y **antes** de desplegar el formulario; ver [Migración de la captura web (`0006`)](#migración-de-la-captura-web-0006)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -278,6 +278,60 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 
 Un lead válido (`'+51938127170'`, email en minúsculas, `source = 'whatsapp'`, `consent_version = 'crm-manual-v1'`) y su actividad `created` sí se insertan.
 
+### Migración de la captura web (`0006`)
+
+Especificada en [`landing-lead-capture.md`](docs/specs/landing-lead-capture.md) (Fase 1). Pendiente de aplicar por el usuario. **Primero en una rama de desarrollo de Neon**; en `production`, solo después de revisarla y con autorización explícita de la operación remota. **Orden: después de `0005` (outbox).** **Debe estar aplicada en `production` antes de mergear o desplegar la Fase 3** de esa spec, la que publica el formulario de `/contacto`; hasta entonces ningún código llama a `createWebLead`. **No volver a aplicar `drizzle/0000_tough_thor.sql`** ni ninguna migración ya aplicada.
+
+Qué cambia, todo en `public`:
+
+- `leads`: `owner_user_id` y `created_by` pasan a admitir `NULL` (los leads web nacen "Sin asignar" y sin creador); columnas nuevas `idempotency_key` (`uuid`, con el índice único `leads_idempotency_key_uq`) y `request_hash` (`text`); CHECK nuevos `leads_owner_chk` (solo un lead `web_form` puede no tener responsable), `leads_created_by_chk` (un lead `web_form` nunca tiene creador y los demás siempre) y `leads_idempotency_chk` (un lead `web_form` lleva clave y huella hex de 64 caracteres; los demás, ninguna de las dos).
+- `lead_activities`: `actor_user_id` pasa a admitir `NULL`, solo en la actividad `created` (CHECK nuevo `lead_activities_actor_chk`), y `lead_activities_owner_chk` se reemplaza para admitir la primera asignación (`owner_changed` con `owner_from = NULL`).
+- `automation_events`: clave foránea `automation_events_lead_id_leads_id_fk` (`lead_id → leads.id`, `ON DELETE restrict`).
+
+Las filas existentes cumplen los CHECK nuevos (los leads manuales tienen responsable, creador y clave nula). No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+1. Revisar `drizzle/0006_puzzling_gamma_corps.sql`: `grep -inE 'neon_auth|create schema|drop (table|column|type|schema|index)' drizzle/0006_puzzling_gamma_corps.sql` no devuelve nada, y `grep -ni drop drizzle/0006_puzzling_gamma_corps.sql` solo muestra los tres `DROP NOT NULL` y el `DROP CONSTRAINT "lead_activities_owner_chk"`.
+2. Precondiciones, en la rama donde se va a aplicar:
+   - `0005` aplicada: `SELECT to_regclass('public.leads'), to_regclass('public.automation_events');` no devuelve ningún `NULL`. Si falta, aplicarla antes siguiendo [Migración del outbox](#migración-del-outbox).
+   - Ningún evento huérfano (la clave foránea nueva fallaría):
+
+     ```sql
+     SELECT count(*) FROM automation_events e
+      WHERE NOT EXISTS (SELECT 1 FROM leads l WHERE l.id = e.lead_id);
+     ```
+
+     Debe devolver `0`. En una rama de desarrollo donde se cargó la versión anterior del seed, ejecutar antes su limpieza (`psql "$DATABASE_MIGRATION_URL" -v cleanup=on -f scripts/sql/seed-automation-demo.sql`, ver [Scripts del outbox](#scripts-del-outbox)) y repetir la consulta. Si sigue sin dar `0`, o si da otro valor en `production`, no aplicar la migración: revisar antes esos eventos.
+3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0006` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0006_puzzling_gamma_corps.sql`.
+5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar el resultado:
+
+   ```sql
+   SELECT conname FROM pg_constraint
+    WHERE connamespace = 'public'::regnamespace
+      AND conname IN ('leads_owner_chk', 'leads_created_by_chk', 'leads_idempotency_chk',
+                      'lead_activities_actor_chk', 'lead_activities_owner_chk',
+                      'automation_events_lead_id_leads_id_fk')
+   UNION ALL
+   SELECT indexname FROM pg_indexes
+    WHERE schemaname = 'public' AND indexname = 'leads_idempotency_key_uq'
+   ORDER BY 1;
+   ```
+
+   Devuelve 7 filas (los seis nombres de restricción y el índice). Además, `SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'lead_activities_owner_chk';` contiene `IS DISTINCT FROM`, y `SELECT table_name, column_name, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND (table_name, column_name) IN (('leads', 'owner_user_id'), ('leads', 'created_by'), ('leads', 'idempotency_key'), ('leads', 'request_hash'), ('lead_activities', 'actor_user_id')) ORDER BY 1, 2;` devuelve 5 filas, todas con `is_nullable = 'YES'`.
+7. Solo en la rama de desarrollo, si se quiere probar n8n o el CRM con datos: cargar el seed (`psql "$DATABASE_MIGRATION_URL" -f scripts/sql/seed-automation-demo.sql`).
+
+Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;`, con un perfil de staff creado en esa misma transacción. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`. La base debe rechazar:
+
+- un lead `whatsapp` sin `owner_user_id` o sin `created_by`;
+- un lead `web_form` con `created_by`, sin `idempotency_key`, sin `request_hash` o con un `request_hash` que no es hex de 64 caracteres (p. ej. con mayúsculas o de 63);
+- un lead `whatsapp` con `idempotency_key`;
+- dos leads con la misma `idempotency_key`;
+- una actividad `note` u `owner_changed` sin `actor_user_id`;
+- un evento de `automation_events` cuyo `lead_id` no existe.
+
+Sí se insertan: un lead `web_form` sin responsable ni creador (con `consent_version = 'web-form-v1'`, una `idempotency_key` y `request_hash = encode(sha256(convert_to('prueba', 'UTF8')), 'hex')`) con su actividad `created` sin autor, y una actividad `owner_changed` de ese lead con `owner_from = NULL`, `owner_to` = el perfil de staff y ese perfil como `actor_user_id`.
+
 ## Reservas y portal del runner
 
 Especificado en [`runner-portal.md`](docs/specs/runner-portal.md). El equipo registra en el CRM las reservas, los pagos confirmados, el itinerario y los avisos de cada viaje, y el runner los consulta en una página privada de solo lectura, `/mis-carreras`. La Fase 1 añade las tablas, el permiso y las lecturas del runner; las páginas del CRM y `/mis-carreras` llegan en las fases siguientes.
@@ -391,7 +445,7 @@ La guía completa está en [`n8n/README.md`](n8n/README.md): importar [`n8n/work
 
 Pendiente de aplicar por el usuario. **Primero en una rama de desarrollo de Neon**; en `production`, solo después de revisarla y con autorización explícita de la operación remota. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production`.
 
-1. Revisar `drizzle/0005_abnormal_gladiator.sql`: solo crea, en `public`, el enum `automation_event_status`, las tablas `automation_events` (seis CHECK, el índice único `automation_events_type_lead_uq` y los índices parciales `automation_events_pending_idx` y `automation_events_lease_idx`) y `automation_event_redrives` (un CHECK y dos claves foráneas `ON DELETE restrict`, hacia `automation_events` y `profiles`). `lead_id` no tiene clave foránea todavía. No hay cambios en las tablas existentes. `grep -inE 'neon_auth|drop|create schema' drizzle/0005_abnormal_gladiator.sql` no devuelve nada.
+1. Revisar `drizzle/0005_abnormal_gladiator.sql`: solo crea, en `public`, el enum `automation_event_status`, las tablas `automation_events` (seis CHECK, el índice único `automation_events_type_lead_uq` y los índices parciales `automation_events_pending_idx` y `automation_events_lease_idx`) y `automation_event_redrives` (un CHECK y dos claves foráneas `ON DELETE restrict`, hacia `automation_events` y `profiles`). `lead_id` no tiene clave foránea en esta migración (la añade `0006`). No hay cambios en las tablas existentes. `grep -inE 'neon_auth|drop|create schema' drizzle/0005_abnormal_gladiator.sql` no devuelve nada.
 2. Orden: si faltan en esa rama, aplicar antes `0001`, `0002_tough_warpath` (leads, ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) `0003_talented_skin` (reservas, ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `0004_sloppy_bushwacker` (campos de carrera, ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)); después, `0005`. Comprobarlo con `SELECT to_regclass('public.profiles'), to_regclass('public.leads'), to_regclass('public.bookings');` (ninguno debe ser `NULL`). El outbox no depende de las reservas ni de los campos de carrera, pero se respeta el orden del journal de Drizzle.
 3. Aplicar `0005` con el mismo procedimiento y la misma comprobación de `neon_auth` que en [Migración de las tablas de staff](#migración-de-las-tablas-de-staff) (pasos 3 a 5): guardar el estado de `neon_auth`, pegar el archivo entre `BEGIN;` y `COMMIT;` en el SQL Editor de Neon con la rama correcta seleccionada (o `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0005_abnormal_gladiator.sql`) y comprobar que el volcado de `neon_auth` es idéntico (`diff` vacío). Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar.
 4. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.automation_events'::regclass, 'public.automation_event_redrives'::regclass) AND contype <> 'n' ORDER BY 1, 2;` lista 11 restricciones (dos `*_pkey`, siete `*_chk` y dos `*_fk`; el filtro `contype <> 'n'` excluye los `NOT NULL`, que PostgreSQL 18 también guarda como restricciones), y `SELECT count(*) FROM automation_events;` devuelve 0.
@@ -406,9 +460,9 @@ No hay script `migrate` ni migración automática.
 
 ### Scripts del outbox
 
-Se ejecutan con psql y `DATABASE_MIGRATION_URL` (nunca la URL de runtime del Worker ni de n8n), cada uno en una transacción y con `ON_ERROR_STOP`. Requieren la migración `0003` aplicada en esa rama. Las instrucciones completas están en la cabecera de cada archivo.
+Se ejecutan con psql y `DATABASE_MIGRATION_URL` (nunca la URL de runtime del Worker ni de n8n), cada uno en una transacción y con `ON_ERROR_STOP`. Requieren la migración `0005` aplicada en esa rama; la carga del seed, además, `0006`. Las instrucciones completas están en la cabecera de cada archivo.
 
-- **Datos ficticios** ([`scripts/sql/seed-automation-demo.sql`](scripts/sql/seed-automation-demo.sql)). **Solo en una rama de desarrollo de Neon, nunca en `production`**: comprobar en la consola que la cadena de conexión apunta a esa rama. Inserta cuatro eventos `lead.created` `pending` con UUID fijos (prefijo `de000000`) y slugs ficticios (`maraton-demo-2027`, `media-maraton-demo`, `trail-demo-2027` y uno sin viaje). Es idempotente: repetirlo no duplica eventos. Con `-v cleanup=on` borra exactamente esos eventos y sus filas de reenvío, sin tocar otros.
+- **Datos ficticios** ([`scripts/sql/seed-automation-demo.sql`](scripts/sql/seed-automation-demo.sql)). **Solo en una rama de desarrollo de Neon, nunca en `production`**: comprobar en la consola que la cadena de conexión apunta a esa rama. Inserta, con UUID fijos (prefijo `de000000`), cuatro leads ficticios del formulario web ("Lead demo 1" a "Lead demo 4", `source = 'web_form'`, sin responsable ni creador, consentimiento `web-form-v1` y clave de idempotencia y huella ficticias), su actividad `created` sin autor y sus cuatro eventos `lead.created` `pending`, con slugs ficticios (`maraton-demo-2027`, `media-maraton-demo`, `trail-demo-2027` y uno sin viaje). Los leads sirven también para probar la lista y la ficha del CRM en esa rama. Es idempotente: repetirlo no duplica nada. Con `-v cleanup=on` borra, en este orden, las filas de reenvío de esos eventos, los eventos, todas las actividades de esos leads (también las añadidas desde el CRM) y los leads, sin tocar otros. La limpieza funciona también antes de aplicar `0006` (sirve para quitar los eventos huérfanos de la versión anterior del seed).
 
   ```sh
   psql "$DATABASE_MIGRATION_URL" -f scripts/sql/seed-automation-demo.sql

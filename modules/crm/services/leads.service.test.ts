@@ -1,25 +1,41 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/neon-http";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
+// The public API of @/modules/trips (reused by @/modules/automation) also exports CRM components and
+// actions (Neon Auth, next/headers): expose only the schema the outbox payload needs.
+vi.mock("@/modules/trips", async () => ({
+  tripSlugSchema: (await import("@/modules/trips/schemas/trips.schema")).tripSlugSchema,
+}));
 
 import { getDb } from "@/lib/db";
-import type { CreateLeadInput } from "../types/leads.types";
-import { createLead, getLeadFormOptions, getLeadList } from "./leads.service";
+import type { CreateLeadInput, WebLeadInput } from "../types/leads.types";
+import { webLeadRequestHash } from "../utils/webLeadHash";
+import { createLead, createWebLead, getLeadFormOptions, getLeadList } from "./leads.service";
 
 type Query = { sql: string; params: unknown[] };
 
 // Fake Neon HTTP client: records every statement and answers each one, in order, with the given rows.
-function useFakeDb({ responses = [] as unknown[][], failWith }: { responses?: unknown[][]; failWith?: Error } = {}) {
+// failTransactionWith rejects only the batch (after recording its statements), so the statements
+// that follow it still get their responses.
+function useFakeDb({
+  responses = [] as unknown[][],
+  failWith,
+  failTransactionWith,
+}: { responses?: unknown[][]; failWith?: Error; failTransactionWith?: Error } = {}) {
   const queries: Query[] = [];
   const query = vi.fn(async (text: string, params: unknown[]) => {
     queries.push({ sql: text, params });
     if (failWith) throw failWith;
     return { rows: responses[queries.length - 1] ?? [] };
   });
-  const transaction = vi.fn((pending: Promise<unknown>[]) => Promise.all(pending));
+  const transaction = vi.fn(async (pending: Promise<unknown>[]) => {
+    const results = await Promise.all(pending);
+    if (failTransactionWith) throw failTransactionWith;
+    return results;
+  });
   const client = Object.assign(query, { transaction });
   vi.mocked(getDb).mockReturnValue(drizzle(client as never) as ReturnType<typeof getDb>);
   return { queries, transaction };
@@ -64,7 +80,7 @@ describe("getLeadList", () => {
     const [list, counts, owners] = fake.queries.map((query) => normalize(query.sql));
 
     expect(list).toMatch(
-      /^select "leads"\."id", .* from "leads" inner join "profiles" on "profiles"\."user_id" = "leads"\."owner_user_id" left join "trips" on "trips"\."id" = "leads"\."trip_id"/,
+      /^select "leads"\."id", .* from "leads" left join "profiles" on "profiles"\."user_id" = "leads"\."owner_user_id" left join "trips" on "trips"\."id" = "leads"\."trip_id"/,
     );
     expect(list).toContain(
       `exists (select 1 from "staff_assignments" where ("staff_assignments"."user_id" = "leads"."owner_user_id" and (${ACTIVE_OWNER_ROLES})))`,
@@ -104,6 +120,21 @@ describe("getLeadList", () => {
     expect(fake.queries[1].params).toEqual(["user-7"]);
   });
 
+  it("filters unassigned leads by a null owner in the page and in the funnel", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "new", owner: "unassigned", page: 1 }, "user-1");
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null) and "leads"."stage" = $3) order by',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "new", 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual([]);
+  });
+
   it("returns 25 leads and hasNextPage when the database returns 26 rows", async () => {
     const rows = Array.from({ length: 26 }, (_, index) => listRow(index));
     useFakeDb({ responses: [rows, [], []] });
@@ -120,6 +151,7 @@ describe("getLeadList", () => {
         [
           listRow(1, [undefined, "Ana Pérez", undefined, "quoted", "other", TRIP_ID, "Maratón de Santiago 2027", "Panamá"]),
           listRow(2, [undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined, "user-9", "ex@example.com", false]),
+          listRow(3, [undefined, undefined, undefined, undefined, "web_form", undefined, undefined, "Roma", null, null, false]),
         ],
         [
           ["quoted", 1],
@@ -150,6 +182,16 @@ describe("getLeadList", () => {
           trip: null,
           destinationText: null,
           owner: { userId: "user-9", email: "ex@example.com", active: false },
+        },
+        {
+          id: "lead-3",
+          fullName: "Lead 3",
+          phone: "+51938127170",
+          stage: "new",
+          source: "web_form",
+          trip: null,
+          destinationText: "Roma",
+          owner: null,
         },
       ],
       hasNextPage: false,
@@ -265,5 +307,142 @@ describe("createLead", () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
     await expect(createLead(input, "user-1")).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+describe("createWebLead", () => {
+  const LEAD_ID = "3f2c1a9e-7b4d-4e8f-9a1b-2c3d4e5f6a7b";
+  const EXISTING_ID = "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a";
+  const KEY = "0c9b8a7f-6e5d-4c3b-9a2f-1e0d9c8b7a6f";
+  const input: WebLeadInput = {
+    fullName: "Ana Pérez",
+    phone: "+51938127170",
+    email: "ana@example.com",
+    interest: { tripSlug: "maraton-santiago-2027", destinationName: "Maratón de Santiago 42K 2027" },
+    idempotencyKey: KEY,
+  };
+  const hashOf = (value: WebLeadInput) =>
+    webLeadRequestHash({
+      fullName: value.fullName,
+      phone: value.phone,
+      email: value.email,
+      tripSlug: value.interest.tripSlug,
+      destinationName: value.interest.destinationName,
+      consentVersion: "web-form-v1",
+    });
+
+  // insert into "t" ("a", "b") values ($1, default) → { a: <param 1>, b: "default" }
+  function insertedValues({ sql, params }: Query) {
+    const match = normalize(sql).match(/^insert into "(\w+)" \((.*)\) values \((.*)\)$/);
+    if (!match) throw new Error(`not a single-row insert: ${sql}`);
+    const columns = match[2].split(", ").map((column) => column.replaceAll('"', ""));
+    const values = match[3].split(", ").map((value) => (value === "default" ? "default" : params[Number(value.slice(1)) - 1]));
+    return { table: match[1], values: Object.fromEntries(columns.map((column, index) => [column, values[index]])) };
+  }
+
+  beforeEach(() => {
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(LEAD_ID);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it("reads the published trip and then writes lead, activity and event in a single batch", async () => {
+    const fake = useFakeDb({ responses: [[["trip-1"]]] });
+    const errors = vi.spyOn(console, "error");
+    const logs = vi.spyOn(console, "log");
+
+    await expect(createWebLead(input)).resolves.toEqual({ id: LEAD_ID });
+
+    expect(fake.queries).toHaveLength(4);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      'select "id" from "trips" where ("trips"."slug" = $1 and "trips"."status" = $2) limit $3',
+    );
+    expect(fake.queries[0].params).toEqual(["maraton-santiago-2027", "published", 1]);
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    expect(fake.transaction.mock.calls[0][0]).toHaveLength(3);
+
+    const [lead, activity, event] = fake.queries.slice(1).map(insertedValues);
+    expect(lead.table).toBe("leads");
+    expect(lead.values).toMatchObject({
+      id: LEAD_ID,
+      full_name: "Ana Pérez",
+      phone: "+51938127170",
+      email: "ana@example.com",
+      trip_id: "trip-1",
+      destination_text: null,
+      source: "web_form",
+      consent_version: "web-form-v1",
+      idempotency_key: KEY,
+      request_hash: await hashOf(input),
+      // Never sent: no owner or author for web leads, and the stage takes the column default.
+      owner_user_id: "default",
+      created_by: "default",
+      stage: "default",
+      consented_at: "default",
+    });
+
+    expect(activity.table).toBe("lead_activities");
+    expect(activity.values).toMatchObject({
+      lead_id: LEAD_ID,
+      type: "created",
+      actor_user_id: "default",
+      body: "default",
+    });
+
+    expect(event.table).toBe("automation_events");
+    expect(event.values).toMatchObject({
+      type: "lead.created",
+      lead_id: LEAD_ID,
+      payload: JSON.stringify({ leadId: LEAD_ID, tripSlug: "maraton-santiago-2027", source: "landing_contact" }),
+    });
+
+    expect(errors).not.toHaveBeenCalled();
+    expect(logs).not.toHaveBeenCalled();
+  });
+
+  it("keeps the destination as text and sends tripSlug null without a published trip", async () => {
+    const fake = useFakeDb({ responses: [[]] });
+
+    await expect(createWebLead(input)).resolves.toEqual({ id: LEAD_ID });
+
+    const [lead, , event] = fake.queries.slice(1).map(insertedValues);
+    expect(lead.values).toMatchObject({ trip_id: null, destination_text: "Maratón de Santiago 42K 2027" });
+    expect(event.values.payload).toBe(
+      JSON.stringify({ leadId: LEAD_ID, tripSlug: null, source: "landing_contact" }),
+    );
+  });
+
+  it("returns the existing lead when the batch fails and the key has the same hash", async () => {
+    const failure = new Error("duplicate key value violates unique constraint");
+    const fake = useFakeDb({
+      responses: [[["trip-1"]], [], [], [], [[EXISTING_ID, await hashOf(input)]]],
+      failTransactionWith: failure,
+    });
+
+    await expect(createWebLead(input)).resolves.toEqual({ id: EXISTING_ID });
+
+    expect(fake.queries).toHaveLength(5);
+    expect(normalize(fake.queries[4].sql)).toBe(
+      'select "id", "request_hash" from "leads" where "leads"."idempotency_key" = $1 limit $2',
+    );
+    expect(fake.queries[4].params).toEqual([KEY, 1]);
+  });
+
+  it("returns conflict when the key exists with another hash", async () => {
+    const changed = { ...input, phone: "+51938127171" };
+    useFakeDb({
+      responses: [[["trip-1"]], [], [], [], [[EXISTING_ID, await hashOf(input)]]],
+      failTransactionWith: new Error("duplicate key value violates unique constraint"),
+    });
+
+    await expect(createWebLead(changed)).resolves.toBe("conflict");
+  });
+
+  it("rethrows the original error when no lead has the key", async () => {
+    const failure = new Error("connection refused");
+    const errors = vi.spyOn(console, "error");
+    useFakeDb({ responses: [[["trip-1"]], [], [], [], []], failTransactionWith: failure });
+
+    await expect(createWebLead(input)).rejects.toBe(failure);
+    expect(errors).not.toHaveBeenCalled();
   });
 });

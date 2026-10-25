@@ -190,6 +190,8 @@ export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
 
 // Leads are archived, never deleted. paid and lost are closed stages: no next action there.
 // phone is E.164 (normalized by the schema); email is lowercase. updated_at is set by the service.
+// Web form leads start unassigned (owner NULL) with no creator; manual leads always have both.
+// idempotency_key + request_hash (SHA-256 hex of the normalized form) exist only on web form leads.
 export const leads = pgTable(
   "leads",
   {
@@ -203,18 +205,18 @@ export const leads = pgTable(
     source: leadSourceEnum("source").notNull(),
     stage: leadStageEnum("stage").notNull().default("new"),
     lostReason: text("lost_reason"),
-    ownerUserId: text("owner_user_id")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    ownerUserId: text("owner_user_id").references(() => profiles.userId, {
+      onDelete: "restrict",
+    }),
     nextActionDate: date("next_action_date", { mode: "string" }),
     nextActionNote: text("next_action_note"),
     consentVersion: text("consent_version").notNull(),
     consentedAt: timestamp("consented_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdBy: text("created_by").references(() => profiles.userId, {
+      onDelete: "restrict",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -225,6 +227,8 @@ export const leads = pgTable(
     archivedBy: text("archived_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    idempotencyKey: uuid("idempotency_key"),
+    requestHash: text("request_hash"),
   },
   (table) => [
     check("leads_full_name_chk", sql`char_length(${table.fullName}) BETWEEN 2 AND 120`),
@@ -251,6 +255,15 @@ export const leads = pgTable(
       sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
     ),
     check("leads_archived_chk", sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`),
+    check("leads_owner_chk", sql`${table.ownerUserId} IS NOT NULL OR ${table.source} = 'web_form'`),
+    check("leads_created_by_chk", sql`(${table.createdBy} IS NULL) = (${table.source} = 'web_form')`),
+    // Explicit IS NOT NULL: in a CHECK, NULL ~ '...' evaluates to NULL and passes.
+    check(
+      "leads_idempotency_chk",
+      sql`CASE WHEN ${table.source} = 'web_form' THEN ${table.idempotencyKey} IS NOT NULL AND ${table.requestHash} IS NOT NULL AND ${table.requestHash} ~ '^[0-9a-f]{64}$' ELSE ${table.idempotencyKey} IS NULL AND ${table.requestHash} IS NULL END`,
+    ),
+    // NULLs of manual leads never collide.
+    uniqueIndex("leads_idempotency_key_uq").on(table.idempotencyKey),
   ],
 );
 
@@ -268,9 +281,10 @@ export const leadActivities = pgTable(
     stageTo: leadStageEnum("stage_to"),
     ownerFrom: text("owner_from").references(() => profiles.userId, { onDelete: "restrict" }),
     ownerTo: text("owner_to").references(() => profiles.userId, { onDelete: "restrict" }),
-    actorUserId: text("actor_user_id")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    // NULL only on the created activity of a web form lead (shown as "Formulario web").
+    actorUserId: text("actor_user_id").references(() => profiles.userId, {
+      onDelete: "restrict",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -285,9 +299,14 @@ export const leadActivities = pgTable(
       "lead_activities_stage_chk",
       sql`CASE WHEN ${table.type} = 'stage_changed' THEN ${table.stageFrom} IS NOT NULL AND ${table.stageTo} IS NOT NULL AND ${table.stageFrom} <> ${table.stageTo} ELSE ${table.stageFrom} IS NULL AND ${table.stageTo} IS NULL END`,
     ),
+    // owner_from NULL = first assignment of an unassigned (web form) lead.
     check(
       "lead_activities_owner_chk",
-      sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerFrom} IS NOT NULL AND ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} <> ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+      sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} IS DISTINCT FROM ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+    ),
+    check(
+      "lead_activities_actor_chk",
+      sql`${table.actorUserId} IS NOT NULL OR ${table.type} = 'created'`,
     ),
     index("lead_activities_lead_created_idx").on(table.leadId, table.createdAt),
   ],
@@ -494,7 +513,7 @@ export const automationEventStatusEnum = pgEnum("automation_event_status", [
 ]);
 
 // Outbox for n8n (at-least-once delivery; id is the eventId n8n deduplicates by).
-// lead_id has no FK in this phase (automation-outbox F1); the lead capture spec adds it.
+// lead_id references leads (added by the lead capture spec, migration 0006).
 // payload is validated with zod before insert. 8 = MAX_ATTEMPTS of modules/automation.
 // lease_token is kept on succeeded so a repeated ack with the same token stays idempotent.
 export const automationEvents = pgTable(
@@ -502,7 +521,9 @@ export const automationEvents = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     type: text("type").notNull(),
-    leadId: uuid("lead_id").notNull(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "restrict" }),
     payloadVersion: integer("payload_version").notNull(),
     payload: jsonb("payload").notNull(),
     status: automationEventStatusEnum("status").notNull().default("pending"),

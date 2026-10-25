@@ -16,6 +16,7 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
   const canManageStaff = can(roles, "staff.manage");
   const canManageTrips = can(roles, "trips.manage");
   const canManageBookings = can(roles, "bookings.manage");
+  const canManageLeads = can(roles, "leads.manage");
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -24,8 +25,13 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
           <Link href="/crm" className="font-heading font-medium">
             CRM Carreras Viajeras
           </Link>
-          {(canManageStaff || canManageTrips || canManageBookings) && (
+          {(canManageStaff || canManageTrips || canManageBookings || canManageLeads) && (
             <nav aria-label="CRM" className="flex flex-wrap gap-1">
+              {canManageLeads && (
+                <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
+                  Leads
+                </Link>
+              )}
               {canManageTrips && (
                 <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
                   Viajes
