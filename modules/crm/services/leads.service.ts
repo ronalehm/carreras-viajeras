@@ -322,7 +322,9 @@ type ChangeResult = { found: boolean; changed: boolean };
 
 // One statement. The target CTE locks the lead (FOR UPDATE) so the previous stage written in the
 // activity is the one the UPDATE replaced, even under concurrent changes. A closed stage clears
-// the next action; lost_reason is set for "lost" and cleared otherwise (schema forces null).
+// the next action; lost_reason is set for "lost" and cleared otherwise (schema forces null). The
+// 'lead.stage_changed' outbox event ({ stageFrom, stageTo }, for n8n; no trigger: it comes from
+// the CRM) is inserted from the same RETURNING, so "no_change" and "not_found" emit nothing.
 export async function changeLeadStage(
   input: LeadStageChangeInput,
   actorUserId: string,
@@ -346,6 +348,11 @@ export async function changeLeadStage(
     activity AS (
       INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id)
       SELECT id, 'stage_changed', ${input.lostReason}, stage_from, ${input.stage}::lead_stage, ${actorUserId}
+      FROM updated
+    ),
+    event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.stage_changed', id, jsonb_build_object('stageFrom', stage_from, 'stageTo', ${input.stage}::lead_stage)
       FROM updated
     )
     SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS changed

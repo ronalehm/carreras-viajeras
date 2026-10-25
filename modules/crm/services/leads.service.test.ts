@@ -690,7 +690,7 @@ describe("updateLead", () => {
 });
 
 describe("changeLeadStage", () => {
-  it("updates the stage and inserts the stage_changed activity in a single statement", async () => {
+  it("updates the stage and inserts the stage_changed activity and the lead.stage_changed event in a single statement", async () => {
     const fake = useFakeDb({ responses: [[{ found: true, changed: true }]] });
 
     await expect(
@@ -703,12 +703,30 @@ describe("changeLeadStage", () => {
     expect(statement).toBe(
       "WITH target AS ( SELECT id, stage FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
         "updated AS ( UPDATE leads SET stage = $2::lead_stage, lost_reason = $3, updated_at = now() FROM target WHERE leads.id = target.id AND target.stage <> $4::lead_stage RETURNING leads.id, target.stage AS stage_from ), " +
-        "activity AS ( INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id) SELECT id, 'stage_changed', $5, stage_from, $6::lead_stage, $7 FROM updated ) " +
+        "activity AS ( INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id) SELECT id, 'stage_changed', $5, stage_from, $6::lead_stage, $7 FROM updated ), " +
+        "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.stage_changed', id, jsonb_build_object('stageFrom', stage_from, 'stageTo', $8::lead_stage) FROM updated ) " +
         "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS changed",
     );
     // An open stage keeps the next action.
     expect(statement).not.toContain("next_action");
-    expect(fake.queries[0].params).toEqual([LEAD_ID, "quoted", null, "quoted", null, "quoted", "user-1"]);
+    expect(fake.queries[0].params).toEqual([LEAD_ID, "quoted", null, "quoted", null, "quoted", "user-1", "quoted"]);
+  });
+
+  it("emits the event only from the updated row: no_change and not_found insert no event", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, changed: false }]] });
+    await expect(changeLeadStage({ leadId: LEAD_ID, stage: "new", lostReason: null }, "user-1")).resolves.toBe(
+      "no_change",
+    );
+
+    const statement = normalize(fake.queries[0].sql);
+    // Exactly one event, of type lead.stage_changed, read from the UPDATE's RETURNING (no rows when the
+    // stage does not change or the lead is missing or archived); payload { stageFrom, stageTo }, no trigger.
+    expect(statement.match(/INSERT INTO outbox_events/g)).toHaveLength(1);
+    expect(statement).toMatch(
+      /event AS \( INSERT INTO outbox_events \(type, lead_id, payload\) SELECT 'lead\.stage_changed', id, jsonb_build_object\('stageFrom', stage_from, 'stageTo', \$\d+::lead_stage\) FROM updated \)/,
+    );
+    expect(statement).not.toContain("trigger");
+    expect(statement).not.toContain("lead.created");
   });
 
   it.each(["paid", "lost"] as const)("a closed stage (%s) clears the next action", async (stage) => {
@@ -723,8 +741,8 @@ describe("changeLeadStage", () => {
     expect(normalize(fake.queries[0].sql)).toContain(
       "updated_at = now(), next_action_date = NULL, next_action_note = NULL FROM target",
     );
-    // lost_reason and the activity body carry the reason (null for paid).
-    expect(fake.queries[0].params).toEqual([LEAD_ID, stage, lostReason, stage, lostReason, stage, "user-1"]);
+    // lost_reason and the activity body carry the reason (null for paid); the event carries the new stage.
+    expect(fake.queries[0].params).toEqual([LEAD_ID, stage, lostReason, stage, lostReason, stage, "user-1", stage]);
   });
 
   it.each([

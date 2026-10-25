@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { contactPreferenceEnum, leadChannelEnum } from "@/lib/db-schema";
 import {
   ackRequestSchema,
+  activityRequestSchema,
   claimRequestSchema,
   createIntegrationLeadSchema,
   enqueueRequestSchema,
@@ -74,6 +75,33 @@ describe("eventIdSchema and leadIdSchema", () => {
     expect(schema.safeParse(UUID).success).toBe(true);
     expect(schema.safeParse("abc").success).toBe(false);
     expect(schema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("activityRequestSchema", () => {
+  const BODY = "Borrador para la etapa Cotizado enviado por correo al usuario.";
+
+  it("accepts a UUID eventId and a trimmed body, dropping unknown keys", () => {
+    expect(activityRequestSchema.parse({ eventId: UUID, body: `  ${BODY}  `, actorUserId: "user-1" })).toEqual({
+      eventId: UUID,
+      body: BODY,
+    });
+  });
+
+  it.each(["x", "x".repeat(500)])("accepts a body of %#", (body) => {
+    expect(activityRequestSchema.parse({ eventId: UUID, body }).body).toBe(body);
+  });
+
+  it.each([
+    ["empty body", { eventId: UUID, body: "" }],
+    ["blank body", { eventId: UUID, body: "   " }],
+    ["body of 501", { eventId: UUID, body: "x".repeat(501) }],
+    ["missing body", { eventId: UUID }],
+    ["non-string body", { eventId: UUID, body: 42 }],
+    ["invalid eventId", { eventId: "abc", body: BODY }],
+    ["missing eventId", { body: BODY }],
+  ])("rejects %s", (_case, input) => {
+    expect(activityRequestSchema.safeParse(input).success).toBe(false);
   });
 });
 

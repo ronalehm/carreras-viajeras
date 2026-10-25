@@ -2,6 +2,7 @@
 export { handleIntegrationRequest, integrationJson, readJsonBody } from "./utils/integrationRequest";
 export {
   ackRequestSchema,
+  activityRequestSchema,
   claimRequestSchema,
   createIntegrationLeadSchema,
   enqueueRequestSchema,
@@ -10,6 +11,10 @@ export {
   leadIdSchema,
 } from "./schemas/integrations.schema";
 export { ackEvent, claimEvents, failEvent } from "./services/outbox.service";
-export { createIntegrationLead, getIntegrationLead } from "./services/integrationLeads.service";
+export {
+  createIntegrationLead,
+  getIntegrationLead,
+  recordAutomationActivity,
+} from "./services/integrationLeads.service";
 export { enqueueFollowUps } from "./services/followUps.service";
 export type { ClaimedEvent, IntegrationLead, OutboxEventType } from "./types/integrations.types";

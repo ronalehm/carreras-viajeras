@@ -28,6 +28,13 @@ export const failRequestSchema = z.object({
 export const eventIdSchema = z.uuid();
 export const leadIdSchema = z.uuid();
 
+// POST /api/integrations/n8n/leads/{id}/activities: what n8n did (fixed text, never the message
+// content), linked to the event it comes from. 500 = limit of lead_activities_body_chk for automation.
+export const activityRequestSchema = z.object({
+  eventId: z.uuid(),
+  body: z.string().trim().min(1).max(500),
+});
+
 // Consent text versions accepted per entry path (closed list; Ley 29733 legal texts pending user
 // confirmation, open question 3).
 export const INTEGRATION_CONSENT_VERSIONS = {

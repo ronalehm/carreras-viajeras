@@ -154,3 +154,34 @@ export async function createIntegrationLead(input: CreateIntegrationLeadInput): 
   // A concurrent request inserted the same key first (ON CONFLICT DO NOTHING).
   return { status: "duplicate", leadId: null };
 }
+
+// n8n records what it did with an event (e.g. "Borrador para la etapa Cotizado enviado por correo
+// al usuario.") in the lead's history, in a single statement: an 'automation' activity without
+// author, linked to the event. The event must belong to that lead and the lead must not be
+// archived, otherwise "not_found". Idempotent per event: source_event_id is unique, so a repeated
+// eventId (also under concurrency) inserts nothing and returns "duplicate".
+export async function recordAutomationActivity(
+  leadId: string,
+  eventId: string,
+  body: string,
+): Promise<"recorded" | "duplicate" | "not_found"> {
+  const result = await getDb().execute<{ found: boolean; recorded: boolean }>(sql`
+    WITH target AS (
+      SELECT outbox_events.id AS event_id, outbox_events.lead_id
+      FROM outbox_events
+      JOIN leads ON leads.id = outbox_events.lead_id
+      WHERE outbox_events.id = ${eventId}::uuid AND outbox_events.lead_id = ${leadId}::uuid
+        AND leads.archived_at IS NULL
+    ),
+    inserted AS (
+      INSERT INTO lead_activities (lead_id, type, body, source_event_id)
+      SELECT lead_id, 'automation', ${body}, event_id FROM target
+      ON CONFLICT (source_event_id) DO NOTHING
+      RETURNING id
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM inserted) AS recorded
+  `);
+  const [row] = result.rows;
+  if (!row?.found) return "not_found";
+  return row.recorded ? "recorded" : "duplicate";
+}

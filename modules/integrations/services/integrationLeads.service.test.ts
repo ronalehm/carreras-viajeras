@@ -8,7 +8,7 @@ vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 import { getDb } from "@/lib/db";
 import type { CreateIntegrationLeadInput } from "../types/integrations.types";
 import { deriveIdempotencyKey, hashSubmission } from "../utils/leadKeys";
-import { createIntegrationLead, getIntegrationLead } from "./integrationLeads.service";
+import { createIntegrationLead, getIntegrationLead, recordAutomationActivity } from "./integrationLeads.service";
 
 type Query = { sql: string; params: unknown[] };
 
@@ -347,5 +347,46 @@ describe("createIntegrationLead", () => {
     expect(fake.queries[1].params[14]).toBe("2026-09-14T13:12:00Z");
     expect(fake.queries[1].params[16]).toBe(fake.queries[0].params[16]);
     expect(fake.queries[2].params[16]).not.toBe(fake.queries[0].params[16]);
+  });
+});
+
+describe("recordAutomationActivity", () => {
+  const EVENT_ID = "7c6b5a4f-3e2d-4c1b-9a0f-8e7d6c5b4a39";
+  const BODY = "Borrador para la etapa Cotizado enviado por correo al usuario.";
+
+  it("inserts an automation activity without author, linked to the lead's event, in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, recorded: true }]] });
+
+    await expect(recordAutomationActivity(LEAD_ID, EVENT_ID, BODY)).resolves.toBe("recorded");
+
+    expect(fake.queries).toHaveLength(1);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      "WITH target AS ( SELECT outbox_events.id AS event_id, outbox_events.lead_id FROM outbox_events " +
+        "JOIN leads ON leads.id = outbox_events.lead_id " +
+        "WHERE outbox_events.id = $1::uuid AND outbox_events.lead_id = $2::uuid AND leads.archived_at IS NULL ), " +
+        "inserted AS ( INSERT INTO lead_activities (lead_id, type, body, source_event_id) " +
+        "SELECT lead_id, 'automation', $3, event_id FROM target ON CONFLICT (source_event_id) DO NOTHING RETURNING id ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM inserted) AS recorded",
+    );
+    expect(fake.queries[0].params).toEqual([EVENT_ID, LEAD_ID, BODY]);
+  });
+
+  it("never writes an author (actor_user_id stays null)", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, recorded: true }]] });
+    await recordAutomationActivity(LEAD_ID, EVENT_ID, BODY);
+    expect(fake.queries[0].sql).not.toContain("actor_user_id");
+  });
+
+  it.each([
+    [{ found: true, recorded: false }, "duplicate"],
+    [{ found: false, recorded: false }, "not_found"],
+  ])("maps %o to %s", async (row, expected) => {
+    useFakeDb({ responses: [[row]] });
+    await expect(recordAutomationActivity(LEAD_ID, EVENT_ID, BODY)).resolves.toBe(expected);
+  });
+
+  it("returns not_found without rows", async () => {
+    useFakeDb({ responses: [[]] });
+    await expect(recordAutomationActivity(LEAD_ID, EVENT_ID, BODY)).resolves.toBe("not_found");
   });
 });
