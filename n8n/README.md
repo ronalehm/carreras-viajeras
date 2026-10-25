@@ -32,7 +32,8 @@ En **Credentials → Add credential** (o desde cada nodo con *Create new credent
 
 - `<token>` es exactamente el mismo valor que el Cloudflare Secret `AUTOMATION_API_TOKEN` (en producción) o que `AUTOMATION_API_TOKEN` de `.env.local` (prueba local con `npm run dev`). Si son distintos, crea dos credenciales (p. ej. `Carreras Viajeras API (dev)` y `Carreras Viajeras API (prod)`).
 - La cabecera es sensible a mayúsculas: `Bearer` con B mayúscula, un espacio y el token, sin comillas ni espacios al final. Cualquier otra forma responde `401`.
-- Asígnala en los tres nodos HTTP: **Reclamar eventos**, **Confirmar (ack)** e **Informar fallo (fail)**.
+- Asígnala en los tres nodos HTTP: **Reclamar eventos**, **Confirmar (ack)** e **Informar fallo (fail)**. Al importar, ningún nodo trae credencial. **Confirmar (ack)** e **Informar fallo (fail)** no detienen el flujo si fallan, así que si les falta la credencial no aparece nada en rojo: llegan los correos, pero los eventos se quedan en `processing` y su salida muestra `Credentials not found`.
+- Con n8n en Docker, `APP_BASE_URL` en **Config** debe ser `http://host.docker.internal:3000` para la prueba local: dentro del contenedor, `localhost` es el propio n8n (`ECONNREFUSED ::1:3000`).
 
 ### SMTP (correo)
 
