@@ -14,6 +14,12 @@ export const USER_ROLE_FILTER_LABELS: Record<UserRoleFilter, string> = {
   runner: "Runner",
 };
 
+// Badge text of an assignment: a sponsor shows its brand, other roles only their label.
+export function formatAssignmentLabel(role: StaffRole, sponsorName: string | null): string {
+  const label = STAFF_ROLE_LABELS[role];
+  return role === "sponsor" && sponsorName ? `${label} · ${sponsorName}` : label;
+}
+
 // Provisional CRM time zone (spec accounts-roles-permissions, open question 5).
 export const CRM_TIME_ZONE = "America/Lima";
 

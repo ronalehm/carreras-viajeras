@@ -36,7 +36,7 @@ export function AccountSection() {
         <RunnerAccount />
         <p className="mt-6 text-xs leading-relaxed">
           La comunidad, las publicaciones y las recompensas siguen en demostración; no hay
-          perfiles persistentes ni descuentos activos.
+          descuentos activos.
         </p>
       </div>
     </div>

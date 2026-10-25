@@ -57,13 +57,18 @@ describe("RunnerAccount", () => {
     expectRunnerPanel();
   });
 
-  it("greets the runner with their email and signs out back to /cuenta", async () => {
+  it("greets the runner with their email, links to their profile and signs out back to /cuenta", async () => {
     session({ data: { user: { email: "runner@example.com" }, session: {} } });
     authClient.signOut.mockResolvedValue({ data: {}, error: null });
     render(<RunnerAccount />);
 
     expect(screen.getByRole("heading", { name: "Qué bueno verte de nuevo." })).toBeTruthy();
     expect(screen.getByText("runner@example.com")).toBeTruthy();
+
+    const profileLink = screen.getByRole("link", { name: "Mi perfil" });
+    const signOut = screen.getByRole("button", { name: "Cerrar sesión" });
+    expect(profileLink.getAttribute("href")).toBe("/cuenta/perfil");
+    expect(profileLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
     await act(async () => {});

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { UserListItem } from "../types/userDirectory.types";
-import { STAFF_ROLE_LABELS, USER_ROLE_FILTER_LABELS } from "../utils/staffDisplay";
+import { formatAssignmentLabel, USER_ROLE_FILTER_LABELS } from "../utils/staffDisplay";
 
 type UserTableProps = {
   users: UserListItem[];
@@ -11,11 +11,6 @@ type UserTableProps = {
 };
 
 const COLUMNS = ["Usuario", "Roles", "Reservas activas"];
-
-function roleLabel(role: UserListItem["roles"][number], sponsorName: string | null): string {
-  const label = STAFF_ROLE_LABELS[role];
-  return role === "sponsor" && sponsorName ? `${label} · ${sponsorName}` : label;
-}
 
 // Read-only list: role changes live in the user detail page.
 export function UserTable({ users, truncated, filtered }: UserTableProps) {
@@ -52,7 +47,7 @@ export function UserTable({ users, truncated, filtered }: UserTableProps) {
                 ) : (
                   <div className="flex flex-wrap gap-1">
                     {user.roles.map((role) => (
-                      <Badge key={role} variant="secondary">{roleLabel(role, user.sponsorName)}</Badge>
+                      <Badge key={role} variant="secondary">{formatAssignmentLabel(role, user.sponsorName)}</Badge>
                     ))}
                     {user.isRunner ? <Badge variant="outline">{USER_ROLE_FILTER_LABELS.runner}</Badge> : null}
                   </div>

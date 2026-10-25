@@ -3,12 +3,18 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { getCrmAccess, getUserDetail, StaffTable, USER_ROLE_FILTER_LABELS } from "@/modules/accounts";
+import {
+  formatAssignmentLabel,
+  getCrmAccess,
+  getUserDetail,
+  StaffTable,
+  USER_ROLE_FILTER_LABELS,
+} from "@/modules/accounts";
 
 // Fixed title: no name or email in the browser history or shared tabs.
 export const metadata: Metadata = { title: "Usuario" };
 
-// Next passes the segment still percent-encoded; a malformed encoding is a 404, not a 500.
+// Next passes the segment still percent-encoded, so the page decodes it.
 function decodeUserId(rawId: string): string | null {
   try {
     return decodeURIComponent(rawId);
@@ -48,9 +54,7 @@ export default async function UserDetailPage({ params }: PageProps<"/crm/admin/u
           <div className="flex flex-wrap gap-1">
             {roles.map((role) => (
               <Badge key={role} variant="secondary">
-                {role === "sponsor" && detail.sponsor
-                  ? `${USER_ROLE_FILTER_LABELS.sponsor} · ${detail.sponsor.name}`
-                  : USER_ROLE_FILTER_LABELS[role]}
+                {formatAssignmentLabel(role, detail.sponsor?.name ?? null)}
               </Badge>
             ))}
             {detail.isRunner ? <Badge variant="outline">{USER_ROLE_FILTER_LABELS.runner}</Badge> : null}

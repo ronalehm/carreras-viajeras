@@ -1,7 +1,21 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { assignmentRoleSchema } from "../schemas/staff.schema";
-import { formatStaffDateTime, STAFF_ROLE_LABELS } from "./staffDisplay";
+import { formatAssignmentLabel, formatStaffDateTime, STAFF_ROLE_LABELS } from "./staffDisplay";
+
+describe("formatAssignmentLabel", () => {
+  it("adds the brand to a sponsor", () => {
+    expect(formatAssignmentLabel("sponsor", "Marca X")).toBe("Patrocinador · Marca X");
+  });
+
+  it("shows only the role label for a sponsor without brand", () => {
+    expect(formatAssignmentLabel("sponsor", null)).toBe("Patrocinador");
+  });
+
+  it("ignores the brand for a role that is not sponsor", () => {
+    expect(formatAssignmentLabel("commercial", "Marca X")).toBe("Comercial");
+  });
+});
 
 describe("formatStaffDateTime", () => {
   it("formats the date and time in the CRM time zone", () => {
