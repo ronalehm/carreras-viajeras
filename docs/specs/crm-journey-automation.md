@@ -582,11 +582,11 @@ Requisitos previos: Fase 1 cerrada (`bookings.lead_id`) y `crm-leads-capture` F5
 
 ### Fase 6: medición por origen y etapa (5 tareas, 15 archivos)
 Requisitos previos: Fase 2 cerrada.
-- [ ] T1 — Filtro `origen` y query del informe (schemas, tipos y URL), con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: Fase 2 · secuencial
-- [ ] T2 — `getLeadList` con origen, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · paralelo (con T3 y T4)
-- [ ] T3 — `getLeadReport` con tests · archivos: `modules/crm/services/leadReport.service.ts`, `modules/crm/services/leadReport.service.test.ts` · depende de: T1 · paralelo (con T2 y T4)
-- [ ] T4 — Componentes: filtro y columna "Origen" en la lista; `LeadReportFilters` y `LeadReportTable` · archivos: `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadReportFilters.tsx`, `modules/crm/components/LeadReportTable.tsx` · depende de: T1 · paralelo (con T2 y T3)
-- [ ] T5 — API pública y portada `/crm`; medir el Worker · archivos: `modules/crm/index.ts`, `app/crm/(protected)/page.tsx` · depende de: T2, T3, T4 · secuencial
+- [x] T1 — Filtro `origen` y query del informe (schemas, tipos y URL), con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: Fase 2 · secuencial
+- [x] T2 — `getLeadList` con origen, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T1 · paralelo (con T3 y T4)
+- [x] T3 — `getLeadReport` con tests · archivos: `modules/crm/services/leadReport.service.ts`, `modules/crm/services/leadReport.service.test.ts` · depende de: T1 · paralelo (con T2 y T4)
+- [x] T4 — Componentes: filtro y columna "Origen" en la lista; `LeadReportFilters` y `LeadReportTable` · archivos: `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadTable.tsx`, `modules/crm/components/LeadReportFilters.tsx`, `modules/crm/components/LeadReportTable.tsx` · depende de: T1 · paralelo (con T2 y T3)
+- [x] T5 — API pública y portada `/crm`; medir el Worker · archivos: `modules/crm/index.ts`, `app/crm/(protected)/page.tsx` · depende de: T2, T3, T4 · secuencial
 
 ### Fase 7: origen en la captura web (4 tareas, 10 archivos)
 Requisitos previos: `crm-leads-capture` F3 y F4 cerradas; Pregunta abierta 6 respondida.
