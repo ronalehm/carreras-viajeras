@@ -14,6 +14,9 @@ export {
   setNextActionAction,
   updateLeadAction,
 } from "./actions/leads.actions";
+// Public action of the landing contact form (no session): ContactSection passes it to ContactForm.
+export { submitWebLeadAction } from "./actions/webLeads.actions";
+export type { WebLeadFormState } from "./types/webLeads.types";
 export { ActivityForm } from "./components/ActivityForm";
 export { LeadDetails } from "./components/LeadDetails";
 export { LeadFilters } from "./components/LeadFilters";
