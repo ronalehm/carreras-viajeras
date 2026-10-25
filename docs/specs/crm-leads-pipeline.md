@@ -1,8 +1,8 @@
 # Leads: alta manual, embudo, ficha, responsable y seguimiento (R3 · CRM comercial)
 
 - Módulo: crm
-- Estado: aprobado
-- Avance: F1 implementada en `main` (`modules/crm/**`, migración `drizzle/0002_tough_warpath.sql`). En este trabajo se implementan F2 y F3, adaptadas a leads sin responsable; F4–F6 quedan para después.
+- Estado: borrador
+- Avance: F1 implementada en `main` (`modules/crm/**`, migración `drizzle/0002_tough_warpath.sql`). F2 implementada y revisada en este trabajo; F3 es la siguiente, adaptada a leads sin responsable; F4–F6 quedan para después.
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, `db.batch` atómico, sin transacciones interactivas), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano.
   - `accounts-roles-permissions.md` y `accounts-auth-ui.md` (implementadas): `can()`, `requirePermission`, `getCrmAccess(permission)`, layout `app/crm/(protected)/`, `CrmShell`, `NoCrmAccess`, `profiles` y `staff_assignments`.
@@ -449,7 +449,8 @@ Todas heredan el layout protegido (`NoCrmAccess` sin rol de staff, `CrmShell`, `
 
 `params` y `searchParams` son promesas (`PageProps<"/crm/leads/[id]">`). Hay que consultar `node_modules/next/dist/docs/` antes de escribirlas.
 - (F2) `leads/page.tsx`: `metadata.title = "Leads"`.
-  - `parseLeadListQuery(await searchParams)` y `getLeadList(filters, access.user.id)` (en F5, con `getTodayDate()`).
+  - `parseLeadListQuery(await searchParams)`. Si la query recibida no es la canónica (`isCanonicalLeadListQuery(query, filters)` es `false`: campos vacíos del formulario GET, `pagina=1`, valores repetidos, orden distinto o claves desconocidas), `redirect(leadListHref(filters, filters.page))` antes de consultar la base. La URL canónica se acepta a la primera, sin bucles.
+  - `getLeadList(filters, access.user.id)` (en F5, con `getTodayDate()`).
   - Compone, en este orden: `h1` "Leads", el enlace "Nuevo lead" (`Link` + `buttonVariants()`), `LeadStageSummary`, `LeadFilters`, `LeadTable` y `LeadPagination`.
 - (F2) `leads/nuevo/page.tsx`: `metadata.title = "Nuevo lead"`. Llama a `getLeadFormOptions()` y compone `h1` + `<LeadForm ownerOptions tripOptions defaultOwnerId={access.user.id} />`.
 - (F3) `leads/[id]/page.tsx`: `metadata.title = "Ficha del lead"`.
@@ -486,7 +487,9 @@ Todas heredan el layout protegido (`NoCrmAccess` sin rol de staff, `CrmShell`, `
 
 ### API pública: `modules/crm/index.ts`
 - `landing-lead-capture` F1 crea el archivo con `createWebLead`, `leadFullNameSchema`, `leadPhoneSchema`, `leadEmailSchema` y el tipo `WebLeadInput`.
-- (F2) además `getLeadList`, `getLeadFormOptions`, `parseLeadListQuery`, `LeadStageSummary`, `LeadFilters`, `LeadTable`, `LeadPagination`, `LeadForm`.
+- (F2) además `getLeadList`, `getLeadFormOptions`, `parseLeadListQuery`, `leadListHref`, `isCanonicalLeadListQuery`, `LeadStageSummary`, `LeadFilters`, `LeadTable`, `LeadPagination`, `LeadForm` y `createLeadAction`.
+  - `createLeadAction` se reexporta aunque ninguna página la importe: si una acción solo se alcanza desde un componente de cliente, Next duplica en el Worker todo su código de servidor (medido: +~250 KiB gzip). Las acciones nuevas de F3–F6 siguen el mismo criterio.
+  - `LEAD_OWNER_PARAMS` y `leadOwnerParam` (`leadListQuery.ts`) son el único mapa `mine ↔ mios`, `unassigned ↔ sin-asignar`; son internos del módulo y `LeadFilters` los usa directamente.
 - (F3) además `getLeadById`, `LeadDetails`, `LeadStageForm`, `LeadOwnerForm`.
 - (F4) además `listLeadActivities`, `LeadTimeline`, `ActivityForm`.
 - (F5) además `NextActionForm`.
