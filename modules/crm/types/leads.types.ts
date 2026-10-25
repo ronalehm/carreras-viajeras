@@ -29,11 +29,12 @@ export type NextActionInput = z.output<typeof nextActionSchema>;
 // stage: a lead stage (non-archived leads in it) or "archived" (archived leads only, any stage).
 // owner: "mine" is the session user, "unassigned" the leads without owner;
 // any other value is a staff user id. followUp: open leads with a next action before today
-// ("overdue") or up to today ("pending").
+// ("overdue") or up to today ("pending"). channel: the lead origin (list and funnel counts).
 export type LeadListFilters = {
   stage?: LeadStage | "archived";
   owner?: "mine" | "unassigned" | string;
   followUp?: "overdue" | "pending";
+  channel?: LeadChannel;
   page: number;
 };
 
@@ -51,6 +52,7 @@ export type LeadListItem = {
   phone: string;
   stage: LeadStage;
   source: LeadSource;
+  channel: LeadChannel;
   trip: { id: string; title: string } | null;
   destinationText: string | null;
   // null: unassigned (web form leads). active = false: the owner lost every role with
@@ -82,7 +84,6 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   createdAt: Date;
   archivedAt: Date | null;
   archivedBy: { email: string } | null;
-  channel: LeadChannel;
   originDetail: string | null;
   utmSource: string | null;
   utmMedium: string | null;
@@ -91,6 +92,29 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   referralPermission: boolean;
   contactPreference: ContactPreference | null;
   contactOptOutAt: Date | null;
+};
+
+// Origin × stage report of /crm. cohort: signup month (YYYY-MM, America/Lima). Imported leads are
+// either excluded (default) or shown alone; archived leads never count.
+export type LeadReportFilters = { cohort: string; tripId?: string; onlyImported: boolean };
+
+// Counts of the current stage of the cohort's leads: no rates, no mixed bases.
+export type LeadReportRow = {
+  channel: LeadChannel;
+  total: number;
+  stages: Record<LeadStage, number>;
+  optedOut: number;
+  unassigned: number;
+};
+
+// rows: one per origin with leads, in leadChannelSchema order; totals: their sum. cohorts: the
+// months with leads, newest first (always including cohort); tripOptions: the non-archived trips.
+export type LeadReport = {
+  cohort: string;
+  rows: LeadReportRow[];
+  totals: Omit<LeadReportRow, "channel">;
+  cohorts: string[];
+  tripOptions: LeadTripOption[];
 };
 
 // History entry. actor is null only for system activities: created of a system lead (web form,

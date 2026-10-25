@@ -14,6 +14,7 @@ export const QUERY_KEYS = {
   stage: "etapa",
   owner: "responsable",
   followUp: "seguimiento",
+  channel: "origen",
   page: "pagina",
 } as const satisfies Record<keyof LeadListFilters, keyof LeadListQuery>;
 // Stage filters with their own URL value; a lead stage travels as itself.
@@ -66,16 +67,19 @@ export function parseLeadListQuery(searchParams: SearchParams): LeadListFilters 
     stage: stageFromParam(query[QUERY_KEYS.stage]),
     owner: ownerFromParam(query[QUERY_KEYS.owner]),
     followUp: followUpFromParam(query[QUERY_KEYS.followUp]),
+    channel: query[QUERY_KEYS.channel],
     page: query[QUERY_KEYS.page],
   };
 }
 
-// Default values (no stage, no owner, no follow-up, page 1) are left out of the URL.
+// Default values (no stage, no owner, no follow-up, no origin, page 1) are left out of the URL.
+// The origin travels as its channel value (origen=event).
 export function leadListHref(filters: LeadListFilters, page: number): string {
   const params = new URLSearchParams();
   if (filters.stage) params.set(QUERY_KEYS.stage, stageToParam(filters.stage));
   if (filters.owner) params.set(QUERY_KEYS.owner, ownerToParam(filters.owner));
   if (filters.followUp) params.set(QUERY_KEYS.followUp, FOLLOW_UP_PARAMS[filters.followUp]);
+  if (filters.channel) params.set(QUERY_KEYS.channel, filters.channel);
   if (page > 1) params.set(QUERY_KEYS.page, String(page));
   const query = params.toString();
   return query ? `${LEAD_LIST_PATH}?${query}` : LEAD_LIST_PATH;

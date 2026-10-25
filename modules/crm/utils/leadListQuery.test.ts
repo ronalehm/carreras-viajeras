@@ -71,6 +71,24 @@ describe("parseLeadListQuery", () => {
   });
 });
 
+describe("parseLeadListQuery: origen", () => {
+  it("maps origen to the channel filter", () => {
+    expect(parseLeadListQuery({ origen: "event", etapa: "quoted" })).toEqual({
+      stage: "quoted",
+      channel: "event",
+      page: 1,
+    });
+  });
+
+  it.each([["foo"], ["Event"], [""], [["event", "event"]], [["event", "instagram"]]])(
+    "treats origen=%j as no origin filter",
+    (origen) => {
+      expect(parseLeadListQuery({ origen, responsable: "mios" })).toEqual({ owner: "mine", page: 1 });
+      expect(parseLeadListQuery({ origen }).channel).toBeUndefined();
+    },
+  );
+});
+
 describe("leadListHref", () => {
   it("returns the bare list without filters", () => {
     expect(leadListHref({ page: 1 }, 1)).toBe("/crm/leads");
@@ -128,6 +146,26 @@ describe("leadListHref", () => {
   it.each(["mine", "unassigned", "user-7"])("round-trips owner %s through parseLeadListQuery", (owner) => {
     const filters = { stage: "lost", owner, page: 4 } as const;
     const params = Object.fromEntries(new URL(leadListHref(filters, 4), "https://x.test").searchParams);
+    expect(parseLeadListQuery(params)).toEqual(filters);
+  });
+});
+
+describe("leadListHref: origen", () => {
+  it("writes the channel value as origen", () => {
+    expect(leadListHref({ channel: "whatsapp_status", page: 1 }, 1)).toBe("/crm/leads?origen=whatsapp_status");
+  });
+
+  it("keeps origen when changing page and stage (funnel)", () => {
+    const filters = { stage: "new", owner: "mine", channel: "event", page: 1 } as const;
+    expect(leadListHref(filters, 2)).toBe("/crm/leads?etapa=new&responsable=mios&origen=event&pagina=2");
+    expect(leadListHref({ ...filters, stage: "lost" }, 1)).toBe(
+      "/crm/leads?etapa=lost&responsable=mios&origen=event",
+    );
+  });
+
+  it.each(["event", "unknown", "google_ads"] as const)("round-trips channel %s through parseLeadListQuery", (channel) => {
+    const filters = { stage: "quoted", followUp: "overdue", channel, page: 2 } as const;
+    const params = Object.fromEntries(new URL(leadListHref(filters, 2), "https://x.test").searchParams);
     expect(parseLeadListQuery(params)).toEqual(filters);
   });
 });

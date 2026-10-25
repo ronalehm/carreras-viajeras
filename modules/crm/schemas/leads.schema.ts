@@ -220,6 +220,7 @@ export const leadListQuerySchema = z.object({
   etapa: stageParamSchema.optional().catch(undefined),
   responsable: z.string().min(1).max(255).optional().catch(undefined),
   seguimiento: followUpParamSchema.optional().catch(undefined),
+  origen: leadChannelSchema.optional().catch(undefined),
   pagina: z
     .string()
     .regex(/^\d+$/)
@@ -227,3 +228,23 @@ export const leadListQuerySchema = z.object({
     .pipe(z.number().int().min(1).max(1000))
     .catch(1),
 });
+
+// Report filters from the URL of /crm (origin × stage counts of one cohort). Each key is dropped on
+// any invalid value, including a repeated parameter, so parsing never throws. cohorte is a lead
+// signup month (YYYY-MM, America/Lima); without it the page uses the current month. Imported leads
+// are excluded unless importados=solo, which shows them alone (never mixed with new capture).
+export const leadReportQuerySchema = z
+  .object({
+    cohorte: z
+      .string()
+      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+      .optional()
+      .catch(undefined),
+    viaje: z.uuid().optional().catch(undefined),
+    importados: z.literal("solo").optional().catch(undefined),
+  })
+  .transform(({ cohorte, viaje, importados }) => ({
+    cohort: cohorte,
+    tripId: viaje,
+    onlyImported: importados === "solo",
+  }));

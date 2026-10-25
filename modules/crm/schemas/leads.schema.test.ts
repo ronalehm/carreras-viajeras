@@ -16,6 +16,7 @@ import {
   leadIdSchema,
   leadListQuerySchema,
   leadOwnerChangeSchema,
+  leadReportQuerySchema,
   leadSourceSchema,
   leadStageChangeSchema,
   leadStageSchema,
@@ -424,6 +425,81 @@ describe("leadListQuerySchema: archivados", () => {
       expect(leadListQuerySchema.parse({ etapa }).etapa).toBeUndefined();
     },
   );
+});
+
+describe("leadListQuerySchema: origen", () => {
+  it.each(leadChannelSchema.options)("accepts origen=%s", (origen) => {
+    expect(leadListQuerySchema.parse({ origen }).origen).toBe(origen);
+  });
+
+  it.each([["foo"], ["Instagram"], ["web_form"], [""], [["event", "event"]]])(
+    "treats origen=%j as no origin filter and keeps the other filters",
+    (origen) => {
+      expect(leadListQuerySchema.parse({ origen, etapa: "new" })).toEqual({
+        etapa: "new",
+        responsable: undefined,
+        seguimiento: undefined,
+        origen: undefined,
+        pagina: 1,
+      });
+    },
+  );
+});
+
+describe("leadReportQuerySchema", () => {
+  it("defaults to no cohort, every trip and imported leads excluded", () => {
+    expect(leadReportQuerySchema.parse({})).toEqual({
+      cohort: undefined,
+      tripId: undefined,
+      onlyImported: false,
+    });
+  });
+
+  it("maps cohorte, viaje and importados=solo", () => {
+    expect(leadReportQuerySchema.parse({ cohorte: "2026-10", viaje: TRIP_ID, importados: "solo" })).toEqual({
+      cohort: "2026-10",
+      tripId: TRIP_ID,
+      onlyImported: true,
+    });
+  });
+
+  it.each(["2026-01", "2026-12", "2027-05"])("accepts the cohort %s", (cohorte) => {
+    expect(leadReportQuerySchema.parse({ cohorte }).cohort).toBe(cohorte);
+  });
+
+  it.each([["2026-13"], ["2026-00"], ["2026-1"], ["26-10"], ["2026-10-01"], [""], [["2026-10", "2026-09"]]])(
+    "drops the invalid cohorte %j only",
+    (cohorte) => {
+      expect(leadReportQuerySchema.parse({ cohorte, viaje: TRIP_ID })).toEqual({
+        cohort: undefined,
+        tripId: TRIP_ID,
+        onlyImported: false,
+      });
+    },
+  );
+
+  it.each([["abc"], [""], [[TRIP_ID, TRIP_ID]]])("drops the invalid viaje %j only", (viaje) => {
+    expect(leadReportQuerySchema.parse({ viaje, cohorte: "2026-10" })).toEqual({
+      cohort: "2026-10",
+      tripId: undefined,
+      onlyImported: false,
+    });
+  });
+
+  it.each([["foo"], ["Solo"], [""], [["solo", "solo"]]])(
+    "treats importados=%j as excluding the imported leads",
+    (importados) => {
+      expect(leadReportQuerySchema.parse({ importados }).onlyImported).toBe(false);
+    },
+  );
+
+  it("drops unknown keys", () => {
+    expect(leadReportQuerySchema.parse({ cohorte: "2026-10", etapa: "new", origen: "event" })).toEqual({
+      cohort: "2026-10",
+      tripId: undefined,
+      onlyImported: false,
+    });
+  });
 });
 
 describe("leadIdSchema", () => {
