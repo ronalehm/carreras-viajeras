@@ -61,7 +61,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cuatro migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) y `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_gigantic_puma.sql` crea la tabla de perfiles de runners (pendiente, después de `0003`; ver [Migración de la tabla de perfiles](#migración-de-la-tabla-de-perfiles)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -322,6 +322,85 @@ El CRM no permite cambiar la cuenta vinculada. Si el equipo escribió mal el cor
   ```
 
 Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` falla por `bookings_trip_email_active_uq`: revisar cuál de las dos es la buena y cancelar la otra desde el CRM. El cambio se aplica en la siguiente petición: la cuenta anterior deja de ver la reserva, porque la autorización se lee de la base en cada carga. No se tocan tablas de `neon_auth` ni filas de `profiles` o `staff_*`.
+
+## Perfiles de runners
+
+Especificado en [`accounts-runner-profiles.md`](docs/specs/accounts-runner-profiles.md). Hoy el equipo pide por WhatsApp, en cada viaje, el nombre completo, el documento, la talla de polo o un contacto de emergencia. El perfil del runner guarda esos datos una sola vez: el propio runner lo completa y edita en `/cuenta/perfil`, y `admin` y `commercial` lo consultan, en solo lectura, en `/crm/corredores`. La Fase 1 añade la tabla, los schemas y el service del propio perfil; la página del runner y las del CRM llegan en las fases siguientes.
+
+- **Una fila por cuenta de Neon Auth.** La clave es el `user.id` de la sesión (`runner_profiles.user_id`), sin FK hacia `neon_auth`. Guardar el perfil no crea filas en `profiles` ni `staff_*` y no concede roles; una cuenta de staff también puede tener su perfil de runner.
+- **Qué guarda:** datos personales (nombre completo y teléfono/WhatsApp en E.164, obligatorios; país, ciudad y fecha de nacimiento), documento de viaje (tipo, número y vencimiento), datos de carrera (talla de polo, distancia preferida, mejor marca y club) y contacto de emergencia (nombre y teléfono, y alergias o condiciones médicas opcionales). Solo nombre y teléfono son obligatorios, para que el runner pueda guardar por partes; el perfil "completo" se calcula al leer, no se guarda.
+- **Grupos coherentes:** tipo y número de documento van juntos y el vencimiento exige documento; nombre y teléfono de emergencia van juntos. Lo validan zod y los CHECK de la base, aunque alguien escriba por SQL.
+- **Correo:** `email` es una copia del correo verificado de la sesión, en minúsculas, que se refresca en cada guardado. Solo sirve para que el CRM identifique y busque al runner (no puede leer `neon_auth`); nunca autoriza ni vincula reservas. El vínculo reserva ↔ cuenta sigue siendo el de `/mis-carreras` (ver [Reservas y portal del runner](#reservas-y-portal-del-runner)).
+- **Consentimiento versionado:** cada guardado exige marcar la casilla de consentimiento y registra `consent_version` (constante del servidor) y `consented_at = now()`. Cambiar el texto obliga a cambiar la versión.
+- **Solo el propio perfil.** El runner escribe con una única sentencia `INSERT … ON CONFLICT (user_id) DO UPDATE` con el `user_id` y el correo de su sesión; el formulario nunca los envía y cualquier campo extra se descarta.
+
+### Datos sensibles
+
+El documento (tipo, número y vencimiento) y las alergias o condiciones médicas son datos sensibles; por extensión, también la fecha de nacimiento y el contacto de emergencia.
+
+- Nunca aparecen en logs, mensajes de error ni respuestas de error. Un error de Postgres (p. ej. un CHECK) incluye en su detalle los valores de la fila: no se registra ni se propaga; el log solo lleva un texto fijo.
+- La respuesta del guardado no devuelve los valores del formulario: lo escrito se conserva en el navegador porque el formulario no se reinicia.
+- En el CRM, la lista no los selecciona en SQL (solo nombre, correo, ciudad y país, si tiene perfil, reservas activas y fecha de actualización). La ficha de cada corredor los muestra solo en Server Components, bajo el rótulo "Dato sensible".
+- No hay cifrado de columnas en la aplicación: Neon cifra en reposo y el acceso lo limita el RBAC del CRM. Riesgo aceptado para el MVP.
+- No hay exportación ni copia a otros sistemas. Las consultas manuales con psql se hacen con `DATABASE_MIGRATION_URL` y no se pegan resultados con datos personales en chats ni issues.
+
+### Migración de la tabla de perfiles
+
+Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon que la necesite). **Orden: después de `0001` (viajes), `0002` (leads) y `0003` (reservas).** La tabla no tiene claves foráneas, pero las migraciones se aplican en el orden del journal y el CRM de corredores lee también `bookings`. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production` y crearía de nuevo las tablas de staff. Una migración ya aplicada nunca se edita.
+
+1. Revisar `drizzle/0004_gigantic_puma.sql`: solo crea, en `public`, los enums `travel_document_type` (`passport`, `national_id`, `foreign_id`), `shirt_size` (`xs` … `xxl`) y `race_distance` (`5k`, `10k`, `21k`, `42k`, `ultra`) y la tabla `runner_profiles` (PK `user_id` y quince CHECK). No tiene claves foráneas, índices adicionales ni cambios en tablas existentes. `grep -inE 'neon_auth|drop|create schema|references|alter table' drizzle/0004_gigantic_puma.sql` no devuelve nada.
+2. Comprobar que las anteriores están aplicadas en esa rama: `SELECT to_regclass('public.trips'), to_regclass('public.leads'), to_regclass('public.bookings');` no devuelve `NULL`. Si falta alguna, aplicarla antes siguiendo [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes), [Migración de la tabla de leads](#migración-de-la-tabla-de-leads) y [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas).
+3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0004` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0004_gigantic_puma.sql`.
+5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar la tabla: `SELECT conname FROM pg_constraint WHERE conrelid = 'public.runner_profiles'::regclass ORDER BY 1;` lista 16 restricciones (`runner_profiles_pkey` y quince `runner_profiles_*_chk`), y `SELECT count(*) FROM runner_profiles;` devuelve 0.
+
+No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+### Pruebas manuales de la Fase 1
+
+**Solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;`. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`. Los `user_id` son de prueba (no hace falta una cuenta real: no hay FK).
+
+Sí se inserta una fila mínima:
+
+```sql
+BEGIN;
+INSERT INTO runner_profiles (user_id, email, full_name, phone, consent_version)
+VALUES ('test-runner-1', 'ana@example.com', 'Ana Pérez', '+51938127170', 'runner-profile-2026-10')
+RETURNING user_id, consented_at, created_at, updated_at;
+ROLLBACK;
+```
+
+Y también una completa, con `document_type = 'passport'`, `document_number = 'AB123456'`, `document_expires_on = '2030-01-31'`, `birth_date = '1990-04-12'`, `shirt_size = 'm'`, `preferred_distance = '42k'` y contacto de emergencia (`'Luis Pérez'`, `'+51987654321'`).
+
+Partiendo de la fila mínima, la base debe rechazar:
+
+- un `email` con mayúsculas (`'Ana@example.com'`);
+- un `phone` sin `+` (`'51938127170'`) o con letras (`'+51abc12345'`);
+- un `full_name` de 1 carácter (`'A'`);
+- un `document_type` sin `document_number`, y un `document_number` sin `document_type`;
+- un `document_number` con minúsculas (`'ab123456'`) o con espacios (`'AB 123456'`);
+- un `document_expires_on` sin documento;
+- un `emergency_contact_name` sin `emergency_contact_phone`, y al revés;
+- `birth_date = '1899-12-31'`;
+- `medical_notes = repeat('a', 501)`;
+- una talla fuera del enum (`shirt_size = 'xxxl'`: `invalid input value for enum shirt_size`);
+- una segunda fila con el mismo `user_id` (`runner_profiles_pkey`).
+
+### Supresión a petición del titular
+
+No hay botón de borrado: el runner rectifica sus datos editando su perfil, y si pide por WhatsApp o correo que se borren, el usuario lo hace a mano con psql y `DATABASE_MIGRATION_URL`, primero en una rama de desarrollo y en `production` solo con autorización explícita. Antes, confirmar que la petición viene del titular (desde el correo de la cuenta o el teléfono del perfil). El `user_id` se copia de la consola de Neon (Auth → Users) o se busca por el correo del perfil:
+
+```sql
+SELECT user_id, email, full_name, updated_at FROM runner_profiles WHERE email = lower('<correo del titular>');
+
+BEGIN;
+DELETE FROM runner_profiles WHERE user_id = '<user_id>'
+RETURNING user_id, email;
+-- Revisar la salida: 1 fila → COMMIT;  0 filas (no existe o el id no es el correcto) → ROLLBACK;
+```
+
+Borra solo el perfil: la cuenta de Neon Auth, sus reservas y sus pagos no cambian (no se tocan tablas de `neon_auth` ni filas de `profiles`, `staff_*` o `bookings`). Si tiene reservas vinculadas, seguirá apareciendo en el CRM de corredores con el nombre y el correo de su reserva más reciente y "Sin perfil". Si vuelve a guardar su perfil en `/cuenta/perfil`, se crea una fila nueva con un consentimiento nuevo.
 
 ## Reglas de colaboración
 
