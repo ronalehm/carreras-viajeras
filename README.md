@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_fluffy_prodigy.sql` prepara la captura y el outbox (pendiente, después de `0003` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano (las pendientes, en el orden `0001` → `0002` → `0003` → `0004` → `0005`): `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_fluffy_prodigy.sql` prepara la captura y el outbox (pendiente, después de `0003` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0005_dark_jasper_sitwell.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0004` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0005`)](#migración-de-origen-seguimiento-y-reservas-0005)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -310,6 +310,91 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 - la base **acepta** un lead `source = 'web_form'` sin `owner_user_id` ni `created_by` (`consent_version = 'web-form-v1'`), su actividad `created` sin autor, y una actividad `owner_changed` con `owner_from` nulo y `owner_to` = uno de los perfiles;
 - la base **rechaza** en `leads` y `lead_activities`: un lead `whatsapp` sin `created_by`; un `idempotency_key` sin `submission_hash`; un `idempotency_key` repetido; una actividad `note` sin autor; una actividad `automation` sin `source_event_id` o sin texto; un `owner_changed` sin `owner_to`;
 - la base **rechaza** en `outbox_events`: `status = 'processing'` sin `lease_token`; `attempts = 9`; `last_error_code = 'Error de SMTP'`; un `payload` de más de 1 KiB; `status = 'succeeded'` sin `processed_at`.
+
+### Migración de origen, seguimiento y reservas (`0005`)
+
+`drizzle/0005_dark_jasper_sitwell.sql` prepara el recorrido del corredor ([`crm-journey-automation.md`](docs/specs/crm-journey-automation.md)): por qué canal nos conoció cada lead, la entrada por Google Forms e importación, los recordatorios y la baja ("Pidió no seguir"), y el vínculo entre una reserva y su lead. Es una sola migración para todas las fases de esa spec. Está pendiente de aplicar por el usuario. **Primero se prueba en una rama de desarrollo de Neon**; en `production` solo se aplica con autorización explícita de esa operación.
+
+**Orden: `0001` → `0002` → `0003` → `0004` → `0005`.** `0005` necesita `0004` (usa `outbox_events` y `leads.created_by`) y `0003` (añade `bookings.lead_id`). Si alguna falta en esa rama, aplicarla antes siguiendo su sección; [Migración de captura y outbox](#migración-de-captura-y-outbox) lista el orden completo. El código del CRM a partir de esta spec lee y escribe las columnas nuevas: una versión con ese código solo funciona contra una rama que ya tenga `0005`.
+
+No volver a aplicar `0000` (ya está en `production`) ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace `0005`** (todo en `public`):
+
+- crea los enums `lead_channel` (los 14 orígenes: `event`, `partner`, `referral`, `whatsapp`, `whatsapp_status`, `instagram`, `facebook`, `tiktok`, `youtube`, `google_ads`, `luma`, `web`, `other`, `unknown`) y `contact_preference` (`whatsapp`, `email`, `call`);
+- añade al final de enums existentes: `google_form` e `import` a `lead_source`; `channel_changed` y `opted_out` a `lead_activity_type`; `lead.follow_up_due` y `lead.opted_out` a `outbox_event_type` (seis `ALTER TYPE … ADD VALUE`);
+- en `leads`: `channel` (`DEFAULT 'unknown' NOT NULL`), `origin_detail`, `utm_source`, `utm_medium`, `utm_campaign`, `referred_by`, `referral_permission` (`DEFAULT false NOT NULL`), `contact_preference` y `contact_opt_out_at`; los CHECK `leads_origin_detail_chk` (2–120 caracteres), `leads_utm_chk` (1–100 cada uno), `leads_referred_by_chk` (2–120), `leads_referral_permission_chk` (el permiso exige referente) y `leads_opt_out_chk` (con baja no hay próxima acción); y sustituye `leads_created_by_chk`, que ahora admite sin autor `web_form`, `google_form` e `import`;
+- en `lead_activities`: `channel_from` y `channel_to`, con el CHECK `lead_activities_channel_chk` (obligatorios y distintos en `channel_changed`, nulos en cualquier otro tipo);
+- en `outbox_events`: `dedupe_key`, con el CHECK `outbox_events_dedupe_key_chk` (1–120 caracteres, obligatorio en `lead.follow_up_due`) y el índice único parcial `outbox_events_dedupe_key_uq`;
+- en `bookings`: `lead_id`, con la clave foránea `bookings_lead_id_leads_id_fk` (`ON DELETE restrict`) y el índice único parcial `bookings_lead_active_uq` (una reserva no cancelada por lead);
+- rellena `channel` en los leads que ya existen (ver más abajo).
+
+Revisión previa: `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0005_dark_jasper_sitwell.sql` no devuelve nada. El único `DROP` del archivo es el `DROP CONSTRAINT "leads_created_by_chk"`, que se vuelve a crear más abajo con la regla nueva. No toca `neon_auth`, `profiles`, `staff_*` ni `trips`.
+
+**Relleno de `channel`.** Al añadir la columna, todos los leads existentes quedan en `unknown` (Desconocido). Justo después del `ADD COLUMN "channel"`, el archivo lleva dos `UPDATE` añadidos a mano (no los genera drizzle-kit):
+
+```sql
+UPDATE "leads" SET "channel" = 'whatsapp' WHERE "source" = 'whatsapp';
+UPDATE "leads" SET "channel" = 'web' WHERE "source" = 'web_form';
+```
+
+Los `source = 'other'` se quedan en `unknown`: "Otro" describía cómo entró el registro, no cómo nos conoció la persona. El equipo puede corregir el origen después desde la edición del lead.
+
+**Por qué en dos bloques:** PostgreSQL no deja usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos usan `'channel_changed'`, `'google_form'`, `'import'` y `'lead.follow_up_due'`. Si se pega el archivo entero en una sola transacción, falla con `unsafe use of new value "channel_changed"` y no se guarda nada (se puede repetir bien después). El corte se hace **por tipo de sentencia, no por posición**: el bloque 1 son solo las seis líneas `ALTER TYPE … ADD VALUE`; los dos `CREATE TYPE` van en el bloque 2 aunque drizzle-kit los ponga al principio del archivo (los tipos nuevos sí se pueden usar en la misma transacción que los crea).
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0003` y `0004` ya están aplicadas en esa rama y que `0005` **no** lo está: `SELECT to_regclass('public.bookings'), to_regclass('public.outbox_events'), to_regtype('public.lead_channel');` devuelve `bookings`, `outbox_events` y `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. **Bloque 1.** Ejecutar solo estas seis líneas, sin `BEGIN;` ni `COMMIT;` (o en su propia transacción, confirmada con `COMMIT;`), y esperar a que termine:
+
+   ```sql
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 'channel_changed';
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 'opted_out';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'google_form';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'import';
+   ALTER TYPE "public"."outbox_event_type" ADD VALUE 'lead.follow_up_due';
+   ALTER TYPE "public"."outbox_event_type" ADD VALUE 'lead.opted_out';
+   ```
+
+   Comprobar: `SELECT enum_range(NULL::lead_source), enum_range(NULL::lead_activity_type), enum_range(NULL::outbox_event_type);` termina, respectivamente, en `google_form,import`, en `channel_changed,opted_out` y en `lead.follow_up_due,lead.opted_out`. Si repites el procedimiento y alguna línea responde `enum label "…" already exists`, ese valor ya estaba: ejecuta solo las que falten (la comprobación anterior dice cuáles) y sigue con el bloque 2.
+4. **Bloque 2.** Copiar el contenido de `drizzle/0005_dark_jasper_sitwell.sql` y **borrar las seis líneas del paso 3** (las líneas 3 a 8 del archivo, todas las que contienen `ADD VALUE`). Dejar las dos primeras (`CREATE TYPE`) y todo lo demás, incluidos el comentario y los dos `UPDATE` del relleno. Pegar el resto entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Si por error queda alguna línea `ADD VALUE`, la transacción falla con `enum label "…" already exists` y no cambia nada: quitarla y repetir. Si el bloque 2 responde `type "contact_preference" already exists`, `0005` ya estaba aplicada en esa rama: no repetir nada.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0005_dark_jasper_sitwell.sql
+   grep -F 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -f -
+   grep -vF 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+
+   La primera orden ejecuta el bloque 1 sin transacción (cada línea se confirma sola) y la segunda, el bloque 2 en una sola transacción (`-1`).
+5. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar:
+   - el relleno: `SELECT source, channel, count(*) FROM leads GROUP BY 1, 2;` muestra `whatsapp` → `whatsapp`, `web_form` → `web` y `other` → `unknown` (y nada más; en una rama sin leads no devuelve filas);
+   - las restricciones: `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass, 'public.outbox_events'::regclass) AND contype IN ('p','c','f');` devuelve 42 (tres `*_pkey`, veintinueve `*_chk` y diez `*_fk`), y `SELECT conname FROM pg_constraint WHERE conname IN ('leads_origin_detail_chk', 'leads_utm_chk', 'leads_referred_by_chk', 'leads_referral_permission_chk', 'leads_opt_out_chk', 'leads_created_by_chk', 'lead_activities_channel_chk', 'outbox_events_dedupe_key_chk', 'bookings_lead_id_leads_id_fk');` devuelve esas nueve;
+   - los índices: `SELECT indexname FROM pg_indexes WHERE indexname IN ('bookings_lead_active_uq', 'outbox_events_dedupe_key_uq');` devuelve los dos.
+
+**Probar el relleno con datos (solo en la rama de desarrollo).** Si la rama no tiene leads, después de `0004` y **antes del bloque 1** se pueden crear y confirmar tres leads de prueba, uno por `source`. Quedan guardados en esa rama, que después se puede borrar o restablecer desde Neon:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-relleno', 'relleno@example.com');
+INSERT INTO leads (full_name, phone, source, consent_version, created_by) VALUES
+  ('Ana Prueba', '+51900000001', 'whatsapp', 'crm-manual-v1', 'test-relleno'),
+  ('Beto Prueba', '+51900000002', 'other', 'crm-manual-v1', 'test-relleno');
+INSERT INTO leads (full_name, phone, source, consent_version) VALUES ('Caro Prueba', '+51900000003', 'web_form', 'web-form-v1');
+COMMIT;
+```
+
+Tras aplicar `0005`, la consulta del relleno del paso 6 debe devolver una fila por cada combinación: `whatsapp`/`whatsapp`, `web_form`/`web` y `other`/`unknown`.
+
+Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Con un perfil de staff, un viaje y un lead `whatsapp` de prueba creados en esa misma transacción. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`.
+
+- la base **acepta**: un lead `source = 'google_form'` y otro `source = 'import'` sin `created_by`; una actividad `channel_changed` de `unknown` a `instagram` con autor y sin texto; una actividad `opted_out` con autor y sin texto; un evento `lead.follow_up_due` con `dedupe_key`; y, para el mismo lead, una reserva cancelada (`status = 'cancelled'`) más otra no cancelada;
+- la base **rechaza** en `leads`: un lead `whatsapp` sin `created_by` (`leads_created_by_chk`); `channel = 'foo'` (`invalid input value for enum lead_channel`); un `origin_detail` o un `referred_by` de 1 o de 121 caracteres (`repeat('a', 121)`); `referral_permission = true` sin `referred_by`; `contact_opt_out_at` con `next_action_date`; un `utm_campaign` de 101 caracteres;
+- la base **rechaza** en `lead_activities`: un `channel_changed` sin `channel_to`, o con el mismo origen y destino (`event` → `event`); un `channel_from` en una actividad `note`; un `opted_out` o un `channel_changed` sin autor (`lead_activities_actor_chk`) o con texto (`lead_activities_body_chk`);
+- la base **rechaza** en `outbox_events` y `bookings`: un `lead.follow_up_due` sin `dedupe_key`; un segundo evento con el mismo `dedupe_key` (`outbox_events_dedupe_key_uq`); una segunda reserva no cancelada con el mismo `lead_id` (`bookings_lead_active_uq`); una reserva con un `lead_id` inexistente (`bookings_lead_id_leads_id_fk`).
 
 ### Activar la protección antispam (Turnstile)
 
