@@ -8,10 +8,10 @@ import type { BookingActionState } from "../types/bookings.types";
 // Shared by the bookings and payments Server Actions. Not a "use server" file: its exports must
 // not become callable actions.
 export const BOOKINGS_PATH = "/crm/reservas";
-export type ErrorState = Extract<BookingActionState, { status: "error" }>;
-export type ErrorCode = ErrorState["code"];
+type ErrorState = Extract<BookingActionState, { status: "error" }>;
+type ErrorCode = ErrorState["code"];
 // A successful mutation names the booking it touched, to revalidate (and, on create, open) it.
-export type Mutation = { bookingId: string; message: string } | ErrorState;
+type Mutation = { bookingId: string; message: string } | ErrorState;
 
 const ERROR_MESSAGES: Record<ErrorCode, string> = {
   unauthorized: "Tu sesión no es válida. Vuelve a iniciar sesión.",

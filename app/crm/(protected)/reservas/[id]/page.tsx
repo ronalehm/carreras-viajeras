@@ -86,9 +86,7 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
       )}
       <section aria-labelledby="booking-payments" className="flex flex-col gap-4">
         <h2 id="booking-payments" className="text-lg font-semibold">Pagos</h2>
-        <PaymentTable
-          payments={payments} totalUsd={booking.totalUsd} paidUsd={booking.paidUsd} editable={!cancelled}
-        />
+        <PaymentTable payments={payments} totalUsd={booking.totalUsd} editable={!cancelled} />
         {!cancelled && <PaymentForm bookingId={booking.id} />}
       </section>
     </section>

@@ -10,13 +10,14 @@ import { formatShortDate } from "../utils/bookingDisplay";
 type PaymentTableProps = {
   payments: CrmPayment[];
   totalUsd: number;
-  paidUsd: number; // non-voided payments only
   editable: boolean; // false for a cancelled booking: no "Anular"
 };
 
 const COLUMNS = ["Fecha", "Concepto", "Importe", "Registrado por", "Estado"];
 
-export function PaymentTable({ payments, totalUsd, paidUsd, editable }: PaymentTableProps) {
+export function PaymentTable({ payments, totalUsd, editable }: PaymentTableProps) {
+  // From the same rows as the table, so the summary always matches them. Voided payments never count.
+  const paidUsd = payments.reduce((sum, payment) => (payment.voided ? sum : sum + payment.amountUsd), 0);
   const balance = totalUsd - paidUsd;
   const totals = [
     ["Total acordado", formatTripPrice(totalUsd)],
