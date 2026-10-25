@@ -17,7 +17,7 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Operación posterior | Outbox persistente en Neon y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0004` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)); ambas están pendientes de aplicar (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0004` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)), y los orígenes del lead (canales, detalle y cambio de origen), con la migración `0005` ([`crm-lead-sources.md`](docs/specs/crm-lead-sources.md)); las tres están pendientes de aplicar (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
 
 ## Preparación local
 
@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_fluffy_prodigy.sql` prepara la captura y el outbox (pendiente, después de `0003` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_fluffy_prodigy.sql` prepara la captura y el outbox (pendiente, después de `0003` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0005_married_greymalkin.sql` amplía los orígenes del lead (pendiente, después de `0004` y **en dos bloques**; ver [Migración de orígenes del lead](#migración-de-orígenes-del-lead)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -234,6 +234,33 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
 
 Especificado en [`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md). El equipo registra a mano las consultas que llegan por WhatsApp como leads y las mueve por el embudo: nuevo → contactado → cotizado → reservado → pagado / perdido. Lo pueden hacer `commercial` y `admin` (permiso `leads.manage`); una cuenta sin rol de staff no tiene acceso. Los leads no se borran: se archivan. Las páginas `/crm/leads` llegan en las fases siguientes de la spec; hoy solo existen las tablas, el permiso y el service.
 
+### Orígenes del lead
+
+Especificado en [`crm-lead-sources.md`](docs/specs/crm-lead-sources.md). Cada lead tiene **un solo origen**: el canal por el que llegó, para poder medir conversaciones, reservas y pagos por canal. Requiere la migración `0005` (ver [Migración de orígenes del lead](#migración-de-orígenes-del-lead)). Los orígenes son estos 14, en este orden en formularios, filtros y listas:
+
+| Valor | Etiqueta | Significado |
+|---|---|---|
+| `event` | Feria, carrera o activación | Contacto hecho en una feria, una carrera o una activación |
+| `partner` | Club, gimnasio o aliado | Llegó a través de un club, un gimnasio u otro aliado |
+| `referral` | Referido | Lo recomendó otra persona |
+| `whatsapp` | WhatsApp (mensaje directo) | Escribió directamente al WhatsApp comercial |
+| `whatsapp_status` | Estado de WhatsApp | Vio un estado o un video de WhatsApp |
+| `instagram` | Instagram | Llegó por Instagram |
+| `facebook` | Facebook | Llegó por Facebook |
+| `tiktok` | TikTok | Llegó por TikTok |
+| `youtube` | YouTube | Llegó por YouTube |
+| `google_ads` | Google Ads | Llegó por un anuncio de Google Ads |
+| `luma` | Luma | Llegó por un evento publicado en Luma |
+| `web_form` | Formulario web | Envió el formulario de la web (solo captura automática) |
+| `other` | Otro | Otro canal identificado que no está en la lista |
+| `unknown` | Desconocido | No se sabe por dónde llegó |
+
+- **`web_form` solo lo asigna la captura automática** del formulario web. El alta manual nunca lo ofrece ni lo acepta, el cambio de origen nunca lo ofrece como destino, y el origen de un lead `web_form` no se puede cambiar (solo su detalle).
+- **`unknown` se usa cuando no se sabe el origen.** El alta manual no tiene origen por defecto: si el comercial no lo sabe, pregunta al runner o elige "Desconocido", en lugar de registrar WhatsApp por inercia.
+- **Detalle del origen** (opcional, de 2 a 120 caracteres): el nombre del evento, del aliado, de la campaña o de la pieza (por ejemplo, "Maratón de Lima 2026"). No se escriben datos personales de otras personas. No se envía a n8n ni a Gemini.
+- **Cambio de origen:** se puede corregir después del alta (por ejemplo, de "Desconocido" a "Feria, carrera o activación"); el historial guarda el cambio con su autor, así que el origen inicial no se pierde. Los leads que ya existían conservan su origen; no hay migración de datos.
+- **Filtro:** la lista y los contadores del embudo se filtran con `origen=<valor>` en la URL (por ejemplo, `/crm/leads?origen=event`). Las pantallas llegan en la Fase 2 de la spec.
+
 ### Migración de la tabla de leads
 
 Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon que la necesite). **Orden: primero `0001` (viajes) y después `0002`**, porque `leads.trip_id` referencia `trips.id`. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production` y crearía de nuevo las tablas de staff.
@@ -262,12 +289,13 @@ Un lead válido (`'+51938127170'`, email en minúsculas, `source = 'whatsapp'`, 
 
 `drizzle/0004_fluffy_prodigy.sql` prepara la captura automática del formulario web y el outbox para n8n ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)). Está pendiente de aplicar por el usuario. **Primero se prueba en una rama de desarrollo de Neon**, y después se aplica en `production`.
 
-**Orden: `0001` → `0002` → `0003` → `0004`.** `0004` solo depende de `0002`, pero aplicarlas en orden evita confusiones. Hoy ninguna de las cuatro está aplicada en Neon, así que en cada rama hay que aplicar, en este orden:
+**Orden: `0001` → `0002` → `0003` → `0004` → `0005`.** `0004` solo depende de `0002`, pero aplicarlas en orden evita confusiones. Hoy ninguna de las cinco está aplicada en Neon, así que en cada rama hay que aplicar, en este orden:
 
 1. `0001` (viajes), siguiendo [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes);
 2. `0002` (leads), siguiendo [Migración de la tabla de leads](#migración-de-la-tabla-de-leads);
 3. `0003` (reservas), siguiendo [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas);
-4. `0004` (esta sección), **en dos bloques**.
+4. `0004` (esta sección), **en dos bloques**;
+5. `0005` (orígenes del lead), **en dos bloques**, siguiendo [Migración de orígenes del lead](#migración-de-orígenes-del-lead).
 
 No volver a aplicar `0000` (ya está en `production`) ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
 
@@ -310,6 +338,61 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 - la base **acepta** un lead `source = 'web_form'` sin `owner_user_id` ni `created_by` (`consent_version = 'web-form-v1'`), su actividad `created` sin autor, y una actividad `owner_changed` con `owner_from` nulo y `owner_to` = uno de los perfiles;
 - la base **rechaza** en `leads` y `lead_activities`: un lead `whatsapp` sin `created_by`; un `idempotency_key` sin `submission_hash`; un `idempotency_key` repetido; una actividad `note` sin autor; una actividad `automation` sin `source_event_id` o sin texto; un `owner_changed` sin `owner_to`;
 - la base **rechaza** en `outbox_events`: `status = 'processing'` sin `lease_token`; `attempts = 9`; `last_error_code = 'Error de SMTP'`; un `payload` de más de 1 KiB; `status = 'succeeded'` sin `processed_at`.
+
+### Migración de orígenes del lead
+
+`drizzle/0005_married_greymalkin.sql` amplía los orígenes del lead ([`crm-lead-sources.md`](docs/specs/crm-lead-sources.md); ver [Orígenes del lead](#orígenes-del-lead)). Está pendiente de aplicar por el usuario. **Primero se prueba en una rama de desarrollo de Neon**, y después se aplica en `production`.
+
+**Orden: `0001` → `0002` → `0003` → `0004` → `0005`.** `0005` se aplica **después de `0004`** (ver [Migración de captura y outbox](#migración-de-captura-y-outbox)): su CHECK nuevo convive con los de `0004` en `lead_activities`. No volver a aplicar `0000` ni ninguna migración que ya esté aplicada en esa rama. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace `0005`** (todo en `public`):
+
+- añade 11 valores al enum `lead_source` (`event`, `partner`, `referral`, `whatsapp_status`, `instagram`, `facebook`, `tiktok`, `youtube`, `google_ads`, `luma` y `unknown`) y el tipo de actividad `source_changed` al enum `lead_activity_type`;
+- en `leads`: la columna opcional `source_detail` (detalle del origen) y el CHECK `leads_source_detail_chk` (nulo o de 2 a 120 caracteres);
+- en `lead_activities`: las columnas opcionales `source_from` y `source_to` (tipo `lead_source`) y el CHECK `lead_activities_source_chk` (en una `source_changed` ambas son obligatorias y distintas; en cualquier otro tipo, ambas nulas).
+
+No cambia datos: los leads existentes conservan su origen. Revisión previa: `grep -inE 'neon_auth|create schema|drop|grant' drizzle/0005_married_greymalkin.sql` no devuelve nada. No toca `profiles`, `staff_*`, `trips`, `outbox_events` ni las tablas de reservas.
+
+**Por qué en dos bloques:** PostgreSQL no deja usar en la misma transacción un valor de enum recién añadido, y el CHECK nuevo de `lead_activities` usa `'source_changed'`. Si se pega el archivo entero en una sola transacción, falla con `unsafe use of new value "source_changed"` y no se guarda nada (se puede repetir bien después). Por eso primero se confirman los valores nuevos (bloque 1) y después se aplica el resto (bloque 2).
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0004` ya está aplicada en esa rama: `SELECT to_regclass('public.outbox_events');` no debe devolver `NULL`. Comprobar también que `0005` **no** está aplicada: `SELECT enum_range(NULL::lead_source);` debe devolver solo `{whatsapp,web_form,other}`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. **Bloque 1.** Ejecutar solo estas doce líneas (son las doce primeras del archivo), sin `BEGIN;` ni `COMMIT;`, y esperar a que terminen. Se pueden ejecutar juntas: ninguna usa los valores nuevos.
+
+   ```sql
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 'source_changed';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'event';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'partner';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'referral';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'whatsapp_status';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'instagram';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'facebook';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'tiktok';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'youtube';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'google_ads';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'luma';
+   ALTER TYPE "public"."lead_source" ADD VALUE 'unknown';
+   ```
+
+   Comprobar: `SELECT enum_range(NULL::lead_activity_type);` termina en `source_changed` y `SELECT enum_range(NULL::lead_source);` devuelve los 14 valores, terminando en `unknown`. Si al repetir el procedimiento alguna línea responde `already exists`, ese valor ya estaba añadido: ejecutar solo las líneas de los valores que falten (según `enum_range`) y seguir con el bloque 2.
+4. **Bloque 2.** Copiar el contenido de `drizzle/0005_married_greymalkin.sql` y **borrar las doce líneas del paso 3** (todas las que empiezan por `ALTER TYPE`). Quedan cinco sentencias: tres `ALTER TABLE … ADD COLUMN` y dos `ALTER TABLE … ADD CONSTRAINT`. Pegarlas entre `BEGIN;` y `COMMIT;` y ejecutarlas. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Si por error se deja alguna línea `ALTER TYPE`, la transacción falla con `enum label "…" already exists` y no cambia nada: quitarla y repetir.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   grep '^ALTER TYPE' drizzle/0005_married_greymalkin.sql | psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -f -
+   grep -v '^ALTER TYPE' drizzle/0005_married_greymalkin.sql | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+5. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar: `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass, 'public.outbox_events'::regclass) AND contype IN ('p','c','f');` devuelve 37 (tres `*_pkey`, veinticuatro `*_chk` y diez `*_fk`; dos CHECK más que tras `0004`), y `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public' AND column_name IN ('source_detail', 'source_from', 'source_to') ORDER BY 1, 2;` lista `lead_activities.source_from`, `lead_activities.source_to` y `leads.source_detail`.
+
+Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado), con un perfil de staff y un lead de prueba creados en esa misma transacción. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`.
+
+- la base **acepta** un lead `source = 'unknown'` sin detalle, un lead `source = 'event'` con `source_detail = 'Maratón de Lima 2026'`, y una actividad `source_changed` con autor, sin texto, `source_from = 'unknown'` y `source_to = 'event'`;
+- la base **rechaza** en `leads`: un `source_detail` de 1 carácter (`'a'`) o de 121 (`repeat('a', 121)`);
+- la base **rechaza** en `lead_activities`: una `source_changed` sin `source_from` o sin `source_to`, o con los dos iguales (`'event'` y `'event'`); un `source_from` o `source_to` en una actividad de otro tipo (por ejemplo, una `note` con autor y texto); una `source_changed` con texto (`lead_activities_body_chk`) o sin autor (`lead_activities_actor_chk`).
 
 ### Activar la protección antispam (Turnstile)
 
@@ -366,7 +449,7 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
 | `POST /api/integrations/n8n/events/{id}/fail` | `{ "leaseToken": "...", "errorCode": "smtp_error" }` | `200 { "status": "pending", "availableAt": "..." }` o `200 { "status": "dead" }` |
 | `GET /api/integrations/n8n/leads/{id}` | — | `200` con los datos del lead (abajo) |
 
-- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" }`), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
+- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": <origen> }`, uno de los 14 valores de [Orígenes del lead](#orígenes-del-lead)), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
 - **ack** ("listo"): confirma que el evento está procesado. Hay que enviar el `leaseToken` que llegó con ese evento.
 - **fail** ("falló"): devuelve el evento a la cola para reintentarlo más tarde (30 s, 1 min, 2 min, 4 min… con algo de variación, hasta 1 hora). `errorCode` es un código corto en minúsculas, números y `_` (máximo 40). Al octavo intento fallido el evento queda `dead` (muerto) y no se vuelve a entregar.
 - **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived` y `createdAt`. No incluye ciudad, notas, historial ni consentimiento.
@@ -463,7 +546,7 @@ Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `
 - **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
 - **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead del formulario web: `$('Uno a uno').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form`.
 - **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
-- El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa.
+- El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa: cualquier `source` distinto de `web_form` (incluidos los orígenes de `0005`) se trata como alta manual.
 - El correo es el **único** canal de aviso. El mensaje al runner siempre lo revisa y lo envía una persona desde WhatsApp Business App.
 
 #### 7. Eventos muertos (`dead`)
