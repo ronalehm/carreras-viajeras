@@ -20,8 +20,6 @@ type Slide = {
   cta?: { href: string; label: string };
 };
 
-const em = (text: string) => <em className="text-highlight italic">{text}</em>;
-
 const SLIDES: Slide[] = [
   {
     image: "/images/hero-santiago.webp",
@@ -31,8 +29,8 @@ const SLIDES: Slide[] = [
     dot: "Ver Santiago 42K",
     title: (
       <>
-        Tu próxima meta es la <br />
-        maratón de {em("Santiago.")}
+        Tu próxima meta es la <br className="max-sm:hidden" />
+        maratón de Santiago.
       </>
     ),
     cta: { href: "/contacto?destino=santiago-2027", label: "Quiero vivir esta carrera" },
@@ -46,7 +44,7 @@ const SLIDES: Slide[] = [
     title: (
       <>
         Tú corres. <br />
-        El viaje, {em("juntos.")}
+        El viaje, juntos.
       </>
     ),
     cta: { href: "#paquete", label: "Descubrir el paquete" },
@@ -61,7 +59,7 @@ const SLIDES: Slide[] = [
       <>
         La meta se cruza. <br />
         La historia <br />
-        {em("se comparte.")}
+        se comparte.
       </>
     ),
     cta: { href: "#comunidad", label: "Explorar la comunidad" },
@@ -82,7 +80,8 @@ function subscribeVisibility(onChange: () => void) {
   return () => document.removeEventListener("visibilitychange", onChange);
 }
 
-export function HeroCarousel() {
+/** `children` is fixed content beside the slides (the trip bib); it doesn't change with the slide. */
+export function HeroCarousel({ children }: { children?: ReactNode }) {
   const [index, setIndex] = useState(0);
   const [focused, setFocused] = useState(false);
   const [status, setStatus] = useState("");
@@ -115,84 +114,93 @@ export function HeroCarousel() {
       id="inicio"
       aria-roledescription="carrusel"
       aria-label="Descubre Carreras Viajeras"
-      className="relative bg-primary text-primary-foreground"
+      className="relative isolate overflow-hidden bg-night text-primary-foreground"
     >
-      <div
-        onFocus={() => setFocused(true)}
-        onBlur={(e) => setFocused(e.currentTarget.contains(e.relatedTarget))}
-        onTouchStart={(e) => {
-          const t = e.changedTouches[0];
-          touchStart.current = { x: t.clientX, y: t.clientY };
-        }}
-        onTouchEnd={(e) => {
-          if (!touchStart.current) return;
-          const t = e.changedTouches[0];
-          const dx = t.clientX - touchStart.current.x;
-          const dy = t.clientY - touchStart.current.y;
-          touchStart.current = null;
-          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(index + (dx < 0 ? 1 : -1));
-        }}
-      >
-        {SLIDES.map((slide, i) => {
-          const Heading = i === 0 ? "h1" : "h2";
-          return (
-            <article
-              key={slide.image}
-              role="group"
-              aria-roledescription="lámina"
-              aria-label={`${i + 1} de ${SLIDES.length}: ${slide.label}`}
-              hidden={i !== index}
-              className="relative isolate flex min-h-[76svh] items-center overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700 max-sm:max-h-190 sm:min-h-165"
-            >
-              <Image
-                src={slide.image}
-                alt={slide.alt}
-                fill
-                sizes="100vw"
-                preload={i === 0}
-                className="-z-20 object-cover object-[60%_center] sm:object-center"
-              />
-              <div className="absolute inset-0 -z-10 bg-linear-to-r from-primary/60 via-primary/30 to-transparent" />
-              <div className="w-full px-[6%] pt-15 pb-20 sm:px-[8%] sm:py-20">
-                <Heading className="m-0 max-w-3xl font-heading text-5xl leading-none font-bold tracking-tight text-shadow-lg text-shadow-primary/50 sm:text-6xl lg:text-7xl xl:text-8xl">
-                  {slide.title}
-                </Heading>
-                {slide.cta && (
-                  <div className="mt-7">
-                    <Link
-                      href={slide.cta.href}
-                      className={cn(
-                        buttonVariants(),
-                        "h-auto gap-8 rounded-sm px-5 py-3.5 text-xs font-bold shadow-[inset_0_-4px_0_var(--highlight)] sm:px-6 sm:py-4 sm:text-sm",
-                      )}
-                    >
-                      {slide.cta.label} <ArrowUpRight aria-hidden />
-                    </Link>
+      {/* lg min-height fits the tallest slide (4 display lines + CTA + dots) so slides don't shift the page. */}
+      <div className="grid gap-10 px-[6%] pt-9 pb-12 sm:px-[8%] sm:pt-20 sm:pb-16 lg:min-h-[max(calc(min(37vw,37rem)+19.5rem),calc(100svh-6.5rem))] lg:grid-cols-[1.25fr_0.75fr] lg:items-end lg:gap-12 lg:py-20">
+        <div>
+          <div
+            className="flex flex-col justify-end max-lg:min-h-72 sm:max-lg:min-h-96"
+            onFocus={() => setFocused(true)}
+            onBlur={(e) => setFocused(e.currentTarget.contains(e.relatedTarget))}
+            onTouchStart={(e) => {
+              const t = e.changedTouches[0];
+              touchStart.current = { x: t.clientX, y: t.clientY };
+            }}
+            onTouchEnd={(e) => {
+              if (!touchStart.current) return;
+              const t = e.changedTouches[0];
+              const dx = t.clientX - touchStart.current.x;
+              const dy = t.clientY - touchStart.current.y;
+              touchStart.current = null;
+              if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) show(index + (dx < 0 ? 1 : -1));
+            }}
+          >
+            {SLIDES.map((slide, i) => {
+              const Heading = i === 0 ? "h1" : "h2";
+              return (
+                // The slide is not positioned: its photo fills the whole hero, behind the bib too.
+                <article
+                  key={slide.image}
+                  role="group"
+                  aria-roledescription="lámina"
+                  aria-label={`${i + 1} de ${SLIDES.length}: ${slide.label}`}
+                  hidden={i !== index}
+                >
+                  {/* Flat duotone: the photo's luminosity over --night. */}
+                  <div className="absolute inset-0 -z-10 opacity-55 mix-blend-luminosity motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">
+                    <Image
+                      src={slide.image}
+                      alt={slide.alt}
+                      fill
+                      sizes="100vw"
+                      preload={i === 0}
+                      className="object-cover object-[60%_center] sm:object-center"
+                    />
                   </div>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
+                  <div className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-700">
+                    <Heading className="m-0 display-title text-display-hero">{slide.title}</Heading>
+                    {slide.cta && (
+                      <div className="mt-8">
+                        <Link
+                          href={slide.cta.href}
+                          className={cn(
+                            buttonVariants(),
+                            "h-auto gap-2 rounded-full bg-highlight px-6 py-3.5 text-sm font-semibold text-night hover:bg-background sm:text-base",
+                          )}
+                        >
+                          {slide.cta.label} <ArrowUpRight aria-hidden />
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
 
-      <div role="group" aria-label="Elegir lámina" className="flex gap-1 px-[6%] sm:px-[8%]">
-        {SLIDES.map((slide, i) => (
-          <button
-            key={slide.dot}
-            type="button"
-            aria-label={slide.dot}
-            aria-current={i === index ? "true" : undefined}
-            onClick={() => show(i)}
-            className="relative h-10 w-9.5 cursor-pointer after:absolute after:top-4.5 after:left-1 after:h-0.75 after:w-7.5 after:bg-primary-foreground/50 aria-[current=true]:after:bg-highlight"
-          />
-        ))}
+          <div role="group" aria-label="Elegir lámina" className="mt-6 -ml-1 flex gap-1">
+            {SLIDES.map((slide, i) => (
+              <button
+                key={slide.dot}
+                type="button"
+                aria-label={slide.dot}
+                aria-current={i === index ? "true" : undefined}
+                onClick={() => show(i)}
+                className="relative h-10 w-9.5 cursor-pointer after:absolute after:top-4.5 after:left-1 after:h-0.75 after:w-7.5 after:rounded-full after:bg-primary-foreground/50 aria-[current=true]:after:bg-highlight"
+              />
+            ))}
+          </div>
+        </div>
+
+        {children}
       </div>
+      <div aria-hidden className="absolute inset-0 -z-10 bg-night/35" />
 
       <button
         type="button"
         onClick={() => setOverride({ reducedMotion, paused: !paused })}
-        className="sr-only rounded-sm bg-background px-3 py-2 text-sm font-bold text-primary focus-visible:not-sr-only focus-visible:absolute focus-visible:top-4 focus-visible:right-4 focus-visible:z-10"
+        className="sr-only rounded-full bg-background px-4 py-2 text-sm font-bold text-primary focus-visible:not-sr-only focus-visible:absolute focus-visible:top-4 focus-visible:right-4 focus-visible:z-10"
       >
         {paused ? "Reanudar cambio automático de láminas" : "Detener cambio automático de láminas"}
       </button>

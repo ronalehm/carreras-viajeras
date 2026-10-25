@@ -13,78 +13,75 @@ export function PackageSection() {
     <section
       id="paquete"
       aria-labelledby="package-title"
-      className="mx-[4%] my-10 overflow-hidden rounded-md border border-primary/20 bg-background text-primary sm:my-14"
+      className="grid items-center gap-10 bg-background px-[6%] py-18 text-primary sm:px-[8%] md:grid-cols-[0.9fr_1.1fr] md:gap-[6%] lg:py-30"
     >
-      <div className="grid md:grid-cols-[1fr_1.15fr]">
-        <div className="relative isolate flex min-h-52 items-end bg-primary md:min-h-133">
-          <Image
-            src={trip.image}
-            alt={trip.imageAlt}
-            fill
-            sizes="(min-width: 768px) 46vw, 100vw"
-            className="-z-20 object-cover"
-          />
-          <div className="absolute inset-0 -z-10 bg-linear-to-b from-primary/5 from-40% to-primary/85" />
-          <span className="p-6 text-xs font-bold tracking-[0.15em] whitespace-pre-line text-primary-foreground sm:p-8 sm:text-sm">
-            {trip.coverLabel}
-          </span>
-        </div>
+      <figure className="relative m-0 aspect-4/5 overflow-hidden rounded-2xl bg-night max-md:max-h-[34rem]">
+        <Image
+          src={trip.image}
+          alt={trip.imageAlt}
+          fill
+          sizes="(min-width: 768px) 42vw, 100vw"
+          className="object-cover"
+        />
+        <figcaption className="absolute bottom-4 left-4 rounded-xl bg-night/85 px-4 py-3 display-title text-2xl leading-none whitespace-pre-line text-primary-foreground sm:bottom-5 sm:left-5 sm:text-3xl">
+          {trip.coverLabel}
+        </figcaption>
+      </figure>
 
-        <div className="px-[7%] py-7 sm:py-9 lg:px-[9%] lg:py-11">
-          <p className="mb-4 text-xs font-bold tracking-[0.12em]">
-            TU PRÓXIMA GRAN HISTORIA · PREVENTA
-          </p>
-          <h2
-            id="package-title"
-            className="mb-6 font-heading text-5xl leading-none font-bold tracking-tight lg:text-6xl"
-          >
-            Tú corres.
+      <div>
+        <p className="mb-4 text-sm font-semibold text-asphalt">Tu próxima gran historia · preventa</p>
+        <h2 id="package-title" className="mb-8 display-title text-display-section">
+          Tú corres.
+          <br />
+          El viaje, juntos.
+        </h2>
+        <ul
+          aria-label="Beneficios principales"
+          className="grid gap-x-8 text-base font-medium sm:grid-cols-2"
+        >
+          {trip.highlights.map((highlight) => (
+            <li
+              key={highlight}
+              className="flex items-baseline gap-3 border-t border-primary/15 py-3.5"
+            >
+              <span aria-hidden className="size-2.5 shrink-0 rounded-full bg-highlight" />
+              {highlight}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-9 flex flex-wrap items-end gap-x-7 gap-y-3">
+          <strong className="display-title text-[76px] leading-[0.85] font-black lg:text-8xl">
+            {trip.prices.cash}
+          </strong>
+          <p className="pb-1 text-sm leading-relaxed text-asphalt sm:text-base">
+            al contado · por corredor
             <br />
-            El viaje, juntos.
-          </h2>
-          <ul
-            aria-label="Beneficios principales"
-            className="mb-6 grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs md:max-lg:grid-cols-1"
-          >
-            {trip.highlights.map((highlight, index) => (
-              <li key={highlight} className={index % 2 === 0 ? "text-highlight" : "text-primary"}>
-                <span aria-hidden>✓ </span>
-                {highlight}
-              </li>
-            ))}
-          </ul>
-          <p>
-            <strong className="block text-4xl leading-tight font-bold tracking-tight lg:text-5xl">
-              {trip.prices.cash}
-            </strong>
-            <span className="mt-1 block text-xs">al contado · por corredor</span>
-          </p>
-          <p className="mt-3 mb-6 text-xs leading-relaxed">
             {trip.prices.installmentsTotal} total en cuotas{" "}
-            <span aria-hidden className="mx-1.5">
+            <span aria-hidden className="mx-1">
               ·
             </span>{" "}
             Reserva con {trip.prices.reservation}
           </p>
+        </div>
+        <div className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-4">
           <Link
             href={tripHref}
             className={cn(
               buttonVariants(),
-              "h-auto w-full gap-1.5 rounded-sm px-6 py-4 text-sm font-bold shadow-[inset_0_-4px_0_var(--highlight)] sm:max-w-88",
+              "h-auto gap-2 rounded-full bg-highlight px-6 py-3.5 text-base font-semibold text-night hover:bg-highlight/85",
             )}
           >
             Quiero correr Santiago <ArrowUpRight aria-hidden />
           </Link>
-          <p className="mt-4 max-w-88 text-xs leading-relaxed">{trip.disclaimer}</p>
+          <Link
+            href={tripHref}
+            className="inline-flex items-center gap-1 text-sm font-semibold underline decoration-highlight decoration-2 underline-offset-[6px]"
+          >
+            Ver más: paquete completo <ArrowUpRight aria-hidden className="size-4" />
+          </Link>
         </div>
+        <p className="mt-5 max-w-[60ch] text-sm leading-relaxed text-asphalt">{trip.disclaimer}</p>
       </div>
-
-      <Link
-        href={tripHref}
-        className="flex min-h-15 items-center justify-center gap-1.5 border-t border-primary/20 px-5 py-4 text-sm font-semibold no-underline hover:underline"
-      >
-        Ver más: paquete completo <ArrowUpRight aria-hidden className="size-4" />
-      </Link>
     </section>
   );
 }

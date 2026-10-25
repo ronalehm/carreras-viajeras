@@ -54,25 +54,29 @@ export function SiteBrand({
 
 export function SiteHeader() {
   return (
-    <header className="sticky top-0 z-40 flex min-h-20 flex-wrap items-center justify-between gap-x-2 gap-y-2 sm:gap-x-4 bg-background px-[5%] py-3 text-primary shadow-sm md:px-[6%] lg:h-24 lg:flex-nowrap lg:py-0">
+    <header className="sticky top-0 z-40 flex min-h-22 flex-wrap items-center justify-between gap-x-2 gap-y-2 border-b border-primary/10 bg-background px-[5%] py-4 text-primary sm:gap-x-4 md:px-[6%] lg:h-26 lg:flex-nowrap lg:py-0">
       <SiteBrand />
       {/* md–lg: the nav takes its own row so it never collides with the actions. */}
       <nav
         aria-label="Principal"
-        className="order-last hidden w-full gap-6 text-sm md:flex lg:order-none lg:w-auto lg:gap-8"
+        className="order-last hidden w-full gap-7 text-sm font-medium whitespace-nowrap md:flex lg:order-none lg:w-auto lg:gap-6 xl:gap-9"
       >
         {NAV_LINKS.map(({ href, label }) => (
-          <Link key={href} href={href} className="no-underline hover:underline">
+          <Link
+            key={href}
+            href={href}
+            className="py-2 no-underline decoration-highlight decoration-2 underline-offset-8 hover:underline active:text-night"
+          >
             {label}
           </Link>
         ))}
       </nav>
-      <div className="ml-auto flex items-center justify-end gap-1 sm:gap-3">
+      <div className="ml-auto flex items-center justify-end gap-1.5 sm:gap-3">
         <Link
           href="/cuenta"
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "h-auto gap-1.5 rounded-sm border-primary px-2.5 py-2.5 text-xs font-bold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-3.5 sm:py-3",
+            "h-auto gap-1.5 rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",
           )}
         >
           Ingresar / Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
@@ -81,7 +85,7 @@ export function SiteHeader() {
           href="/contacto"
           className={cn(
             buttonVariants(),
-            "h-auto gap-1.5 rounded-sm px-3 py-2.5 text-xs font-bold max-md:hidden sm:px-4 sm:py-3 sm:text-sm",
+            "h-auto gap-1.5 rounded-full bg-highlight px-5 py-3 text-sm font-semibold text-night hover:bg-highlight/85 max-md:hidden",
           )}
         >
           Quiero correr <ArrowUpRight aria-hidden />
