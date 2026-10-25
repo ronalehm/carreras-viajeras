@@ -157,7 +157,32 @@ export const leadStageEnum = pgEnum("lead_stage", [
   "paid",
   "lost",
 ]);
-export const leadSourceEnum = pgEnum("lead_source", ["whatsapp", "web_form", "other"]);
+// source = how the record entered the CRM (never edited); channel = how the person found us
+// (editable, every change logged as channel_changed). New enum values always go last.
+export const leadSourceEnum = pgEnum("lead_source", [
+  "whatsapp",
+  "web_form",
+  "other",
+  "google_form",
+  "import",
+]);
+export const leadChannelEnum = pgEnum("lead_channel", [
+  "event",
+  "partner",
+  "referral",
+  "whatsapp",
+  "whatsapp_status",
+  "instagram",
+  "facebook",
+  "tiktok",
+  "youtube",
+  "google_ads",
+  "luma",
+  "web",
+  "other",
+  "unknown",
+]);
+export const contactPreferenceEnum = pgEnum("contact_preference", ["whatsapp", "email", "call"]);
 export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "created",
   "stage_changed",
@@ -167,6 +192,8 @@ export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "call",
   "message",
   "automation",
+  "channel_changed",
+  "opted_out",
 ]);
 
 // Leads are archived, never deleted. paid and lost are closed stages: no next action there.
@@ -182,6 +209,18 @@ export const leads = pgTable(
     tripId: uuid("trip_id").references(() => trips.id, { onDelete: "restrict" }),
     destinationText: text("destination_text"),
     source: leadSourceEnum("source").notNull(),
+    channel: leadChannelEnum("channel").notNull().default("unknown"),
+    originDetail: text("origin_detail"),
+    // UTM values are written only by the web capture (lowercase, normalized); never edited.
+    utmSource: text("utm_source"),
+    utmMedium: text("utm_medium"),
+    utmCampaign: text("utm_campaign"),
+    referredBy: text("referred_by"),
+    referralPermission: boolean("referral_permission").notNull().default(false),
+    // NULL = no preference.
+    contactPreference: contactPreferenceEnum("contact_preference"),
+    // Opt-out ("Pidió no seguir"): final in the MVP; while set, the lead can never have a next action.
+    contactOptOutAt: timestamp("contact_opt_out_at", { withTimezone: true }),
     stage: leadStageEnum("stage").notNull().default("new"),
     lostReason: text("lost_reason"),
     // NULL = unassigned (web form leads); the CRM assigns the first owner by hand.
@@ -192,7 +231,7 @@ export const leads = pgTable(
     consentedAt: timestamp("consented_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    // NULL only for web form leads (leads_created_by_chk).
+    // NULL only for system sources: web_form, google_form and import (leads_created_by_chk).
     createdBy: text("created_by").references(() => profiles.userId, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -233,7 +272,30 @@ export const leads = pgTable(
       sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
     ),
     check("leads_archived_chk", sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`),
-    check("leads_created_by_chk", sql`${table.createdBy} IS NOT NULL OR ${table.source} = 'web_form'`),
+    check(
+      "leads_created_by_chk",
+      sql`${table.createdBy} IS NOT NULL OR ${table.source} IN ('web_form', 'google_form', 'import')`,
+    ),
+    check(
+      "leads_origin_detail_chk",
+      sql`${table.originDetail} IS NULL OR char_length(${table.originDetail}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "leads_utm_chk",
+      sql`(${table.utmSource} IS NULL OR char_length(${table.utmSource}) BETWEEN 1 AND 100) AND (${table.utmMedium} IS NULL OR char_length(${table.utmMedium}) BETWEEN 1 AND 100) AND (${table.utmCampaign} IS NULL OR char_length(${table.utmCampaign}) BETWEEN 1 AND 100)`,
+    ),
+    check(
+      "leads_referred_by_chk",
+      sql`${table.referredBy} IS NULL OR char_length(${table.referredBy}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "leads_referral_permission_chk",
+      sql`NOT ${table.referralPermission} OR ${table.referredBy} IS NOT NULL`,
+    ),
+    check(
+      "leads_opt_out_chk",
+      sql`${table.contactOptOutAt} IS NULL OR ${table.nextActionDate} IS NULL`,
+    ),
     check(
       "leads_submission_chk",
       sql`(${table.idempotencyKey} IS NULL) = (${table.submissionHash} IS NULL) AND (${table.submissionHash} IS NULL OR ${table.submissionHash} ~ '^[0-9a-f]{64}$')`,
@@ -242,7 +304,12 @@ export const leads = pgTable(
   ],
 );
 
-export const outboxEventTypeEnum = pgEnum("outbox_event_type", ["lead.created", "lead.stage_changed"]);
+export const outboxEventTypeEnum = pgEnum("outbox_event_type", [
+  "lead.created",
+  "lead.stage_changed",
+  "lead.follow_up_due",
+  "lead.opted_out",
+]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "succeeded", "dead"]);
 
 // Durable events for n8n (pull model, at-least-once). id is the event_id n8n deduplicates on.
@@ -270,6 +337,8 @@ export const outboxEvents = pgTable(
       .defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
     lastErrorCode: text("last_error_code"),
+    // Business-rule uniqueness (e.g. one lead.follow_up_due per stage episode); required for follow-ups.
+    dedupeKey: text("dedupe_key"),
   },
   (table) => [
     check("outbox_events_payload_version_chk", sql`${table.payloadVersion} >= 1`),
@@ -290,6 +359,13 @@ export const outboxEvents = pgTable(
       "outbox_events_last_error_code_chk",
       sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} ~ '^[a-z0-9_]{1,40}$'`,
     ),
+    check(
+      "outbox_events_dedupe_key_chk",
+      sql`(${table.dedupeKey} IS NULL OR char_length(${table.dedupeKey}) BETWEEN 1 AND 120) AND (${table.type} <> 'lead.follow_up_due' OR ${table.dedupeKey} IS NOT NULL)`,
+    ),
+    uniqueIndex("outbox_events_dedupe_key_uq")
+      .on(table.dedupeKey)
+      .where(sql`${table.dedupeKey} IS NOT NULL`),
     index("outbox_events_ready_idx")
       .on(table.availableAt)
       .where(sql`${table.status} IN ('pending', 'processing')`),
@@ -310,6 +386,8 @@ export const leadActivities = pgTable(
     stageTo: leadStageEnum("stage_to"),
     ownerFrom: text("owner_from").references(() => profiles.userId, { onDelete: "restrict" }),
     ownerTo: text("owner_to").references(() => profiles.userId, { onDelete: "restrict" }),
+    channelFrom: leadChannelEnum("channel_from"),
+    channelTo: leadChannelEnum("channel_to"),
     // NULL only for system activities: created (web form) and automation (n8n).
     actorUserId: text("actor_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
     // The outbox event an automation activity comes from (one activity per event).
@@ -333,6 +411,10 @@ export const leadActivities = pgTable(
     check(
       "lead_activities_owner_chk",
       sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} IS DISTINCT FROM ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+    ),
+    check(
+      "lead_activities_channel_chk",
+      sql`CASE WHEN ${table.type} = 'channel_changed' THEN ${table.channelFrom} IS NOT NULL AND ${table.channelTo} IS NOT NULL AND ${table.channelFrom} <> ${table.channelTo} ELSE ${table.channelFrom} IS NULL AND ${table.channelTo} IS NULL END`,
     ),
     check(
       "lead_activities_actor_chk",
@@ -379,6 +461,8 @@ export const bookings = pgTable(
     participantName: text("participant_name").notNull(),
     participantEmail: text("participant_email").notNull(),
     runnerUserId: text("runner_user_id"),
+    // At most one non-cancelled booking per lead (bookings_lead_active_uq).
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "restrict" }),
     status: bookingStatusEnum("status").notNull().default("pending"),
     packageLabel: text("package_label").notNull(),
     distance: text("distance"),
@@ -400,6 +484,9 @@ export const bookings = pgTable(
     unique("bookings_id_trip_uq").on(table.id, table.tripId),
     uniqueIndex("bookings_trip_email_active_uq")
       .on(table.tripId, table.participantEmail)
+      .where(sql`${table.status} <> 'cancelled'`),
+    uniqueIndex("bookings_lead_active_uq")
+      .on(table.leadId)
       .where(sql`${table.status} <> 'cancelled'`),
     index("bookings_runner_user_idx").on(table.runnerUserId),
     index("bookings_unlinked_email_idx")
