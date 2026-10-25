@@ -1,13 +1,23 @@
-import type { leadSourceEnum, leadStageEnum, outboxEventTypeEnum } from "@/lib/db-schema";
+import type { z } from "zod";
+import type {
+  contactPreferenceEnum,
+  leadChannelEnum,
+  leadSourceEnum,
+  leadStageEnum,
+  outboxEventTypeEnum,
+} from "@/lib/db-schema";
+import type { createIntegrationLeadSchema } from "../schemas/integrations.schema";
 
 type LeadStage = (typeof leadStageEnum.enumValues)[number];
 type LeadSource = (typeof leadSourceEnum.enumValues)[number];
+type LeadChannel = (typeof leadChannelEnum.enumValues)[number];
+type ContactPreference = (typeof contactPreferenceEnum.enumValues)[number];
 
 export type OutboxEventType = (typeof outboxEventTypeEnum.enumValues)[number];
 
 // Payload version 1: minimal, never personal data.
 export type OutboxEventPayload =
-  | { source: LeadSource } // lead.created
+  | { source: LeadSource; bulk?: boolean } // lead.created (bulk: one-off import, from F3)
   | { stageFrom: LeadStage; stageTo: LeadStage }; // lead.stage_changed
 
 // Contract of POST /api/integrations/n8n/events/claim.
@@ -40,4 +50,21 @@ export type IntegrationLead = {
   owner: { email: string } | null;
   archived: boolean;
   createdAt: string;
+  channel: LeadChannel; // never sent to Gemini
+  originDetail: string | null; // never sent to Gemini
+  contactPreference: ContactPreference | null;
+  nextActionDate: string | null; // YYYY-MM-DD
+  doNotContact: boolean; // true: the lead opted out, discard any draft
 };
+
+// Validated body of POST /api/integrations/n8n/leads.
+export type CreateIntegrationLeadInput = z.infer<typeof createIntegrationLeadSchema>;
+
+// duplicate: same key and data (leadId null when a concurrent request won the key); existing: a
+// lead with the same phone (not archived, or archived with opt-out) already exists.
+export type CreateIntegrationLeadResult =
+  | { status: "created"; leadId: string }
+  | { status: "duplicate"; leadId: string | null }
+  | { status: "existing"; leadId: string }
+  | { status: "conflict" }
+  | { status: "unknown_trip" };

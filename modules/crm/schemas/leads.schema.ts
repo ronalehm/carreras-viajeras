@@ -1,4 +1,8 @@
 import { z } from "zod";
+import { phoneSchema } from "@/lib/phone";
+
+// Shared E.164 phone schema (lib/phone.ts), re-exported for the CRM forms (manual and web).
+export { phoneSchema };
 
 // Same values as the lead_* enums in lib/db-schema.ts (kept in sync by leads.schema.test.ts).
 export const leadStageSchema = z.enum(["new", "contacted", "quoted", "reserved", "paid", "lost"]);
@@ -44,7 +48,6 @@ export const manualLeadSourceSchema = z.enum(["whatsapp", "other"], {
   error: "Elige la vía de entrada del lead.",
 });
 
-const PHONE_MESSAGE = "Escribe el número con código de país, p. ej. +51 938 127 170.";
 const CONSENT_MESSAGE = "Confirma que el contacto aceptó que guardemos sus datos.";
 
 const requiredText = (min: number, max: number, message: string) =>
@@ -58,13 +61,6 @@ const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
     .optional()
     .transform((value) => value?.trim() || null)
     .pipe(schema.nullable());
-
-// E.164: drop spaces, parentheses, dashes and dots, then "+" and 8 to 15 digits.
-// Shared with the web form schema (same normalization as the manual form).
-export const phoneSchema = z
-  .string({ error: PHONE_MESSAGE })
-  .transform((value) => value.replace(/[\s().-]/g, ""))
-  .pipe(z.string().regex(/^\+[1-9]\d{7,14}$/, PHONE_MESSAGE));
 
 const ownerUserIdSchema = z
   .string({ error: "Elige un responsable." })

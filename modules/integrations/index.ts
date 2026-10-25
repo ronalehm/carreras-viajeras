@@ -3,10 +3,11 @@ export { handleIntegrationRequest, integrationJson, readJsonBody } from "./utils
 export {
   ackRequestSchema,
   claimRequestSchema,
+  createIntegrationLeadSchema,
   eventIdSchema,
   failRequestSchema,
   leadIdSchema,
 } from "./schemas/integrations.schema";
 export { ackEvent, claimEvents, failEvent } from "./services/outbox.service";
-export { getIntegrationLead } from "./services/integrationLeads.service";
+export { createIntegrationLead, getIntegrationLead } from "./services/integrationLeads.service";
 export type { ClaimedEvent, IntegrationLead, OutboxEventType } from "./types/integrations.types";

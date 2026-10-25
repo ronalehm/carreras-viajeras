@@ -428,7 +428,7 @@ Si falta, la API de n8n responderá que no está configurada y el resto de la ap
 
 n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
 
-Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada.
+Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada (y la `0005` para el alta desde Google Forms y la importación, apartados 10 y 11).
 
 #### 1. Credenciales (solo dentro de n8n)
 
@@ -437,8 +437,9 @@ En n8n → **Credentials** → **Add credential**:
 1. **Header Auth** (para hablar con la web): nombre `Authorization`, valor `Bearer <tu N8N_API_TOKEN>` (la palabra `Bearer`, un espacio y el mismo valor que guardaste como Secret, ver [Secretos de integraciones](#secretos-de-integraciones)).
 2. **SMTP** (para enviarte los correos): los datos del servidor de correo de tu cuenta.
 3. **Google Gemini** (para redactar los borradores): la API key que creas en Google AI Studio.
+4. **Google Sheets** (solo para el workflow "Alta desde Google Forms", apartado 10): la cuenta de Google que puede leer la hoja de respuestas del formulario.
 
-Estas tres credenciales viven **solo en n8n**. Nunca se copian al repositorio, a `.env.local`, a `.dev.vars` ni al Worker. La API key de Gemini nunca llega a la web.
+Estas credenciales viven **solo en n8n**. Nunca se copian al repositorio, a `.env.local`, a `.dev.vars` ni al Worker. La API key de Gemini nunca llega a la web.
 
 #### 2. La API privada (qué puede pedir n8n)
 
@@ -450,13 +451,28 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
 | `POST /api/integrations/n8n/events/{id}/ack` | `{ "leaseToken": "..." }` | `200 { "status": "succeeded" }` |
 | `POST /api/integrations/n8n/events/{id}/fail` | `{ "leaseToken": "...", "errorCode": "smtp_error" }` | `200 { "status": "pending", "availableAt": "..." }` o `200 { "status": "dead" }` |
 | `GET /api/integrations/n8n/leads/{id}` | — | `200` con los datos del lead (abajo) |
+| `POST /api/integrations/n8n/leads` | Una respuesta de Google Forms o una fila de la importación (abajo) | `201 { "status": "created", "leadId": "..." }`, `200 { "status": "duplicate", "leadId": "..." }` (o `"leadId": null`) o `200 { "status": "existing", "leadId": "..." }` |
 
-- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" }`), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
+- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" | "google_form" | "import", "bulk": true | false }`; `bulk` solo es `true` en la importación única y lo decide la web, no la petición; los eventos anteriores pueden no traerlo), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
 - **ack** ("listo"): confirma que el evento está procesado. Hay que enviar el `leaseToken` que llegó con ese evento.
 - **fail** ("falló"): devuelve el evento a la cola para reintentarlo más tarde (30 s, 1 min, 2 min, 4 min… con algo de variación, hasta 1 hora). `errorCode` es un código corto en minúsculas, números y `_` (máximo 40). Al octavo intento fallido el evento queda `dead` (muerto) y no se vuelve a entregar.
-- **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived` y `createdAt`. No incluye ciudad, notas, historial ni consentimiento.
+- **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived`, `createdAt`, `channel` (el origen: `event`, `instagram`, `unknown`…), `originDetail` (detalle del origen o `null`), `contactPreference` (`whatsapp`, `email`, `call` o `null`), `nextActionDate` (`AAAA-MM-DD` o `null`) y `doNotContact` (`true` si el contacto pidió no seguir: **descarta cualquier borrador**). No incluye ciudad, notas, historial, consentimiento, referente, UTM ni ids de usuario.
+- **leads** (`POST`): registra a una persona que llega por Google Forms (apartado 10) o por la importación única (apartado 11). El lead entra "Sin asignar", en etapa "Nuevo" y sin autor. Cuerpo:
 
-Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
+  | Campo | Obligatorio | Valor |
+  |---|---|---|
+  | `source` | sí | `"google_form"` o `"import"` |
+  | `externalId` | sí | Id de la respuesta o de la fila, único dentro de su vía: letras, números y `_ . : -`, hasta 100 (p. ej. `"<id de la hoja>:42"` o `"mml-2026:17"`) |
+  | `consentVersion` | sí | `"google-form-v1"` para `google_form`; `"import-mml-v1"` para `import` (otra versión → `400`) |
+  | `consentedAt` | sí | Fecha y hora en que dio el consentimiento, con zona horaria: `"2026-09-14T08:12:00-05:00"` |
+  | `fullName` | sí | 2 a 120 caracteres |
+  | `phone` | sí | Con código de país (`+51 938 127 170`); la web quita espacios y guiones |
+  | `email`, `tripSlug`, `destinationText`, `originDetail`, `referredBy`, `contactPreference` | no | `tripSlug` es el slug de un viaje del catálogo (`maraton-santiago-2027`); `originDetail` y `referredBy`, 2 a 120 caracteres; `contactPreference`, `whatsapp`, `email` o `call`. Una celda vacía (`""`) cuenta como sin dato |
+  | `channel` | no | El origen (`event`, `partner`, `referral`, `whatsapp`, `whatsapp_status`, `instagram`, `facebook`, `tiktok`, `youtube`, `google_ads`, `luma`, `web`, `other`); sin él, `unknown` |
+
+  Respuestas: `created` (lead nuevo; llega al workflow principal por su `lead.created`); `duplicate` (ese `externalId` ya se registró con los mismos datos: repetir una petición nunca duplica); `existing` (ya hay un lead con ese teléfono, también si está archivado tras pedir no seguir: no se crea otro y `leadId` es el existente); `409 { "error": "conflict" }` (ese `externalId` ya se registró con **otros** datos); `422 { "error": "unknown_trip" }` (el `tripSlug` no es un viaje del catálogo). Ninguna respuesta repite los datos enviados. Responsable, autor, etapa y `bulk` los decide la web: si la petición los trae, se ignoran.
+
+Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `409 { "error": "conflict" }` y `422 { "error": "unknown_trip" }` (solo en `POST …/leads`, arriba), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
 
 Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (apartado 3, paso 5).
 
@@ -473,12 +489,15 @@ En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian 
 5. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `event_id` (no la llames `id`: la tabla ya tiene una columna `id` propia).
    - Nodo **Data table** "Buscar procesado": obtener filas donde `event_id` es igual a `{{ $('Uno a uno').item.json.id }}`. En **Settings**, activa *Always Output Data* para que el workflow siga aunque no encuentre nada. (Esa opción actúa sobre el nodo entero, no sobre cada item; por eso es correcta aquí, donde gracias al bucle solo hay un evento por vuelta.)
    - Nodo **If** "¿Ya procesado?": si `{{ $('Buscar procesado').item.json.event_id }}` no está vacío, el correo ya se envió antes: ve directo al nodo "Ack" (paso 14) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
-6. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Uno a uno').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`).
+6. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Uno a uno').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`, `channel`, `originDetail`, `contactPreference`, `doNotContact`).
 7. **Edit Fields (Set)** "Datos para Gemini", con *Include Other Input Fields* **desactivado** para que solo salgan estos tres campos:
    - `etapa`: `{{ $('Uno a uno').item.json.type === 'lead.created' ? 'new' : $('Uno a uno').item.json.payload.stageTo }}` (la etapa del evento);
    - `firstName`: `{{ $('Leer lead').item.json.firstName }}`;
    - `viaje`: `{{ $('Leer lead').item.json.trip ? $('Leer lead').item.json.trip.title : ($('Leer lead').item.json.destinationText || 'nuestros viajes') }}`.
-8. **If** "¿Sigue vigente?": si `{{ $('Leer lead').item.json.archived }}` es verdadero, o si `{{ $('Leer lead').item.json.stage }}` es distinto de `{{ $('Datos para Gemini').item.json.etapa }}`, el evento quedó viejo: ve al nodo "Ack" sin preparar nada.
+8. **If** "¿Sigue vigente?" (condiciones unidas con **OR**): ve al nodo "Ack" sin preparar nada (ni borrador ni correo) si se cumple cualquiera de estas:
+   - `{{ $('Leer lead').item.json.archived }}` es verdadero, o `{{ $('Leer lead').item.json.stage }}` es distinto de `{{ $('Datos para Gemini').item.json.etapa }}` (el evento quedó viejo);
+   - `{{ $('Leer lead').item.json.doNotContact }}` es verdadero (el contacto pidió no seguir: nunca se prepara un borrador);
+   - `{{ $('Uno a uno').item.json.type === 'lead.created' && $('Uno a uno').item.json.payload.bulk === true }}` es verdadero (lead de la importación única, apartado 11: ni borrador ni correo, nada de bienvenidas en masa).
 9. **Switch** "Etapa" sobre `{{ $('Datos para Gemini').item.json.etapa }}`, con una salida por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`). Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
 10. **Nodo de Gemini** en cada salida del Switch (crea uno y duplícalo; solo cambia el objetivo de la etapa, apartado 4). En **Settings** de cada uno: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
 11. **Code** "Borrador" (modo *Run Once for Each Item*). Conecta aquí la salida correcta **y** la de error de los seis nodos de Gemini. Elige el texto de Gemini si sirve y, si no, la plantilla de respaldo (apartado 5). Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
@@ -495,7 +514,11 @@ En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian 
     const respaldo = plantillas[datos.etapa].replace('{firstName}', datos.firstName).replace('{viaje}', datos.viaje);
     return { json: { borrador: texto && texto.length <= 1000 ? texto : respaldo } };
     ```
-12. **Edit Fields (Set)** "Enlace WhatsApp", con un campo `enlace`: `https://wa.me/{{ $('Leer lead').item.json.phone.replace('+', '') }}?text={{ encodeURIComponent($('Borrador').item.json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo.
+12. **Edit Fields (Set)** "Enlace WhatsApp", con un campo `enlace`: `https://wa.me/{{ $('Leer lead').item.json.phone.replace('+', '') }}?text={{ encodeURIComponent($('Borrador').item.json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo. Si el lead prefiere el correo (`contactPreference` es `email`) y tiene email, el enlace es un `mailto:` con el borrador en lugar de `wa.me` (tampoco envía nada solo):
+
+    ```text
+    {{ $('Leer lead').item.json.contactPreference === 'email' && $('Leer lead').item.json.email ? 'mailto:' + $('Leer lead').item.json.email + '?body=' + encodeURIComponent($('Borrador').item.json.borrador) : 'https://wa.me/' + $('Leer lead').item.json.phone.replace('+', '') + '?text=' + encodeURIComponent($('Borrador').item.json.borrador) }}
+    ```
 13. **Send Email** "Enviar correo" (credencial SMTP) **a ti** (apartado 6). En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`. Después del envío correcto, nodo **Data table** "Guardar procesado": insertar una fila con `event_id` = `{{ $('Uno a uno').item.json.id }}`.
 14. **HTTP Request** "Ack": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/ack` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}" }`. En **Settings** → *On Error* → *Continue*: si responde 409 (`lease_lost`), no te preocupes; el evento volverá a llegar y el paso 5 evitará un segundo correo. Con *Continue*, un error sale por la salida normal: conéctala de vuelta a "Uno a uno". A "Ack" llegan tres caminos: el duplicado (paso 5), el evento viejo (paso 8) y el correo enviado (paso 13).
 
@@ -505,7 +528,7 @@ Con 10 eventos por minuto, procesados uno a uno, y hasta 20 s de Gemini por even
 
 #### 4. Qué datos recibe Gemini y prompt por etapa
 
-**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe solo con los tres campos del nodo "Datos para Gemini" (paso 7):
+**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial, el origen y su detalle, la preferencia de contacto ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe solo con los tres campos del nodo "Datos para Gemini" (paso 7):
 
 ```text
 Etapa: {{ $('Datos para Gemini').item.json.etapa }}
@@ -545,10 +568,16 @@ Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `
 
 #### 6. El correo que recibes
 
-- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
-- **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead del formulario web: `$('Uno a uno').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form`.
-- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
-- El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa.
+- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), "Nuevo lead (Google Forms): {fullName} · {viaje}" para un `lead.created` de Google Forms (`source = "google_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
+- **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead nuevo del formulario web o de Google Forms: `$('Uno a uno').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form` o `google_form`.
+- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el origen y la preferencia de contacto (abajo), el borrador y el botón o enlace de WhatsApp o de correo (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
+- **Origen y preferencia**, con las mismas etiquetas que el CRM (pega estas dos líneas en el cuerpo del correo):
+
+  ```text
+  Origen: {{ ({ event: 'Feria, carrera o activación', partner: 'Club, gimnasio o aliado', referral: 'Referido', whatsapp: 'WhatsApp (mensaje directo)', whatsapp_status: 'Estado de WhatsApp', instagram: 'Instagram', facebook: 'Facebook', tiktok: 'TikTok', youtube: 'YouTube', google_ads: 'Google Ads', luma: 'Luma', web: 'Web', other: 'Otro', unknown: 'Desconocido' })[$('Leer lead').item.json.channel] }}{{ $('Leer lead').item.json.originDetail ? ' · ' + $('Leer lead').item.json.originDetail : '' }}
+  Prefiere: {{ ({ whatsapp: 'WhatsApp', email: 'Correo', call: 'Llamada' })[$('Leer lead').item.json.contactPreference] || 'Sin preferencia' }}
+  ```
+- El aviso de **"nuevo lead"** se envía para los leads del formulario web y de Google Forms. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa. Los de la importación única (`bulk: true`) no generan correo ni borrador (paso 8).
 - El correo es el **único** canal de aviso. El mensaje al runner siempre lo revisa y lo envía una persona desde WhatsApp Business App.
 
 #### 7. Eventos muertos (`dead`)
@@ -573,10 +602,124 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 - Sin la cabecera, o con otro token, responde `401`.
 - Crea dos leads de prueba en el CRM y lanza dos `claim` a la vez (dos terminales, o `& wait`): ningún evento aparece en las dos respuestas.
 - Reclama un evento y no lo confirmes: a los 5 minutos vuelve a aparecer en otro `claim` con otro `leaseToken` y `attempts` sube en 1.
+- Alta por Google Forms (necesita `0005` aplicada en esa rama). Usa un teléfono de prueba que no esté en el CRM:
+
+  ```sh
+  curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \
+    -d '{"source":"google_form","externalId":"prueba:2","consentVersion":"google-form-v1","consentedAt":"2026-09-14T08:12:00-05:00","fullName":"Prueba Forms","phone":"+51 900 000 001","tripSlug":"maraton-santiago-2027","channel":"instagram"}' \
+    http://localhost:3000/api/integrations/n8n/leads
+  ```
+
+  La primera vez responde `201 { "status": "created", … }` y en el CRM aparece "Sin asignar", vía "Google Forms", etapa "Nuevo"; repetida, `200 { "status": "duplicate", … }`; con otro `fullName` y el mismo `externalId`, `409`; con otro `externalId` y el mismo teléfono, `200 { "status": "existing", … }` con el id del primero; con `"tripSlug":"no-existe"` (y otro teléfono y `externalId`), `422`.
 
 #### 9. Regla WAF opcional contra abusos
 
 En el plan Free de Cloudflare, sin tocar código: panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → crear una regla para las peticiones `POST` a la ruta `/contacto` que bloquee una IP cuando supere unas pocas peticiones cada 10 segundos. Es una defensa adicional a Turnstile, que protegerá el formulario cuando se conecte (Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)).
+
+#### 10. Workflow "Alta desde Google Forms"
+
+Lleva cada respuesta nueva del Google Forms al CRM. Es un workflow aparte del principal: el lead nuevo llega después al workflow principal por su `lead.created`, que te avisa con el asunto "Nuevo lead (Google Forms): …" y te prepara el borrador. **Actívalo solo cuando** el texto legal de `google-form-v1` esté confirmado y conozcas las columnas reales de la hoja de respuestas (preguntas abiertas 3 y 4 de [`crm-journey-automation.md`](docs/specs/crm-journey-automation.md)).
+
+1. **Google Sheets Trigger** (credencial Google Sheets): evento *Row Added* en la hoja de respuestas del formulario. **No ordenes ni borres filas** de esa hoja: el número de fila forma parte del id de cada respuesta.
+2. **Code** "Normalizar" (modo *Run Once for All Items*). Cambia los textos entre comillas por los títulos reales de tus columnas. Descarta las respuestas sin consentimiento:
+
+   ```js
+   const HOJA = 'ID_DE_LA_HOJA'; // el id que aparece en la URL de la hoja, entre /d/ y /edit
+   // Valores de "¿Cómo nos conociste?" → origen del CRM (sin respuesta o desconocida: unknown).
+   const ORIGENES = { 'Instagram': 'instagram', 'Facebook': 'facebook', 'TikTok': 'tiktok', 'Un amigo me recomendó': 'referral', 'En una carrera o feria': 'event' };
+   const PREFERENCIAS = { 'WhatsApp': 'whatsapp', 'Correo': 'email', 'Llamada': 'call' };
+   const texto = (valor) => String(valor ?? '').trim();
+   return $input.all()
+     .filter((item) => texto(item.json['Acepto el tratamiento de mis datos']) !== '')
+     .map((item) => {
+       const fila = item.json;
+       // Teléfono: sin espacios ni guiones; 9 dígitos que empiezan por 9 = celular de Perú.
+       let telefono = texto(fila['Teléfono (WhatsApp)']).replace(/[\s().-]/g, '');
+       if (/^9\d{8}$/.test(telefono)) telefono = '+51' + telefono;
+       // Marca temporal "14/09/2026 8:12:00" (hora de Lima) → "2026-09-14T08:12:00-05:00".
+       const [fecha, hora] = texto(fila['Marca temporal']).split(' ');
+       const [dia, mes, anio] = fecha.split('/');
+       const [h, min, seg] = hora.split(':');
+       const consentedAt = `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}T${h.padStart(2, '0')}:${min}:${seg}-05:00`;
+       return { json: {
+         fila: fila.row_number,
+         body: {
+           source: 'google_form',
+           externalId: `${HOJA}:${fila.row_number}`,
+           consentVersion: 'google-form-v1',
+           consentedAt,
+           fullName: texto(fila['Nombre y apellidos']),
+           phone: telefono,
+           email: texto(fila['Correo electrónico']),
+           tripSlug: 'maraton-santiago-2027',
+           channel: ORIGENES[texto(fila['¿Cómo nos conociste?'])] ?? 'unknown',
+           contactPreference: PREFERENCIAS[texto(fila['¿Cómo prefieres que te contactemos?'])] ?? '',
+         },
+       } };
+     });
+   ```
+3. **HTTP Request** "Registrar lead": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads` con la credencial *Header Auth* y cuerpo JSON `{{ JSON.stringify($json.body) }}`. En **Settings** → *On Error* → *Continue (using error output)*.
+4. **If** "¿Ya existía?" en la salida correcta: si `{{ $json.status }}` es `existing`, **Send Email** a ti con el texto "Este contacto ya está en el CRM: https://carreras-viajeras.mentec.dev/crm/leads/{{ $json.leadId }}" (la persona volvió a llenar el formulario; no se creó otra ficha). Con `created` o `duplicate` no hace falta nada más.
+5. En la **salida de error** (respuestas `400`, `409`, `422`, `5xx` o la web caída): **Send Email** a ti con "No se pudo registrar la fila {{ $('Normalizar').item.json.fila }} del formulario". No pongas datos de la persona en ese correo: revisa la fila en la hoja.
+
+Si la misma respuesta se envía dos veces (n8n reintenta o la reprocesas), la web responde `duplicate` y no crea nada.
+
+#### 11. Workflow "Importación única"
+
+Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lima. Entran "Sin asignar", en "Nuevo" y **sin bienvenida**: su `lead.created` lleva `bulk: true` y el workflow principal hace ack sin preparar borrador ni enviarte correo (apartado 3, paso 8). Nadie recibe nada: después el equipo decide a quién escribir y cuándo, desde el CRM.
+
+**Antes de empezar:** confirma el texto legal de `import-mml-v1` (lo que aceptaron los 180) y las columnas del archivo (preguntas abiertas 3 y 4 de [`crm-journey-automation.md`](docs/specs/crm-journey-automation.md)). Un registro sin un consentimiento que cubra el contacto **no se importa**.
+
+1. **Read/Write Files from Disk** (el CSV de los 180 en tu computadora) → **Extract from File** "Leer CSV" (*Extract From CSV*, con la primera fila como encabezados) → **Code** "Numerar" (modo *Run Once for All Items*) con `return $input.all().map((item, i) => ({ json: { ...item.json, fila: i + 2 } }));` (la fila 1 son los encabezados). Se numera antes de filtrar para que cada registro conserve su número de fila. No reordenes el archivo entre una ejecución y otra: el número de fila forma parte del id.
+2. **Filter** "Con consentimiento": deja pasar solo las filas cuyo consentimiento está marcado (ajusta la columna).
+3. **Code** "Normalizar" (modo *Run Once for All Items*), como el del apartado 10 pero con `source: "import"` y los datos fijos de la importación. Ajusta los títulos de las columnas y el nombre exacto del evento:
+
+   ```js
+   const texto = (valor) => String(valor ?? '').trim();
+   return $input.all().map((item) => {
+     const fila = item.json;
+     let telefono = texto(fila['Teléfono']).replace(/[\s().-]/g, '');
+     if (/^9\d{8}$/.test(telefono)) telefono = '+51' + telefono;
+     // Fecha del registro "12/04/2026" (hora de Lima) → "2026-04-12T00:00:00-05:00".
+     const [dia, mes, anio] = texto(fila['Fecha de registro']).split('/');
+     return { json: {
+       fila: fila.fila,
+       body: {
+         source: 'import',
+         externalId: `mml-2026:${fila.fila}`,
+         consentVersion: 'import-mml-v1',
+         consentedAt: `${anio}-${mes.padStart(2, '0')}-${dia.padStart(2, '0')}T00:00:00-05:00`,
+         fullName: texto(fila['Nombre']),
+         phone: telefono,
+         email: texto(fila['Correo']),
+         tripSlug: 'maraton-santiago-2027',
+         channel: 'event',
+         originDetail: 'Media Maratón de Lima 2026', // el nombre exacto del evento
+       },
+     } };
+   });
+   ```
+4. **Loop Over Items** "Fila a fila" con *Batch Size* = `1`. Su salida *loop* va a un **Wait** de 1 segundo y de ahí a:
+5. **HTTP Request** "Importar fila": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads` con la credencial *Header Auth* y cuerpo JSON `{{ JSON.stringify($('Fila a fila').item.json.body) }}`. En **Options** → *Response* activa *Include Response Headers and Status* y *Never Error*, para que un `409` o un `422` no detengan la importación.
+6. **Edit Fields (Set)** "Resultado", con *Include Other Input Fields* desactivado: `fila` = `{{ $('Fila a fila').item.json.fila }}` y `estado` = `{{ $json.body.status ?? $json.body.error ?? 'http_' + $json.statusCode }}`. Conecta su salida **de vuelta a la entrada de "Fila a fila"**.
+7. En la salida *done* de "Fila a fila", **Code** "Resumen" (modo *Run Once for All Items*) y un solo **Send Email** a ti con su texto. Solo lleva conteos y números de fila, nunca datos de las personas:
+
+   ```js
+   const conteos = {};
+   const conError = [];
+   for (const { json } of $input.all()) {
+     conteos[json.estado] = (conteos[json.estado] ?? 0) + 1;
+     if (!['created', 'duplicate', 'existing'].includes(json.estado)) conError.push(json.fila);
+   }
+   const lineas = Object.entries(conteos).map(([estado, n]) => `${estado}: ${n}`);
+   return [{ json: { texto: `Importación terminada.\n${lineas.join('\n')}\nFilas con error: ${conError.join(', ') || 'ninguna'}` } }];
+   ```
+
+   `created` son leads nuevos; `duplicate`, filas ya importadas en una ejecución anterior; `existing`, personas que ya estaban en el CRM con ese teléfono (no se tocan). Las filas con `conflict` (la fila cambió desde la importación anterior), `invalid_request` (algún dato no cumple el formato) o `unknown_trip` se revisan a mano.
+
+**Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0005` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
+
+**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0005` aplicada en producción. Repetirla por error no duplica personas.
 
 ## Reservas y portal del runner
 
