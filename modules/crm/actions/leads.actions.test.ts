@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("../services/leads.service", () => ({
   archiveLead: vi.fn(),
   createLead: vi.fn(),
+  optOutLead: vi.fn(),
   updateLead: vi.fn(),
   changeLeadStage: vi.fn(),
   changeLeadOwner: vi.fn(),
@@ -28,6 +29,7 @@ import {
   changeLeadOwner,
   changeLeadStage,
   createLead,
+  optOutLead,
   setNextAction,
   updateLead,
 } from "../services/leads.service";
@@ -38,6 +40,7 @@ import {
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
+  optOutLeadAction,
   setNextActionAction,
   updateLeadAction,
 } from "./leads.actions";
@@ -290,6 +293,7 @@ const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
 const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
 const NEXT_ACTION = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
 const ARCHIVE = { leadId: LEAD_ID };
+const OPT_OUT = { leadId: LEAD_ID };
 
 type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
 
@@ -300,6 +304,7 @@ const DETAIL_ACTIONS = [
   ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
   ["setNextActionAction", setNextActionAction, NEXT_ACTION, setNextAction],
   ["archiveLeadAction", archiveLeadAction, ARCHIVE, archiveLead],
+  ["optOutLeadAction", optOutLeadAction, OPT_OUT, optOutLead],
 ] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
 
 describe("acciones de la ficha: permisos y errores del service", () => {
@@ -639,6 +644,17 @@ describe("setNextActionAction", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("con un lead que pidió no seguir devuelve opted_out con su mensaje y no revalida", async () => {
+    vi.mocked(setNextAction).mockResolvedValue("opted_out");
+    expect(await setNextActionAction(IDLE, form(NEXT_ACTION))).toEqual({
+      status: "error",
+      code: "opted_out",
+      message: "El contacto pidió no seguir: no se programan próximas acciones.",
+      values: NEXT_ACTION,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("con un lead pagado o perdido devuelve closed y no revalida", async () => {
     vi.mocked(setNextAction).mockResolvedValue("closed");
     expect(await setNextActionAction(IDLE, form(NEXT_ACTION))).toEqual({
@@ -675,5 +691,55 @@ describe("archiveLeadAction", () => {
       status: "error",
       message: "El lead ya no existe o está archivado. Recarga la página.",
     });
+  });
+});
+
+describe("optOutLeadAction", () => {
+  const SMUGGLED = { actorUserId: "intruder", stage: "paid", lostReason: "Otro", contactOptOutAt: "2020-01-01" };
+
+  it("registra la baja con el usuario de la sesión, ignora campos extra y revalida la lista y la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(optOutLead).mockResolvedValue("opted_out");
+
+    expect(await optOutLeadAction(IDLE, form({ ...OPT_OUT, ...SMUGGLED }))).toEqual({
+      status: "success", message: "Registrado: pidió no seguir.",
+    });
+    expect(requirePermission).toHaveBeenCalledExactlyOnceWith("leads.manage");
+    expect(optOutLead).toHaveBeenCalledExactlyOnceWith(LEAD_ID, "session-user");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("si ya tenía baja devuelve no_change con su mensaje, sin eco de campos extra, y no revalida", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("no_change");
+    expect(await optOutLeadAction(IDLE, form({ ...OPT_OUT, ...SMUGGLED }))).toEqual({
+      status: "error",
+      code: "no_change",
+      message: "Ya estaba registrado que pidió no seguir.",
+      values: OPT_OUT,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("con un lead inexistente o archivado devuelve not_found y no revalida", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("not_found");
+    expect(await optOutLeadAction(IDLE, form(OPT_OUT))).toEqual({
+      status: "error",
+      code: "not_found",
+      message: "El lead ya no existe o está archivado. Recarga la página.",
+      values: OPT_OUT,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("su resultado encaja en ConfirmActionState (status y message)", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("opted_out");
+    const success: ConfirmActionState = await optOutLeadAction(IDLE, form(OPT_OUT));
+    expect(success).toEqual({ status: "success", message: "Registrado: pidió no seguir." });
+
+    vi.mocked(optOutLead).mockResolvedValue("no_change");
+    const error: ConfirmActionState = await optOutLeadAction(IDLE, form(OPT_OUT));
+    expect(error).toMatchObject({ status: "error", message: "Ya estaba registrado que pidió no seguir." });
   });
 });

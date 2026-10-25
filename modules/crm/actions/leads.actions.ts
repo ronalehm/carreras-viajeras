@@ -20,6 +20,7 @@ import {
   changeLeadOwner,
   changeLeadStage,
   createLead,
+  optOutLead,
   setNextAction,
   updateLead,
 } from "../services/leads.service";
@@ -39,6 +40,7 @@ const ERROR_MESSAGES: Record<LeadActionErrorCode, string> = {
   not_found: "El lead ya no existe o está archivado. Recarga la página.",
   no_change: "No hay cambios.",
   closed: "El lead está cerrado o archivado.",
+  opted_out: "El contacto pidió no seguir: no se programan próximas acciones.",
 };
 
 const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
@@ -259,4 +261,32 @@ export async function archiveLeadAction(
 
   revalidateLead(parsed.data.leadId);
   return { status: "success", message: "Lead archivado." };
+}
+
+// Opt-out is final in the MVP: the lead becomes lost, loses its next action and n8n prepares no
+// more drafts. The author of its activities is the session user. Its state fits ConfirmActionState.
+export async function optOutLeadAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, LEAD_ID_FIELDS);
+  const parsed = leadIdSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => optOutLead(parsed.data.leadId, actor.id));
+  if (result === "not_found") return failure(result, values);
+  if (result === "no_change") {
+    return {
+      status: "error",
+      code: result,
+      message: "Ya estaba registrado que pidió no seguir.",
+      values,
+    };
+  }
+
+  revalidateLead(parsed.data.leadId);
+  return { status: "success", message: "Registrado: pidió no seguir." };
 }
