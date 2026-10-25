@@ -463,7 +463,7 @@ Cruce entre esta estrategia y lo que el repositorio define en `docs/specs/` y en
 
 ### Brechas a resolver antes de medir por canal y cohorte
 
-1. **Origen:** el CRM solo distingue `whatsapp`, `web_form` y `other`. Los canales del §3 (evento, aliado/club, referido, Instagram, Facebook, TikTok, YouTube, Google Ads, estados de WhatsApp, Luma) no tienen valor propio. Mientras no haya una spec que lo amplíe, registrar el canal real en la nota de alta con un formato fijo (por ejemplo, `Origen: evento – <nombre>`).
+1. **Origen:** el CRM solo distingue `whatsapp`, `web_form` y `other`. Los canales del §3 (evento, aliado/club, referido, Instagram, Facebook, TikTok, YouTube, Google Ads, estados de WhatsApp, Luma) no tienen valor propio. La spec en borrador [`crm-lead-sources.md`](../specs/crm-lead-sources.md) propone ampliarlos; mientras no esté aprobada e implementada, registrar el canal real en la nota de alta con un formato fijo (por ejemplo, `Origen: evento – <nombre>`).
 2. **Lead ↔ reserva:** no están vinculados (decisión 19 de `runner-portal.md`). Las tasas por cohorte (§8) exigen cruzarlos a mano hasta que una spec lo resuelva.
 3. **Ficha comercial:** necesidad o persona, duda principal, preferencia de contacto, permiso de seguimiento y versión de propuesta enviada no tienen campo; van en notas del historial con etiquetas acordadas.
 4. **Términos de reserva:** el catálogo guarda un precio "desde" en USD y la lista de inclusiones; no hay campos para exclusiones, monto de reserva (US$200 mencionado), cancelación ni responsables. Esos términos se publican como contenido fijo cuando MAZ los apruebe.
