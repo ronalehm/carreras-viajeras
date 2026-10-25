@@ -61,7 +61,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_gigantic_puma.sql` crea la tabla de perfiles de runners (pendiente, después de `0003`; ver [Migración de la tabla de perfiles](#migración-de-la-tabla-de-perfiles)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_gigantic_puma.sql` crea la tabla de perfiles de runners (pendiente, después de `0003`; ver [Migración de la tabla de perfiles](#migración-de-la-tabla-de-perfiles)) y `drizzle/0005_unusual_nighthawk.sql` añade los patrocinadores (pendiente, después de `0004` y antes de desplegar su código; ver [Migración de patrocinadores](#migración-de-patrocinadores)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -401,6 +401,92 @@ RETURNING user_id, email;
 ```
 
 Borra solo el perfil: la cuenta de Neon Auth, sus reservas y sus pagos no cambian (no se tocan tablas de `neon_auth` ni filas de `profiles`, `staff_*` o `bookings`). Si tiene reservas vinculadas, seguirá apareciendo en el CRM de corredores con el nombre y el correo de su reserva más reciente y "Sin perfil". Si vuelve a guardar su perfil en `/cuenta/perfil`, se crea una fila nueva con un consentimiento nuevo.
+
+## Patrocinadores
+
+Especificado en [`sponsors-portal.md`](docs/specs/sponsors-portal.md). Las marcas patrocinadoras publican y promocionan sus eventos dentro del mismo catálogo de viajes, siempre con revisión del equipo: el admin da de alta cada marca e invita a sus personas, la persona patrocinadora crea borradores en `/patrocinador` y los envía a revisión, y `commercial` y `admin` los publican, los devuelven con un motivo o los destacan en la portada. La Fase 1 añade las tablas, el rol, los permisos y las guardas; el CRM de marcas, el portal y la promoción pública llegan en las fases siguientes.
+
+- **Rol `sponsor`, solo por invitación.** Es un valor nuevo del enum `staff_role`. El admin invita con `role = 'sponsor'` y la marca (`sponsor_id`), y la aceptación copia la marca a la asignación en la misma sentencia. Registrarse sin invitación no concede nada.
+- **Sin acceso al CRM.** `sponsor` solo tiene el permiso `sponsor.portal`: `/crm/**` le muestra el aviso sin acceso y `GET /api/crm/me` responde 403. Gestionar marcas (`sponsors.manage`) es solo de `admin`.
+- **Una marca por cuenta.** Una asignación `sponsor` siempre lleva `sponsor_id` y una de staff nunca la lleva; lo mismo en las invitaciones (CHECK). Los eventos pertenecen a la marca (`trips.sponsor_id`), no a la persona.
+- **Revisión sin tocar `trip_status`.** `review_status` (`in_review`, `changes_requested`) y `review_note` (el último motivo de devolución) solo existen en borradores de patrocinador; `featured` solo en viajes publicados. Las lecturas públicas siguen filtrando `status = 'published'`.
+
+### Migración de patrocinadores
+
+Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon que la necesite). **Orden: después de `0004` (perfiles de runners), la última documentada en [Migración de la tabla de perfiles](#migración-de-la-tabla-de-perfiles).** Modifica `staff_assignments`, `staff_invitations` (de `0000`) y `trips` (de `0001`), y las migraciones se aplican en el orden del journal. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production` y crearía de nuevo las tablas de staff. Una migración ya aplicada nunca se edita; si otra rama integra antes en `main` una migración `0005`, esta se regenera con `npm run db:generate` y se usa el nombre de archivo definitivo en los pasos siguientes.
+
+> **Aplicar antes de desplegar.** Las consultas `select()` de `trips` del código de la Fase 1 ya leen `sponsor_id`, `featured`, `review_status` y `review_note`: si se despliega antes de migrar, el catálogo (`/`, `/viajes/<slug>`) y `/crm/viajes` fallan con `column ... does not exist`. Al revés no hay problema: el código desplegado hoy no lee las columnas nuevas, que tienen valores por defecto (`featured = false`, el resto `NULL`), así que la migración se puede aplicar antes de mergear.
+
+1. Revisar `drizzle/0005_unusual_nighthawk.sql`: solo afecta a objetos de `public`.
+   - Crea el enum `trip_review_status` (`in_review`, `changes_requested`) y añade el valor `sponsor` a `staff_role`.
+   - Crea la tabla `sponsors` (cinco CHECK, FK `created_by` → `profiles` e índice único `sponsors_slug_uq`).
+   - Añade `sponsor_id` a `staff_assignments` y `staff_invitations` (FK → `sponsors`, `ON DELETE restrict`, y un CHECK `*_sponsor_chk` en cada tabla).
+   - Añade a `trips` las columnas `sponsor_id` (FK e índice `trips_sponsor_idx`), `featured`, `review_status` y `review_note`, con tres CHECK (`trips_featured_chk`, `trips_review_chk` y `trips_review_note_chk`).
+
+   No cambia columnas existentes ni inserta filas. Los CHECK que comparan el rol usan `role::text = 'sponsor'`, sin el literal del enum, para que todo el archivo se ejecute en una transacción. `grep -inE 'neon_auth|drop|create schema|alter column|rename' drizzle/0005_unusual_nighthawk.sql` no devuelve nada.
+2. Comprobar los prerrequisitos en esa rama:
+   - `SELECT to_regclass('public.trips'), to_regclass('public.staff_invitations'), to_regclass('public.runner_profiles');` no devuelve `NULL`. Si falta alguna, aplicar antes las migraciones pendientes en orden, siguiendo sus secciones.
+   - `SELECT enum_range(NULL::staff_role);` devuelve `{commercial,admin}`. Si ya incluye `sponsor` (por un intento anterior con la alternativa del paso 4), omitir la línea `ALTER TYPE … ADD VALUE` al aplicar.
+   - `SELECT to_regclass('public.sponsors');` devuelve `NULL` (la migración no está aplicada).
+3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0005` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0005_unusual_nighthawk.sql`.
+
+   **Si Neon responde `unsafe use of new value`.** PostgreSQL permite `ALTER TYPE … ADD VALUE` dentro de una transacción, pero el valor nuevo no se puede usar hasta el `COMMIT`. La migración no debería usarlo, pero si aun así aparece el error: `ROLLBACK;`, ejecutar sola (fuera de `BEGIN;`) la línea `ALTER TYPE "public"."staff_role" ADD VALUE 'sponsor';` y después el resto del archivo, sin esa línea, entre `BEGIN;` y `COMMIT;`. Con psql:
+
+   ```sh
+   psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -c "ALTER TYPE \"public\".\"staff_role\" ADD VALUE 'sponsor';"
+   grep -v "ADD VALUE 'sponsor'" drizzle/0005_unusual_nighthawk.sql | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+
+   **El valor `sponsor` no se puede eliminar:** PostgreSQL no tiene `DROP VALUE` para enums. Dentro de la transacción normal, un `ROLLBACK` lo deshace junto con el resto; pero una vez confirmado (con la alternativa o tras el `COMMIT`), queda en `staff_role` para siempre. Si la migración se abandona después de ese paso, el valor queda sin uso y es inofensivo: ninguna fila lo usa y el código desplegado hoy no lo asigna.
+5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Verificar:
+   - `SELECT enum_range(NULL::staff_role);` devuelve `{commercial,admin,sponsor}` y `SELECT enum_range(NULL::trip_review_status);` devuelve `{in_review,changes_requested}`.
+   - `SELECT conname FROM pg_constraint WHERE conrelid = 'public.sponsors'::regclass ORDER BY 1;` lista 7 restricciones (`sponsors_pkey`, cinco `sponsors_*_chk` y `sponsors_created_by_profiles_user_id_fk`).
+   - `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.staff_assignments'::regclass, 'public.staff_invitations'::regclass, 'public.trips'::regclass) AND (conname LIKE '%sponsor%' OR conname IN ('trips_featured_chk', 'trips_review_chk', 'trips_review_note_chk')) ORDER BY 1, 2;` lista 8 restricciones (`staff_assignments_sponsor_chk`, `staff_assignments_sponsor_id_sponsors_id_fk`, las dos equivalentes de `staff_invitations`, `trips_sponsor_id_sponsors_id_fk` y los tres CHECK de `trips`).
+   - `SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('sponsors_slug_uq', 'trips_sponsor_idx');` devuelve las dos filas.
+   - `SELECT count(*) FROM sponsors;` devuelve 0 y `SELECT count(*) FROM trips WHERE sponsor_id IS NOT NULL OR featured OR review_status IS NOT NULL;` devuelve 0.
+
+Las filas existentes de `staff_*` y `trips` siguen siendo válidas: PostgreSQL comprueba cada `ADD CONSTRAINT … CHECK` contra las filas que ya hay, así que si la migración termina sin error, todas cumplen los CHECK nuevos (staff sin `sponsor_id`, viajes sin revisión ni destacado). No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+### Pruebas manuales de la Fase 1
+
+**Solo en una rama de desarrollo de Neon**, con la migración ya confirmada (el valor `sponsor` no se puede usar en la misma transacción que lo añade), y dentro de `BEGIN;` … `ROLLBACK;`. Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite seguir con la siguiente prueba; en el SQL Editor, ejecutar cada caso en su propio `BEGIN;` … `ROLLBACK;`, repitiendo los datos de partida. Los `user_id` son de prueba (no hace falta una cuenta real: `profiles` no tiene FK hacia `neon_auth`).
+
+Datos de partida, que también deben insertarse sin error:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES
+  ('test-admin-1', 'admin@example.com'),
+  ('test-sponsor-1', 'marca@example.com'),
+  ('test-commercial-1', 'ventas@example.com');
+INSERT INTO sponsors (slug, name, created_by)
+VALUES ('marca-prueba', 'Marca de prueba', 'test-admin-1')
+RETURNING id, created_at, updated_at;
+INSERT INTO staff_invitations (email, role, invited_by, sponsor_id)
+VALUES ('marca@example.com', 'sponsor', 'test-admin-1', (SELECT id FROM sponsors WHERE slug = 'marca-prueba'));
+INSERT INTO staff_assignments (user_id, role, reason, sponsor_id)
+VALUES ('test-sponsor-1', 'sponsor', 'prueba', (SELECT id FROM sponsors WHERE slug = 'marca-prueba'));
+INSERT INTO trips (slug, title, city, country, race_date, distances, summary, sponsor_id, review_status)
+VALUES ('evento-prueba', 'Evento de prueba', 'Lima', 'Perú', '2027-05-16', ARRAY['42k'], 'Evento de prueba de la marca.',
+        (SELECT id FROM sponsors WHERE slug = 'marca-prueba'), 'in_review')
+RETURNING id, status, featured, review_status;
+-- … casos de prueba …
+ROLLBACK;
+```
+
+También se insertan: una marca completa (`slug = 'otra-marca'`, `logo_url` y `website_url` con `https://`, `description` de 10 a 500 caracteres); una invitación `commercial` sin `sponsor_id` (`'ventas@example.com'`) y una asignación `commercial` sin `sponsor_id` (`'test-commercial-1'`); un borrador de la marca con `review_status = 'changes_requested'` y `review_note = 'Falta la imagen del evento.'`; y un viaje del equipo (`sponsor_id` nulo) con `status = 'published'` y `featured = true`.
+
+La base debe rechazar (en los viajes, cada caso con un `slug` propio, y en invitaciones y asignaciones, con un correo o `user_id` que no choque con los de partida):
+
+- una invitación o una asignación `sponsor` sin `sponsor_id`, y una `commercial` con `sponsor_id` (`staff_invitations_sponsor_chk` y `staff_assignments_sponsor_chk`);
+- un `sponsors.slug` con mayúsculas (`'Marca-Prueba'`) o duplicado (`'marca-prueba'`, `sponsors_slug_uq`);
+- un `sponsors.logo_url` o `website_url` con `http://` (`'http://example.com/logo.png'`);
+- un `sponsors.name` de 1 carácter (`'A'`);
+- un viaje con `review_status = 'in_review'` y `sponsor_id` nulo, y uno de la marca con `review_status = 'in_review'` y `status = 'published'` (`trips_review_chk`);
+- un borrador de la marca con `review_status = 'changes_requested'` sin `review_note`, y uno con `review_note` y `review_status` nulo o `'in_review'` (`trips_review_note_chk`);
+- un viaje con `featured = true` y `status = 'draft'` (`trips_featured_chk`).
 
 ## Reglas de colaboración
 
