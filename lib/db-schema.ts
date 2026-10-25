@@ -17,9 +17,9 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const staffRoleEnum = pgEnum("staff_role", ["commercial", "admin"]);
+export const staffRoleEnum = pgEnum("staff_role", ["commercial", "admin", "sponsor"]);
 
-// Staff accounts only. user_id is the stable Neon Auth id (no cross-schema FK).
+// Accounts with an assigned role (staff or sponsor). user_id is the stable Neon Auth id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
 export const profiles = pgTable(
   "profiles",
@@ -35,7 +35,50 @@ export const profiles = pgTable(
   ],
 );
 
+// Brands. Never deleted; slug fixed at creation. updated_at is set by the service.
+export const sponsors = pgTable(
+  "sponsors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    logoUrl: text("logo_url"),
+    websiteUrl: text("website_url"),
+    description: text("description"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sponsors_slug_uq").on(table.slug),
+    check(
+      "sponsors_slug_format_chk",
+      sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${table.slug}) BETWEEN 3 AND 80`,
+    ),
+    check("sponsors_name_chk", sql`char_length(${table.name}) BETWEEN 2 AND 80`),
+    check(
+      "sponsors_logo_url_chk",
+      sql`${table.logoUrl} IS NULL OR (${table.logoUrl} LIKE 'https://%' AND char_length(${table.logoUrl}) <= 2048)`,
+    ),
+    check(
+      "sponsors_website_url_chk",
+      sql`${table.websiteUrl} IS NULL OR (${table.websiteUrl} LIKE 'https://%' AND char_length(${table.websiteUrl}) <= 2048)`,
+    ),
+    check(
+      "sponsors_description_chk",
+      sql`${table.description} IS NULL OR char_length(${table.description}) BETWEEN 10 AND 500`,
+    ),
+  ],
+);
+
 // Active assignment = revoked_at IS NULL. granted_by NULL = bootstrap script.
+// sponsor_id is set exactly on sponsor rows; role::text keeps the migration single-transaction.
 export const staffAssignments = pgTable(
   "staff_assignments",
   {
@@ -55,15 +98,21 @@ export const staffAssignments = pgTable(
     revokedBy: text("revoked_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
   },
   (table) => [
     uniqueIndex("staff_assignments_active_uq")
       .on(table.userId, table.role)
       .where(sql`${table.revokedAt} IS NULL`),
+    check(
+      "staff_assignments_sponsor_chk",
+      sql`(${table.role}::text = 'sponsor') = (${table.sponsorId} IS NOT NULL)`,
+    ),
   ],
 );
 
 // Pending invitation = accepted_at IS NULL AND revoked_at IS NULL (expiry checked at query time).
+// sponsor_id is set exactly on sponsor invitations and copied on acceptance.
 export const staffInvitations = pgTable(
   "staff_invitations",
   {
@@ -87,11 +136,16 @@ export const staffInvitations = pgTable(
     revokedBy: text("revoked_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
   },
   (table) => [
     check(
       "staff_invitations_email_lowercase_chk",
       sql`${table.email} = lower(${table.email})`,
+    ),
+    check(
+      "staff_invitations_sponsor_chk",
+      sql`(${table.role}::text = 'sponsor') = (${table.sponsorId} IS NOT NULL)`,
     ),
     uniqueIndex("staff_invitations_pending_email_uq")
       .on(table.email)
@@ -100,10 +154,12 @@ export const staffInvitations = pgTable(
 );
 
 export const tripStatusEnum = pgEnum("trip_status", ["draft", "published", "archived"]);
+export const tripReviewStatusEnum = pgEnum("trip_review_status", ["in_review", "changes_requested"]);
 
 // Trips are archived, never deleted, so a future leads.trip_id FK never dangles.
 // Dates are calendar dates (YYYY-MM-DD); price_usd is an integer "from" price, always USD.
 // updated_at is set by the service on every UPDATE (no trigger).
+// sponsor_id NULL = team trip; review_* only on sponsor drafts. sponsor_id is never updated.
 export const trips = pgTable(
   "trips",
   {
@@ -122,6 +178,10 @@ export const trips = pgTable(
     capacity: integer("capacity"),
     imageUrl: text("image_url"),
     status: tripStatusEnum("status").notNull().default("draft"),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
+    featured: boolean("featured").notNull().default(false),
+    reviewStatus: tripReviewStatusEnum("review_status"),
+    reviewNote: text("review_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -144,6 +204,17 @@ export const trips = pgTable(
     check("trips_price_usd_chk", sql`${table.priceUsd} IS NULL OR ${table.priceUsd} >= 0`),
     check("trips_capacity_chk", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
     check("trips_image_url_chk", sql`${table.imageUrl} IS NULL OR ${table.imageUrl} LIKE 'https://%'`),
+    index("trips_sponsor_idx").on(table.sponsorId),
+    check("trips_featured_chk", sql`NOT ${table.featured} OR ${table.status} = 'published'`),
+    check(
+      "trips_review_chk",
+      sql`${table.reviewStatus} IS NULL OR (${table.sponsorId} IS NOT NULL AND ${table.status} = 'draft')`,
+    ),
+    // IS NOT DISTINCT FROM: a NULL review_status must not let the CHECK pass.
+    check(
+      "trips_review_note_chk",
+      sql`(${table.reviewStatus} IS NOT DISTINCT FROM 'changes_requested') = (${table.reviewNote} IS NOT NULL) AND (${table.reviewNote} IS NULL OR char_length(${table.reviewNote}) BETWEEN 3 AND 500)`,
+    ),
   ],
 );
 

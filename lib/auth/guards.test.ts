@@ -7,21 +7,29 @@ const getSession = vi.fn();
 vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(),
+  loadSponsorId: vi.fn(),
   loadStaffRoles: vi.fn(),
 }));
 
-import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
+import {
+  acceptInvitationAndLoadStaffRoles,
+  loadSponsorId,
+  loadStaffRoles,
+} from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
+import type { StaffRole } from "@/lib/auth/permissions";
 import {
   getCurrentUser,
   requireCrmUser,
   requirePermission,
+  requireSponsor,
   requireUser,
   requireVerifiedEmail,
 } from "@/lib/auth/guards";
 
 const accept = vi.mocked(acceptInvitationAndLoadStaffRoles);
 const load = vi.mocked(loadStaffRoles);
+const loadSponsor = vi.mocked(loadSponsorId);
 
 function sessionWith(user: Record<string, unknown>) {
   getSession.mockResolvedValue({ data: { session: { id: "session-1" }, user }, error: null });
@@ -33,6 +41,7 @@ beforeEach(() => {
   getSession.mockReset();
   accept.mockReset();
   load.mockReset();
+  loadSponsor.mockReset();
 });
 
 describe("missing or invalid session", () => {
@@ -165,5 +174,91 @@ describe("verified email", () => {
     expect(user).toEqual({ id: "user-1", email: "ana@example.com", emailVerified: true, staffRoles: [] });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
+describe("requireSponsor", () => {
+  const sponsorId = "6f1c2b9e-4a8d-4f3e-9b7a-2c5d8e1f0a3b";
+
+  it("without a session → UnauthorizedError without loading the brand", async () => {
+    getSession.mockResolvedValue({ data: null, error: null });
+
+    await expect(requireSponsor()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(loadSponsor).not.toHaveBeenCalled();
+  });
+
+  it("with an unverified email → ForbiddenError without loading the brand", async () => {
+    sessionWith({ ...verifiedUser, emailVerified: false });
+    load.mockResolvedValue(["sponsor"]);
+
+    await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(loadSponsor).not.toHaveBeenCalled();
+  });
+
+  it.each<[StaffRole[]]>([[["commercial"]], [[]]])(
+    "roles %j → ForbiddenError without loading the brand",
+    async (roles) => {
+      sessionWith(verifiedUser);
+      accept.mockResolvedValue(roles);
+
+      await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+      expect(loadSponsor).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each<[StaffRole[]]>([[["admin"]], [["sponsor"]]])(
+    "roles %j without a brand assignment → ForbiddenError",
+    async (roles) => {
+      sessionWith(verifiedUser);
+      accept.mockResolvedValue(roles);
+      loadSponsor.mockResolvedValue(null);
+
+      await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+      expect(loadSponsor).toHaveBeenCalledWith("user-1");
+    },
+  );
+
+  it("returns the current user with the brand of a sponsor", async () => {
+    sessionWith({ ...verifiedUser, email: " Ana@Example.com " });
+    accept.mockResolvedValue(["sponsor"]);
+    loadSponsor.mockResolvedValue(sponsorId);
+
+    await expect(requireSponsor()).resolves.toEqual({
+      id: "user-1",
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: ["sponsor"],
+      sponsorId,
+    });
+    expect(loadSponsor).toHaveBeenCalledTimes(1);
+    expect(loadSponsor).toHaveBeenCalledWith("user-1");
+  });
+
+  it("maps a brand lookup failure to ForbiddenError without cause or original message", async () => {
+    sessionWith(verifiedUser);
+    accept.mockResolvedValue(["sponsor"]);
+    loadSponsor.mockRejectedValue(new Error("password authentication failed for user app"));
+
+    const error = await requireSponsor().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect((error as ForbiddenError).cause).toBeUndefined();
+    expect((error as ForbiddenError).message).toBe("forbidden");
+    expect(String((error as ForbiddenError).stack)).not.toContain("password");
+  });
+
+  it("keeps sponsor out of the CRM and of every existing permission", async () => {
+    sessionWith(verifiedUser);
+    accept.mockResolvedValue(["sponsor"]);
+
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    for (const permission of [
+      "staff.manage",
+      "trips.manage",
+      "leads.manage",
+      "bookings.manage",
+      "sponsors.manage",
+    ] as const) {
+      await expect(requirePermission(permission)).rejects.toBeInstanceOf(ForbiddenError);
+    }
   });
 });

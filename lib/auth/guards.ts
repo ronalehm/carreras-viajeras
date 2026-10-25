@@ -1,7 +1,11 @@
 import "server-only";
 import { cache } from "react";
 import { z } from "zod";
-import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
+import {
+  acceptInvitationAndLoadStaffRoles,
+  loadSponsorId,
+  loadStaffRoles,
+} from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
 import { getAuth } from "@/lib/auth/server";
@@ -12,6 +16,8 @@ export type CurrentUser = {
   emailVerified: boolean;
   staffRoles: StaffRole[];
 };
+
+export type SponsorUser = CurrentUser & { sponsorId: string };
 
 // Minimal trusted shape; z.object drops any extra user field (role, staffRoles, …).
 const sessionSchema = z.object({
@@ -76,4 +82,21 @@ export async function requirePermission(permission: Permission): Promise<Current
 
 export function requireCrmUser(): Promise<CurrentUser> {
   return requirePermission("crm.access");
+}
+
+async function loadUserSponsorId(userId: string) {
+  try {
+    return await loadSponsorId(userId);
+  } catch {
+    // Fail closed without exposing the original database message.
+    throw new ForbiddenError();
+  }
+}
+
+// The portal always needs a brand: admin passes can() but is denied without a sponsor assignment.
+export async function requireSponsor(): Promise<SponsorUser> {
+  const user = await requirePermission("sponsor.portal");
+  const sponsorId = await loadUserSponsorId(user.id);
+  if (!sponsorId) throw new ForbiddenError();
+  return { ...user, sponsorId };
 }

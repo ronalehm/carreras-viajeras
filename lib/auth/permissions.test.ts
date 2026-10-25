@@ -6,6 +6,16 @@ vi.mock("server-only", () => ({}));
 import { authErrorResponse, ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
 
+const ALL_PERMISSIONS = [
+  "crm.access",
+  "staff.manage",
+  "trips.manage",
+  "leads.manage",
+  "bookings.manage",
+  "sponsors.manage",
+  "sponsor.portal",
+] as const satisfies readonly Permission[];
+
 describe("can", () => {
   it.each<[StaffRole[], Permission, boolean]>([
     [["commercial"], "crm.access", true],
@@ -28,28 +38,45 @@ describe("can", () => {
     [["admin"], "bookings.manage", true],
     [["commercial", "admin"], "bookings.manage", true],
     [[], "bookings.manage", false],
+    [["sponsor"], "sponsors.manage", false],
+    [["commercial"], "sponsors.manage", false],
+    [["admin"], "sponsors.manage", true],
+    [["commercial", "admin"], "sponsors.manage", true],
+    [[], "sponsors.manage", false],
+    [["sponsor"], "sponsor.portal", true],
+    [["commercial"], "sponsor.portal", false],
+    [["admin"], "sponsor.portal", true],
+    [["commercial", "admin"], "sponsor.portal", true],
+    [[], "sponsor.portal", false],
   ])("roles %j with %s → %s", (roles, permission, expected) => {
     expect(can(roles, permission)).toBe(expected);
   });
 
   it("grants admin every permission", () => {
-    for (const permission of [
-      "crm.access",
-      "staff.manage",
-      "trips.manage",
-      "leads.manage",
-      "bookings.manage",
-    ] as const) {
+    for (const permission of ALL_PERMISSIONS) {
       expect(can(["admin"], permission)).toBe(true);
     }
   });
 
   it("denies everything without roles", () => {
-    expect(can([], "crm.access")).toBe(false);
-    expect(can([], "staff.manage")).toBe(false);
-    expect(can([], "trips.manage")).toBe(false);
-    expect(can([], "leads.manage")).toBe(false);
-    expect(can([], "bookings.manage")).toBe(false);
+    for (const permission of ALL_PERMISSIONS) {
+      expect(can([], permission)).toBe(false);
+    }
+  });
+
+  it("gives sponsor only sponsor.portal", () => {
+    for (const permission of ALL_PERMISSIONS) {
+      expect(can(["sponsor"], permission)).toBe(permission === "sponsor.portal");
+    }
+  });
+
+  it("keeps commercial's four permissions without the sponsor ones", () => {
+    expect(ALL_PERMISSIONS.filter((permission) => can(["commercial"], permission))).toEqual([
+      "crm.access",
+      "trips.manage",
+      "leads.manage",
+      "bookings.manage",
+    ]);
   });
 
   it.each(["unknown.permission", "toString", "constructor", "__proto__"])(

@@ -36,6 +36,13 @@
       "when": 1792889736995,
       "tag": "0004_gigantic_puma",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792890704978,
+      "tag": "0005_unusual_nighthawk",
+      "breakpoints": true
     }
   ]
 }

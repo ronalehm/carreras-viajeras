@@ -7,7 +7,9 @@ export type Permission =
   | "staff.manage"
   | "trips.manage"
   | "leads.manage"
-  | "bookings.manage";
+  | "bookings.manage"
+  | "sponsors.manage"
+  | "sponsor.portal";
 
 // Roles granted each permission besides admin, which has every known permission.
 const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
@@ -16,6 +18,9 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   "trips.manage": ["commercial"],
   "leads.manage": ["commercial"],
   "bookings.manage": ["commercial"],
+  "sponsors.manage": [],
+  // Admin passes can(), but requireSponsor also demands a brand assignment.
+  "sponsor.portal": ["sponsor"],
 };
 
 export function can(roles: readonly StaffRole[], permission: Permission): boolean {
