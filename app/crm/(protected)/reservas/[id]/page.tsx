@@ -2,8 +2,15 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
-import { BookingForm, BookingStatusBadge, changeBookingStatusAction, getBookingById } from "@/modules/bookings";
-import { formatTripPrice } from "@/modules/trips";
+import {
+  BookingForm,
+  BookingStatusBadge,
+  changeBookingStatusAction,
+  getBookingById,
+  listBookingPayments,
+  PaymentForm,
+  PaymentTable,
+} from "@/modules/bookings";
 
 export const metadata: Metadata = { title: "Reserva" };
 
@@ -21,7 +28,8 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
     );
   }
   const { id } = await params;
-  const booking = await getBookingById(id);
+  // listBookingPayments returns [] for a non-UUID id without querying, so both reads run in parallel.
+  const [booking, payments] = await Promise.all([getBookingById(id), listBookingPayments(id)]);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
 
@@ -63,8 +71,6 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
             {[
               ["Correo", booking.participantEmail],
               ["Paquete", booking.distance ? `${booking.packageLabel} · ${booking.distance}` : booking.packageLabel],
-              ["Total acordado", formatTripPrice(booking.totalUsd)],
-              ["Pagado", formatTripPrice(booking.paidUsd)],
               ["Fecha límite del saldo", booking.balanceDueOn ?? "—"],
               ["Nota interna", booking.internalNote ?? "—"],
             ].map(([term, value]) => (
@@ -78,6 +84,13 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
       ) : (
         <BookingForm booking={booking} />
       )}
+      <section aria-labelledby="booking-payments" className="flex flex-col gap-4">
+        <h2 id="booking-payments" className="text-lg font-semibold">Pagos</h2>
+        <PaymentTable
+          payments={payments} totalUsd={booking.totalUsd} paidUsd={booking.paidUsd} editable={!cancelled}
+        />
+        {!cancelled && <PaymentForm bookingId={booking.id} />}
+      </section>
     </section>
   );
 }

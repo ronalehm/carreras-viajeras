@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
-import type { bookingFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
+import type { bookingFormSchema, paymentFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
 export type ItineraryKind = (typeof itineraryKindEnum.enumValues)[number];
@@ -102,6 +102,18 @@ export type CrmBooking = CrmBookingListItem & {
   balanceDueOn: string | null; // YYYY-MM-DD
   internalNote: string | null;
   createdAt: Date;
+};
+
+export type PaymentInput = z.output<typeof paymentFormSchema>;
+
+// The CRM sees every payment, voided ones included, with who recorded it.
+export type CrmPayment = {
+  id: string;
+  amountUsd: number;
+  paidOn: string; // YYYY-MM-DD
+  concept: string;
+  recordedByEmail: string;
+  voided: boolean;
 };
 
 // Fits ConfirmActionState of components/shared/ConfirmActionButton.

@@ -7,6 +7,8 @@ import {
   bookingStatusSchema,
   itineraryKindSchema,
   itineraryStatusSchema,
+  paymentFormSchema,
+  paymentVoidSchema,
   updateBookingSchema,
 } from "./bookings.schema";
 
@@ -115,5 +117,47 @@ describe("bookingStatusChangeSchema", () => {
   });
   it.each(["pending", "completed", ""])("rejects %j", (status) => {
     expect(issueFields(bookingStatusChangeSchema.safeParse({ bookingId: BOOKING_ID, status }))).toEqual(["status"]);
+  });
+});
+
+describe("paymentFormSchema", () => {
+  const validPayment = { bookingId: BOOKING_ID, amountUsd: " 300 ", paidOn: "2027-03-03", concept: " Reserva " };
+  const parsePayment = (overrides: Record<string, string | undefined>) =>
+    paymentFormSchema.safeParse({ ...validPayment, ...overrides });
+
+  it("parses a valid payment into clean values", () => {
+    expect(parsePayment({}).data).toEqual({
+      bookingId: BOOKING_ID, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva",
+    });
+  });
+
+  it.each(["0", "300.50", "-1", "abc", "", "1000001", undefined])("rejects amount %j with the USD message", (amountUsd) => {
+    const result = parsePayment({ amountUsd });
+    expect(issueFields(result)).toEqual(["amountUsd"]);
+    expect(result.error?.issues[0].message).toBe("Indica el importe en dólares, sin decimales.");
+  });
+
+  it.each([
+    ["bookingId", "abc"],
+    ["paidOn", ""],
+    ["paidOn", "2027-02-30"],
+    ["concept", "  "],
+    ["concept", "x".repeat(81)],
+  ])("rejects an invalid %s (%j)", (field, value) => {
+    expect(issueFields(parsePayment({ [field]: value }))).toEqual([field]);
+  });
+
+  it("drops fields that never come from the form", () => {
+    const result = paymentFormSchema.parse({ ...validPayment, recordedBy: "user-x", voidedBy: "user-y" });
+    expect(result).not.toHaveProperty("recordedBy");
+    expect(result).not.toHaveProperty("voidedBy");
+  });
+});
+
+describe("paymentVoidSchema", () => {
+  it("requires a payment id and drops anything else", () => {
+    const id = "22222222-2222-4222-8222-222222222222";
+    expect(paymentVoidSchema.parse({ paymentId: id, voidedBy: "user-y" })).toEqual({ paymentId: id });
+    expect(issueFields(paymentVoidSchema.safeParse({ paymentId: "abc" }))).toEqual(["paymentId"]);
   });
 });

@@ -16,3 +16,7 @@ export { BookingFilters } from "./components/BookingFilters";
 export { BookingForm } from "./components/BookingForm";
 export { BookingStatusBadge, BookingTable } from "./components/BookingTable";
 export type { CrmBooking, CrmBookingListItem } from "./types/bookings.types";
+export { listBookingPayments } from "./services/payments.service";
+export { PaymentForm } from "./components/PaymentForm";
+export { PaymentTable } from "./components/PaymentTable";
+export type { CrmPayment } from "./types/bookings.types";

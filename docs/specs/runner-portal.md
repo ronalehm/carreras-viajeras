@@ -683,10 +683,10 @@ Requisitos previos: F1 cerrada y migración aplicada en la rama de Neon de prueb
 - [x] T5 — Enlace "Reservas" en `CrmShell`, exports y páginas; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T4 · secuencial
 
 ### Fase 3 — CRM: pagos (4 tareas, 11 archivos)
-- [ ] T1 — Schemas de pago con tests; tipos de pagos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 2 · secuencial
-- [ ] T2 — Service de pagos con tests · archivos: `modules/bookings/services/payments.service.ts`, `modules/bookings/services/payments.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions de pagos con tests · archivos: `modules/bookings/actions/payments.actions.ts`, `modules/bookings/actions/payments.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `PaymentTable` y `PaymentForm`, exports y sección "Pagos" en la ficha; medir el Worker · archivos: `modules/bookings/components/PaymentTable.tsx`, `modules/bookings/components/PaymentForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T3 · secuencial
+- [x] T1 — Schemas de pago con tests; tipos de pagos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 2 · secuencial
+- [x] T2 — Service de pagos con tests · archivos: `modules/bookings/services/payments.service.ts`, `modules/bookings/services/payments.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions de pagos con tests · archivos: `modules/bookings/actions/payments.actions.ts`, `modules/bookings/actions/payments.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `PaymentTable` y `PaymentForm`, exports y sección "Pagos" en la ficha; medir el Worker · archivos: `modules/bookings/components/PaymentTable.tsx`, `modules/bookings/components/PaymentForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T3 · secuencial
 
 ### Fase 4 — CRM: itinerario y avisos (5 tareas, 16 archivos)
 - [ ] T1 — Schemas de hito y aviso con tests; tipos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 3 · secuencial
