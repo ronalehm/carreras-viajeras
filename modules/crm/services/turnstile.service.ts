@@ -11,8 +11,9 @@ const TIMEOUT_MS = 3000;
 
 const siteverifyResponseSchema = z.object({
   success: z.boolean(),
-  hostname: z.string().optional(),
-  action: z.string().optional(),
+  // nullish: Siteverify may answer null; a null action or hostname is then invalid, not unavailable.
+  hostname: z.string().nullish(),
+  action: z.string().nullish(),
   "error-codes": z.array(z.string()).optional(),
 });
 
@@ -34,8 +35,11 @@ async function siteverify(body: URLSearchParams): Promise<SiteverifyResponse | "
   } catch {
     return null;
   }
-  if (response.status >= 500) return null;
-  if (!response.ok) return "failed";
+  if (!response.ok) {
+    // Release the connection (Workers) before retrying or failing: the body is never read.
+    await response.body?.cancel().catch(() => {});
+    return response.status >= 500 ? null : "failed";
+  }
   const parsed = siteverifyResponseSchema.safeParse(await response.json().catch(() => null));
   return parsed.success ? parsed.data : "failed";
 }

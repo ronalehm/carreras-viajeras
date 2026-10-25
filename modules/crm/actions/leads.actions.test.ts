@@ -711,7 +711,7 @@ describe("optOutLeadAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
-  it("si ya tenía baja devuelve no_change con su mensaje, sin eco de campos extra, y no revalida", async () => {
+  it("si ya tenía baja devuelve no_change con su mensaje, sin eco de campos extra, y revalida la lista y la ficha", async () => {
     vi.mocked(optOutLead).mockResolvedValue("no_change");
     expect(await optOutLeadAction(IDLE, form({ ...OPT_OUT, ...SMUGGLED }))).toEqual({
       status: "error",
@@ -719,7 +719,8 @@ describe("optOutLeadAction", () => {
       message: "Ya estaba registrado que pidió no seguir.",
       values: OPT_OUT,
     });
-    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
   });
 
   it("con un lead inexistente o archivado devuelve not_found y no revalida", async () => {

@@ -14,6 +14,7 @@ import {
   leadOwnerLabel,
   leadTripLabel,
   OPT_OUT_LOST_REASON,
+  SYSTEM_ACTOR_LABELS,
 } from "./leadDisplay";
 
 describe("lead labels", () => {
@@ -61,6 +62,10 @@ describe("lead labels", () => {
   it("label the origin change and the opt-out in the history", () => {
     expect(LEAD_ACTIVITY_LABELS.channel_changed).toBe("Origen");
     expect(LEAD_ACTIVITY_LABELS.opted_out).toBe("Pidió no seguir");
+  });
+
+  it("label only n8n as a system author: the entry path labels the other activities without one", () => {
+    expect(SYSTEM_ACTOR_LABELS).toEqual({ automation: "n8n" });
   });
 
   it("fix the opt-out lost reason", () => {

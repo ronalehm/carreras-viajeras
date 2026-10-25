@@ -278,6 +278,9 @@ export async function optOutLeadAction(
 
   const result = await runService(() => optOutLead(parsed.data.leadId, actor.id));
   if (result === "not_found") return failure(result, values);
+
+  // no_change: someone else registered it first; revalidate anyway so the detail page shows it.
+  revalidateLead(parsed.data.leadId);
   if (result === "no_change") {
     return {
       status: "error",
@@ -286,7 +289,5 @@ export async function optOutLeadAction(
       values,
     };
   }
-
-  revalidateLead(parsed.data.leadId);
   return { status: "success", message: "Registrado: pidió no seguir." };
 }

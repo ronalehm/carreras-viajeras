@@ -88,9 +88,9 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   opted_out: "Pidió no seguir",
 };
 
-// Author of the activities without one: the web form (created) and n8n (automation).
+// Author of the automation activities, which have none: n8n. Other activities without an author
+// show the lead's entry path (LEAD_SOURCE_LABELS) instead, see LeadTimeline.
 export const SYSTEM_ACTOR_LABELS = {
-  created: "Formulario web",
   automation: "n8n",
 } as const satisfies Partial<Record<LeadActivityType, string>>;
 

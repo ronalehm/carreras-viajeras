@@ -28,6 +28,9 @@ export async function createWebLead(
   const submissionHash = await hashSubmission(input);
   const destination = INQUIRY_DESTINATIONS[input.destination];
 
+  // recent: the 10-minute phone window is not guaranteed under concurrency. There is no lock and no
+  // unique index on phone (decision 8 of crm-leads-pipeline), so two simultaneous submissions with
+  // the same phone and a different submissionId can both insert. Only the idempotency key is unique.
   const result = await getDb().execute<{ created: boolean; existing_hash: string | null }>(sql`
     WITH existing AS (
       SELECT submission_hash FROM leads WHERE idempotency_key = ${input.submissionId}::uuid

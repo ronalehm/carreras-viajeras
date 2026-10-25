@@ -72,7 +72,9 @@ describe("verifyTurnstileToken", () => {
   it.each([
     ["another hostname", passed({ hostname: "evil.example.com" })],
     ["a missing hostname", passed({ hostname: undefined })],
+    ["a null hostname", passed({ hostname: null })],
     ["another action", passed({ action: "login" })],
+    ["a null action", passed({ action: null })],
     ["success: false (timeout-or-duplicate)", json({ success: false, "error-codes": ["timeout-or-duplicate"] })],
   ])("invalid with %s, without retrying", async (_case, response) => {
     fetchMock.mockResolvedValueOnce(response);
@@ -83,6 +85,9 @@ describe("verifyTurnstileToken", () => {
   it("with the development test secret only success is required", async () => {
     configure({ secret: "1x0000000000000000000000000000000AA", isTestSecret: true });
     fetchMock.mockResolvedValueOnce(json({ success: true, hostname: "example.com", action: "" }));
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
+
+    fetchMock.mockResolvedValueOnce(json({ success: true, hostname: null, action: null }));
     await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
 
     fetchMock.mockResolvedValueOnce(json({ success: false, "error-codes": ["invalid-input-response"] }));
@@ -101,6 +106,19 @@ describe("verifyTurnstileToken", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sentBodies().map((body) => body.get("idempotency_key"))).toEqual([KEY, KEY]);
+  });
+
+  it.each([
+    ["a 5xx before retrying", 503],
+    ["a 4xx before failing", 400],
+  ])("cancels the unread body of %s", async (_case, status) => {
+    const failed = new Response("oops", { status });
+    const cancel = vi.spyOn(failed.body!, "cancel");
+    fetchMock.mockResolvedValueOnce(failed).mockResolvedValueOnce(passed());
+
+    await verifyTurnstileToken(INPUT);
+
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it("two failures in a row → unavailable, never a third attempt", async () => {
