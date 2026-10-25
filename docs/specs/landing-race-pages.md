@@ -1,7 +1,7 @@
 # Landing minimalista por carrera
 
 - Módulo: trips (Fase 1) · landing (Fase 2)
-- Estado: aprobado
+- Estado: borrador
 - Base: `trips-catalog.md` (aprobada; catálogo y contrato de lectura pública) y `landing-public-site.md` (aprobada; F4 lee el catálogo en `/viajes/[slug]`). Esta spec **sustituye** en `/viajes/[slug]` la combinación de contenido fijo (`TRIPS`) + catálogo de `landing-public-site.md` F4. Esa spec excluía expresamente "una plantilla genérica para viajes sin contenido fijo", que es justo lo que se pide ahora. No modifica otras specs.
 - Decisiones del usuario (2026-10-25): (1) la información de cada carrera sale **del CRM**, ampliando el catálogo con los campos que hoy solo existen como contenido fijo de Santiago, aunque eso exija una migración aplicada a mano en Neon; (2) Santiago usa **la misma plantilla minimalista** que el resto y su contenido fijo de la página del viaje se elimina del código.
 
@@ -52,7 +52,7 @@ Se busca que **cada carrera publicada en el CRM tenga su propia landing** en `/v
 
    Ningún bloque deja títulos huérfanos ni textos de relleno cuando su dato falta. Cada bloque con título usa `<section aria-labelledby>`. Se mantienen `SiteHeader` y `SiteFooter`.
 6. **Metadatos (F2).** `<title>` = `title` (con el template del layout), `description` = `summary`, y `openGraph.images` = `[imageUrl]` solo si existe. `generateMetadata` y la página comparten una consulta por petición (`cache` de React, como hoy).
-7. **Renderizado (F2).** La ruta sigue dinámica (`ƒ`) porque el catálogo llama a `connection()`; `/`, `/contacto` y `/cuenta` siguen estáticas (`○`). Sin `generateStaticParams`. Coste aceptado: al no existir ya el filtro previo de `TRIPS`, un slug bien formado pero inexistente sí consulta Neon (un slug mal formado sigue devolviendo `null` sin consultar, en `getPublishedTripBySlug`).
+7. **Renderizado (F2).** La ruta sigue dinámica (`ƒ`) porque el catálogo llama a `connection()`; `/` y `/cuenta` siguen estáticas (`○`) y `/contacto` sigue dinámica (`ƒ`), como ya está en `main` (lee `searchParams`). Sin `generateStaticParams`. Coste aceptado: al no existir ya el filtro previo de `TRIPS`, un slug bien formado pero inexistente sí consulta Neon (un slug mal formado sigue devolviendo `null` sin consultar, en `getPublishedTripBySlug`).
 8. **Errores (F2).** Los errores de la base se propagan sin capturar (página de error por defecto de Next, sin el mensaje en producción), como hoy.
 9. **Consulta (F2).** El CTA es un enlace a `wa.me` con `buildWhatsAppUrl(WHATSAPP_NUMBER, buildTripInquiryMessage(...))` (utilidades existentes de `modules/landing/utils/inquiry.ts` + una función nueva), en nueva pestaña. Mensaje:
    ```
@@ -82,7 +82,7 @@ Verificación manual con `npm run dev` contra una rama de Neon con la migración
 - [ ] (F2) Dado `getCatalogTrip`, entonces: slug no publicado → `null`; viaje publicado → vista con fechas, precios y cupos formateados, líneas opcionales `null` cuando el dato falta y `paymentTerms`/`notes` divididos en párrafos sin líneas vacías; un error de la base se propaga (unit tests, con `@/modules/trips` simulado).
 - [ ] (F2) Dado un ancho de 360 px, entonces la página no tiene scroll horizontal y el CTA ocupa todo el ancho.
 - [ ] (F2) Dado `app/viajes/[slug]/page.tsx` y `modules/landing/components/TripDetail.tsx`, entonces no importan `TRIPS`, `TripFacts` ni `getTrip`, y `getTrip` ya no existe. `/` se ve igual que antes.
-- [ ] (F2) Dado `npm run build` sin `DATABASE_URL`, entonces termina sin errores, `/viajes/[slug]` es dinámica (`ƒ`) y `/`, `/contacto` y `/cuenta` siguen estáticas (`○`).
+- [ ] (F2) Dado `npm run build` sin `DATABASE_URL`, entonces termina sin errores, `/viajes/[slug]` es dinámica (`ƒ`), `/` y `/cuenta` siguen estáticas (`○`) y `/contacto` sigue como en `main` (`ƒ`).
 - [ ] (F2) Dado `npm run build:worker` seguido de `npx wrangler deploy --dry-run --outdir <scratch>` (sin desplegar, en Linux/WSL), entonces el tamaño gzip del Worker se registra en el resumen de la fase; debe ser < 2 MiB (si lo supera, se detiene y se consulta al usuario; límite Free: 3 MiB).
 - [ ] (F2) Dado el README, entonces "Qué usa hoy la landing" describe la plantilla única (todo sale del catálogo; `TRIPS` solo alimenta `/`) y la consulta por WhatsApp.
 - [ ] (F2) Dado el diff, entonces solo toca los archivos del plan de F2; no modifica `modules/trips/**`, `lib/**`, `drizzle/`, `app/crm/**`, `app/page.tsx`, `/contacto` ni otras specs, y no añade dependencias.
@@ -160,7 +160,7 @@ Verificación manual con `npm run dev` contra una rama de Neon con la migración
 - [x] T5 — README (migración `0004` y contrato) · archivos: `README.md` · depende de: T3 · secuencial
 
 ### Fase 2 — Plantilla minimalista (`landing`)
-Empieza solo con la Fase 1 en `main` y la precondición operativa F1 cumplida.
+Empieza con la Fase 1 implementada (en `main` o en la misma rama/PR) y la precondición operativa F1 cumplida (migración `0004` aplicada en Neon).
 - [ ] T1 — Vista del viaje desde el catálogo y limpieza de `TRIPS` · archivos: `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/index.ts` · depende de: — · secuencial (base)
 - [ ] T2 — Mensaje de consulta por viaje · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts` · depende de: — · paralelo con T1
 - [ ] T3 — Plantilla `TripDetail` minimalista · archivos: `modules/landing/components/TripDetail.tsx` · depende de: T1, T2 · secuencial
