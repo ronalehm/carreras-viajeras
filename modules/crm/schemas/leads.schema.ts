@@ -2,7 +2,29 @@ import { z } from "zod";
 
 // Same values as the lead_* enums in lib/db-schema.ts (kept in sync by leads.schema.test.ts).
 export const leadStageSchema = z.enum(["new", "contacted", "quoted", "reserved", "paid", "lost"]);
-export const leadSourceSchema = z.enum(["whatsapp", "web_form", "other"]);
+// Entry path (source): how the record entered the CRM. Never edited.
+export const leadSourceSchema = z.enum(["whatsapp", "web_form", "other", "google_form", "import"]);
+// Origin (channel): how the person found us, in the order of forms, filters and tables.
+export const leadChannelSchema = z.enum(
+  [
+    "event",
+    "partner",
+    "referral",
+    "whatsapp",
+    "whatsapp_status",
+    "instagram",
+    "facebook",
+    "tiktok",
+    "youtube",
+    "google_ads",
+    "luma",
+    "web",
+    "other",
+    "unknown",
+  ],
+  { error: "Elige el origen del lead." },
+);
+export const contactPreferenceSchema = z.enum(["whatsapp", "email", "call"]);
 export const leadActivityTypeSchema = z.enum([
   "created",
   "stage_changed",
@@ -12,11 +34,14 @@ export const leadActivityTypeSchema = z.enum([
   "call",
   "message",
   "automation",
+  "channel_changed",
+  "opted_out",
 ]);
 
-// web_form is reserved for the future automatic capture: the manual form never offers it.
+// web_form, google_form and import are system entry paths (web capture and n8n): the manual form
+// never offers them.
 export const manualLeadSourceSchema = z.enum(["whatsapp", "other"], {
-  error: "Elige el origen del lead.",
+  error: "Elige la vía de entrada del lead.",
 });
 
 const PHONE_MESSAGE = "Escribe el número con código de país, p. ej. +51 938 127 170.";
@@ -46,9 +71,39 @@ const ownerUserIdSchema = z
   .min(1, "Elige un responsable.")
   .max(255, "Elige un responsable.");
 
+const ORIGIN_DETAIL_MESSAGE = "El detalle del origen debe tener entre 2 y 120 caracteres.";
+const REFERRED_BY_MESSAGE = "El referente debe tener entre 2 y 120 caracteres.";
+
+// Origin fields shared by the manual form and the edit. channel has no default: the form starts
+// on "Elige el origen" so WhatsApp is never recorded by inertia. The checkbox sends "on" only
+// when checked.
+const leadOriginFields = {
+  channel: leadChannelSchema,
+  originDetail: blankToNull(z.string().min(2, ORIGIN_DETAIL_MESSAGE).max(120, ORIGIN_DETAIL_MESSAGE)),
+  referredBy: blankToNull(z.string().min(2, REFERRED_BY_MESSAGE).max(120, REFERRED_BY_MESSAGE)),
+  referralPermission: z
+    .string()
+    .optional()
+    .transform((value) => value === "on"),
+  contactPreference: blankToNull(
+    z.enum(contactPreferenceSchema.options, { error: "Elige una preferencia de contacto." }),
+  ),
+};
+
+// The referral permission needs a referrer (same rule as leads_referral_permission_chk).
+function refineReferral(
+  value: { referralPermission: boolean; referredBy: string | null },
+  ctx: z.RefinementCtx,
+) {
+  if (value.referralPermission && !value.referredBy) {
+    ctx.addIssue({ code: "custom", path: ["referredBy"], message: "Indica quién lo refirió." });
+  }
+}
+
 // Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as
-// stage, createdBy or consentVersion: they never come from the form.
-export const createLeadSchema = z.object({
+// stage, createdBy, consentVersion, the UTM fields or contactOptOutAt: they never come from the
+// form. Unrefined base: .pick() does not accept objects with refinements.
+const createLeadBaseSchema = z.object({
   fullName: requiredText(2, 120, "El nombre debe tener entre 2 y 120 caracteres."),
   phone: phoneSchema,
   email: blankToNull(
@@ -64,13 +119,17 @@ export const createLeadSchema = z.object({
   ownerUserId: ownerUserIdSchema,
   note: blankToNull(z.string().max(2000, "La nota puede tener hasta 2000 caracteres.")),
   consent: z.literal("on", { error: CONSENT_MESSAGE }),
+  ...leadOriginFields,
 });
+
+export const createLeadSchema = createLeadBaseSchema.superRefine(refineReferral);
 
 const leadUuidSchema = z.uuid({ error: "El lead no es válido." });
 
-// Contact data edit: the contact fields of the manual form plus the lead id. Source, owner,
-// note and consent are not editable; any other key (stage, actorUserId…) is dropped.
-export const updateLeadSchema = createLeadSchema
+// Contact and origin edit: the contact and origin fields of the manual form plus the lead id.
+// Source, owner, note, consent and the UTM fields are not editable; any other key (stage,
+// actorUserId…) is dropped.
+export const updateLeadSchema = createLeadBaseSchema
   .pick({
     fullName: true,
     phone: true,
@@ -78,8 +137,14 @@ export const updateLeadSchema = createLeadSchema
     location: true,
     tripId: true,
     destinationText: true,
+    channel: true,
+    originDetail: true,
+    referredBy: true,
+    referralPermission: true,
+    contactPreference: true,
   })
-  .extend({ leadId: leadUuidSchema });
+  .extend({ leadId: leadUuidSchema })
+  .superRefine(refineReferral);
 
 // Actions on the lead as a whole (archive): only its id; any other submitted key is dropped.
 export const leadIdSchema = z.object({ leadId: leadUuidSchema });

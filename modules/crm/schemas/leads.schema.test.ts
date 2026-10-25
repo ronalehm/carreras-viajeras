@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { leadActivityTypeEnum, leadSourceEnum, leadStageEnum } from "@/lib/db-schema";
 import {
+  contactPreferenceEnum,
+  leadActivityTypeEnum,
+  leadChannelEnum,
+  leadSourceEnum,
+  leadStageEnum,
+} from "@/lib/db-schema";
+import {
+  contactPreferenceSchema,
   createLeadSchema,
   leadActivityFormSchema,
   leadActivityTypeSchema,
+  leadChannelSchema,
   leadIdSchema,
   leadListQuerySchema,
   leadOwnerChangeSchema,
@@ -31,6 +39,19 @@ const validForm = {
   ownerUserId: "user-1",
   note: "",
   consent: "on",
+  channel: "unknown",
+  originDetail: "",
+  referredBy: "",
+  contactPreference: "",
+};
+
+// Origin fields as the form sends them, normalized.
+const blankOrigin = {
+  channel: "unknown",
+  originDetail: null,
+  referredBy: null,
+  referralPermission: false,
+  contactPreference: null,
 };
 
 function fieldErrors(input: Record<string, unknown>, schema: z.ZodType = createLeadSchema) {
@@ -39,11 +60,40 @@ function fieldErrors(input: Record<string, unknown>, schema: z.ZodType = createL
   return z.flattenError(result.error).fieldErrors as Record<string, string[] | undefined>;
 }
 
+const sorted = (values: readonly string[]) => [...values].sort();
+
 describe("lead enums", () => {
   it("match the database enums", () => {
     expect(leadStageSchema.options).toEqual(leadStageEnum.enumValues);
-    expect(leadSourceSchema.options).toEqual(leadSourceEnum.enumValues);
-    expect(leadActivityTypeSchema.options).toEqual(leadActivityTypeEnum.enumValues);
+    expect(sorted(leadSourceSchema.options)).toEqual(sorted(leadSourceEnum.enumValues));
+    expect(sorted(leadChannelSchema.options)).toEqual(sorted(leadChannelEnum.enumValues));
+    expect(sorted(contactPreferenceSchema.options)).toEqual(sorted(contactPreferenceEnum.enumValues));
+    expect(sorted(leadActivityTypeSchema.options)).toEqual(sorted(leadActivityTypeEnum.enumValues));
+  });
+
+  it("include the new entry paths, preferences and activity types", () => {
+    expect(leadSourceSchema.options).toEqual(expect.arrayContaining(["google_form", "import"]));
+    expect(contactPreferenceSchema.options).toEqual(["whatsapp", "email", "call"]);
+    expect(leadActivityTypeSchema.options).toEqual(expect.arrayContaining(["channel_changed", "opted_out"]));
+  });
+
+  it("list the 14 origins in the order of Requirement 2", () => {
+    expect(leadChannelSchema.options).toEqual([
+      "event",
+      "partner",
+      "referral",
+      "whatsapp",
+      "whatsapp_status",
+      "instagram",
+      "facebook",
+      "tiktok",
+      "youtube",
+      "google_ads",
+      "luma",
+      "web",
+      "other",
+      "unknown",
+    ]);
   });
 
   it("include the automation activity type (n8n)", () => {
@@ -82,6 +132,7 @@ describe("createLeadSchema", () => {
       ownerUserId: "user-1",
       note: null,
       consent: "on",
+      ...blankOrigin,
     });
     expect(result).not.toHaveProperty("stage");
     expect(result).not.toHaveProperty("createdBy");
@@ -112,7 +163,16 @@ describe("createLeadSchema", () => {
   });
 
   it("turns missing optional keys into null without errors", () => {
-    const optionalKeys = ["email", "location", "tripId", "destinationText", "note"];
+    const optionalKeys = [
+      "email",
+      "location",
+      "tripId",
+      "destinationText",
+      "note",
+      "originDetail",
+      "referredBy",
+      "contactPreference",
+    ];
     const required = Object.fromEntries(Object.entries(validForm).filter(([key]) => !optionalKeys.includes(key)));
     const result = createLeadSchema.safeParse(required);
 
@@ -123,6 +183,10 @@ describe("createLeadSchema", () => {
       tripId: null,
       destinationText: null,
       note: null,
+      originDetail: null,
+      referredBy: null,
+      referralPermission: false,
+      contactPreference: null,
     });
   });
 
@@ -154,9 +218,12 @@ describe("createLeadSchema", () => {
     ]);
   });
 
-  it("rejects the web_form source in the manual form", () => {
-    expect(fieldErrors({ ...validForm, source: "web_form" }).source).toEqual(["Elige el origen del lead."]);
-  });
+  it.each(["web_form", "google_form", "import", "", undefined])(
+    "rejects the entry path %j in the manual form (system paths are never offered)",
+    (source) => {
+      expect(fieldErrors({ ...validForm, source }).source).toEqual(["Elige la vía de entrada del lead."]);
+    },
+  );
 
   it.each([
     ["missing", undefined],
@@ -183,6 +250,116 @@ describe("createLeadSchema", () => {
     const result = createLeadSchema.safeParse({ ...validForm, phone: secret, fullName: "Z" });
     expect(result.success).toBe(false);
     expect(JSON.stringify(result.error)).not.toContain("SECRETO");
+  });
+});
+
+// Origin rules shared by the manual form and the edit (same cases, same messages).
+describe.each([
+  ["createLeadSchema", createLeadSchema, validForm],
+  [
+    "updateLeadSchema",
+    updateLeadSchema,
+    {
+      leadId: LEAD_ID,
+      fullName: "Ana Pérez",
+      phone: "+51 938 127 170",
+      channel: "unknown",
+    },
+  ],
+] as const)("%s: origin fields", (_, schema, valid) => {
+  const parse = (input: Record<string, unknown>) => schema.parse({ ...valid, ...input });
+  const errors = (input: Record<string, unknown>) => fieldErrors({ ...valid, ...input }, schema);
+
+  it.each([
+    ["missing", undefined],
+    ["empty («Elige el origen»)", ""],
+    ["unknown", "foo"],
+    ["an entry path", "web_form"],
+  ])("rejects a %s channel with «Elige el origen del lead.»", (_, channel) => {
+    expect(errors({ channel }).channel).toEqual(["Elige el origen del lead."]);
+  });
+
+  it.each(leadChannelSchema.options)("accepts the channel %s", (channel) => {
+    expect(parse({ channel }).channel).toBe(channel);
+  });
+
+  it("trims the origin detail and the referrer and turns blanks into null", () => {
+    expect(parse({ originDetail: "  Media Maratón de Lima 2026 ", referredBy: " Club Andino " })).toMatchObject({
+      originDetail: "Media Maratón de Lima 2026",
+      referredBy: "Club Andino",
+    });
+    expect(parse({ originDetail: "   ", referredBy: "" })).toMatchObject({ originDetail: null, referredBy: null });
+  });
+
+  it("accepts 2 and 120 characters", () => {
+    expect(parse({ originDetail: "ab", referredBy: "x".repeat(120) })).toMatchObject({
+      originDetail: "ab",
+      referredBy: "x".repeat(120),
+    });
+  });
+
+  it.each([
+    ["1 character", " a "],
+    ["121 characters", "x".repeat(121)],
+  ])("rejects an origin detail and a referrer of %s in their fields", (_, text) => {
+    expect(errors({ originDetail: text, referredBy: text })).toEqual({
+      originDetail: ["El detalle del origen debe tener entre 2 y 120 caracteres."],
+      referredBy: ["El referente debe tener entre 2 y 120 caracteres."],
+    });
+  });
+
+  it("turns the referral permission checkbox into a boolean", () => {
+    expect(parse({ referredBy: "Club Andino", referralPermission: "on" }).referralPermission).toBe(true);
+    expect(parse({ referredBy: "Club Andino" }).referralPermission).toBe(false);
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["blank", "  "],
+  ])("rejects the referral permission with a %s referrer: «Indica quién lo refirió.»", (_, referredBy) => {
+    expect(errors({ referralPermission: "on", referredBy })).toEqual({ referredBy: ["Indica quién lo refirió."] });
+  });
+
+  it("accepts each contact preference, turns a blank into null and rejects an unknown one", () => {
+    for (const contactPreference of contactPreferenceSchema.options) {
+      expect(parse({ contactPreference }).contactPreference).toBe(contactPreference);
+    }
+    expect(parse({ contactPreference: "" }).contactPreference).toBeNull();
+    expect(errors({ contactPreference: "sms" }).contactPreference).toEqual(["Elige una preferencia de contacto."]);
+  });
+
+  it("drops the UTM fields, the opt-out, the stage and the entry path written by the system", () => {
+    const result = parse({
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: "santiago-2027",
+      contactOptOutAt: "2026-10-25T10:00:00Z",
+      stage: "paid",
+    });
+    for (const key of ["utmSource", "utmMedium", "utmCampaign", "contactOptOutAt", "stage"]) {
+      expect(result).not.toHaveProperty(key);
+    }
+  });
+});
+
+describe("createLeadSchema: a referral lead", () => {
+  it("keeps the origin, detail, referrer, permission and preference", () => {
+    expect(
+      createLeadSchema.parse({
+        ...validForm,
+        channel: "referral",
+        originDetail: " Recomendación en el club ",
+        referredBy: " Club Andino ",
+        referralPermission: "on",
+        contactPreference: "call",
+      }),
+    ).toMatchObject({
+      channel: "referral",
+      originDetail: "Recomendación en el club",
+      referredBy: "Club Andino",
+      referralPermission: true,
+      contactPreference: "call",
+    });
   });
 });
 
@@ -270,9 +447,13 @@ describe("updateLeadSchema", () => {
     location: " Lima ",
     tripId: TRIP_ID,
     destinationText: "",
+    channel: "instagram",
+    originDetail: "",
+    referredBy: "",
+    contactPreference: "",
   };
 
-  it("normalizes the contact fields and drops every other key", () => {
+  it("normalizes the contact and origin fields and drops every other key", () => {
     const result = updateLeadSchema.parse({
       ...validEdit,
       stage: "paid",
@@ -280,6 +461,8 @@ describe("updateLeadSchema", () => {
       ownerUserId: "intruder",
       actorUserId: "intruder",
       consent: "on",
+      utmSource: "instagram",
+      contactOptOutAt: "2026-10-25T10:00:00Z",
     });
     expect(result).toEqual({
       leadId: LEAD_ID,
@@ -289,6 +472,8 @@ describe("updateLeadSchema", () => {
       location: "Lima",
       tripId: TRIP_ID,
       destinationText: null,
+      ...blankOrigin,
+      channel: "instagram",
     });
   });
 

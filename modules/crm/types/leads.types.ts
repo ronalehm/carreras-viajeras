@@ -1,9 +1,11 @@
 import type { z } from "zod";
 import type { tripStatusEnum } from "@/lib/db-schema";
 import type {
+  contactPreferenceSchema,
   createLeadSchema,
   leadActivityFormSchema,
   leadActivityTypeSchema,
+  leadChannelSchema,
   leadOwnerChangeSchema,
   leadSourceSchema,
   leadStageChangeSchema,
@@ -14,6 +16,8 @@ import type {
 
 export type LeadStage = z.infer<typeof leadStageSchema>;
 export type LeadSource = z.infer<typeof leadSourceSchema>;
+export type LeadChannel = z.infer<typeof leadChannelSchema>;
+export type ContactPreference = z.infer<typeof contactPreferenceSchema>;
 export type CreateLeadInput = z.output<typeof createLeadSchema>;
 export type UpdateLeadInput = z.output<typeof updateLeadSchema>;
 export type LeadStageChangeInput = z.output<typeof leadStageChangeSchema>;
@@ -64,8 +68,9 @@ export type LeadList = {
   ownerOptions: LeadOwnerOption[];
 };
 
-// Lead detail page. createdBy is null for web form leads (no author); archivedBy is null while
-// the lead is not archived.
+// Lead detail page. createdBy is null for system leads (web form, Google Forms, import: no
+// author); archivedBy is null while the lead is not archived. The UTM fields are only written by
+// the web capture; contactOptOutAt is set when the contact asked not to be followed up.
 export type LeadDetail = Omit<LeadListItem, "trip"> & {
   email: string | null;
   location: string | null;
@@ -77,6 +82,15 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   createdAt: Date;
   archivedAt: Date | null;
   archivedBy: { email: string } | null;
+  channel: LeadChannel;
+  originDetail: string | null;
+  utmSource: string | null;
+  utmMedium: string | null;
+  utmCampaign: string | null;
+  referredBy: string | null;
+  referralPermission: boolean;
+  contactPreference: ContactPreference | null;
+  contactOptOutAt: Date | null;
 };
 
 // History entry. actor is null only for system activities: created of a web form lead and
