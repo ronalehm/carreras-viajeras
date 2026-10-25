@@ -1,9 +1,11 @@
 # Landing pública de Carreras Viajeras (port del diseño HTML/CSS/JS)
 
 - Módulo: landing
-- Estado: aprobado
+- Estado: borrador
+- Enmienda (2026-10-25): el runner llega a `/mis-carreras` tras ingresar en `/cuenta`, `/cuenta` con sesión enlaza a "Ver mis carreras" y "Mi perfil", cambia la nota de `AccountSection`, se exportan `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER`, `/viajes/[slug]` gana una plantilla genérica (`CatalogTripView`), `/` pasa a dinámica por "Eventos destacados" y se añade `/patrocinadores/[slug]`, porque lo exigen `runner-portal.md`, `accounts-runner-profiles.md` y `sponsors-portal.md` (aprobadas). Esta spec no gana tareas: cada cambio lo implementan esas specs en la fase indicada en "Enmienda: qué implementa cada spec".
 - Base: `platform-neon-foundation.md` (aprobada). F1 y F2 no usan base de datos, auth, D1, Hyperdrive, Access ni Turnstile. F3 usa Neon Auth solo a través de la API pública de `modules/accounts` y **no cambia** el control de acceso del CRM (`accounts-roles-permissions.md`, aprobada). F4 lee el catálogo publicado de Neon solo a través de la API pública de `modules/trips` (`trips-catalog.md`, aprobada; F1 y F2 en `main`, PR #6 y #11).
 - Depende de: F3 requiere `accounts-auth-ui.md` **Fase 4 (audiencia runner) aprobada e implementada**: `RunnerAccount` exportado desde `@/modules/accounts`. F3 no modifica archivos de `modules/accounts`. F4 usa el contrato de lectura pública de `trips-catalog.md` sin modificar `modules/trips` y exige la precondición operativa de F4 antes de mergear.
+- F1–F4 implementadas en `main`. La amplían (enmienda 2026-10-25): `runner-portal.md` (F5-T1, F6), `accounts-runner-profiles.md` (F2-T5) y `sponsors-portal.md` (F6-T2, F7).
 - Fuente de diseño (solo local, excluida en `.git/info/exclude`; no se importa ni se versiona): `docs/Rediseño de Landing/Carreras-Viajeras-Web-HTML-CSS-JS/`: `index.html` (landing), `contacto.html` (formulario), `cuenta.html` (acceso), CSS/JS asociados, `LEEME.txt` y capturas en `docs/Rediseño de Landing/*.png`. El developer copia de ahí los **textos literales** de cada sección; esta spec solo enumera las adaptaciones y omisiones.
 
 ## Objetivo
@@ -12,6 +14,7 @@ Publicar la landing diseñada por el usuario para runners peruanos interesados e
 - `/contacto`, que **prepara** una consulta para copiarla o abrirla en WhatsApp, sin enviar ni guardar datos;
 - `/cuenta`, donde un runner se registra, inicia sesión y la cierra con la cuenta de Neon Auth existente, sin obtener acceso al CRM.
 - (F4) que la página del viaje muestre los datos que el equipo comercial mantiene en `/crm/viajes` (título, fecha de la carrera, precio "desde", cupos y resumen) sin redesplegar, y responda 404 si el viaje no está publicado.
+- (Enmienda; `sponsors-portal.md` F7) que los eventos publicados sin contenido fijo (p. ej. los de una marca patrocinadora) tengan página con una plantilla genérica, que `/` muestre "Eventos destacados" y que cada marca con eventos publicados tenga `/patrocinadores/<slug>`.
 
 Sustituye el template "Hello world".
 
@@ -22,13 +25,20 @@ Sustituye el template "Hello world".
   - `/viajes/[slug]`: ruta dinámica con contenido estático. El único viaje es `maraton-santiago-2027`, con los datos del paquete Santiago del diseño.
   - `/cuenta` (inspirada en `cuenta.html`): ingresar, registrarse con verificación por código y cerrar sesión con Neon Auth, reutilizando `modules/accounts`. Enlaces "Ingresar / Registrarse" en cabecera, comunidad y pie.
   - (F4) `/viajes/[slug]` lee el viaje publicado con `getPublishedTripBySlug` de `@/modules/trips` y lo combina con el contenido fijo de la landing. La página pasa a renderizarse por petición.
+  - (Enmienda 2026-10-25; sin tareas en esta spec, ver "Enmienda: qué implementa cada spec"):
+    - tras ingresar o verificar en `/cuenta`, destino `/mis-carreras`; `/cuenta` con sesión muestra "Ver mis carreras" (`runner-portal.md` F6) y "Mi perfil" (`accounts-runner-profiles.md` F2-T5); los enlaces los pone `RunnerAccount`, no la landing;
+    - nota de `AccountSection` sin "no hay perfiles persistentes" (`accounts-runner-profiles.md` F2-T5);
+    - exportar `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` desde `@/modules/landing` para `modules/bookings` (`runner-portal.md` F5-T1);
+    - `/viajes/[slug]` con dos vistas: la de diseño (`TripDetail`, con "Presentado por" si el viaje tiene marca) y una plantilla genérica (`CatalogTripDetail`) para viajes publicados sin contenido fijo; `getCatalogTrip` devuelve `CatalogTripView` (`sponsors-portal.md` F7-T1, F7-T2);
+    - sección "Eventos destacados" en `/`, que pasa a dinámica (`sponsors-portal.md` F7-T3, F7-T4);
+    - ruta pública `/patrocinadores/[slug]` (`sponsors-portal.md` F7-T3, F7-T4).
   - Redes oficiales en el pie: Facebook e Instagram.
   - Tokens de marca (azul `#0144ae`, verde `#7ac734`, blanco) en `app/globals.css`; también se aplican al CRM.
   - Fuentes DM Sans y Barlow Condensed con `next/font/google`: autoalojadas, sin peticiones a Google en runtime.
   - Imágenes en `public/images/`; `<html lang="es">`, metadata, `theme-color`, accesibilidad básica y responsive desde 360 px.
 - No incluye:
   - Envío o almacenamiento de leads, Turnstile, APIs nuevas, tablas o migraciones, analítica (se descarta el `track()` de `app.js`).
-  - Perfil de runner, experiencias o fotos persistentes, estrellas, recompensas, inscripción a eventos.
+  - Perfil de runner (lo cubre `accounts-runner-profiles.md`, `/cuenta/perfil`), experiencias o fotos persistentes, estrellas, recompensas, inscripción a eventos.
   - La demo de comunidad de `index.html`: formulario de experiencias, vista previa local de fotos, filtro de historias e invitación copiable.
   - Páginas `pasion-por-correr`, `terminos`, `privacidad`, `cookies`, `reclamaciones` e `informacion-comercial` (trabajo futuro).
   - Diálogo de preferencias de cookies: la app no usa cookies opcionales; las de sesión de Neon Auth son técnicas.
@@ -36,10 +46,11 @@ Sustituye el template "Hello world".
   - Afiches `paquete-santiago-referencia.png` y `preventa-santiago-referencia.png`: no se publican.
   - `experience-tabs.*`, `journey.js`, `simplified.js` y `blog-links.js`.
   - Afirmar la condición de partner de Santiago 2027, testimonios, cifras o datos legales ausentes del diseño.
-  - Lectura del catálogo en `/` (F4 solo cambia la página del viaje): datos del viaje, paquete, tarjeta de Santiago en destinos, CTA móvil y la cláusula de precios de la consulta siguen con contenido fijo y `/` sigue estática. Ver "Fase 4".
-  - Mostrar en la página del viaje los campos del catálogo sin hueco en el diseño (`distances`, `includes`, `startDate`/`endDate`, `city`/`country`, `imageUrl`), una plantilla genérica para viajes sin contenido fijo, `loading.tsx` o `error.tsx` en `app/viajes/`.
+  - Lectura del catálogo en `/` (F4 solo cambia la página del viaje): datos del viaje, paquete, tarjeta de Santiago en destinos, CTA móvil y la cláusula de precios de la consulta siguen con contenido fijo y `/` sigue estática. Ver "Fase 4". **Enmienda:** la única lectura del catálogo en `/` es la sección "Eventos destacados" de `sponsors-portal.md` F7, que hace `/` dinámica; todo lo demás de `/` sigue con contenido fijo.
+  - Mostrar en la vista de diseño de la página del viaje los campos del catálogo sin hueco en el diseño (`distances`, `includes`, `startDate`/`endDate`, `city`/`country`, `imageUrl`), `loading.tsx` o `error.tsx` en `app/viajes/`. **Enmienda:** la plantilla genérica para viajes sin contenido fijo deja de estar excluida: la añade `sponsors-portal.md` F7 (`CatalogTripDetail`), y es la única vista que muestra esos campos.
   - Cambios en `modules/trips/**` o en `README.md` más allá de su sección "Lectura pública para la landing".
-  - Cambios en `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, en las tablas `profiles`/`staff_*` o en la matriz de permisos.
+  - Cambios en `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, en las tablas `profiles`/`staff_*` o en la matriz de permisos (los que hacen las specs que amplían esta son de ellas).
+  - Las rutas privadas `/mis-carreras` (`runner-portal.md`), `/cuenta/perfil` (`accounts-runner-profiles.md`) y `/patrocinador/**` (`sponsors-portal.md`) no son de esta spec, aunque las dos primeras reutilizan `SiteBrand`, `SiteHeader` o `SiteFooter`.
   - Modo oscuro, multi-idioma y nuevas dependencias npm.
 
 ## Requisitos
@@ -59,7 +70,9 @@ Sustituye el template "Hello world".
    | `cuenta.html`, `cuenta.html#registro` ("Ingresar / Registrarse") | `/cuenta` |
    | `terminos.html`, `privacidad.html`, `cookies.html`, `reclamaciones.html`, `informacion-comercial.html`, "Ver afiche de inclusiones", "Ver privacidad" | se omite el enlace; el Libro de Reclamaciones se muestra como texto con "Pendiente de habilitación" |
    | Externos (maratondesantiago.cl, NHS, B.A.A., Facebook, Instagram, WhatsApp) | `target="_blank" rel="noopener noreferrer"` |
-3. **Indexación:** `robots: { index: false, follow: false }` en todo el sitio mientras falten datos legales (decisión del usuario).
+   | (Enmienda; `sponsors-portal.md` F7) "Presentado por <marca>" / tarjetas de "Eventos destacados" y de la marca | `/patrocinadores/<slug>` / `/viajes/<slug>` (solo viajes publicados; la marca solo tiene página si tiene eventos publicados, así que el enlace nunca queda roto) |
+   | (Enmienda; `sponsors-portal.md` F7) "Visitar sitio web" de la marca | externo, `target="_blank" rel="sponsored noopener noreferrer"` |
+3. **Indexación:** `robots: { index: false, follow: false }` en todo el sitio mientras falten datos legales (decisión del usuario). Con la enmienda también se aplica a `/patrocinadores/[slug]`, que hereda el `robots` del layout aunque `sponsors-portal.md` la describa como "Indexable" (ver Pregunta abierta 6).
 4. **Imágenes:**
    - `next/image` con `images.unoptimized: true` en `next.config.ts`: no hay binding `IMAGES` en Workers Free y, sin él, cada imagen pasaría por el Worker sin optimizarse. Se sirven como assets estáticos desde `public/images/`.
    - `story-runners.png` (2,6 MB) y `maz-producciones.png` se convierten una vez a WebP con `sharp`, ya presente en `node_modules` como dependencia de `next`: comando puntual, sin script ni dependencia nueva.
@@ -83,11 +96,17 @@ Sustituye el template "Hello world".
      - sin `generateStaticParams` ni `dynamicParams`: la página se renderiza por petición (`connection()` dentro del service del catálogo);
      - responde 404 si el slug no tiene contenido fijo en `TRIPS` (sin consultar Neon) o si el catálogo no lo devuelve publicado (inexistente, borrador o archivado);
      - título, resumen (meta description), fecha de la carrera, precio "desde" y cupos salen del catálogo; el resto sigue siendo contenido fijo del diseño (tabla de combinación en "Fase 4").
+   - **Desde `sponsors-portal.md` F7** (enmienda; sustituye el 404 por falta de contenido fijo):
+     - `getCatalogTrip` consulta siempre el catálogo (`getPublishedTripBySlug` valida antes el formato del slug y devuelve `null` sin consultar si no es canónico) y responde 404 solo si el viaje no está publicado (inexistente, borrador, en revisión o archivado);
+     - con contenido fijo en `TRIPS` → vista `designed`: `TripDetail` como en F4, más "Presentado por" bajo el `h1` si el viaje tiene marca;
+     - sin contenido fijo → vista `catalog`: `CatalogTripDetail`, plantilla genérica con los campos del catálogo (imagen, título, ciudad y país, fechas, distancias, resumen, "Qué incluye", precio desde, cupos y "Presentado por") y el CTA "Quiero información" al WhatsApp del equipo;
+     - `generateMetadata` usa el título y el resumen de la vista.
 9. **Cuenta de runner (F3):** la landing aporta la ruta, el diseño y los enlaces. Toda la lógica de acceso es de `accounts-auth-ui.md` F4 (Requisito 12), consumida solo a través de `RunnerAccount`.
    - **Identidad y acceso al CRM:** un runner es una cuenta de Neon Auth sin roles de staff. El CRM sigue denegado por defecto (`requireCrmUser()`: correo verificado + rol activo por `user_id`). Un runner que abre `/crm` ve "Tu cuenta no tiene acceso al CRM…" y no se crean filas en `profiles` ni `staff_*`.
-   - **Navegación:** tras ingresar o verificar en `/cuenta`, la persona se queda en `/cuenta`, también si es staff. Tras cerrar sesión vuelve a `/cuenta`. Los destinos los fija `accounts` como uniones cerradas; la landing no pasa ni lee destinos.
-   - **Página estática:** `app/cuenta/page.tsx` no llama a `getCrmAccess()`, a guardas ni a la base de datos. El estado de sesión lo muestra `RunnerAccount` en el cliente, solo como presentación.
-   - **Comunidad sin persistencia:** `#comunidad` es contenido estático con un CTA a `/cuenta`. No hay experiencias, fotos, estrellas ni datos de runner.
+   - **Navegación:** tras ingresar o verificar en `/cuenta`, la persona se queda en `/cuenta`, también si es staff (F3). **Desde `runner-portal.md` F6** (enmienda), va a `/mis-carreras`, también si es staff. Tras cerrar sesión vuelve a `/cuenta`. Los destinos los fija `accounts` como uniones cerradas; la landing no pasa ni lee destinos.
+   - **`/cuenta` con sesión** (enmienda): `RunnerAccount` muestra "Qué bueno verte de nuevo.", el correo, "Ver mis carreras" → `/mis-carreras` (`runner-portal.md` F6-T2), "Mi perfil" → `/cuenta/perfil` (`accounts-runner-profiles.md` F2-T5) y "Cerrar sesión". `/cuenta` no redirige a quien tiene sesión.
+   - **Página estática:** `app/cuenta/page.tsx` no llama a `getCrmAccess()`, a guardas ni a la base de datos, y sigue estática (`○`) con la enmienda. El estado de sesión lo muestra `RunnerAccount` en el cliente, solo como presentación.
+   - **Comunidad sin persistencia:** `#comunidad` es contenido estático con un CTA a `/cuenta`. No hay experiencias, fotos ni estrellas. Los datos del runner (perfil y reservas) viven en `/cuenta/perfil` y `/mis-carreras`, fuera de esta spec.
    - **Sin regresiones:** `/crm/acceso` no cambia. Esta fase no modifica `modules/accounts`, `lib/auth/*`, `app/crm/*`, `app/api/*` ni `drizzle/`.
    - **Tamaño del Worker:** se mide sin desplegar y debe seguir < 3 MiB gzip.
 
@@ -102,14 +121,17 @@ Sustituye el template "Hello world".
 | 6 | `#comunidad` | `CommunitySection` | F3 | — | Bloque hero (imagen, título, texto) con CTA "Ingresar / Registrarse" → `/cuenta`, los 3 pasos y la nota "Participar + compartir = sumar." con "SIN DESCUENTOS ACTIVOS TODAVÍA", visibles sin desplegable. Sin demo. Sin eyebrow (el CSS del diseño lo oculta) |
 | 7 | `#por-que-viajar` | `WhyUsSection` | F2 | `<details>` "Ver más" y "Ver detalle" | Iconos SVG → `lucide-react`. Sin eyebrow. "Hablemos de tu próxima carrera" → `/contacto` |
 | 8 | `#blog` | `BlogSection` + `TipList` (client) | F2 | `<details>` y filtro de tips con `aria-pressed` | Referentes publicados con nombre (Daniela Zarfati, Karla Medina) y los avisos del diseño ("PARTICIPACIÓN POR CONFIRMAR", "FOTO ILUSTRATIVA · NO ES …") |
+| 8b | `#destacados` | `FeaturedTripsSection` + `TripCard` | Enmienda (`sponsors-portal.md` F7) | — | "Eventos destacados": hasta 6 viajes publicados con `featured`, leídos de Neon dentro de `<Suspense fallback={null}>`. Sin destacados o con error de la base, la sección no aparece. No existe en el diseño |
 | 9 | `#destinos` | `DestinationsSection` | F2 | — | Tarjetas como enlaces: Santiago → página del viaje; Río y Roma → `/contacto?destino=<id>` |
 | 10 | `#preguntas` | `FaqSection` | F2 | `<details>` | 9 preguntas literales |
 | 11 | `aside.maz-support` | dentro de `SiteFooter` | F1 | — | Se integra como franja superior del pie en todas las páginas. Sin "Conoce al operador" |
 | 12 | `footer#pie` | `SiteFooter` | F1; F3 añade "Tu comunidad" | — | Marca, "Corre. Viaja. Conecta.", Facebook e Instagram, "Información del proveedor" (dl literal, con "Pendientes de completar"), "Atención al consumidor" (Libro de Reclamaciones como texto con "Pendiente de habilitación") y pie inferior literal. F3: "Tu comunidad" → "Ingresar / Registrarse" → `/cuenta`. Sin enlaces legales ni botón de cookies |
 | 13 | `.mobile-cta` | `MobileCta` | F1 | CSS `fixed` < `sm` | → `/contacto?destino=santiago-2027` |
 | — | `/contacto` | `ContactSection` + `ContactForm` (client) | F1 | Preparar, copiar, WhatsApp | Sin "Ver privacidad"; queda "La consulta no se envía desde esta demostración." |
-| — | `/viajes/maraton-santiago-2027` | `TripDetail` (+ `TripFacts`) | F2; F4 lee del catálogo | — | Nueva página (no existe en el diseño) compuesta solo con contenido del diseño. Desde F4, título, resumen, fecha, precio y cupos salen del catálogo publicado |
-| — | `/cuenta` | `AccountSection` (server, landing) + `RunnerAccount` (client, `modules/accounts` F4) | F3 | Ingresar, registrarse, verificar, recuperar contraseña, cerrar sesión | Columna de `cuenta.html` con sus textos; sin los avisos "Acceso próximamente" / "Servicio de cuentas pendiente" (ya está conectado); sin pestañas: el cambio entre ingreso y alta lo hace el panel de `accounts` |
+| — | `/viajes/maraton-santiago-2027` | `TripDetail` (+ `TripFacts`) | F2; F4 lee del catálogo | — | Nueva página (no existe en el diseño) compuesta solo con contenido del diseño. Desde F4, título, resumen, fecha, precio y cupos salen del catálogo publicado. Con la enmienda (`sponsors-portal.md` F7), "Presentado por" bajo el `h1` si el viaje tiene marca |
+| — | `/viajes/<slug>` sin contenido fijo | `CatalogTripDetail` + `SponsorCredit` | Enmienda (`sponsors-portal.md` F7) | — | Plantilla genérica con los campos del catálogo publicado; no existe en el diseño |
+| — | `/patrocinadores/<slug>` | `SponsorShowcase` + `TripCard` | Enmienda (`sponsors-portal.md` F7) | — | Logo, nombre (`h1`), descripción, "Visitar sitio web" y cuadrícula de eventos publicados de la marca; 404 si no tiene ninguno |
+| — | `/cuenta` | `AccountSection` (server, landing) + `RunnerAccount` (client, `modules/accounts` F4) | F3 | Ingresar, registrarse, verificar, recuperar contraseña, cerrar sesión | Columna de `cuenta.html` con sus textos; sin los avisos "Acceso próximamente" / "Servicio de cuentas pendiente" (ya está conectado); sin pestañas: el cambio entre ingreso y alta lo hace el panel de `accounts`. Con la enmienda, con sesión: "Ver mis carreras" y "Mi perfil" (los pone `RunnerAccount`) y nota sin "no hay perfiles persistentes" |
 
 ## Criterios de aceptación
 ### Fase 1 — Base, cabecera, carrusel, pie, CTA móvil y `/contacto`
@@ -171,8 +193,8 @@ Sustituye el template "Hello world".
 
 ### Fase 3 — Cuenta del runner y comunidad
 - [ ] (F3) Dado `/`, cuando lo recorro, entonces la sección `#comunidad` aparece entre paquete y por qué viajar. La cabecera añade "Comunidad" (`/#comunidad`) y "Ingresar / Registrarse" (`/cuenta`), la lámina 3 enlaza a `#comunidad` y el pie muestra "Tu comunidad" → `/cuenta`. No hay demo de experiencias ni enlaces a `/crm`.
-- [ ] (F3) Dado `/cuenta` sin sesión, cuando lo abro, entonces veo la cabecera y el pie de la landing y la columna de `cuenta.html`. Los textos son "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." (texto display, no encabezado), "Participa. Comparte. Conecta.", "★ ESTRELLAS POR CORRER Y COMPARTIR" y la nota "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay perfiles persistentes ni descuentos activos.". Sin "Acceso próximamente". Junto a la columna aparece el panel de runner de `accounts`: "Iniciar sesión" con el enlace "Registrarse". La página tiene un único `h1`, el del panel.
-- [ ] (F3) Dado un alta en `/cuenta`, cuando verifico el código, entonces me quedo en `/cuenta` con sesión y veo "Qué bueno verte de nuevo." y mi correo. "Cerrar sesión" me deja en `/cuenta` sin sesión.
+- [ ] (F3) Dado `/cuenta` sin sesión, cuando lo abro, entonces veo la cabecera y el pie de la landing y la columna de `cuenta.html`. Los textos son "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." (texto display, no encabezado), "Participa. Comparte. Conecta.", "★ ESTRELLAS POR CORRER Y COMPARTIR" y la nota "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay perfiles persistentes ni descuentos activos." (desde `accounts-runner-profiles.md` F2-T5: "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay descuentos activos."). Sin "Acceso próximamente". Junto a la columna aparece el panel de runner de `accounts`: "Iniciar sesión" con el enlace "Registrarse". La página tiene un único `h1`, el del panel.
+- [ ] (F3) Dado un alta en `/cuenta`, cuando verifico el código, entonces me quedo en `/cuenta` con sesión y veo "Qué bueno verte de nuevo." y mi correo (así se implementó F3). **Desde `runner-portal.md` F6:** llego a `/mis-carreras`; al volver a `/cuenta` veo "Qué bueno verte de nuevo.", mi correo y "Ver mis carreras" (y "Mi perfil" desde `accounts-runner-profiles.md` F2-T5). "Cerrar sesión" me deja en `/cuenta` sin sesión.
 - [ ] (F3) Dada una sesión de runner sin roles, cuando abro `/crm`, entonces veo "Tu cuenta no tiene acceso al CRM. Pide una invitación a un administrador.". `GET /api/crm/me` responde 403 y no se crean filas en `profiles` ni `staff_*` (comprobación manual en producción, con autorización del usuario; la misma de `accounts-auth-ui.md` F4).
 - [ ] (F3) Dado `/crm/acceso`, cuando lo uso, entonces se comporta igual que antes de esta fase.
 - [ ] (F3) Dado el HTML de `/cuenta`, entonces el `<title>` es "Ingresar o registrarse | Carreras Viajeras" (segmento hijo: aplica el template del layout) y `robots` es `noindex, nofollow`.
@@ -189,13 +211,20 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
   - "EL PRIMER EQUIPO" muestra "100 cupos definidos";
   - el resto es igual que en F2: portada con `santiago.jpg` y su `alt`, rótulo, ruta, destacados, cuotas, reserva, acompañante, nota de pagos, 9 incluidos, no incluido, pendientes, "Ver anuncio oficial ↗" y el CTA → `/contacto?destino=santiago-2027`.
 - [ ] (F4) Dado el viaje publicado, cuando cambio en `/crm/viajes/<id>` el precio (p. ej. 1599) o los cupos (p. ej. 80) y recargo la página del viaje, entonces muestra el valor nuevo sin redesplegar. `/` no cambia: sigue mostrando la copia fija de `TRIPS`.
-- [ ] (F4) Dado el viaje despublicado (o archivado) en el CRM, cuando pido `/viajes/maraton-santiago-2027` (`curl -sI`), entonces responde con estado `404` y la página 404. Al publicarlo de nuevo, responde `200`. Dado `/viajes/otro-slug`, entonces responde `404` sin consultar Neon (unit test).
-- [ ] (F4) Dado `npm run build` sin `DATABASE_URL`, entonces termina sin errores, `/viajes/[slug]` aparece como dinámica (`ƒ`) y `/`, `/contacto` y `/cuenta` siguen estáticas (`○`).
+- [ ] (F4) Dado el viaje despublicado (o archivado) en el CRM, cuando pido `/viajes/maraton-santiago-2027` (`curl -sI`), entonces responde con estado `404` y la página 404. Al publicarlo de nuevo, responde `200`. Dado `/viajes/otro-slug`, entonces responde `404` sin consultar Neon (unit test). **Desde `sponsors-portal.md` F7-T1:** `/viajes/otro-slug` sí consulta el catálogo; responde `404` si no está publicado y, si lo está, muestra la plantilla genérica.
+- [ ] (F4) Dado `npm run build` sin `DATABASE_URL`, entonces termina sin errores, `/viajes/[slug]` aparece como dinámica (`ƒ`) y `/`, `/contacto` y `/cuenta` siguen estáticas (`○`). **Desde `sponsors-portal.md` F7-T4:** `/` también es dinámica (`ƒ`); `/contacto` y `/cuenta` siguen estáticas.
 - [ ] (F4) Dado un error de la base al leer el catálogo, entonces `getCatalogTrip` lo propaga sin capturarlo (unit test) y la página muestra el error por defecto de Next, sin el mensaje original en producción. No existen `app/viajes/**/error.tsx` ni `app/viajes/**/loading.tsx`.
 - [ ] (F4) Dado `README.md`, entonces su sección "Lectura pública para la landing" describe lo implementado en F4 (combinación, 404, `cache`, sin `error.tsx`) y la precondición operativa, sin decir que la landing está en otra rama.
-- [ ] (F4) Dado el diff de la fase, entonces solo toca los archivos del plan de F4. No modifica `modules/trips/**`, `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, `drizzle/`, `package.json` ni otras specs, y no añade dependencias. La landing importa de `@/modules/trips` solo `getPublishedTripBySlug`, `formatTripDate`, `formatTripPrice` y `type PublicTrip`.
+- [ ] (F4) Dado el diff de la fase, entonces solo toca los archivos del plan de F4. No modifica `modules/trips/**`, `lib/auth/*`, `lib/db*`, `app/crm/*`, `app/api/*`, `drizzle/`, `package.json` ni otras specs, y no añade dependencias. La landing importa de `@/modules/trips` solo `getPublishedTripBySlug`, `formatTripDate`, `formatTripPrice` y `type PublicTrip` (desde `sponsors-portal.md` F7 añade `listPublishedTrips`, `formatTripDateRange` y `type PublicTripSponsor`, según la reutilización de esa spec, y de `@/modules/sponsors` `getPublicSponsorBySlug` y `type PublicSponsor`).
 - [ ] (F4) Dado `npm run build:worker` seguido de `npx wrangler deploy --dry-run --outdir <scratch>` (sin desplegar, en Linux/WSL), entonces el tamaño gzip del Worker se registra en el resumen de la fase frente a la última referencia registrada (1411 KiB, `crm-leads-pipeline.md`). Debe ser < 2 MiB; si lo supera, se detiene y se consulta al usuario (límite Free: 3 MiB).
 - [ ] (F4) `npm run lint`, `npx vitest run` y `npm run build` sin errores.
+
+### Enmienda 2026-10-25 (sin fase propia: cada criterio lo verifica el reviewer de la spec y la fase indicadas)
+- [ ] (`runner-portal.md` F5-T1) Dado `@/modules/landing`, entonces exporta `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` sin cambiar su comportamiento; `inquiry.test.ts` pasa sin cambios.
+- [ ] (`runner-portal.md` F6) Dado un ingreso o una verificación con sesión en `/cuenta`, entonces llego a `/mis-carreras`, también con una cuenta de staff. "Cerrar sesión" en `/cuenta` me deja en `/cuenta` sin sesión, y `/cuenta` sigue estática (`○`).
+- [ ] (`runner-portal.md` F6-T2 y `accounts-runner-profiles.md` F2-T5) Dado `/cuenta` con sesión, entonces veo "Qué bueno verte de nuevo.", mi correo, "Ver mis carreras" → `/mis-carreras`, "Mi perfil" → `/cuenta/perfil` y "Cerrar sesión". `/cuenta` no redirige.
+- [ ] (`accounts-runner-profiles.md` F2-T5) Dado `/cuenta`, entonces la nota de `AccountSection` dice "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay descuentos activos.".
+- [ ] (`sponsors-portal.md` F7) Dado un viaje publicado sin contenido fijo, `/viajes/maraton-santiago-2027`, un slug no publicado, "Eventos destacados" en `/` y `/patrocinadores/<slug>`, entonces se cumplen los criterios F7 de `sponsors-portal.md`. Dado `/viajes/maraton-santiago-2027` de un viaje del equipo, entonces se ve igual que en F4.
 
 ## Diseño técnico
 
@@ -207,7 +236,8 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
   - `export const viewport: Viewport = { themeColor: "#0144ae" }`.
 - **`app/page.tsx`** (F1, reescribir; ampliado en F2 y F3):
   - `metadata.title = { absolute: "Tu próxima meta es la maratón de Santiago. | Carreras Viajeras" }`. En Next 16, el `title.template` del layout no se aplica a un `page.js` del mismo segmento (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/generate-metadata.md`, líneas 285–288). `/contacto`, `/viajes/[slug]` y `/cuenta` son segmentos hijos, así que en ellas el template sí aplica;
-  - compone `<SiteHeader />`, `<main>` con las secciones de la fase, `<SiteFooter />` y `<MobileCta />`.
+  - compone `<SiteHeader />`, `<main>` con las secciones de la fase, `<SiteFooter />` y `<MobileCta />`;
+  - (enmienda; **implementado en `sponsors-portal.md` F7-T4**) inserta `<Suspense fallback={null}><FeaturedTripsSection /></Suspense>` antes de `<DestinationsSection />`. `/` pasa a renderizarse por petición (`ƒ`); el resto de la portada se envía sin esperar a Neon.
 - **`app/contacto/page.tsx`** (F1, nuevo):
   - `metadata = { title: "Contacto", description: "Consulta por tu próximo viaje con Carreras Viajeras." }`;
   - `async function ContactPage({ searchParams }: PageProps<"/contacto">)` hace `const { destino } = await searchParams;` y renderiza `<SiteHeader /><main><ContactSection destination={destino} /></main><SiteFooter />`.
@@ -226,6 +256,8 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
     return <><SiteHeader /><main><TripDetail trip={trip} /></main><SiteFooter /></>;
   }
   ```
+- **`app/viajes/[slug]/page.tsx`** (enmienda; **implementado en `sponsors-portal.md` F7-T4**): `getCatalogTrip(slug)` (`null` → `notFound()`); `generateMetadata` con `view.title`/`view.description`; `view.kind === "designed" ? <TripDetail trip={view.trip} /> : <CatalogTripDetail trip={view.trip} />`. Sigue sin `generateStaticParams`, `loading.tsx` ni `error.tsx`.
+- **`app/patrocinadores/[slug]/page.tsx`** (enmienda; nuevo, **implementado en `sponsors-portal.md` F7-T4**): `getSponsorShowcase(slug)` (`null` → `notFound()`); `generateMetadata` con el nombre y la descripción de la marca (segmento hijo: aplica el template del layout); `<SiteHeader /><main><SponsorShowcase sponsor trips /></main><SiteFooter />`. Por petición, sin `generateStaticParams`. Hereda `robots` del layout (Requisito 3).
 - **`app/cuenta/page.tsx`** (F3, nuevo): Server Component estático. `metadata = { title: "Ingresar o registrarse" }` (segmento hijo, así que el template del layout aplica); renderiza `<SiteHeader /><main><AccountSection /></main><SiteFooter />`. No llama a `getCrmAccess()`, a guardas ni a la base de datos. Sin `MobileCta`, igual que en `/contacto`.
 - **Sin route group `(public)`:** cada página compone `SiteHeader` y `SiteFooter` en una línea. El layout compartido se introducirá con las páginas legales (trabajo futuro), si la repetición crece.
 
@@ -253,7 +285,7 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
 | `native-select` | shadcn (instalar: `npx shadcn@latest add native-select`; solo depende de `cn`, ya instalado) | F1 | Selector de destino |
 | Carrusel shadcn | descartado | — | Requiere `embla-carousel-react` (dependencia nueva), y el diseño es de fundido, no de desplazamiento |
 | Accordion shadcn | descartado | — | `<details>` nativo funciona sin JS y en Server Components |
-| `SiteHeader` | nuevo | F1 (mod. F2, F3) | Server. `<header className="sticky top-0 z-40 bg-background shadow-sm">`. Marca (`ArrowUpRight` + "CARRERAS / VIAJERAS") → `/`. `<nav aria-label="Principal">` oculto < `md`, con array local de enlaces. CTA "Quiero correr" → `/contacto`; F3 añade "Ingresar / Registrarse" → `/cuenta` (variante outline). Estático: no lee la sesión |
+| `SiteHeader` | nuevo | F1 (mod. F2, F3) | Server. `<header className="sticky top-0 z-40 bg-background shadow-sm">`. Marca (`ArrowUpRight` + "CARRERAS / VIAJERAS") → `/`. `<nav aria-label="Principal">` oculto < `md`, con array local de enlaces. CTA "Quiero correr" → `/contacto`; F3 añade "Ingresar / Registrarse" → `/cuenta` (variante outline). Estático: no lee la sesión. La marca es `SiteBrand` (existente, exportado por `SiteHeader.tsx` y usado también por `SiteFooter`); la enmienda lo exporta desde `index.ts` (`runner-portal.md` F5-T1) para la cabecera de `/mis-carreras`, sin cambiar su marcado |
 | `SiteFooter` | nuevo | F1 (mod. F3) | Server. Franja MAZ: logo `maz-producciones.webp`, "Una unidad de MAZ PRODUCCIONES.", razón social, RUC, métricas "+25 Años", "+70", "+500" y "+15 Maratones internacionales" (4 tarjetas con icono, acentos alternos verde/azul) con "Datos de trayectoria 2025 proporcionados por MAZ Producciones.". Después, contenido del inventario. Constante local `SOCIAL_LINKS` con Facebook e Instagram (URLs exactas; glifos del diseño `aria-hidden` + nombre). `max-sm:pb-28` para dejar sitio a la barra móvil |
 | `HeroCarousel` | nuevo | F1 (mod. F2, F3) | Detalle en la subsección siguiente |
 | `MobileCta` | nuevo | F1 | Server. `<Link className="fixed inset-x-0 bottom-0 z-30 sm:hidden ...">` con `pb-[calc(1rem+env(safe-area-inset-bottom))]`. Texto: "US$1,499 al contado · Quiero información ↗" |
@@ -261,7 +293,7 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
 | `ContactForm` | nuevo | F1 | Detalle en la subsección siguiente |
 | `TripFacts` | nuevo | F2 | Server. Props `{ trip: Trip }`. Los 4 datos de `.trip-strip`. Lo usan `/` y `TripDetail` |
 | `PackageSection` | nuevo | F2 | Server. `<section id="paquete" aria-labelledby="package-title">`. Resumen con datos de `TRIPS[0]`; CTA principal y "Ver más: paquete completo" → `/viajes/${trip.slug}` |
-| `TripDetail` | nuevo | F2 | Server. Props `{ trip: Trip }`. Portada con `h1` `trip.name`, `<TripFacts />`, destacados, "Precios y condiciones", rejilla "Sí está incluido", "No está incluido", "Detalles que falta confirmar" (abierto) y CTA → `/contacto?destino=${trip.destinationId}` |
+| `TripDetail` | nuevo | F2 | Server. Props `{ trip: Trip }`. Portada con `h1` `trip.name`, `<TripFacts />`, destacados, "Precios y condiciones", rejilla "Sí está incluido", "No está incluido", "Detalles que falta confirmar" (abierto) y CTA → `/contacto?destino=${trip.destinationId}`. Enmienda (`sponsors-portal.md` F7-T2): `<SponsorCredit>` bajo el `h1` si `trip.sponsor` |
 | `StorySection` | nuevo | F2 | Server. `<figure>` con `story-runners.webp` y `figcaption` "CORRE. VIAJA. CONECTA."; CTA → página del viaje |
 | `WhyUsSection` | nuevo | F2 | Server. 3 puntos clave + `<details>` con 6 tarjetas (array local con iconos lucide `Ticket`, `Building2`, `Users`, `Utensils`, `Heart`, `ShieldCheck`) |
 | `BlogSection` | nuevo | F2 | Server. Intro + columnas "Referentes" (`<details>` con 2 tarjetas y nota) y "Tips" (`<details>` con `<TipList tips={TIPS} />` y nota "Información general, revisada el 17/10/2026…"). `TIPS`: array local serializable `{ category, image, eyebrow, title, summary, body, source?: { label, href } }`; los saltos de título van con `\n` + `whitespace-pre-line` |
@@ -269,9 +301,14 @@ Verificación manual sobre una rama de Neon con la precondición de F4 cumplida 
 | `DestinationsSection` | nuevo | F2 | Server. 3 `Link` (array local); Santiago, con estilo activo, → `/viajes/maraton-santiago-2027` |
 | `FaqSection` | nuevo | F2 | Server. `<section id="preguntas">`; 9 `<details>` (array local) |
 | `CommunitySection` | nuevo | F3 | Server. `<section id="comunidad" aria-labelledby="community-title">`: imagen `running-team.jpg`, título, texto, CTA "Ingresar / Registrarse" → `/cuenta`, 3 pasos y nota de recompensas. Estático, sin persistencia |
-| `AccountSection` | nuevo | F3 | Server. Rejilla de dos columnas de `cuenta.html`: (1) imagen `running-team.jpg` (alt "Corredores juntos, imagen ilustrativa") con eyebrow "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." como párrafo con estilo display (`font-heading`, no encabezado), "Participa. Comparte. Conecta." y "★ ESTRELLAS POR CORRER Y COMPARTIR"; (2) eyebrow "COMUNIDAD CARRERAS VIAJERAS", `<RunnerAccount />` y la nota de demostración. No pasa props a `RunnerAccount` |
+| `AccountSection` | nuevo | F3 | Server. Rejilla de dos columnas de `cuenta.html`: (1) imagen `running-team.jpg` (alt "Corredores juntos, imagen ilustrativa") con eyebrow "TU PASAPORTE A MÁS HISTORIAS", "El próximo viaje empieza contigo." como párrafo con estilo display (`font-heading`, no encabezado), "Participa. Comparte. Conecta." y "★ ESTRELLAS POR CORRER Y COMPARTIR"; (2) eyebrow "COMUNIDAD CARRERAS VIAJERAS", `<RunnerAccount />` y la nota de demostración. No pasa props a `RunnerAccount`. Enmienda (`accounts-runner-profiles.md` F2-T5): la nota pasa a "La comunidad, las publicaciones y las recompensas siguen en demostración; no hay descuentos activos." |
+| `SponsorCredit` | nuevo (enmienda; `sponsors-portal.md` F7-T2) | — | Server. "Presentado por", logo y nombre de la marca → `/patrocinadores/<slug>`. Diseño en `sponsors-portal.md` ("Cambios en `modules/landing/`") |
+| `CatalogTripDetail` | nuevo (enmienda; `sponsors-portal.md` F7-T2) | — | Server. Plantilla genérica de `/viajes/<slug>` para viajes publicados sin contenido fijo, con el lenguaje visual de `TripDetail` |
+| `TripCard` | nuevo (enmienda; `sponsors-portal.md` F7-T3) | — | Server. Tarjeta de viaje publicado con el estilo de `DestinationsSection`; la usan `FeaturedTripsSection` y `SponsorShowcase` (uso interno del módulo) |
+| `FeaturedTripsSection` | nuevo (enmienda; `sponsors-portal.md` F7-T3) | — | async Server. "Eventos destacados" (`#destacados`), hasta 6 `TripCard`; sin destacados o con error de la base → `null` |
+| `SponsorShowcase` | nuevo (enmienda; `sponsors-portal.md` F7-T3) | — | Server. Cabecera de la marca y cuadrícula de `TripCard` de `/patrocinadores/<slug>` |
 
-Todos son de un único dominio (landing) y van en `modules/landing/components/`. No existe nada equivalente en el proyecto ni en shadcn más allá de lo indicado.
+Todos son de un único dominio (landing) y van en `modules/landing/components/`. No existe nada equivalente en el proyecto ni en shadcn más allá de lo indicado. Los componentes de la enmienda los diseña y prueba `sponsors-portal.md`; esta tabla solo los registra.
 
 #### `HeroCarousel`
 `"use client"`. Array local de 3 láminas `{ image, alt, label, title, cta? }`; en F1 solo la lámina 1 tiene `cta`.
@@ -320,6 +357,7 @@ Todos son de un único dominio (landing) y van en `modules/landing/components/`.
   ```
   - `{cláusula}`: " y la preventa por corredor: US$1,499 al contado o US$1,799 en cuotas, con reserva anunciada de US$300" para Santiago; " cuando haya una propuesta confirmada" para el resto.
   - `buildWhatsAppUrl`: elimina los caracteres que no son dígitos; si el resultado no cumple `^\d{10,15}$`, devuelve `null`; si cumple, `https://wa.me/${digits}?text=${encodeURIComponent(text)}`.
+  - Enmienda: `buildWhatsAppUrl` y `WHATSAPP_NUMBER` pasan a la API pública del módulo (`runner-portal.md` F5-T1) para el contacto de `/mis-carreras`; `CatalogTripDetail` (`sponsors-portal.md` F7) los usa dentro del módulo. Sin cambios de comportamiento.
 - **`trips.ts`** (F2):
   ```ts
   export type Trip = {
@@ -346,16 +384,22 @@ Todos son de un único dominio (landing) y van en `modules/landing/components/`.
 - **Único import:** `RunnerAccount` desde `@/modules/accounts`. Lo crea `accounts-auth-ui.md` F4: `AccessPanel audience="runner"` con alta, verificación por código, `EMAIL_NOT_VERIFIED`, recuperación de contraseña y mensajes sin enumeración, más `SignOutButton redirectTo="/cuenta"` y los estados de sesión con `authClient.useSession()`.
 - **La landing no toca** `AccessPanel`, los formularios, `authClient`, `getCrmAccess()`, `CrmShell`, `NoCrmAccess`, `lib/auth/*`, las tablas ni las páginas del CRM.
 - **Encabezados:** el único `h1` de `/cuenta` lo aporta `RunnerAccount`: el título del formulario activo ("Iniciar sesión", "Crea tu cuenta"…) o, con sesión, "Qué bueno verte de nuevo.". Por eso `AccountSection` muestra "El próximo viaje empieza contigo." como texto display, no como encabezado.
+- **Enmienda:** el import sigue siendo solo `RunnerAccount`. El destino `/mis-carreras` y los enlaces "Ver mis carreras" y "Mi perfil" viven dentro de `RunnerAccount`/`AccessPanel` (`accounts-auth-ui.md`, Requisito 12) y los implementan `runner-portal.md` F6 y `accounts-runner-profiles.md` F2-T5; `AccountSection` no cambia por ellos.
 
 ### Contrato de API
 No se añaden APIs.
 - F1 y F2 no hacen peticiones.
 - F3 usa los endpoints existentes de Neon Auth a través del proxy same-origin, con los métodos de `accounts-auth-ui.md` (Requisitos 1) más `useSession()` del mismo cliente (`ReactAuthClient` de better-auth, exportado por `createAuthClient()` de `@neondatabase/auth/next`).
 - F4 no añade API HTTP: llama en el servidor a `getPublishedTripBySlug(slug): Promise<PublicTrip | null>` de `@/modules/trips` (contrato de `trips-catalog.md`, sin `GET /api/trips`). Contrato interno nuevo: `getCatalogTrip(slug: string): Promise<Trip | null>` (ver "Fase 4").
+- Enmienda (`sponsors-portal.md` F7-T1, sin API HTTP): `getCatalogTrip(slug): Promise<CatalogTripView | null>`, con `CatalogTripView = { kind: "designed"; title; description; trip: Trip } | { kind: "catalog"; title; description; trip: PublicTrip }`, y `getSponsorShowcase(slug): Promise<{ sponsor: PublicSponsor; trips: PublicTrip[] } | null>`. `Trip` añade `sponsor: PublicTripSponsor | null`. Consumen `listPublishedTrips(filter)` de `@/modules/trips` y `getPublicSponsorBySlug` de `@/modules/sponsors`. Contrato completo en `sponsors-portal.md` ("Contratos").
 
 ### Base para el trabajo futuro (sin implementarlo)
-- **Viajes:** `TRIPS` y `getTrip(slug)` hacen de contrato de lectura. Cuando exista el catálogo en Neon, `getTrip` y `generateStaticParams` leerán de `trips-catalog` con el mismo `slug` y la misma ruta `/viajes/[slug]`. (Hecho en F4 para la página del viaje; `/` sigue con contenido fijo.)
-- **Runner:** su identidad es el `user.id` de Neon Auth. Un futuro perfil de runner irá en una tabla propia (no en `profiles`, que es solo de staff), referenciada por ese id. Comunidad y experiencias colgarán de esa identidad, y una futura guarda de runner (sesión con correo verificado, sin roles de staff) protegerá sus recursos.
+- **Viajes:** `TRIPS` y `getTrip(slug)` hacen de contrato de lectura. Cuando exista el catálogo en Neon, `getTrip` y `generateStaticParams` leerán de `trips-catalog` con el mismo `slug` y la misma ruta `/viajes/[slug]`. (Hecho en F4 para la página del viaje; `/` sigue con contenido fijo. La plantilla genérica para viajes sin contenido fijo y los destacados de `/` llegan con `sponsors-portal.md` F7.)
+- **Runner:** su identidad es el `user.id` de Neon Auth. Con la enmienda ya existen, cada uno en su spec:
+  - el perfil del runner, en la tabla propia `runner_profiles` (no en `profiles`, que es solo de cuentas con rol), con clave `user_id` (`accounts-runner-profiles.md`); su guarda de página es `getRunnerProfilePage` (`/cuenta/perfil`);
+  - la guarda de runner de `/mis-carreras` (sesión con correo verificado y lecturas filtradas por `runner_user_id`), `getRunnerPortal` (`runner-portal.md` F5).
+
+  Comunidad y experiencias colgarán de esa misma identidad, con su propia guarda en el servidor.
 - **Leads:** `buildInquiryMessage` y los campos del formulario son la base del payload de la futura spec de leads.
 
 ### Fase 4: página del viaje desde el catálogo
@@ -365,6 +409,7 @@ Contrato consumido (`trips-catalog.md`, "Contrato de lectura pública" e "Integr
 1. **Alcance: solo `/viajes/[slug]`.** `/` sigue estática con la copia fija de `TRIPS` (`TripFacts`, `PackageSection`, `DestinationsSection`), igual que `MobileCta`, `HeroCarousel` y la cláusula de `buildInquiryMessage`, que ya tienen "US$1,499" como literal.
    - Leer el catálogo en `/` la haría dinámica: una consulta a Neon por cada visita a la portada, la página más visitada, con CPU del Worker Free y sin caché posible (`trips-catalog.md` excluye ISR/KV). Además obligaría a decidir qué muestra la portada si el viaje no está publicado.
    - Coste aceptado: si el equipo cambia precio, fecha o cupos en el CRM, `/` no cambia hasta editar `TRIPS` (Pregunta abierta 4).
+   - **Enmienda (`sponsors-portal.md` F7, Decisión 17 de esa spec):** `/` pasa a dinámica solo por la sección "Eventos destacados" (una consulta pequeña, en `<Suspense>`, que no tumba la portada si falla). Las secciones con copia fija de `TRIPS` no cambian ni leen el catálogo. El coste en Neon Free es la Pregunta abierta 1 de `sponsors-portal.md`.
 2. **Combinación: el contenido fijo manda en la estructura y el catálogo sustituye solo los campos que tienen hueco en el diseño.** `TRIPS` pasa a tipar `TripContent` (contenido fijo) y `Trip` es la vista combinada que pinta `TripDetail`:
 
    | Campo de `TRIPS` | Desde F4 | Motivo |
@@ -384,7 +429,7 @@ Contrato consumido (`trips-catalog.md`, "Contrato de lectura pública" e "Integr
 3. **Precio:** donde la página muestra el precio al contado ("EL PAQUETE" de `TripFacts` y "AL CONTADO" de `TripDetail`), se usa `formatTripPrice(priceUsd)`, el formato elegido por el usuario para el catálogo ("US$ 1,499"; `null` → "Precio a consultar"). Los importes fijos (cuotas, reserva y acompañante) conservan el literal del diseño ("US$1,799"). La regla es: importe del catálogo → `formatTripPrice`; importe fijo → literal. `/` no cambia.
 4. **Errores:**
    - `null` → `notFound()` en `generateMetadata` y en la página, antes de renderizar nada. Sin `loading.tsx` ni otro `<Suspense>` por encima, así que la respuesta lleva estado `404` (`node_modules/next/dist/docs/01-app/03-api-reference/04-functions/not-found.md`: tras empezar el streaming quedaría en `200`).
-   - Un slug sin contenido fijo en `TRIPS` → `null` **sin consultar Neon**. Una URL inventada no gasta consultas, igual que hacía `dynamicParams = false`.
+   - Un slug sin contenido fijo en `TRIPS` → `null` **sin consultar Neon**. Una URL inventada no gasta consultas, igual que hacía `dynamicParams = false`. **Enmienda (`sponsors-portal.md` F7-T1, Decisión 15 de esa spec):** se sustituye por "se consulta siempre el catálogo; un slug no canónico devuelve `null` sin consultar (validación de `getPublishedTripBySlug`), y uno canónico sin contenido fijo pero publicado usa la plantilla genérica". Una URL inventada con formato válido pasa a costar una consulta.
    - Un error de la base se propaga sin `try/catch`. Capturarlo podría tragarse también el aviso interno de `connection()`. Basta la página de error por defecto: Next oculta el mensaje en producción. Un `error.tsx` exigiría un componente de cliente para un caso operativo raro (YAGNI).
 5. **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React, en el propio módulo landing. `generateMetadata` y la página comparten el resultado dentro del mismo render; es el patrón de `getCurrentUser` en `lib/auth/guards.ts`.
 6. **Render por petición:** se eliminan `generateStaticParams` y `dynamicParams`. Sin `generateStaticParams`, el segmento dinámico se renderiza bajo demanda y `connection()` impide prerenderizar con datos de la base. `npm run build` no necesita `DATABASE_URL`.
@@ -432,6 +477,8 @@ export const getCatalogTrip = cache(async (slug: string): Promise<Trip | null> =
   };
 });
 ```
+Así se implementó F4. **Enmienda (`sponsors-portal.md` F7-T1):** devuelve `CatalogTripView | null`, llama siempre a `getPublishedTripBySlug(slug)` y elige la vista `designed` (esta combinación, más `sponsor`) o `catalog` (el `PublicTrip` tal cual); sigue envuelta en `cache` y propagando los errores de la base.
+
 No es un `service` del módulo: no habla con una API propia y usa React (`cache`); compone el service público de `trips` con el contenido fijo de la landing. Es transitivamente `server-only` (vía `@/modules/trips`); ningún componente de cliente de la landing importa `@/modules/landing` ni `utils/trips.ts`.
 
 #### Componentes
@@ -483,7 +530,9 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
 - F2: añade `TripFacts`, `PackageSection`, `TripDetail`, `StorySection`, `WhyUsSection`, `BlogSection`, `DestinationsSection`, `FaqSection`, `TRIPS`, `getTrip` y `type Trip`.
 - F3: añade `CommunitySection` y `AccountSection`.
 - F4: sustituye `getTrip` por `getCatalogTrip` (`getTrip` pasa a uso interno); se mantienen `TRIPS` (lo usa `app/page.tsx`) y `type Trip`.
-- `ContactForm` y `TipList` son internos.
+- Enmienda, `runner-portal.md` F5-T1: añade `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER`, consumidos por `modules/bookings`.
+- Enmienda, `sponsors-portal.md` F7-T4: añade `CatalogTripDetail`, `FeaturedTripsSection`, `SponsorShowcase`, `getSponsorShowcase` y `type CatalogTripView`.
+- `ContactForm`, `TipList`, `SponsorCredit` y `TripCard` son internos.
 
 ### Assets de `public/images/` (F1)
 - Copia directa: `running-road.jpg`, `running-team.jpg`, `running-training.jpg`, `story-runners.webp`, `maz-producciones.webp`.
@@ -492,12 +541,29 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
 - `app/icon.svg`: isotipo trazado desde `isotipo-cv.png` (Moore boundary tracing + Douglas-Peucker, verde `#58B11B` / azul `#0045AF`), 0,9 KB.
 - Los originales del cliente se conservan en `public/images/` sin usar; no borrar hasta confirmar el descarte.
 
+### Enmienda: qué implementa cada spec
+Esta spec no añade tareas. Cada cambio lo implementa una sola spec, en la tarea indicada.
+
+| Cambio | Archivos de la landing o de `app/` | Lo implementa |
+|---|---|---|
+| Exportar `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` | `modules/landing/index.ts` | `runner-portal.md` F5-T1 |
+| Destino `/mis-carreras` tras ingresar en `/cuenta` y "Ver mis carreras" | ninguno (`modules/accounts`, ver `accounts-auth-ui.md`) | `runner-portal.md` F6-T1, F6-T2 |
+| "Mi perfil" en `/cuenta` y nota de `AccountSection` | `modules/landing/components/AccountSection.tsx` (el enlace está en `modules/accounts`) | `accounts-runner-profiles.md` F2-T5 |
+| Fixture `sponsor: null` en el test de `getCatalogTrip` | `modules/landing/utils/catalogTrip.test.ts` | `sponsors-portal.md` F6-T2 |
+| `Trip` con `sponsor` y `getCatalogTrip` con `CatalogTripView` | `modules/landing/utils/trips.ts`, `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts` | `sponsors-portal.md` F7-T1 |
+| "Presentado por" y plantilla genérica | `SponsorCredit.tsx`, `TripDetail.tsx`, `CatalogTripDetail.tsx` | `sponsors-portal.md` F7-T2 |
+| Destacados y página de la marca | `TripCard.tsx`, `FeaturedTripsSection.tsx` (+ test), `utils/sponsorShowcase.ts` (+ test), `SponsorShowcase.tsx` | `sponsors-portal.md` F7-T3 |
+| API pública y rutas `/`, `/viajes/[slug]` y `/patrocinadores/[slug]` | `modules/landing/index.ts`, `app/page.tsx`, `app/viajes/[slug]/page.tsx`, `app/patrocinadores/[slug]/page.tsx` | `sponsors-portal.md` F7-T4 |
+
+Coordinación: `runner-portal.md` F5-T1 y `sponsors-portal.md` F7-T4 tocan `modules/landing/index.ts`; la segunda conserva los exports de la primera.
+
 ## Reutilización
 - shadcn ya instalados: `Button`/`buttonVariants`, `Input`, `Label`. Nuevo: `native-select`, sin dependencias npm.
 - `cn` de `@/lib/utils`, `lucide-react`, `next/image`, `next/link`, `next/font/google`, `notFound` de `next/navigation`.
 - `sharp` (transitivo de `next`), solo para la conversión puntual de las dos imágenes.
 - F3: `RunnerAccount` de `@/modules/accounts` (`accounts-auth-ui.md` F4), que encapsula `AccessPanel`, sus formularios, `SignOutButton` y `authClient`. No hay un segundo sistema de auth.
 - F4: `getPublishedTripBySlug`, `formatTripDate`, `formatTripPrice` y `type PublicTrip` de `@/modules/trips` (no se reimplementa ningún formato); `cache` de React (mismo patrón que `getCurrentUser` en `lib/auth/guards.ts`); `notFound`; los componentes `TripDetail` y `TripFacts` existentes, sin cambios de marcado.
+- Enmienda: `SiteBrand` (existente en `SiteHeader.tsx`), `buildWhatsAppUrl`/`WHATSAPP_NUMBER` (existentes) y `RunnerAccount` ampliado en `modules/accounts`; para `sponsors-portal.md` F7, `listPublishedTrips` y `PublicTripSponsor` de `@/modules/trips` y `getPublicSponsorBySlug` de `@/modules/sponsors`. Sin dependencias npm nuevas.
 
 ## Tests
 - **`modules/landing/utils/inquiry.test.ts`** (F1):
@@ -511,7 +577,7 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
     - el texto va codificado, con acentos y saltos de línea;
     - `""`, 9 dígitos o 16 dígitos → `null`.
   - `parseDestinationId`: `"rio"` → `"rio"`; `undefined`, `"xyz"` o `["rio"]` → `"santiago-2027"`.
-- F3 no añade tests en la landing: la lógica de acceso y sus tests (`AccessPanel.test.tsx`, `RunnerAccount.test.tsx`) son de `accounts-auth-ui.md` F4.
+- F3 no añade tests en la landing: la lógica de acceso y sus tests (`AccessPanel.test.tsx`, `RunnerAccount.test.tsx`) son de `accounts-auth-ui.md` F4. Con la enmienda, sus casos de `/mis-carreras`, "Ver mis carreras" y "Mi perfil" los añaden `runner-portal.md` F6 y `accounts-runner-profiles.md` F2-T5.
 - **`modules/landing/utils/catalogTrip.test.ts`** (F4). Mock de `@/modules/trips`: `getPublishedTripBySlug: vi.fn()` y los formateadores reales, tomados en la factoría de `@/modules/trips/utils/tripDisplay` (archivo puro, sin `server-only`; es la única importación interna, y solo en el test). Fixture `PublicTrip` con los datos de la precondición. Casos:
   - slug sin contenido fijo (`"otro-viaje"`) → `null` y el service no se llama;
   - el service devuelve `null` → `null`, y se llamó una vez con `"maraton-santiago-2027"`;
@@ -523,6 +589,9 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
   - el service lanza → `getCatalogTrip` rechaza con el mismo error.
 
   `cache` no memoiza fuera de un render RSC, así que el test no comprueba la deduplicación (igual que `guards.test.ts`).
+
+  Enmienda: `sponsors-portal.md` F6-T2 añade `sponsor: null` al fixture y F7-T1 sustituye el caso "slug sin contenido fijo → `null` y el service no se llama" por "slug sin contenido fijo y publicado → vista `catalog`" y añade "con contenido fijo → `designed` con `sponsor`"; los casos de `null` y de error se mantienen.
+- **Enmienda, tests de `sponsors-portal.md` F7:** `modules/landing/utils/sponsorShowcase.test.ts` y `modules/landing/components/FeaturedTripsSection.test.tsx`, con los casos que define esa spec.
 - **Sin unit test en F4:** `app/viajes/[slug]/page.tsx` solo compone (`getCatalogTrip` → `notFound()` o `TripDetail`); toda su decisión está en `getCatalogTrip`, que se prueba con `@/modules/trips` mockeado. El estado `404` y el render dinámico se verifican con los criterios de F4 (`curl -sI` y la salida de `build`). Tampoco `TripFacts`, por ser solo un cambio de tipo.
 - **Sin unit tests**, según `docs/SETUP.md`:
   - las secciones presentacionales, incluidas `CommunitySection` y `AccountSection`;
@@ -573,19 +642,24 @@ Requisito previo para **mergear** (no para implementar): la precondición operat
   Archivos: `modules/landing/index.ts`, `app/viajes/[slug]/page.tsx` · depende de: T1 · secuencial (final)
 - [x] T3 — README: sección "Lectura pública para la landing" con lo implementado y la precondición operativa · archivos: `README.md` · depende de: — · paralelo (con T1)
 
+### Enmienda 2026-10-25 (sin tareas en esta spec)
+La implementan `runner-portal.md` (F5-T1, F6), `accounts-runner-profiles.md` (F2-T5) y `sponsors-portal.md` (F6-T2, F7-T1 a F7-T4), según la tabla "Enmienda: qué implementa cada spec". Ningún developer implementa la enmienda desde esta spec.
+
 ### Trabajo futuro (fuera de esta spec, cada uno con su spec)
-- **Catálogo de maratones en Neon:** hecho para la página del viaje en F4. Queda fuera la portada (`/`): leer el catálogo allí la haría dinámica (ver F4, Decisión 1); se revisará si hay caché disponible o si el equipo cambia los datos a menudo.
+- **Catálogo de maratones en Neon:** hecho para la página del viaje en F4. Queda fuera la portada (`/`): leer el catálogo allí la haría dinámica (ver F4, Decisión 1); se revisará si hay caché disponible o si el equipo cambia los datos a menudo. Con la enmienda, `sponsors-portal.md` F7 lee en `/` solo los destacados; el resto de la portada sigue fija.
 - **Leads:** formulario protegido (consentimiento versionado, Turnstile Siteverify), lead y evento en una transacción Neon, outbox y API privada claim/ack para n8n local, según `platform-neon-foundation.md`. Sustituirá la consulta preparada de `ContactForm`. `crm-leads-pipeline.md` debe reescribirse.
-- **Comunidades y área de runners:** perfil de runner en tabla propia, experiencias y fotos persistentes, estrellas y moderación, sobre la identidad de F3 y una guarda de runner. Recupera la demo omitida.
+- **Comunidades y área de runners:** experiencias y fotos persistentes, estrellas y moderación, sobre la identidad de F3 y una guarda de runner. Recupera la demo omitida. (El perfil de runner en tabla propia lo cubre `accounts-runner-profiles.md` y el portal de reservas `runner-portal.md`.)
 - **Páginas legales y secundarias:** `/pasion-por-correr`, `/terminos`, `/privacidad`, `/cookies`, `/libro-de-reclamaciones`, `/informacion-comercial`. Al llegar se reactivan los enlaces omitidos del pie, "Conoce al operador", "Ver privacidad" y TikTok, y se revisa `noindex`. Requiere domicilio, correos, textos legales y Libro de Reclamaciones habilitado.
 
 ## Preguntas abiertas
 1. **(Resuelta)** La audiencia runner se especifica en `accounts-auth-ui.md` F4, no como excepción de esta spec. F3 depende de esa fase.
 2. **(No bloqueante) Texto desactualizado en `accounts-roles-permissions.md`.** Sus apartados de objetivo y alcance dicen que los runners son "visitantes anónimos, sin cuenta ni perfil". Su mecánica sigue siendo válida (registro libre → 403, sin perfil). El README se corrige en `accounts-auth-ui.md` F4-T3. ¿Quieres actualizar también esa spec? Volvería a `borrador` y necesitaría tu aprobación.
-3. **(No bloqueante, F4) Viajes publicados sin contenido fijo.** Si el equipo publica en el CRM otro viaje (p. ej. `maraton-lima-2027`), `/viajes/<slug>` responde 404 porque la landing no tiene su contenido fijo (precios detallados, incluidos, pendientes). Por defecto se mantiene así. Una plantilla genérica solo con los campos del catálogo sería otra fase. ¿Hace falta ya?
-4. **(No bloqueante, F4) Portada con copia fija.** Fecha, precio al contado y cupos de `/` (datos del viaje, paquete, tarjeta de Santiago, CTA móvil y la consulta de WhatsApp) siguen en el código. Si cambian en el CRM, hay que editar también `TRIPS` y los literales. ¿Aceptas esta duplicación a cambio de mantener `/` estática?
+3. **(Resuelta por la enmienda) Viajes publicados sin contenido fijo.** Si el equipo publica en el CRM otro viaje (p. ej. `maraton-lima-2027`), `/viajes/<slug>` responde 404 porque la landing no tiene su contenido fijo (precios detallados, incluidos, pendientes). La plantilla genérica `CatalogTripDetail` de `sponsors-portal.md` F7 lo resuelve para cualquier viaje publicado sin contenido fijo, de una marca o del equipo (Decisión 15 de esa spec).
+4. **(No bloqueante, F4) Portada con copia fija.** Fecha, precio al contado y cupos de `/` (datos del viaje, paquete, tarjeta de Santiago, CTA móvil y la consulta de WhatsApp) siguen en el código. Si cambian en el CRM, hay que editar también `TRIPS` y los literales. ¿Aceptas esta duplicación a cambio de mantener `/` estática? Con la enmienda, `/` deja de ser estática por los destacados (`sponsors-portal.md`, Pregunta abierta 1), pero la duplicación de estas secciones sigue igual: los destacados no sustituyen la copia fija.
 5. **(No bloqueante, F4) Campos del catálogo sin uso y formato.** `includes`, `distances`, `city`/`country`, fechas de viaje e `imageUrl` no se muestran. Editar "Qué incluye" en el CRM no cambia la página: la lista del diseño (título y texto) sigue fija. Además:
    - si el catálogo no tiene cupos, se muestra "Cupos por confirmar";
    - en la misma página conviven "US$ 1,499" (catálogo) y "US$1,799" (literal del diseño).
 
-   ¿Confirmas estos valores por defecto?
+   ¿Confirmas estos valores por defecto? (Con la enmienda, esto sigue valiendo para la vista de diseño; la plantilla genérica de `sponsors-portal.md` F7 sí muestra esos campos.)
+6. **(No bloqueante; enmienda) Indexación de `/patrocinadores/[slug]`.** `sponsors-portal.md` describe la página como "Indexable", pero el Requisito 3 de esta spec (decisión del usuario) pone `noindex, nofollow` en todo el sitio mientras falten los datos legales, y el layout lo aplica a todas las páginas. **Propuesta por defecto:** "Indexable" se lee como "no añade un `robots` propio" (a diferencia de `/patrocinador`, que fija `index: false`); la página hereda el `noindex, nofollow` global y pasará a indexarse cuando se revise el Requisito 3 con las páginas legales. Si quieres indexarla ya, habría que sobrescribir `robots` en esa ruta y enmendar `sponsors-portal.md` F7.
+7. **(No bloqueante; enmienda) `/viajes/<slug>` con formato válido gasta una consulta.** Con la plantilla genérica (`sponsors-portal.md` F7), cualquier slug canónico consulta Neon aunque no exista, cuando antes solo se consultaban los de `TRIPS`. **Propuesta por defecto:** aceptarlo (es una consulta por índice único, como el resto del catálogo, sin caché por diseño); no se añade lista blanca de slugs.
