@@ -62,6 +62,12 @@ Run the full flow with `claude --agent orchestrator` (it must be the main thread
 
 **Human approval is a hard blocker.** No SDD implementation starts until the user writes exactly **"apruebo docs/specs/<slug>.md"** in the chat (bare "apruebo" or "apruebo <slug>" is rejected by the hook); a hook then changes its header from `Estado: borrador` to `Estado: aprobado` (the only two states) and logs who approved in `docs/specs/approvals.jsonl`, HMAC-signed with a per-machine key at `~/.claude/spec-approval.key` (unsigned/forged lines are ignored; approvals don't transfer between machines). After a successful approval the hook tells Claude to continue immediately with implementation following the orchestrator flow (`.claude/agents/orchestrator.md` §3 step 4: developer per task plan, then reviewer) — no second confirmation. Claude may only write specs with `Estado: borrador` (a Write/Edit hook blocks anything else) and never edits the ledger. This applies to every session, with or without the orchestrator: never infer approval, never mark a spec approved without the user's explicit answer, and any edit to an approved spec sends it back to `borrador`. Enforced by hooks in `.claude/settings.json` → `.claude/hooks/spec-approval.mjs` (tests: `npx vitest run .claude/hooks`): launching `developer` is blocked unless every spec its prompt cites has a logged approval and hasn't changed since (ticking plan checkboxes is fine), or the prompt declares `Modo: build`. Don't work around it. The user may edit code directly; these rules bind Claude.
 
+## Plugins and memory
+
+The user's account may enable Claude plugins (Superpowers, `frontend-design`, AI Skills `zizi-skills:*`). They are optional helpers: when a plugin skill conflicts with this file, `docs/SETUP.md` or the hooks, the repo wins. In particular, Superpowers `brainstorming`/`writing-plans`/`executing-plans` and `zizi-skills:planning` don't replace the spec flow or the "apruebo docs/specs/<slug>.md" gate, and `zizi-skills:git-sync`/`handoff` don't override the branch and PR conventions given by the session. Use `frontend-design` for UI work within shadcn/ui and the tokens in `app/globals.css`.
+
+Cloud sessions run in ephemeral containers, so locally stored memory (e.g. claude-mem in `~/.claude-mem`) is lost between sessions. Durable decisions and conventions belong in this file, `docs/SETUP.md` or `docs/`, committed through a PR.
+
 ## Stack
 
 - Next.js 16 App Router (`app/`), React 19, TypeScript strict. Path alias `@/*` → repo root.
