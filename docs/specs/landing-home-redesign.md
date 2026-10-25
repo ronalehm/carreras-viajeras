@@ -1,7 +1,7 @@
 # Rediseño visual de la portada
 
 - Módulo: landing
-- Estado: borrador
+- Estado: aprobado
 - Base: `landing-public-site.md` (aprobada; estructura, secciones y textos de `/`) y `landing-race-pages.md` (aprobada; `TRIPS` solo alimenta `/`). Esta spec **solo cambia la presentación** de `/`: no cambia rutas, datos, enlaces, comportamiento ni textos, salvo lo indicado en el Requisito 6.
 - Decisiones del usuario (2026-10-25): se rediseña **la portada (`/`)**; se **mantiene la marca** (azul `#0244a9`, verde `#63ae27`, logo y textos) y se replantean tipografía, jerarquía, layout y ritmo de las secciones.
 - Maqueta de referencia (no es código del repo): hero con el dorsal y sección del paquete, en escritorio y móvil, compartida en la conversación del 2026-10-25.
