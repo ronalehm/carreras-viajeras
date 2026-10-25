@@ -15,6 +15,7 @@ import {
   getLeadById,
   getLeadFormOptions,
   getLeadList,
+  optOutLead,
   setNextAction,
   updateLead,
 } from "./leads.service";
@@ -793,30 +794,41 @@ describe("changeLeadOwner", () => {
 describe("setNextAction", () => {
   const input = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
 
-  it("saves the date and the note of an open, non-archived lead in a single statement", async () => {
-    const fake = useFakeDb({ responses: [[{ found: true, saved: true }]] });
+  it("saves the date and the note of an open, non-archived lead without opt-out in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: false, saved: true }]] });
 
     await expect(setNextAction(input)).resolves.toBe("saved");
 
     expect(fake.transaction).not.toHaveBeenCalled();
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
-      "WITH target AS ( SELECT id, stage FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
-        "updated AS ( UPDATE leads SET next_action_date = $2::date, next_action_note = $3, updated_at = now() FROM target WHERE leads.id = target.id AND target.stage NOT IN ($4::lead_stage, $5::lead_stage) RETURNING leads.id ) " +
-        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS saved",
+      "WITH target AS ( SELECT id, stage, contact_opt_out_at FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
+        "updated AS ( UPDATE leads SET next_action_date = $2::date, next_action_note = $3, updated_at = now() FROM target WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL AND target.stage NOT IN ($4::lead_stage, $5::lead_stage) RETURNING leads.id ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM target WHERE contact_opt_out_at IS NOT NULL) AS opted_out, EXISTS (SELECT 1 FROM updated) AS saved",
     );
     expect(fake.queries[0].params).toEqual([LEAD_ID, "2026-10-25", "Enviar la cotización.", "paid", "lost"]);
   });
 
   it("clears the next action with null date and note", async () => {
-    const fake = useFakeDb({ responses: [[{ found: true, saved: true }]] });
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: false, saved: true }]] });
     await expect(setNextAction({ leadId: LEAD_ID, nextActionDate: null, nextActionNote: null })).resolves.toBe("saved");
     expect(fake.queries[0].params).toEqual([LEAD_ID, null, null, "paid", "lost"]);
   });
 
+  it("returns opted_out without writing for a lead whose contact opted out, even if it reopened", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: true, saved: false }]] });
+
+    await expect(setNextAction(input)).resolves.toBe("opted_out");
+
+    // The UPDATE itself excludes opted-out leads: nothing is written, not even under a race.
+    expect(normalize(fake.queries[0].sql)).toContain("WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL AND");
+  });
+
   it.each([
-    [{ found: true, saved: false }, "closed"],
-    [{ found: false, saved: false }, "not_found"],
+    [{ found: true, opted_out: false, saved: false }, "closed"],
+    // The opt-out is checked before the stage: an opted-out lost lead is opted_out, not closed.
+    [{ found: true, opted_out: true, saved: false }, "opted_out"],
+    [{ found: false, opted_out: false, saved: false }, "not_found"],
   ])("maps %o to %s", async (row, expected) => {
     useFakeDb({ responses: [[row]] });
     await expect(setNextAction(input)).resolves.toBe(expected);
@@ -826,6 +838,79 @@ describe("setNextAction", () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
     await expect(setNextAction(input)).rejects.toMatchObject({ cause: failure });
+  });
+});
+
+describe("optOutLead", () => {
+  const STATEMENT =
+    "WITH target AS ( SELECT id, stage, contact_opt_out_at FROM leads WHERE id = $1::uuid AND archived_at IS NULL FOR UPDATE ), " +
+    "updated AS ( UPDATE leads SET contact_opt_out_at = now(), stage = 'lost', " +
+    "lost_reason = CASE target.stage WHEN 'lost' THEN leads.lost_reason ELSE $2 END, " +
+    "next_action_date = NULL, next_action_note = NULL, updated_at = now() " +
+    "FROM target WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL RETURNING leads.id, target.stage AS stage_from ), " +
+    "stage_activity AS ( INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id) " +
+    "SELECT id, 'stage_changed', $3, stage_from, 'lost', $4 FROM updated WHERE stage_from <> 'lost' ), " +
+    "opt_out_activity AS ( INSERT INTO lead_activities (lead_id, type, actor_user_id) SELECT id, 'opted_out', $5 FROM updated ), " +
+    "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.opted_out', id, jsonb_build_object('stageFrom', stage_from) FROM updated ) " +
+    "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS opted_out";
+
+  it("records the opt-out, moves to lost, clears the next action, logs both activities and the event in a single statement", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: true }]] });
+
+    await expect(optOutLead(LEAD_ID, "session-user")).resolves.toBe("opted_out");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement.match(/;/g)).toBeNull();
+    expect(statement).toBe(STATEMENT);
+    // The fixed reason goes to lost_reason and to the stage_changed body; the session user is the
+    // author of both activities.
+    expect(fake.queries[0].params).toEqual([
+      LEAD_ID,
+      "Pidió no seguir en contacto.",
+      "Pidió no seguir en contacto.",
+      "session-user",
+      "session-user",
+    ]);
+  });
+
+  it("an already lost lead keeps its reason and only gets the opted_out activity", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: true }]] });
+    await optOutLead(LEAD_ID, "user-1");
+
+    const statement = normalize(fake.queries[0].sql);
+    // lost_reason is kept when the locked stage was already lost (e.g. "Precio").
+    expect(statement).toContain("lost_reason = CASE target.stage WHEN 'lost' THEN leads.lost_reason ELSE $2 END");
+    // stage_changed is filtered out when the stage does not change; opted_out is not filtered.
+    expect(statement).toContain("FROM updated WHERE stage_from <> 'lost' )");
+    expect(statement).toContain("SELECT id, 'opted_out', $5 FROM updated )");
+  });
+
+  it("emits lead.opted_out with { stageFrom } and never lead.stage_changed", async () => {
+    const fake = useFakeDb({ responses: [[{ found: true, opted_out: true }]] });
+    await optOutLead(LEAD_ID, "user-1");
+
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement.match(/INSERT INTO outbox_events/g)).toHaveLength(1);
+    expect(statement).toContain("SELECT 'lead.opted_out', id, jsonb_build_object('stageFrom', stage_from) FROM updated");
+    expect(statement).not.toContain("lead.stage_changed");
+  });
+
+  it.each<[unknown[], string]>([
+    [[{ found: true, opted_out: true }], "opted_out"],
+    [[{ found: true, opted_out: false }], "no_change"],
+    [[{ found: false, opted_out: false }], "not_found"],
+    [[], "not_found"],
+  ])("maps rows %j to %s", async (rows, expected) => {
+    useFakeDb({ responses: [rows] });
+    await expect(optOutLead(LEAD_ID, "user-1")).resolves.toBe(expected);
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(optOutLead(LEAD_ID, "user-1")).rejects.toMatchObject({ cause: failure });
   });
 });
 
@@ -880,7 +965,8 @@ describe("writes on an archived lead", () => {
     ["updateLead", () => updateLead(edit, "user-1"), [[{ found: false, updated: false }]]],
     ["changeLeadStage", () => changeLeadStage({ leadId: LEAD_ID, stage: "quoted", lostReason: null }, "user-1"), [[{ found: false, changed: false }]]],
     ["changeLeadOwner", () => changeLeadOwner({ leadId: LEAD_ID, ownerUserId: "user-2" }, "user-1"), [[{ found: false, changed: false, owner_ok: true }]]],
-    ["setNextAction", () => setNextAction({ leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: null }), [[{ found: false, saved: false }]]],
+    ["setNextAction", () => setNextAction({ leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: null }), [[{ found: false, opted_out: false, saved: false }]]],
+    ["optOutLead", () => optOutLead(LEAD_ID, "user-1"), [[{ found: false, opted_out: false }]]],
     ["archiveLead", () => archiveLead(LEAD_ID, "user-1"), [[{ archived: false }]]],
   ] as const)("%s filters archived_at is null and returns not_found", async (_, write, responses) => {
     const fake = useFakeDb({ responses: responses as unknown as unknown[][] });

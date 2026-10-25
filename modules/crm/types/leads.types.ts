@@ -93,8 +93,9 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   contactOptOutAt: Date | null;
 };
 
-// History entry. actor is null only for system activities: created of a web form lead and
-// automation (n8n). ownerFrom is null when the first owner is assigned (web form lead).
+// History entry. actor is null only for system activities: created of a system lead (web form,
+// Google Forms, import) and automation (n8n). ownerFrom is null when the first owner is assigned
+// (system lead). channelFrom and channelTo are only set on channel_changed.
 export type LeadActivity = {
   id: string;
   type: LeadActivityType;
@@ -103,6 +104,8 @@ export type LeadActivity = {
   stageTo: LeadStage | null;
   ownerFrom: { email: string } | null;
   ownerTo: { email: string } | null;
+  channelFrom: LeadChannel | null;
+  channelTo: LeadChannel | null;
   actor: { email: string } | null;
   createdAt: Date;
 };
@@ -122,7 +125,8 @@ export type LeadActionState =
         | "invalid_trip"
         | "not_found"
         | "no_change"
-        | "closed";
+        | "closed"
+        | "opted_out";
       message: string;
       fieldErrors?: Record<string, string[]>;
       values?: Record<string, string>;

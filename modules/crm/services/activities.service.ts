@@ -11,8 +11,8 @@ const previousOwner = alias(profiles, "previous_owner");
 const newOwner = alias(profiles, "new_owner");
 
 // History of a lead, newest first. LEFT JOINs: system activities have no author (created of a
-// web form lead, automation) and the first owner change has no previous owner. A non-UUID id
-// never reaches the database.
+// system lead, automation) and the first owner change has no previous owner. channel_from and
+// channel_to are only set on channel_changed. A non-UUID id never reaches the database.
 export async function listLeadActivities(leadId: string): Promise<LeadActivity[]> {
   if (!z.uuid().safeParse(leadId).success) return [];
   return getDb()
@@ -24,6 +24,8 @@ export async function listLeadActivities(leadId: string): Promise<LeadActivity[]
       stageTo: leadActivities.stageTo,
       ownerFrom: { email: previousOwner.email },
       ownerTo: { email: newOwner.email },
+      channelFrom: leadActivities.channelFrom,
+      channelTo: leadActivities.channelTo,
       actor: { email: actor.email },
       createdAt: leadActivities.createdAt,
     })

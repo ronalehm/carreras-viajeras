@@ -35,7 +35,7 @@ import type {
   NextActionInput,
   UpdateLeadInput,
 } from "../types/leads.types";
-import { CLOSED_LEAD_STAGES } from "../utils/leadDisplay";
+import { CLOSED_LEAD_STAGES, OPT_OUT_LOST_REASON } from "../utils/leadDisplay";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -395,12 +395,16 @@ export async function changeLeadOwner(
 }
 
 // One statement, same locking as changeLeadStage. The next action only exists in open,
-// non-archived leads: an archived or missing lead is "not_found" (like every other write) and a
-// paid or lost one is "closed". Null date and note clear it.
-export async function setNextAction(input: NextActionInput): Promise<"saved" | "not_found" | "closed"> {
-  const result = await getDb().execute<{ found: boolean; saved: boolean }>(sql`
+// non-archived leads whose contact did not opt out: an archived or missing lead is "not_found"
+// (like every other write), an opted-out one is "opted_out" (checked before the stage: a lead may
+// reopen after opting out, but never gets a next action again) and a paid or lost one is
+// "closed". Null date and note clear it.
+export async function setNextAction(
+  input: NextActionInput,
+): Promise<"saved" | "not_found" | "opted_out" | "closed"> {
+  const result = await getDb().execute<{ found: boolean; opted_out: boolean; saved: boolean }>(sql`
     WITH target AS (
-      SELECT id, stage FROM leads
+      SELECT id, stage, contact_opt_out_at FROM leads
       WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
       FOR UPDATE
     ),
@@ -408,17 +412,68 @@ export async function setNextAction(input: NextActionInput): Promise<"saved" | "
       UPDATE leads
       SET next_action_date = ${input.nextActionDate}::date, next_action_note = ${input.nextActionNote}, updated_at = now()
       FROM target
-      WHERE leads.id = target.id AND target.stage NOT IN (${sql.join(
+      WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL AND target.stage NOT IN (${sql.join(
         CLOSED_LEAD_STAGES.map((stage) => sql`${stage}::lead_stage`),
         sql`, `,
       )})
       RETURNING leads.id
     )
-    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS saved
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      EXISTS (SELECT 1 FROM target WHERE contact_opt_out_at IS NOT NULL) AS opted_out,
+      EXISTS (SELECT 1 FROM updated) AS saved
   `);
   const row = result.rows[0];
   if (!row?.found) return "not_found";
+  if (row.opted_out) return "opted_out";
   return row.saved ? "saved" : "closed";
+}
+
+// "Pidió no seguir" (definitive in the MVP). One statement, same locking as changeLeadStage: the
+// UPDATE only applies to a non-archived lead without opt-out. It records the opt-out, clears the
+// next action (the database forbids both together) and moves the lead to lost with the fixed
+// reason; an already lost lead keeps its own reason. The stage_changed activity is inserted only
+// when the stage really changes; the opted_out activity always. Both carry the session user. The
+// 'lead.opted_out' event ({ stageFrom }) lets n8n discard pending drafts; no 'lead.stage_changed'
+// is emitted, so no farewell draft is prepared.
+export async function optOutLead(
+  leadId: string,
+  actorUserId: string,
+): Promise<"opted_out" | "no_change" | "not_found"> {
+  const result = await getDb().execute<{ found: boolean; opted_out: boolean }>(sql`
+    WITH target AS (
+      SELECT id, stage, contact_opt_out_at FROM leads
+      WHERE id = ${leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET contact_opt_out_at = now(), stage = 'lost',
+        lost_reason = CASE target.stage WHEN 'lost' THEN leads.lost_reason ELSE ${OPT_OUT_LOST_REASON} END,
+        next_action_date = NULL, next_action_note = NULL, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL
+      RETURNING leads.id, target.stage AS stage_from
+    ),
+    stage_activity AS (
+      INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id)
+      SELECT id, 'stage_changed', ${OPT_OUT_LOST_REASON}, stage_from, 'lost', ${actorUserId}
+      FROM updated
+      WHERE stage_from <> 'lost'
+    ),
+    opt_out_activity AS (
+      INSERT INTO lead_activities (lead_id, type, actor_user_id)
+      SELECT id, 'opted_out', ${actorUserId} FROM updated
+    ),
+    event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.opted_out', id, jsonb_build_object('stageFrom', stage_from) FROM updated
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS opted_out
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  return row.opted_out ? "opted_out" : "no_change";
 }
 
 function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {
