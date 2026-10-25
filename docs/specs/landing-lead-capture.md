@@ -372,11 +372,11 @@ Evento: sin cambios (`lead.created` v1, `{ leadId, tripSlug: string | null, sour
 Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (el reviewer); F2 y F3 además miden el Worker con `npm run build:worker` en Linux/WSL.
 
 ### Fase 1 — Datos, migración y service (5 tareas, 14 archivos: 2 generados por drizzle-kit)
-- [ ] T1 — Schema y migración `0006`: cambios de `lib/db-schema.ts`, `npm run db:generate`, revisión del SQL (criterio F1) y, si hay PostgreSQL local, la cadena `0000`–`0006` · archivos: `lib/db-schema.ts`, `drizzle/0006_*.sql` (generado), `drizzle/meta/0006_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — Subschemas exportados, tipos (`WebLeadInput`, `owner` nulo, `unassigned`) y huella, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/webLeadHash.ts`, `modules/crm/utils/webLeadHash.test.ts` · depende de: T1 · paralelo (con T5)
-- [ ] T3 — `createWebLead` y `getLeadList` con responsable opcional, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — API pública del módulo · archivos: `modules/crm/index.ts` (nuevo) · depende de: T3 · secuencial
-- [ ] T5 — Seed del outbox con leads ficticios y README de la migración `0006` · archivos: `scripts/sql/seed-automation-demo.sql`, `README.md` · depende de: T1 · paralelo (con T2)
+- [x] T1 — Schema y migración `0006`: cambios de `lib/db-schema.ts`, `npm run db:generate`, revisión del SQL (criterio F1) y, si hay PostgreSQL local, la cadena `0000`–`0006` · archivos: `lib/db-schema.ts`, `drizzle/0006_*.sql` (generado), `drizzle/meta/0006_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
+- [x] T2 — Subschemas exportados, tipos (`WebLeadInput`, `owner` nulo, `unassigned`) y huella, con tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/webLeadHash.ts`, `modules/crm/utils/webLeadHash.test.ts` · depende de: T1 · paralelo (con T5)
+- [x] T3 — `createWebLead` y `getLeadList` con responsable opcional, con tests · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de: T2 · secuencial
+- [x] T4 — API pública del módulo · archivos: `modules/crm/index.ts` (nuevo) · depende de: T3 · secuencial
+- [x] T5 — Seed del outbox con leads ficticios y README de la migración `0006` · archivos: `scripts/sql/seed-automation-demo.sql`, `README.md` · depende de: T1 · paralelo (con T2)
 
 ### Fase 2 — Envío protegido en el servidor (4 tareas, 14 archivos)
 Requisito previo: Fase 1 cerrada.
