@@ -161,11 +161,11 @@ Verificación manual con `npm run dev` contra una rama de Neon con la migración
 
 ### Fase 2 — Plantilla minimalista (`landing`)
 Empieza con la Fase 1 implementada (en `main` o en la misma rama/PR) y la precondición operativa F1 cumplida (migración `0004` aplicada en Neon).
-- [ ] T1 — Vista del viaje desde el catálogo y limpieza de `TRIPS` · archivos: `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/index.ts` · depende de: — · secuencial (base)
-- [ ] T2 — Mensaje de consulta por viaje · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts` · depende de: — · paralelo con T1
-- [ ] T3 — Plantilla `TripDetail` minimalista · archivos: `modules/landing/components/TripDetail.tsx` · depende de: T1, T2 · secuencial
-- [ ] T4 — Ruta y metadatos · archivos: `app/viajes/[slug]/page.tsx` · depende de: T1 · paralelo con T3
-- [ ] T5 — README ("Qué usa hoy la landing") y medición del Worker · archivos: `README.md` · depende de: T3, T4 · secuencial
+- [x] T1 — Vista del viaje desde el catálogo y limpieza de `TRIPS` · archivos: `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts`, `modules/landing/utils/trips.ts`, `modules/landing/index.ts` · depende de: — · secuencial (base)
+- [x] T2 — Mensaje de consulta por viaje · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts` · depende de: — · paralelo con T1
+- [x] T3 — Plantilla `TripDetail` minimalista · archivos: `modules/landing/components/TripDetail.tsx` · depende de: T1, T2 · secuencial
+- [x] T4 — Ruta y metadatos · archivos: `app/viajes/[slug]/page.tsx` · depende de: T1 · paralelo con T3
+- [x] T5 — README ("Qué usa hoy la landing") y medición del Worker · archivos: `README.md` · depende de: T3, T4 · secuencial
 
 ## Precondiciones operativas (las realiza el usuario)
 - **F1, antes de desplegar su código:** revisar `drizzle/0004_*.sql` y aplicarlo a mano en Neon `production` (y en la rama de pruebas que se use). Si el código de F1 llega a producción sin la migración, `/viajes/*` y `/crm/viajes` fallan al leer columnas inexistentes.

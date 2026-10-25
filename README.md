@@ -217,13 +217,17 @@ import {
 - Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" y `formatTripPrice(null)` → "Precio a consultar". Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
 #### Qué usa hoy la landing
 
-Especificado en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4).
+Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 2), que sustituye en `/viajes/[slug]` lo descrito en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4).
 
-- **`/viajes/[slug]`** se renderiza en cada petición: `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y combina el resultado con el contenido fijo de `TRIPS`. Del catálogo salen el título (`h1` y `<title>`), el resumen (meta description), la fecha de la carrera, el precio "desde" (`formatTripPrice`, en "EL PAQUETE" y "AL CONTADO") y los cupos ("100 cupos definidos", o "Cupos por confirmar" si no hay). El resto (portada, ruta, destacados, cuotas, reserva, acompañante, incluidos, pendientes, enlace oficial y CTA) sigue como contenido fijo de la landing. No se muestran `imageUrl`, `includes`, `distances`, `city`, `country` ni las fechas de viaje.
-- **404:** un slug sin contenido fijo en `TRIPS` devuelve `null` sin consultar Neon; si el viaje no existe, está en borrador o archivado, `getPublishedTripBySlug` devuelve `null`. En ambos casos, `notFound()` responde con estado `404`. No hay `loading.tsx`, para que el estado no quede en `200`.
+- **Una landing por carrera publicada:** cada viaje publicado en `/crm/viajes` tiene su página en `/viajes/<slug>`, sin tocar código ni redesplegar. Para difundir una carrera nueva se comparte esa URL (no hay listado `/viajes` ni enlaces desde `/` a carreras distintas de Santiago).
+- **Todo sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas, precios y cupos formateados; `paymentTerms` y `notes` divididos en un párrafo por línea no vacía). No lee `TRIPS`.
+- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, Server Component): una columna centrada con cabecera ("Ciudad, País · distancias", título, resumen e imagen si hay `imageUrl`), datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), precio "Desde" (`formatTripPrice`, "Precio a consultar" si falta) con las líneas de cuotas, reserva y acompañante solo si tienen valor, y las condiciones de pago; después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos. Ningún bloque aparece vacío.
+- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`, cuyos destinos siguen fijos (`DESTINATION_IDS`).
+- **Metadatos:** `<title>` es el título del viaje, la meta description es el resumen y `og:image` es `imageUrl` solo si existe.
+- **404:** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `notFound()` responde con estado `404`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. No hay `loading.tsx`, para que el estado no quede en `200`.
 - **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado.
 - **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
-- **`/` no consulta Neon:** sigue estática y conserva su propia copia de fecha, precio y cupos en `TRIPS` (`modules/landing/utils/trips.ts`), igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de consulta. **Si el equipo cambia la fecha, el precio o los cupos en el CRM, hay que editar a mano esa copia en la landing**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
+- **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de `/contacto`. **Si el equipo cambia la fecha, el precio o los cupos de Santiago en el CRM, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
 - `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` aparece como dinámica (`ƒ`).
 
 #### Precondición operativa (antes de mergear)
@@ -231,17 +235,18 @@ Especificado en [`landing-public-site.md`](docs/specs/landing-public-site.md) (F
 Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a leer `production`; si el despliegue es manual, se comprueba antes de `npm run deploy`. En la rama `production` de Neon:
 
 1. **Migración `0001` aplicada** (ver "Migración de la tabla de viajes"). Comprobación: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, la página responde **500**.
-2. **Viaje creado en `/crm/viajes/nuevo` y publicado**, con:
+2. **Migración `0004` aplicada** (ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)). Comprobación: `SELECT column_name FROM information_schema.columns WHERE table_name = 'trips' AND column_name = 'official_url';` devuelve una fila. Si falta, la página responde **500**.
+3. **Viaje creado en `/crm/viajes/nuevo` y publicado**, con:
    - slug `maraton-santiago-2027` (exacto);
    - título "Maratón de Santiago 42K 2027";
    - ciudad "Santiago" y país "Chile";
    - fecha de la carrera 2027-05-16 y distancias "42K";
    - resumen: "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.";
    - precio desde 1499 y cupos 100;
-   - sin fechas de viaje ni imagen (no se muestran).
+   - para no perder información respecto a la página anterior (precondición F2 de `landing-race-pages.md`): web oficial `https://maratondesantiago.cl/`, precio total en cuotas 1799, reserva 300, acompañante 1300, imagen con una URL `https://` (p. ej. `https://carreras-viajeras.mentec.dev/images/cover-santiago.webp`), y los textos de qué incluye, qué no incluye, condiciones de pago y detalles por confirmar que antes estaban fijos en el código (`included`, `excluded`, `prices.paymentNote` y `pendingDetails`; se recuperan con `git show dfa5d8a:modules/landing/utils/trips.ts`).
 
    Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página responde **404** y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a un 404.
-3. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
+4. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
 4. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
 
 ## Leads (CRM comercial)
