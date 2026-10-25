@@ -91,9 +91,12 @@ describe("listBookingItems and getItineraryItemById", () => {
     );
   });
 
-  it("reads one item by id, or null", async () => {
-    useFakeDb([[ITEM_ROW]]);
-    await expect(getItineraryItemById(ITEM_ID)).resolves.toEqual(ITEM);
+  it("reads one item by id with whether it is still editable, or null", async () => {
+    const fake = useFakeDb([[[...ITEM_ROW, false]]]);
+    await expect(getItineraryItemById(ITEM_ID)).resolves.toEqual({ ...ITEM, editable: false });
+    expect(normalize(fake.queries[0].sql)).toBe(
+      `select ${ITEM_COLUMNS}, ${EDITABLE}1))) from "itinerary_items" where "itinerary_items"."id" = $2`,
+    );
     useFakeDb([[]]);
     await expect(getItineraryItemById(ITEM_ID)).resolves.toBeNull();
   });

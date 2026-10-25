@@ -85,19 +85,24 @@ const ITEM_DATE_MESSAGE = "Indica la fecha.";
 const TIME_ZONE_MESSAGE = "Indica la zona horaria.";
 const INVALID_TIME_ZONE_MESSAGE = "Indica una zona horaria válida, como America/Lima.";
 
-// Same shape as the database CHECK, and a zone Intl (and so Workers) knows.
-export function isValidTimeZone(timeZone: string): boolean {
-  if (!/^[A-Za-z]+(\/[A-Za-z0-9_+-]+)+$/.test(timeZone) || timeZone.length > 64) return false;
+// The zone's canonical IANA name ("US/Eastern" → "America/New_York", "AMERICA/LIMA" → "America/Lima"),
+// or null when Intl (and so Workers) does not know it or the name fails the database CHECK.
+export function canonicalTimeZone(timeZone: string): string | null {
+  let canonical: string;
   try {
-    new Intl.DateTimeFormat("en", { timeZone });
-    return true;
+    canonical = new Intl.DateTimeFormat("en", { timeZone }).resolvedOptions().timeZone;
   } catch {
-    return false;
+    return null;
   }
+  return /^[A-Za-z]+(\/[A-Za-z0-9_+-]+)+$/.test(canonical) && canonical.length <= 64 ? canonical : null;
 }
 
 const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Indica una hora válida.");
-const timeZoneSchema = z.string().refine(isValidTimeZone, INVALID_TIME_ZONE_MESSAGE);
+const timeZoneSchema = z.string().transform((timeZone, ctx) => {
+  const canonical = canonicalTimeZone(timeZone);
+  if (!canonical) ctx.addIssue({ code: "custom", message: INVALID_TIME_ZONE_MESSAGE });
+  return canonical ?? z.NEVER;
+});
 
 const itineraryItemFields = {
   kind: itineraryKindSchema,

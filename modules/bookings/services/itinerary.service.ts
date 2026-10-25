@@ -88,9 +88,14 @@ export async function listBookingItems(bookingId: string): Promise<CrmItineraryI
     .orderBy(...itemOrder);
 }
 
-export async function getItineraryItemById(id: string): Promise<CrmItineraryItem | null> {
+// editable is false for an item of a cancelled booking: the edit page shows it read-only.
+export async function getItineraryItemById(id: string): Promise<(CrmItineraryItem & { editable: boolean }) | null> {
   if (!idSchema.safeParse(id).success) return null;
-  const [item] = await getDb().select(itemColumns).from(itineraryItems).where(eq(itineraryItems.id, id));
+  const db = getDb();
+  const [item] = await db
+    .select({ ...itemColumns, editable: sql<boolean>`${editableItem(db)}` })
+    .from(itineraryItems)
+    .where(eq(itineraryItems.id, id));
   return item ?? null;
 }
 

@@ -26,3 +26,4 @@ export { ItineraryTable } from "./components/ItineraryTable";
 export { TripUpdateForm } from "./components/TripUpdateForm";
 export { TripUpdateList } from "./components/TripUpdateList";
 export type { CrmItineraryItem, CrmTripUpdate } from "./types/bookings.types";
+export { itineraryOriginPath } from "./utils/bookingDisplay";

@@ -3,7 +3,8 @@
 import { bookingFormSchema, bookingStatusChangeSchema, updateBookingSchema } from "../schemas/bookings.schema";
 import { createBooking, setBookingStatus, updateBooking } from "../services/bookings.service";
 import type { BookingActionState } from "../types/bookings.types";
-import { BOOKINGS_PATH, bookingPaths, failure, runBookingAction } from "./runBookingAction";
+import { BOOKINGS_PATH } from "../utils/bookingDisplay";
+import { bookingPaths, failure, runBookingAction } from "./runBookingAction";
 
 export async function createBookingAction(
   _prev: BookingActionState,
@@ -12,7 +13,9 @@ export async function createBookingAction(
   return runBookingAction(formData, bookingFormSchema, async (input, values, actorUserId) => {
     const result = await createBooking(input, actorUserId);
     if (typeof result === "string") return failure(result, values);
-    return { revalidate: bookingPaths(result.id), redirectTo: `${BOOKINGS_PATH}/${result.id}`, message: "Reserva creada." };
+    return {
+      revalidate: bookingPaths(result.id), redirectTo: `${BOOKINGS_PATH}/${result.id}`, message: "Reserva creada.",
+    };
   });
 }
 

@@ -5,10 +5,10 @@ import type { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import type { BookingActionState } from "../types/bookings.types";
+import { BOOKINGS_PATH } from "../utils/bookingDisplay";
 
 // Shared by the bookings, payments and itinerary Server Actions. Not a "use server" file: its exports must
 // not become callable actions.
-export const BOOKINGS_PATH = "/crm/reservas";
 type ErrorState = Extract<BookingActionState, { status: "error" }>;
 type ErrorCode = ErrorState["code"];
 // A successful mutation names the pages it changed and, optionally, where to go next.

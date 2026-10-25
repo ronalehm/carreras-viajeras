@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
 import {
   bookingFormSchema,
+  canonicalTimeZone,
   bookingStatusChangeSchema,
   bookingStatusSchema,
   itineraryKindSchema,
-  isValidTimeZone,
   itemIdSchema,
   itineraryItemFormSchema,
   itineraryStatusSchema,
@@ -168,13 +168,22 @@ describe("paymentVoidSchema", () => {
   });
 });
 
-describe("isValidTimeZone", () => {
-  it.each(["America/Lima", "America/Argentina/Buenos_Aires", "Europe/Madrid", "Etc/GMT+5"])("accepts %s", (zone) => {
-    expect(isValidTimeZone(zone)).toBe(true);
+describe("canonicalTimeZone", () => {
+  it.each([
+    ["America/Lima", "America/Lima"],
+    ["Etc/GMT+5", "Etc/GMT+5"],
+    // Stored canonical, so the portal says "hora de Santiago", not "hora de SANTIAGO" or "hora de Eastern".
+    ["AMERICA/SANTIAGO", "America/Santiago"],
+    ["US/Eastern", "America/New_York"],
+  ])("normalizes %s to %s", (zone, expected) => {
+    expect(canonicalTimeZone(zone)).toBe(expected);
   });
-  // UTC is a real zone but fails the database CHECK (it needs a region).
-  it.each(["Mars/Base", "UTC", "Lima", "America/", "America/Lima; DROP", `America/${"x".repeat(60)}`])("rejects %j", (zone) => {
-    expect(isValidTimeZone(zone)).toBe(false);
+  it("keeps the city of a zone whose canonical name depends on the ICU version", () => {
+    expect(canonicalTimeZone("America/Argentina/Buenos_Aires")).toMatch(/^America\/(Argentina\/)?Buenos_Aires$/);
+  });
+  // UTC (also as Etc/UTC) is a real zone but fails the database CHECK (it needs a region).
+  it.each(["Mars/Base", "UTC", "Etc/UTC", "Lima", "America/", "America/Lima; DROP"])("rejects %j", (zone) => {
+    expect(canonicalTimeZone(zone)).toBeNull();
   });
 });
 
@@ -226,6 +235,10 @@ describe("itineraryItemFormSchema", () => {
     ["invalid time", { startTime: "25:00" }, [["startTime", "Indica una hora válida."]]],
   ])("rejects %s with the error on its field", (_case, overrides, expected) => {
     expect(issues(parseItem(overrides))).toEqual(expected);
+  });
+
+  it("stores the canonical zone name", () => {
+    expect(parseItem({ endTimeZone: "america/santiago" }).data?.endTimeZone).toBe("America/Santiago");
   });
 
   it("drops a zone without a time", () => {
