@@ -20,11 +20,8 @@ export type UpdateLeadInput = z.output<typeof updateLeadSchema>;
 export type LeadStageChangeInput = z.output<typeof leadStageChangeSchema>;
 export type LeadOwnerChangeInput = z.output<typeof leadOwnerChangeSchema>;
 // changeLeadSource input: the validated form plus the session user. source admits every value
-// (web_form included): a web_form lead keeps its source and only its detail changes.
-export type LeadSourceChangeInput = Omit<z.output<typeof leadSourceChangeSchema>, "source"> & {
-  source: LeadSource;
-  actorUserId: string;
-};
+// (web_form included): the service keeps a web_form lead's source and only changes its detail.
+export type LeadSourceChangeInput = z.output<typeof leadSourceChangeSchema> & { actorUserId: string };
 export type LeadActivityType = z.infer<typeof leadActivityTypeSchema>;
 export type LeadActivityInput = z.output<typeof leadActivityFormSchema>;
 export type NextActionInput = z.output<typeof nextActionSchema>;

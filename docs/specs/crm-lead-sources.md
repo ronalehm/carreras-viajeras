@@ -137,12 +137,12 @@ Fase 2 (pantallas):
 
 ## Plan de tareas
 ### Fase 1
-- [ ] T1 — Schema de la base y migración `0005` generada con `npm run db:generate` · archivos: `lib/db-schema.ts`, `drizzle/0005_*.sql`, `drizzle/meta/0005_snapshot.json`, `drizzle/meta/_journal.json` · depende de: PR #12 en `main` · secuencial (base)
-- [ ] T2 — Schemas zod, tipos y etiquetas · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadDisplay.ts`, `modules/crm/utils/leadDisplay.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Service: `createLead` con detalle, `changeLeadSource`, filtro en `getLeadList` y `source_changed` en la lectura del historial · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts` · depende de: T2 · paralelo (con T4 y T5)
-- [ ] T4 — Parámetro `origen` en la URL · archivos: `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T2 · paralelo (con T3 y T5)
-- [ ] T5 — README: migración `0005` en dos bloques y lista de orígenes · archivos: `README.md` · depende de: T1 · paralelo (con T3 y T4)
-- [ ] T6 — (enmienda) `leadSourceChangeSchema` acepta los 14 orígenes y sus tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts` · depende de: T2 · paralelo (con T3, T4 y T5)
+- [x] T1 — Schema de la base y migración `0005` generada con `npm run db:generate` · archivos: `lib/db-schema.ts`, `drizzle/0005_*.sql`, `drizzle/meta/0005_snapshot.json`, `drizzle/meta/_journal.json` · depende de: PR #12 en `main` · secuencial (base)
+- [x] T2 — Schemas zod, tipos y etiquetas · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts`, `modules/crm/types/leads.types.ts`, `modules/crm/utils/leadDisplay.ts`, `modules/crm/utils/leadDisplay.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Service: `createLead` con detalle, `changeLeadSource`, filtro en `getLeadList` y `source_changed` en la lectura del historial · archivos: `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/services/activities.service.ts`, `modules/crm/services/activities.service.test.ts` · depende de: T2 · paralelo (con T4 y T5)
+- [x] T4 — Parámetro `origen` en la URL · archivos: `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts` · depende de: T2 · paralelo (con T3 y T5)
+- [x] T5 — README: migración `0005` en dos bloques y lista de orígenes · archivos: `README.md` · depende de: T1 · paralelo (con T3 y T4)
+- [x] T6 — (enmienda) `leadSourceChangeSchema` acepta los 14 orígenes y sus tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts` · depende de: T2 · paralelo (con T3, T4 y T5)
 
 ### Fase 2
 - [ ] T1 — Acción `changeLeadSourceAction` y alta con detalle · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/index.ts` · depende de: Fase 1 · secuencial (base)

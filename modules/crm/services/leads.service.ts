@@ -411,8 +411,8 @@ export async function setNextAction(input: NextActionInput): Promise<"saved" | "
 
 // One statement, same locking as changeLeadStage, but target also reads archived leads so that
 // "archived" differs from "not_found". locked: the source would change from or to web_form (a
-// web form lead keeps its source; a manual lead never becomes web_form, even if the schema already
-// rejects it). The UPDATE decides with its WHERE: not archived, not locked and a different source
+// web form lead keeps its source; a manual lead never becomes web_form). The schema accepts
+// web_form, so this rule lives only here. The UPDATE decides with its WHERE: not archived, not locked and a different source
 // or detail. Only a source change inserts 'source_changed' (detail-only edits leave no activity).
 export async function changeLeadSource(
   input: LeadSourceChangeInput,
