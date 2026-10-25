@@ -1,6 +1,13 @@
 import type { z } from "zod";
 import type { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
-import type { bookingFormSchema, paymentFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
+import type {
+  bookingFormSchema,
+  itineraryItemFormSchema,
+  paymentFormSchema,
+  tripUpdateFormSchema,
+  updateBookingSchema,
+  updateItineraryItemSchema,
+} from "../schemas/bookings.schema";
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
 export type ItineraryKind = (typeof itineraryKindEnum.enumValues)[number];
@@ -115,6 +122,31 @@ export type CrmPayment = {
   recordedByEmail: string;
   voided: boolean;
 };
+
+export type ItineraryItemInput = z.output<typeof itineraryItemFormSchema>;
+export type UpdateItineraryItemInput = z.output<typeof updateItineraryItemSchema>;
+export type TripUpdateInput = z.output<typeof tripUpdateFormSchema>;
+
+// Flat, as the form edits it. bookingId null = trip item, seen by every participant. Times are HH:MM.
+export type CrmItineraryItem = {
+  id: string;
+  tripId: string;
+  bookingId: string | null;
+  kind: ItineraryKind;
+  status: ItineraryStatus;
+  title: string;
+  details: string | null;
+  location: string | null;
+  startDate: string | null;
+  startTime: string | null;
+  startTimeZone: string | null;
+  endDate: string | null;
+  endTime: string | null;
+  endTimeZone: string | null;
+  runnerVisible: boolean;
+};
+
+export type CrmTripUpdate = RunnerTripUpdate;
 
 // Fits ConfirmActionState of components/shared/ConfirmActionButton.
 export type BookingActionState =

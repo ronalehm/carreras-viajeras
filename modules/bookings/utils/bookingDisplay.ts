@@ -93,3 +93,8 @@ export function formatScheduleEdge(edge: ScheduleEdge): string {
 export function firstName(name?: string): string | undefined {
   return name?.trim().split(/\s+/)[0] || undefined;
 }
+
+// CRM page an itinerary item is managed from: its booking's page, or its trip's itinerary.
+export function itineraryOriginPath(item: { tripId: string; bookingId: string | null }): string {
+  return item.bookingId ? `/crm/reservas/${item.bookingId}` : `/crm/viajes/${item.tripId}/itinerario`;
+}

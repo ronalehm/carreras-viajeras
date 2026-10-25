@@ -6,10 +6,16 @@ import {
   bookingStatusChangeSchema,
   bookingStatusSchema,
   itineraryKindSchema,
+  isValidTimeZone,
+  itemIdSchema,
+  itineraryItemFormSchema,
   itineraryStatusSchema,
   paymentFormSchema,
   paymentVoidSchema,
+  tripUpdateFormSchema,
+  tripUpdateIdSchema,
   updateBookingSchema,
+  updateItineraryItemSchema,
 } from "./bookings.schema";
 
 const TRIP_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
@@ -159,5 +165,110 @@ describe("paymentVoidSchema", () => {
     const id = "22222222-2222-4222-8222-222222222222";
     expect(paymentVoidSchema.parse({ paymentId: id, voidedBy: "user-y" })).toEqual({ paymentId: id });
     expect(issueFields(paymentVoidSchema.safeParse({ paymentId: "abc" }))).toEqual(["paymentId"]);
+  });
+});
+
+describe("isValidTimeZone", () => {
+  it.each(["America/Lima", "America/Argentina/Buenos_Aires", "Europe/Madrid", "Etc/GMT+5"])("accepts %s", (zone) => {
+    expect(isValidTimeZone(zone)).toBe(true);
+  });
+  // UTC is a real zone but fails the database CHECK (it needs a region).
+  it.each(["Mars/Base", "UTC", "Lima", "America/", "America/Lima; DROP", `America/${"x".repeat(60)}`])("rejects %j", (zone) => {
+    expect(isValidTimeZone(zone)).toBe(false);
+  });
+});
+
+describe("itineraryItemFormSchema", () => {
+  // The flight of the F4 criterion, as the form sends it.
+  const flight = {
+    tripId: TRIP_ID, kind: "flight", status: "confirmed", title: " LA 2370 Lima → Santiago ",
+    details: "", location: " Aeropuerto Jorge Chávez ",
+    startDate: "2027-05-14", startTime: "01:30", startTimeZone: "America/Lima",
+    endDate: "2027-05-14", endTime: "06:55", endTimeZone: "America/Santiago",
+    runnerVisible: "on",
+  };
+  const parseItem = (overrides: Record<string, string | undefined>) =>
+    itineraryItemFormSchema.safeParse({ ...flight, ...overrides });
+  const issues = (result: { error?: { issues: { path: PropertyKey[]; message: string }[] } }) =>
+    result.error?.issues.map((issue) => [issue.path[0], issue.message]);
+
+  it("parses the criterion flight into clean values", () => {
+    expect(parseItem({}).data).toEqual({
+      tripId: TRIP_ID, bookingId: null, kind: "flight", status: "confirmed", title: "LA 2370 Lima → Santiago",
+      details: null, location: "Aeropuerto Jorge Chávez",
+      startDate: "2027-05-14", startTime: "01:30", startTimeZone: "America/Lima",
+      endDate: "2027-05-14", endTime: "06:55", endTimeZone: "America/Santiago",
+      runnerVisible: true,
+    });
+  });
+
+  it("treats a missing checkbox as not visible", () => {
+    expect(parseItem({ runnerVisible: undefined }).data?.runnerVisible).toBe(false);
+  });
+
+  it("accepts an item without any date", () => {
+    const result = parseItem({ startDate: "", startTime: "", startTimeZone: "", endDate: "", endTime: "", endTimeZone: "" });
+    expect(result.data).toMatchObject({ startDate: null, startTime: null, startTimeZone: null, endDate: null });
+  });
+
+  it("needs exactly one owner: a booking item ignores a sent tripId", () => {
+    expect(parseItem({ bookingId: BOOKING_ID }).data).toMatchObject({ bookingId: BOOKING_ID, tripId: null });
+    expect(issues(parseItem({ tripId: "" }))).toEqual([["tripId", "Falta el viaje o la reserva."]]);
+  });
+
+  it.each([
+    ["time without date", { startDate: "", endDate: "", endTime: "", endTimeZone: "" }, [["startDate", "Indica la fecha."]]],
+    ["end time without end date", { endDate: "" }, [["endDate", "Indica la fecha."]]],
+    ["time without zone", { startTimeZone: "" }, [["startTimeZone", "Indica la zona horaria."]]],
+    ["end before start", { endDate: "2027-05-13", endTime: "", endTimeZone: "" }, [["endDate", "El fin no puede ser anterior al inicio."]]],
+    ["end without start", { startDate: "", startTime: "", startTimeZone: "" }, [["startDate", "Indica la fecha."]]],
+    ["invalid zone", { startTimeZone: "Mars/Base" }, [["startTimeZone", "Indica una zona horaria válida, como America/Lima."]]],
+    ["invalid time", { startTime: "25:00" }, [["startTime", "Indica una hora válida."]]],
+  ])("rejects %s with the error on its field", (_case, overrides, expected) => {
+    expect(issues(parseItem(overrides))).toEqual(expected);
+  });
+
+  it("drops a zone without a time", () => {
+    expect(parseItem({ startTime: "", endTime: "" }).data).toMatchObject({ startTimeZone: null, endTimeZone: null });
+  });
+
+  it.each([
+    ["kind", "boat"], ["status", "done"], ["title", "  "], ["details", "x".repeat(1001)], ["location", "x".repeat(161)],
+  ])("rejects an invalid %s", (field, value) => {
+    expect(issueFields(parseItem({ [field]: value }))).toEqual([field]);
+  });
+});
+
+describe("updateItineraryItemSchema", () => {
+  it("requires the item id, never moves the item and applies the same schedule rules", () => {
+    const result = updateItineraryItemSchema.parse({
+      itemId: BOOKING_ID, tripId: TRIP_ID, bookingId: BOOKING_ID, kind: "hotel", status: "completed", title: "Hotel",
+      startDate: "2027-05-14", startTimeZone: "America/Santiago",
+    });
+    expect(result).toMatchObject({ itemId: BOOKING_ID, status: "completed", startTimeZone: null, runnerVisible: false });
+    expect(result).not.toHaveProperty("tripId");
+    expect(result).not.toHaveProperty("bookingId");
+    expect(issueFields(updateItineraryItemSchema.safeParse({
+      itemId: BOOKING_ID, kind: "hotel", status: "pending", title: "Hotel", startDate: "2027-05-14", endDate: "2027-05-13",
+    }))).toEqual(["endDate"]);
+    expect(issueFields(itemIdSchema.safeParse({ itemId: "abc" }))).toEqual(["itemId"]);
+  });
+});
+
+describe("tripUpdateFormSchema", () => {
+  const update = { tripId: TRIP_ID, title: " Recojo de kits ", body: " El sábado a las 10:00. " };
+
+  it("trims title and body", () => {
+    expect(tripUpdateFormSchema.parse(update)).toEqual({ tripId: TRIP_ID, title: "Recojo de kits", body: "El sábado a las 10:00." });
+  });
+
+  it.each([
+    ["title", ""], ["title", "ab"], ["title", "x".repeat(121)], ["body", "  "], ["body", "x".repeat(2001)], ["tripId", "abc"],
+  ])("rejects an invalid %s (%j)", (field, value) => {
+    expect(issueFields(tripUpdateFormSchema.safeParse({ ...update, [field]: value }))).toEqual([field]);
+  });
+
+  it("requires an update id to delete", () => {
+    expect(issueFields(tripUpdateIdSchema.safeParse({ updateId: "abc" }))).toEqual(["updateId"]);
   });
 });

@@ -1,17 +1,23 @@
 import "server-only";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import type { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import type { BookingActionState } from "../types/bookings.types";
 
-// Shared by the bookings and payments Server Actions. Not a "use server" file: its exports must
+// Shared by the bookings, payments and itinerary Server Actions. Not a "use server" file: its exports must
 // not become callable actions.
 export const BOOKINGS_PATH = "/crm/reservas";
 type ErrorState = Extract<BookingActionState, { status: "error" }>;
 type ErrorCode = ErrorState["code"];
-// A successful mutation names the booking it touched, to revalidate (and, on create, open) it.
-type Mutation = { bookingId: string; message: string } | ErrorState;
+// A successful mutation names the pages it changed and, optionally, where to go next.
+type Mutation = { message: string; revalidate: string[]; redirectTo?: string } | ErrorState;
+
+// The list and the booking's own page: what a booking or payment change touches.
+export function bookingPaths(bookingId: string): string[] {
+  return [BOOKINGS_PATH, `${BOOKINGS_PATH}/${bookingId}`];
+}
 
 const ERROR_MESSAGES: Record<ErrorCode, string> = {
   unauthorized: "Tu sesión no es válida. Vuelve a iniciar sesión.",
@@ -54,25 +60,26 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
   return result;
 }
 
-// requirePermission → zod → service → revalidatePath on success. The actor is always the session's user.
+// requirePermission → zod → service → revalidatePath (and redirect) on success. The actor is always
+// the session's user.
 export async function runBookingAction<Input>(
   formData: FormData,
   schema: z.ZodObject & z.ZodType<Input>,
   mutate: (input: Input, values: Record<string, string>, actorUserId: string) => Promise<Mutation>,
-): Promise<{ state: BookingActionState; bookingId?: string }> {
+): Promise<BookingActionState> {
   let actorUserId: string;
   try {
     ({ id: actorUserId } = await requirePermission("bookings.manage"));
   } catch (error) {
-    if (error instanceof UnauthorizedError) return { state: failure("unauthorized") };
-    if (error instanceof ForbiddenError) return { state: failure("forbidden") };
+    if (error instanceof UnauthorizedError) return failure("unauthorized");
+    if (error instanceof ForbiddenError) return failure("forbidden");
     throw error;
   }
 
   const values = formValues(formData, Object.keys(schema.shape));
   const parsed = schema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
-    return { state: { ...failure("invalid_input", values), fieldErrors: fieldErrors(parsed.error) } };
+    return { ...failure("invalid_input", values), fieldErrors: fieldErrors(parsed.error) };
   }
 
   let result: Mutation;
@@ -82,9 +89,10 @@ export async function runBookingAction<Input>(
     // No original message or cause: database details must not leave this boundary.
     throw new Error("booking action failed");
   }
-  if (!("bookingId" in result)) return { state: result };
+  if ("status" in result) return result;
 
-  revalidatePath(BOOKINGS_PATH);
-  revalidatePath(`${BOOKINGS_PATH}/${result.bookingId}`);
-  return { state: { status: "success", message: result.message }, bookingId: result.bookingId };
+  for (const path of result.revalidate) revalidatePath(path);
+  // Next's redirect throws; it must stay outside the mutation's catch.
+  if (result.redirectTo) redirect(result.redirectTo);
+  return { status: "success", message: result.message };
 }

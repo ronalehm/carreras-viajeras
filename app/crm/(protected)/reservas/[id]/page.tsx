@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
@@ -7,6 +8,9 @@ import {
   BookingStatusBadge,
   changeBookingStatusAction,
   getBookingById,
+  ItineraryItemForm,
+  ItineraryTable,
+  listBookingItems,
   listBookingPayments,
   PaymentForm,
   PaymentTable,
@@ -28,8 +32,10 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
     );
   }
   const { id } = await params;
-  // listBookingPayments returns [] for a non-UUID id without querying, so both reads run in parallel.
-  const [booking, payments] = await Promise.all([getBookingById(id), listBookingPayments(id)]);
+  // The lists return [] for a non-UUID id without querying, so all reads run in parallel.
+  const [booking, payments, items] = await Promise.all([
+    getBookingById(id), listBookingPayments(id), listBookingItems(id),
+  ]);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
 
@@ -88,6 +94,19 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
         <h2 id="booking-payments" className="text-lg font-semibold">Pagos</h2>
         <PaymentTable payments={payments} totalUsd={booking.totalUsd} editable={!cancelled} />
         {!cancelled && <PaymentForm bookingId={booking.id} />}
+      </section>
+      <section aria-labelledby="booking-items" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="booking-items" className="text-lg font-semibold">Servicios de esta reserva</h2>
+          <Link
+            href={`/crm/viajes/${booking.trip.id}/itinerario`}
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            Ver itinerario del viaje
+          </Link>
+        </div>
+        <ItineraryTable items={items} editable={!cancelled} />
+        {!cancelled && <ItineraryItemForm owner={{ bookingId: booking.id }} />}
       </section>
     </section>
   );
