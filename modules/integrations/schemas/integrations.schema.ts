@@ -9,6 +9,14 @@ export const claimRequestSchema = z.object({
   limit: z.number().int().min(1).max(CLAIM_MAX_LIMIT).default(CLAIM_DEFAULT_LIMIT),
 });
 
+// POST /api/integrations/n8n/follow-ups/enqueue: at most 20 reminders a day by default (decision P2).
+export const FOLLOW_UP_DEFAULT_LIMIT = 20;
+export const FOLLOW_UP_MAX_LIMIT = 50;
+
+export const enqueueRequestSchema = z.object({
+  limit: z.number().int().min(1).max(FOLLOW_UP_MAX_LIMIT).default(FOLLOW_UP_DEFAULT_LIMIT),
+});
+
 export const ackRequestSchema = z.object({ leaseToken: z.uuid() });
 
 // Short code only (it is stored in last_error_code): never provider text.

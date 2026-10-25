@@ -15,10 +15,15 @@ type ContactPreference = (typeof contactPreferenceEnum.enumValues)[number];
 
 export type OutboxEventType = (typeof outboxEventTypeEnum.enumValues)[number];
 
+// Only open sales stages get an automatic reminder (decision P2): from reserved on, follow-up is personal.
+export type FollowUpStage = Extract<LeadStage, "new" | "contacted" | "quoted">;
+
 // Payload version 1: minimal, never personal data.
 export type OutboxEventPayload =
   | { source: LeadSource; bulk?: boolean } // lead.created (bulk: one-off import, from F3)
-  | { stageFrom: LeadStage; stageTo: LeadStage }; // lead.stage_changed
+  | { stageFrom: LeadStage; stageTo: LeadStage } // lead.stage_changed
+  | { stage: FollowUpStage; dueOn: string } // lead.follow_up_due (dueOn: YYYY-MM-DD next action date)
+  | { stageFrom: LeadStage }; // lead.opted_out (stage before the opt-out)
 
 // Contract of POST /api/integrations/n8n/events/claim.
 export type ClaimedEvent = {

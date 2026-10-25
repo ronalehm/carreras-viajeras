@@ -428,7 +428,7 @@ Si falta, la API de n8n responderá que no está configurada y el resto de la ap
 
 n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
 
-Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada (y la `0005` para el alta desde Google Forms y la importación, apartados 10 y 11).
+Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada (y la `0005` para el alta desde Google Forms y la importación, apartados 10 y 11, y para los recordatorios y el aviso de baja, apartados 12 y 13).
 
 #### 1. Credenciales (solo dentro de n8n)
 
@@ -452,11 +452,13 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
 | `POST /api/integrations/n8n/events/{id}/fail` | `{ "leaseToken": "...", "errorCode": "smtp_error" }` | `200 { "status": "pending", "availableAt": "..." }` o `200 { "status": "dead" }` |
 | `GET /api/integrations/n8n/leads/{id}` | — | `200` con los datos del lead (abajo) |
 | `POST /api/integrations/n8n/leads` | Una respuesta de Google Forms o una fila de la importación (abajo) | `201 { "status": "created", "leadId": "..." }`, `200 { "status": "duplicate", "leadId": "..." }` (o `"leadId": null`) o `200 { "status": "existing", "leadId": "..." }` |
+| `POST /api/integrations/n8n/follow-ups/enqueue` | `{ "limit": 20 }` (de 1 a 50; sin cuerpo, 20) | `200 { "enqueued": 3 }` (cuántos recordatorios se pusieron en la cola; `0` si no había ninguno pendiente) |
 
-- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" | "google_form" | "import", "bulk": true | false }`; `bulk` solo es `true` en la importación única y lo decide la web, no la petición; los eventos anteriores pueden no traerlo), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
+- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created`, `lead.stage_changed`, `lead.follow_up_due` o `lead.opted_out`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" | "google_form" | "import", "bulk": true | false }`; `bulk` solo es `true` en la importación única y lo decide la web, no la petición; los eventos anteriores pueden no traerlo. Para `lead.stage_changed`, `{ "stageFrom", "stageTo" }`; para `lead.follow_up_due` (recordatorio, apartado 12), `{ "stage": "new" | "contacted" | "quoted", "dueOn": "AAAA-MM-DD" }` con la etapa y la fecha de la próxima acción vencida; para `lead.opted_out` (el contacto pidió no seguir, apartado 13), `{ "stageFrom" }` con la etapa que tenía antes), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
 - **ack** ("listo"): confirma que el evento está procesado. Hay que enviar el `leaseToken` que llegó con ese evento.
 - **fail** ("falló"): devuelve el evento a la cola para reintentarlo más tarde (30 s, 1 min, 2 min, 4 min… con algo de variación, hasta 1 hora). `errorCode` es un código corto en minúsculas, números y `_` (máximo 40). Al octavo intento fallido el evento queda `dead` (muerto) y no se vuelve a entregar.
 - **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived`, `createdAt`, `channel` (el origen: `event`, `instagram`, `unknown`…), `originDetail` (detalle del origen o `null`), `contactPreference` (`whatsapp`, `email`, `call` o `null`), `nextActionDate` (`AAAA-MM-DD` o `null`) y `doNotContact` (`true` si el contacto pidió no seguir: **descarta cualquier borrador**). No incluye ciudad, notas, historial, consentimiento, referente, UTM ni ids de usuario.
+- **follow-ups/enqueue** ("encolar recordatorios"): lo llama una vez al día el workflow "Recordatorios diarios" (apartado 12). Pone en la cola un evento `lead.follow_up_due` por cada lead que lo necesita, como máximo `limit`, y responde cuántos puso. Llamarlo dos veces no duplica nada.
 - **leads** (`POST`): registra a una persona que llega por Google Forms (apartado 10) o por la importación única (apartado 11). El lead entra "Sin asignar", en etapa "Nuevo" y sin autor. Cuerpo:
 
   | Campo | Obligatorio | Valor |
@@ -472,7 +474,7 @@ Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Cont
 
   Respuestas: `created` (lead nuevo; llega al workflow principal por su `lead.created`); `duplicate` (ese `externalId` ya se registró con los mismos datos: repetir una petición nunca duplica); `existing` (ya hay un lead con ese teléfono, también si está archivado tras pedir no seguir: no se crea otro y `leadId` es el existente); `409 { "error": "conflict" }` (ese `externalId` ya se registró con **otros** datos); `422 { "error": "unknown_trip" }` (el `tripSlug` no es un viaje del catálogo). Ninguna respuesta repite los datos enviados. Responsable, autor, etapa y `bulk` los decide la web: si la petición los trae, se ignoran.
 
-Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `409 { "error": "conflict" }` y `422 { "error": "unknown_trip" }` (solo en `POST …/leads`, arriba), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
+Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `409 { "error": "conflict" }` y `422 { "error": "unknown_trip" }` (solo en `POST …/leads`, arriba; en `…/follow-ups/enqueue`, un `limit` fuera de 1–50 o que no es un número da `400`), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
 
 Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (apartado 3, paso 5).
 
@@ -489,18 +491,23 @@ En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian 
 5. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `event_id` (no la llames `id`: la tabla ya tiene una columna `id` propia).
    - Nodo **Data table** "Buscar procesado": obtener filas donde `event_id` es igual a `{{ $('Uno a uno').item.json.id }}`. En **Settings**, activa *Always Output Data* para que el workflow siga aunque no encuentre nada. (Esa opción actúa sobre el nodo entero, no sobre cada item; por eso es correcta aquí, donde gracias al bucle solo hay un evento por vuelta.)
    - Nodo **If** "¿Ya procesado?": si `{{ $('Buscar procesado').item.json.event_id }}` no está vacío, el correo ya se envió antes: ve directo al nodo "Ack" (paso 14) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
-6. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Uno a uno').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`, `channel`, `originDetail`, `contactPreference`, `doNotContact`).
+6. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Uno a uno').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`, `channel`, `originDetail`, `contactPreference`, `nextActionDate`, `doNotContact`).
+
+   Conecta la salida correcta de "Leer lead" a un **Switch** "Tipo de evento" sobre `{{ $('Uno a uno').item.json.type }}` (apartado 13): `lead.created`, `lead.stage_changed` y `lead.follow_up_due` siguen al paso 7; `lead.opted_out` va al aviso de baja (apartado 13), sin Gemini; activa en **Options** la *Fallback Output* (cualquier otro tipo) y conéctala directa a "Ack" (paso 14), sin preparar nada.
 7. **Edit Fields (Set)** "Datos para Gemini", con *Include Other Input Fields* **desactivado** para que solo salgan estos tres campos:
-   - `etapa`: `{{ $('Uno a uno').item.json.type === 'lead.created' ? 'new' : $('Uno a uno').item.json.payload.stageTo }}` (la etapa del evento);
+   - `etapa`: `{{ $('Uno a uno').item.json.type === 'lead.created' ? 'new' : ($('Uno a uno').item.json.type === 'lead.follow_up_due' ? $('Uno a uno').item.json.payload.stage : $('Uno a uno').item.json.payload.stageTo) }}` (la etapa del evento; en un recordatorio, `payload.stage`);
    - `firstName`: `{{ $('Leer lead').item.json.firstName }}`;
    - `viaje`: `{{ $('Leer lead').item.json.trip ? $('Leer lead').item.json.trip.title : ($('Leer lead').item.json.destinationText || 'nuestros viajes') }}`.
 8. **If** "¿Sigue vigente?" (condiciones unidas con **OR**): ve al nodo "Ack" sin preparar nada (ni borrador ni correo) si se cumple cualquiera de estas:
    - `{{ $('Leer lead').item.json.archived }}` es verdadero, o `{{ $('Leer lead').item.json.stage }}` es distinto de `{{ $('Datos para Gemini').item.json.etapa }}` (el evento quedó viejo);
    - `{{ $('Leer lead').item.json.doNotContact }}` es verdadero (el contacto pidió no seguir: nunca se prepara un borrador);
-   - `{{ $('Uno a uno').item.json.type === 'lead.created' && $('Uno a uno').item.json.payload.bulk === true }}` es verdadero (lead de la importación única, apartado 11: ni borrador ni correo, nada de bienvenidas en masa).
+   - `{{ $('Uno a uno').item.json.type === 'lead.created' && $('Uno a uno').item.json.payload.bulk === true }}` es verdadero (lead de la importación única, apartado 11: ni borrador ni correo, nada de bienvenidas en masa);
+   - `{{ $('Uno a uno').item.json.type === 'lead.follow_up_due' && (!$('Leer lead').item.json.nextActionDate || $('Leer lead').item.json.nextActionDate > $('Uno a uno').item.json.payload.dueOn) }}` es verdadero (recordatorio viejo: el equipo ya quitó o reprogramó la próxima acción; si cambió la etapa, ya lo cubre la primera condición).
+
+   La salida *false* (sigue vigente) va al **Switch** "Etapa del recordatorio" (apartado 13). Su salida de respaldo, todo lo que no es un recordatorio, llega al paso 9.
 9. **Switch** "Etapa" sobre `{{ $('Datos para Gemini').item.json.etapa }}`, con una salida por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`). Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
 10. **Nodo de Gemini** en cada salida del Switch (crea uno y duplícalo; solo cambia el objetivo de la etapa, apartado 4). En **Settings** de cada uno: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
-11. **Code** "Borrador" (modo *Run Once for Each Item*). Conecta aquí la salida correcta **y** la de error de los seis nodos de Gemini. Elige el texto de Gemini si sirve y, si no, la plantilla de respaldo (apartado 5). Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
+11. **Code** "Borrador" (modo *Run Once for Each Item*). Conecta aquí la salida correcta **y** la de error de los seis nodos de Gemini (y de los tres de recordatorio, apartado 13). Elige el texto de Gemini si sirve y, si no, la plantilla de respaldo (apartado 5, o la de recordatorio del apartado 13). Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
 
     ```js
     const datos = $('Datos para Gemini').item.json;
@@ -511,7 +518,13 @@ En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian 
       new: 'Hola {firstName}, gracias por escribirnos por {viaje}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan?',
       // …pega aquí las otras cinco plantillas del apartado 5, con su etapa.
     };
-    const respaldo = plantillas[datos.etapa].replace('{firstName}', datos.firstName).replace('{viaje}', datos.viaje);
+    // Recordatorios (apartado 13): una plantilla por etapa de venta.
+    const recordatorios = {
+      new: 'Hola {firstName}, te escribimos de Carreras Viajeras por tu interés en {viaje}. ¿Te ayudamos con alguna duda? Si prefieres que no te escribamos más, dínoslo y lo respetamos.',
+      // …pega aquí las de contacted y quoted del apartado 13.
+    };
+    const esRecordatorio = $('Uno a uno').item.json.type === 'lead.follow_up_due';
+    const respaldo = (esRecordatorio ? recordatorios : plantillas)[datos.etapa].replace('{firstName}', datos.firstName).replace('{viaje}', datos.viaje);
     return { json: { borrador: texto && texto.length <= 1000 ? texto : respaldo } };
     ```
 12. **Edit Fields (Set)** "Enlace WhatsApp", con un campo `enlace`: `https://wa.me/{{ $('Leer lead').item.json.phone.replace('+', '') }}?text={{ encodeURIComponent($('Borrador').item.json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo. Si el lead prefiere el correo (`contactPreference` es `email`) y tiene email, el enlace es un `mailto:` con el borrador en lugar de `wa.me` (tampoco envía nada solo):
@@ -519,8 +532,8 @@ En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian 
     ```text
     {{ $('Leer lead').item.json.contactPreference === 'email' && $('Leer lead').item.json.email ? 'mailto:' + $('Leer lead').item.json.email + '?body=' + encodeURIComponent($('Borrador').item.json.borrador) : 'https://wa.me/' + $('Leer lead').item.json.phone.replace('+', '') + '?text=' + encodeURIComponent($('Borrador').item.json.borrador) }}
     ```
-13. **Send Email** "Enviar correo" (credencial SMTP) **a ti** (apartado 6). En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`. Después del envío correcto, nodo **Data table** "Guardar procesado": insertar una fila con `event_id` = `{{ $('Uno a uno').item.json.id }}`.
-14. **HTTP Request** "Ack": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/ack` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}" }`. En **Settings** → *On Error* → *Continue*: si responde 409 (`lease_lost`), no te preocupes; el evento volverá a llegar y el paso 5 evitará un segundo correo. Con *Continue*, un error sale por la salida normal: conéctala de vuelta a "Uno a uno". A "Ack" llegan tres caminos: el duplicado (paso 5), el evento viejo (paso 8) y el correo enviado (paso 13).
+13. **Send Email** "Enviar correo" (credencial SMTP) **a ti** (apartado 6). En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`. Después del envío correcto, nodo **Data table** "Guardar procesado": insertar una fila con `event_id` = `{{ $('Uno a uno').item.json.id }}`. (Al mismo "Guardar procesado" llega también el aviso de baja del apartado 13.)
+14. **HTTP Request** "Ack": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/ack` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}" }`. En **Settings** → *On Error* → *Continue*: si responde 409 (`lease_lost`), no te preocupes; el evento volverá a llegar y el paso 5 evitará un segundo correo. Con *Continue*, un error sale por la salida normal: conéctala de vuelta a "Uno a uno". A "Ack" llegan cinco caminos: el duplicado (paso 5), un tipo de evento desconocido (paso 6), el evento viejo (paso 8), el correo enviado (paso 13) y el aviso de baja enviado (apartado 13).
 
 **Rama de error**, nodo **HTTP Request** "Fail": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/fail` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}", "errorCode": "<código>" }`. Usa un nodo "Fail" por código (o escribe el código en un campo antes de llegar a él). Como "Ack", cada nodo "Fail" tiene *On Error* → *Continue* y su salida vuelve a "Uno a uno". Códigos sugeridos: `smtp_error` (no se pudo enviar el correo), `lead_not_found` (no se pudo leer el lead), `lead_read_error` (si separas la lectura fallida del 404) y `unexpected_error` (cualquier otro). Usa solo códigos cortos: nunca copies el texto del error del proveedor.
 
@@ -535,6 +548,8 @@ Etapa: {{ $('Datos para Gemini').item.json.etapa }}
 Nombre de pila: {{ $('Datos para Gemini').item.json.firstName }}
 Viaje o destino: {{ $('Datos para Gemini').item.json.viaje }}
 ```
+
+Los recordatorios (apartado 13) usan exactamente estos tres campos: se distinguen por el texto fijo de su prompt, no por datos. La fecha y la nota de la próxima acción, como el aviso de baja, nunca llegan a Gemini.
 
 Ampliar esta lista exige tu decisión explícita y un cambio de la spec. Ten en cuenta que, en el plan gratuito de la API de Gemini, Google puede usar lo que le envías para mejorar sus productos.
 
@@ -568,9 +583,9 @@ Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `
 
 #### 6. El correo que recibes
 
-- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), "Nuevo lead (Google Forms): {fullName} · {viaje}" para un `lead.created` de Google Forms (`source = "google_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
+- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), "Nuevo lead (Google Forms): {fullName} · {viaje}" para un `lead.created` de Google Forms (`source = "google_form"`), "Recordatorio para {fullName} · {etapa}" para un `lead.follow_up_due` (apartado 13), o "Lead {fullName}: etapa {etapa}" en los demás casos. El aviso de baja (`lead.opted_out`) tiene su propio correo, sin borrador (apartado 13).
 - **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead nuevo del formulario web o de Google Forms: `$('Uno a uno').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form` o `google_form`.
-- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el origen y la preferencia de contacto (abajo), el borrador y el botón o enlace de WhatsApp o de correo (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
+- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el origen y la preferencia de contacto (abajo), el borrador y el botón o enlace de WhatsApp o de correo (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.". En un recordatorio, añade debajo: "Es el único recordatorio automático de esta etapa.".
 - **Origen y preferencia**, con las mismas etiquetas que el CRM (pega estas dos líneas en el cuerpo del correo):
 
   ```text
@@ -720,6 +735,78 @@ Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lim
 **Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0005` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
 
 **La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0005` aplicada en producción. Repetirla por error no duplica personas.
+
+#### 12. Workflow "Recordatorios diarios"
+
+Si un corredor no responde y su próxima acción ya venció, n8n te prepara **un solo** recordatorio por etapa, como borrador para que lo revises (nada se le envía solo). Es un workflow aparte, de dos nodos:
+
+1. **Schedule Trigger** "Cada día": todos los días a las **09:00**. En los **Settings** del workflow, *Timezone* = `America/Lima`, para que las 09:00 sean hora de Lima y no la de tu computadora.
+2. **HTTP Request** "Encolar recordatorios": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/follow-ups/enqueue` con la credencial *Header Auth* y cuerpo JSON `{ "limit": 20 }`. Responde `{ "enqueued": <n> }`. En **Settings** → *On Error* → *Continue (using error output)* y, en la salida de error, **Send Email** a ti con "No se pudieron preparar los recordatorios de hoy" (sin datos de nadie). Si un día falla, no pasa nada: al día siguiente se encolan los que sigan pendientes.
+
+La web decide quién recibe recordatorio; n8n no filtra nada aquí:
+
+- solo leads en **Nuevo, Contactado o Cotizado**, no archivados y que **no** pidieron no seguir. Desde "Reservado" el acompañamiento es personal y no hay recordatorios automáticos;
+- con la **próxima acción para hoy o vencida**, según la fecha de Lima (la calcula la web);
+- **uno por etapa:** si el corredor sigue sin responder, no hay un segundo recordatorio en esa etapa, aunque la próxima acción siga vencida o la reprogrames. Cuando el lead cambia de etapa (señal de que respondió o avanzó), puede tener otro. Después del recordatorio, lo que siga lo decides tú en el CRM;
+- como máximo **20 al día** (`limit`, de 1 a 50), los más vencidos primero; si hay más, el resto entra al día siguiente.
+
+Llamar a la petición dos veces el mismo día (o reintentarla) no duplica nada. Cada recordatorio llega al workflow principal como un evento `lead.follow_up_due` en el siguiente minuto, y ahí se prepara el borrador y te llega el correo (apartado 13).
+
+**Prueba manual (rama de desarrollo de Neon, `0005` aplicada, `npm run dev`):** en el CRM deja cuatro leads de prueba: uno en "Contactado" con la próxima acción de **ayer**; otro con "Pidió no seguir"; otro en "Reservado" con la próxima acción vencida; y otro con la próxima acción para **mañana**. Luego:
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"limit":20}' http://localhost:3000/api/integrations/n8n/follow-ups/enqueue
+```
+
+- La primera vez responde `{ "enqueued": 1 }` (solo el de "Contactado") y la segunda, `{ "enqueued": 0 }`.
+- Al día siguiente, si su próxima acción sigue vencida, sigue en `0`. Si cambias su etapa a "Cotizado" con una próxima acción vencida, la siguiente llamada devuelve `1`.
+- `{"limit":0}`, `{"limit":51}` o `{"limit":"20"}` responden `400`; sin token, `401`.
+
+#### 13. Recordatorios y aviso de baja en el workflow principal
+
+El workflow principal (apartado 3) recibe dos tipos de evento más. El **Switch** "Tipo de evento" (al final del paso 6) los separa:
+
+| Tipo de evento | Camino |
+|---|---|
+| `lead.created`, `lead.stage_changed` | Como hasta ahora (pasos 7 a 14). |
+| `lead.follow_up_due` (recordatorio) | Pasos 7 y 8 con la etapa `payload.stage` → Switch "Etapa del recordatorio" → Gemini de recordatorio → "Borrador" → pasos 12 a 14. |
+| `lead.opted_out` (pidió no seguir) | Correo "Aviso de baja", sin Gemini → "Guardar procesado" → "Ack". |
+| Cualquier otro | Salida de respaldo → "Ack", sin preparar nada. |
+
+**Si aún no actualizaste el workflow,** los eventos nuevos no rompen nada: llegan sin `stageTo`, "Datos para Gemini" deja la etapa vacía y "¿Sigue vigente?" (paso 8) hace ack sin preparar borrador ni correo (en un `lead.opted_out`, además, `doNotContact` es verdadero). Simplemente no recibes el recordatorio ni el aviso hasta que lo actualices.
+
+**Aviso de baja (`lead.opted_out`).** Cuando el equipo registra en el CRM que un contacto "Pidió no seguir", puede haber borradores suyos en tu correo que aún no enviaste. Este aviso te pide descartarlos:
+
+1. **Send Email** "Aviso de baja" (credencial SMTP) **a ti**, con asunto "Pidió no seguir: {{ $('Leer lead').item.json.fullName }}" y el texto "Pidió no seguir: {{ $('Leer lead').item.json.fullName }}. Descarta cualquier borrador pendiente de este lead.". Sin borrador, sin enlace de WhatsApp y sin pasar por Gemini. En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`.
+2. Después del envío correcto, al mismo **Data table** "Guardar procesado" del paso 13 y de ahí a "Ack".
+
+Desde ese momento, "Leer lead" devuelve `doNotContact: true` y el paso 8 hace ack de cualquier otro evento de ese lead sin preparar nada.
+
+**Recordatorio (`lead.follow_up_due`).**
+
+- **"Datos para Gemini"** (paso 7) toma la etapa de `payload.stage`; los tres campos que salen hacia Gemini no cambian (`etapa`, `firstName`, `viaje`).
+- **"¿Sigue vigente?"** (paso 8) hace ack sin preparar nada si el lead ya no está en esa etapa, si su próxima acción se quitó o se movió a una fecha posterior a `payload.dueOn`, si está archivado o si pidió no seguir.
+- **Switch** "Etapa del recordatorio", entre "¿Sigue vigente?" y el Switch "Etapa" (paso 9), en modo *Rules*, con tres salidas: `{{ $('Uno a uno').item.json.type === 'lead.follow_up_due' && $('Datos para Gemini').item.json.etapa === 'new' }}` (y lo mismo con `contacted` y `quoted`). Activa en **Options** la *Fallback Output* y conéctala al Switch "Etapa": por ahí siguen todos los eventos que no son recordatorios.
+- **Tres nodos de Gemini** "Recordatorio new", "Recordatorio contacted" y "Recordatorio quoted", uno por salida, con los mismos *Settings* que los del paso 10 (*On Error* → *Continue (using error output)*, 20 segundos) y su salida correcta y de error conectadas a "Borrador" (paso 11). Su prompt son las instrucciones comunes del apartado 4, el mismo mensaje con los tres campos de "Datos para Gemini" y este objetivo fijo, igual en los tres:
+
+  > Escribe un único recordatorio breve y útil, sin presionar: retoma la consulta, ofrece resolver una duda y deja claro que puede responder cuando quiera o pedirnos que no le escribamos más.
+
+- **Plantillas de respaldo** (en el objeto `recordatorios` del código "Borrador", paso 11):
+
+  | Etapa | Plantilla del recordatorio |
+  |---|---|
+  | `new` | Hola {firstName}, te escribimos de Carreras Viajeras por tu interés en {viaje}. ¿Te ayudamos con alguna duda? Si prefieres que no te escribamos más, dínoslo y lo respetamos. |
+  | `contacted` | Hola {firstName}, ¿pudiste pensar en {viaje}? Estamos para resolver cualquier duda. Si prefieres que no te escribamos más, dínoslo y lo respetamos. |
+  | `quoted` | Hola {firstName}, ¿pudiste revisar la propuesta de {viaje}? Si te ayuda, la vemos juntos. Si prefieres que no te escribamos más, dínoslo y lo respetamos. |
+
+- **Correo** (paso 13 y apartado 6): asunto "Recordatorio para {fullName} · {etapa}" y, debajo del aviso de revisión, "Es el único recordatorio automático de esta etapa.". Para el asunto:
+
+  ```text
+  {{ $('Uno a uno').item.json.type === 'lead.follow_up_due' ? 'Recordatorio para ' + $('Leer lead').item.json.fullName + ' · ' + $('Datos para Gemini').item.json.etapa : '…el asunto que ya tenías (apartado 6)…' }}
+  ```
+
+Si el corredor responde, cambia su etapa en el CRM: eso abre una etapa nueva y, si vuelve a quedarse sin respuesta, tendrá como máximo otro recordatorio. Si pide que no le escribamos más, registra "Pidió no seguir" en su ficha.
 
 ## Reservas y portal del runner
 

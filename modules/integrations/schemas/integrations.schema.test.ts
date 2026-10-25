@@ -4,6 +4,7 @@ import {
   ackRequestSchema,
   claimRequestSchema,
   createIntegrationLeadSchema,
+  enqueueRequestSchema,
   eventIdSchema,
   failRequestSchema,
   leadIdSchema,
@@ -22,6 +23,24 @@ describe("claimRequestSchema", () => {
 
   it.each([0, 26, -1, 2.5, "2", "abc", null])("rejects limit %j", (limit) => {
     expect(claimRequestSchema.safeParse({ limit }).success).toBe(false);
+  });
+});
+
+describe("enqueueRequestSchema", () => {
+  it("defaults the daily limit to 20 without a body", () => {
+    expect(enqueueRequestSchema.parse({})).toEqual({ limit: 20 });
+  });
+
+  it.each([1, 20, 50])("accepts limit %d", (limit) => {
+    expect(enqueueRequestSchema.parse({ limit })).toEqual({ limit });
+  });
+
+  it.each([0, 51, -1, 2.5, "20", "abc", null])("rejects limit %j", (limit) => {
+    expect(enqueueRequestSchema.safeParse({ limit }).success).toBe(false);
+  });
+
+  it("drops unknown keys", () => {
+    expect(enqueueRequestSchema.parse({ limit: 5, stage: "reserved" })).toEqual({ limit: 5 });
   });
 });
 
