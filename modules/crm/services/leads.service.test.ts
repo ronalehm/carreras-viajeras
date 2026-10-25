@@ -10,6 +10,7 @@ import type { CreateLeadInput, UpdateLeadInput } from "../types/leads.types";
 import {
   archiveLead,
   changeLeadOwner,
+  changeLeadSource,
   changeLeadStage,
   createLead,
   getLeadById,
@@ -208,6 +209,53 @@ describe("getLeadList", () => {
     );
   });
 
+  it("filters the list and the funnel counts by source, in the same batch", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ source: "event", page: 1 }, "user-1", TODAY);
+
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    expect(fake.queries).toHaveLength(3);
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where ("leads"."archived_at" is null and "leads"."source" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "event", 26]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."source" = $1) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["event"]);
+  });
+
+  it("combines the source with stage, owner, follow-up and page; the counts ignore only the stage", async () => {
+    const fake = useFakeDb();
+    await getLeadList(
+      { stage: "quoted", owner: "mine", followUp: "pending", source: "instagram", page: 2 },
+      "user-1",
+      TODAY,
+    );
+
+    const [list, counts] = fake.queries;
+    expect(normalize(list.sql)).toContain(
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $3 and ("leads"."stage" not in ($4, $5) and "leads"."next_action_date" <= $6) and "leads"."source" = $7) and "leads"."stage" = $8) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $9 offset $10',
+    );
+    expect(list.params).toEqual(["commercial", "admin", "user-1", "paid", "lost", TODAY, "instagram", "quoted", 26, 25]);
+    expect(normalize(counts.sql)).toBe(
+      'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" = $1 and ("leads"."stage" not in ($2, $3) and "leads"."next_action_date" <= $4) and "leads"."source" = $5) group by "leads"."stage"',
+    );
+    expect(counts.params).toEqual(["user-1", "paid", "lost", TODAY, "instagram"]);
+  });
+
+  it("archived: lists only archived leads of that source", async () => {
+    const fake = useFakeDb();
+    await getLeadList({ stage: "archived", source: "unknown", page: 1 }, "user-1", TODAY);
+
+    expect(normalize(fake.queries[0].sql)).toContain(
+      'where ("leads"."archived_at" is not null and "leads"."source" = $3) order by',
+    );
+    expect(fake.queries[0].params).toEqual(["commercial", "admin", "unknown", 26]);
+    expect(fake.queries[1].params).toEqual(["unknown"]);
+  });
+
   it("returns 25 leads and hasNextPage when the database returns 26 rows", async () => {
     const rows = Array.from({ length: 26 }, (_, index) => listRow(index));
     useFakeDb({ responses: [rows, [], []] });
@@ -323,8 +371,8 @@ describe("createLead", () => {
     location: "Lima",
     tripId: TRIP_ID,
     destinationText: null,
-    source: "whatsapp",
-    sourceDetail: null,
+    source: "event",
+    sourceDetail: "Maratón de Lima 2026",
     ownerUserId: "user-2",
     note: "Quiere la 21K.",
     consent: "on",
@@ -343,16 +391,17 @@ describe("createLead", () => {
       /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok, \(\$4::uuid IS NULL OR EXISTS \( SELECT 1 FROM trips WHERE trips\.id = \$5::uuid AND trips\.status <> 'archived' \)\) AS trip_ok \)/,
     );
     expect(statement).toContain(
-      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15 FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
+      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, source_detail, owner_user_id, consent_version, created_by ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15, $16 FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
     );
     expect(statement).toContain(
-      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $16, $17 FROM inserted",
+      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $17, $18 FROM inserted",
     );
     // status, attempts and available_at take their defaults (pending, 0, now()); payload { source }
-    // is built from the inserted lead (no personal data).
+    // only is built from the inserted lead (no personal data, never the source detail).
     expect(statement).toContain(
       "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted )",
     );
+    expect(statement.match(/source_detail/g)).toHaveLength(1);
     expect(statement).toMatch(/SELECT \(SELECT id FROM inserted\) AS id, owner_ok, trip_ok FROM checks$/);
     expect(fake.queries[0].params).toEqual([
       "user-2",
@@ -366,13 +415,21 @@ describe("createLead", () => {
       "Lima",
       TRIP_ID,
       null,
-      "whatsapp",
+      "event",
+      "Maratón de Lima 2026",
       "user-2",
       "crm-manual-v1",
       "user-1",
       "Quiere la 21K.",
       "user-1",
     ]);
+  });
+
+  it("inserts a null source detail when none is given", async () => {
+    const fake = useFakeDb({ responses: [[{ id: "lead-1", owner_ok: true, trip_ok: true }]] });
+    await createLead({ ...input, source: "unknown", sourceDetail: null }, "user-1");
+
+    expect(fake.queries[0].params.slice(11, 14)).toEqual(["unknown", null, "user-2"]);
   });
 
   it("never sends the stage: the column default applies", async () => {
@@ -648,6 +705,102 @@ describe("changeLeadOwner", () => {
   ])("maps %o to %s", async (row, expected) => {
     useFakeDb({ responses: [[row]] });
     await expect(changeLeadOwner(input, "user-1")).resolves.toBe(expected);
+  });
+});
+
+describe("changeLeadSource", () => {
+  const input = {
+    leadId: LEAD_ID,
+    source: "event" as const,
+    sourceDetail: "Maratón de Lima 2026",
+    actorUserId: "user-1",
+  };
+  const row = (values: Partial<Record<"found" | "archived" | "locked" | "updated", boolean>>) => ({
+    found: true,
+    archived: false,
+    locked: false,
+    updated: false,
+    ...values,
+  });
+
+  it("decides with the WHERE of a single statement: update, source_changed activity and outcome", async () => {
+    const fake = useFakeDb({ responses: [[row({ updated: true })]] });
+
+    await expect(changeLeadSource(input)).resolves.toBe("updated");
+
+    expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement.match(/;/g)).toBeNull();
+    expect(statement).toBe(
+      // target reads archived leads too (to tell "archived" from "not_found") and locks the row.
+      "WITH target AS ( SELECT id, source, source_detail, archived_at IS NOT NULL AS archived, " +
+        "source <> $1::lead_source AND 'web_form'::lead_source IN (source, $2::lead_source) AS locked " +
+        "FROM leads WHERE id = $3::uuid FOR UPDATE ), " +
+        "updated AS ( UPDATE leads SET source = $4::lead_source, source_detail = $5, updated_at = now() FROM target " +
+        "WHERE leads.id = target.id AND NOT target.archived AND NOT target.locked " +
+        "AND (target.source <> $6::lead_source OR target.source_detail IS DISTINCT FROM $7) " +
+        "RETURNING leads.id, target.source AS source_from ), " +
+        // Only a source change leaves history: source_from is the replaced source, the author the session user.
+        "activity AS ( INSERT INTO lead_activities (lead_id, type, source_from, source_to, actor_user_id) " +
+        "SELECT id, 'source_changed', source_from, $8::lead_source, $9 FROM updated WHERE source_from <> $10::lead_source ) " +
+        "SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM target WHERE archived) AS archived, " +
+        "EXISTS (SELECT 1 FROM target WHERE locked) AS locked, EXISTS (SELECT 1 FROM updated) AS updated",
+    );
+    expect(fake.queries[0].params).toEqual([
+      "event", "event", LEAD_ID, "event", "Maratón de Lima 2026", "event", "Maratón de Lima 2026", "event", "user-1", "event",
+    ]);
+  });
+
+  it("sends a null detail to clear it", async () => {
+    const fake = useFakeDb({ responses: [[row({ updated: true })]] });
+    await changeLeadSource({ ...input, sourceDetail: null });
+    expect(fake.queries[0].params[4]).toBeNull();
+    expect(fake.queries[0].params[6]).toBeNull();
+  });
+
+  it("never takes the author from anything but actorUserId", async () => {
+    const fake = useFakeDb({ responses: [[row({ updated: true })]] });
+    await changeLeadSource({ ...input, actorUserId: "user-9" });
+    expect(fake.queries[0].params[8]).toBe("user-9");
+    expect(fake.queries[0].params.filter((param) => param === "user-9")).toHaveLength(1);
+  });
+
+  // The database answers each case as PostgreSQL would for the given lead.
+  it.each([
+    ["manual lead, different source (update + source_changed)", row({ updated: true }), "updated"],
+    ["manual lead, only the detail changes (update, no activity)", row({ updated: true }), "updated"],
+    ["same source and detail (no write)", row({}), "unchanged"],
+    ["web_form lead to another source", row({ locked: true }), "source_locked"],
+    ["web_form lead, same source and other detail", row({ updated: true }), "updated"],
+    ["manual lead to web_form", row({ locked: true }), "source_locked"],
+    ["archived lead", row({ archived: true }), "archived"],
+    ["archived and locked lead", row({ archived: true, locked: true }), "archived"],
+    ["missing lead", row({ found: false }), "not_found"],
+  ])("%s → %s", async (_, answer, expected) => {
+    useFakeDb({ responses: [[answer]] });
+    await expect(changeLeadSource(input)).resolves.toBe(expected);
+  });
+
+  it("returns not_found when the statement returns no row", async () => {
+    useFakeDb({ responses: [[]] });
+    await expect(changeLeadSource(input)).resolves.toBe("not_found");
+  });
+
+  it("locks a manual lead going to web_form and a web_form lead going elsewhere, in the same WHERE", async () => {
+    const toWebForm = useFakeDb({ responses: [[row({ locked: true })]] });
+    await expect(changeLeadSource({ ...input, source: "web_form" })).resolves.toBe("source_locked");
+    const [sql] = toWebForm.queries.map((query) => normalize(query.sql));
+    // locked: the source would change and web_form is either the current or the new one.
+    expect(sql).toContain("source <> $1::lead_source AND 'web_form'::lead_source IN (source, $2::lead_source) AS locked");
+    expect(sql).toContain("NOT target.locked");
+    expect(toWebForm.queries[0].params.slice(0, 2)).toEqual(["web_form", "web_form"]);
+  });
+
+  it("propagates database rejections", async () => {
+    const failure = new Error("connection refused");
+    useFakeDb({ failWith: failure });
+    await expect(changeLeadSource(input)).rejects.toMatchObject({ cause: failure });
   });
 });
 

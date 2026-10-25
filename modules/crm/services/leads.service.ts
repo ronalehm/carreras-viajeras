@@ -30,6 +30,7 @@ import type {
   LeadListFilters,
   LeadOwnerChangeInput,
   LeadOwnerOption,
+  LeadSourceChangeInput,
   LeadStage,
   LeadStageChangeInput,
   LeadTripOption,
@@ -86,7 +87,8 @@ function followUpCondition(followUp: LeadListFilters["followUp"], today: string)
 }
 
 // One batch (one round-trip): the page plus one extra row (hasNextPage, no COUNT),
-// the funnel counts (every filter but the stage; never archived leads) and the owner options.
+// the funnel counts (every filter but the stage: owner, follow-up and source; never archived
+// leads) and the owner options.
 // The "archived" stage filter lists only archived leads, of any stage.
 // LEFT JOIN profiles: a lead without owner is listed with owner = null.
 // With a follow-up filter the most urgent next action comes first.
@@ -98,10 +100,11 @@ export async function getLeadList(
   const db = getDb();
   const byOwner = ownerCondition(filters.owner, currentUserId);
   const byFollowUp = followUpCondition(filters.followUp, today);
-  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp);
+  const bySource = filters.source === undefined ? undefined : eq(leads.source, filters.source);
+  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp, bySource);
   const listed =
     filters.stage === "archived"
-      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp)
+      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp, bySource)
       : and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage));
   const newestFirst = [desc(leads.createdAt), desc(leads.id)];
   const order = filters.followUp ? [asc(leads.nextActionDate), ...newestFirst] : newestFirst;
@@ -172,8 +175,8 @@ export async function getLeadFormOptions(): Promise<{
 }
 
 // One statement: the lead is inserted only if the owner is active and the trip (if any) is not
-// archived; its 'created' activity and its 'lead.created' outbox event (payload { source }, for
-// n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
+// archived; its 'created' activity and its 'lead.created' outbox event (payload { source } only:
+// the source detail never reaches n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
 // and the consent version never come from the input.
 export async function createLead(
   input: CreateLeadInput,
@@ -191,11 +194,11 @@ export async function createLead(
     inserted AS (
       INSERT INTO leads (
         full_name, phone, email, location, trip_id, destination_text,
-        source, owner_user_id, consent_version, created_by
+        source, source_detail, owner_user_id, consent_version, created_by
       )
       SELECT
         ${input.fullName}, ${input.phone}, ${input.email}, ${input.location}, ${input.tripId}::uuid,
-        ${input.destinationText}, ${input.source}::lead_source, ${input.ownerUserId},
+        ${input.destinationText}, ${input.source}::lead_source, ${input.sourceDetail}, ${input.ownerUserId},
         ${MANUAL_CONSENT_VERSION}, ${actorUserId}
       FROM checks
       WHERE owner_ok AND trip_ok
@@ -404,6 +407,50 @@ export async function setNextAction(input: NextActionInput): Promise<"saved" | "
   const row = result.rows[0];
   if (!row?.found) return "not_found";
   return row.saved ? "saved" : "closed";
+}
+
+// One statement, same locking as changeLeadStage, but target also reads archived leads so that
+// "archived" differs from "not_found". locked: the source would change from or to web_form (a
+// web form lead keeps its source; a manual lead never becomes web_form, even if the schema already
+// rejects it). The UPDATE decides with its WHERE: not archived, not locked and a different source
+// or detail. Only a source change inserts 'source_changed' (detail-only edits leave no activity).
+export async function changeLeadSource(
+  input: LeadSourceChangeInput,
+): Promise<"updated" | "unchanged" | "source_locked" | "archived" | "not_found"> {
+  const result = await getDb().execute<{ found: boolean; archived: boolean; locked: boolean; updated: boolean }>(sql`
+    WITH target AS (
+      SELECT
+        id, source, source_detail, archived_at IS NOT NULL AS archived,
+        source <> ${input.source}::lead_source AND 'web_form'::lead_source IN (source, ${input.source}::lead_source) AS locked
+      FROM leads
+      WHERE id = ${input.leadId}::uuid
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET source = ${input.source}::lead_source, source_detail = ${input.sourceDetail}, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id AND NOT target.archived AND NOT target.locked
+        AND (target.source <> ${input.source}::lead_source OR target.source_detail IS DISTINCT FROM ${input.sourceDetail})
+      RETURNING leads.id, target.source AS source_from
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, source_from, source_to, actor_user_id)
+      SELECT id, 'source_changed', source_from, ${input.source}::lead_source, ${input.actorUserId}
+      FROM updated
+      WHERE source_from <> ${input.source}::lead_source
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      EXISTS (SELECT 1 FROM target WHERE archived) AS archived,
+      EXISTS (SELECT 1 FROM target WHERE locked) AS locked,
+      EXISTS (SELECT 1 FROM updated) AS updated
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  if (row.archived) return "archived";
+  if (row.updated) return "updated";
+  return row.locked ? "source_locked" : "unchanged";
 }
 
 function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {

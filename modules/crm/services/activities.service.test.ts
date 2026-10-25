@@ -129,6 +129,26 @@ describe("listLeadActivities", () => {
     ]);
   });
 
+  it("returns a source_changed activity with sourceFrom/sourceTo, no body and its author", async () => {
+    useFakeDb({ responses: [[activityRow({ 0: "a1", 1: "source_changed", 5: "unknown", 6: "event" })]] });
+
+    await expect(listLeadActivities(LEAD_ID)).resolves.toEqual([
+      {
+        id: "a1",
+        type: "source_changed",
+        body: null,
+        stageFrom: null,
+        stageTo: null,
+        sourceFrom: "unknown",
+        sourceTo: "event",
+        ownerFrom: null,
+        ownerTo: null,
+        actor: { email: "agent@example.com" },
+        createdAt: new Date("2026-10-18T14:00:00Z"),
+      },
+    ]);
+  });
+
   it("returns actor: null for the web form creation and for n8n automations, and ownerFrom: null for the first owner", async () => {
     useFakeDb({
       responses: [
