@@ -34,4 +34,11 @@ export type PublicTrip = {
   priceUsd: number | null; // integer "from" price in USD; null → "Precio a consultar"
   capacity: number | null; // total informational seats
   imageUrl: string | null; // external https:// URL
+  officialUrl: string | null; // race's official website, external https:// URL
+  installmentsPriceUsd: number | null; // integer total price in installments, USD
+  depositUsd: number | null; // integer deposit to book, USD
+  companionPriceUsd: number | null; // integer companion price, USD
+  paymentTerms: string | null; // free text, 1..1000 characters, one paragraph per line
+  excludes: string[]; // 0..20 items
+  notes: string | null; // details still to be confirmed, 1..1000 characters
 };

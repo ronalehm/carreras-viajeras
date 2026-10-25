@@ -121,6 +121,13 @@ export const trips = pgTable(
     priceUsd: integer("price_usd"),
     capacity: integer("capacity"),
     imageUrl: text("image_url"),
+    officialUrl: text("official_url"),
+    installmentsPriceUsd: integer("installments_price_usd"),
+    depositUsd: integer("deposit_usd"),
+    companionPriceUsd: integer("companion_price_usd"),
+    paymentTerms: text("payment_terms"),
+    excludes: text("excludes").array().notNull().default([]),
+    notes: text("notes"),
     status: tripStatusEnum("status").notNull().default("draft"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -144,6 +151,20 @@ export const trips = pgTable(
     check("trips_price_usd_chk", sql`${table.priceUsd} IS NULL OR ${table.priceUsd} >= 0`),
     check("trips_capacity_chk", sql`${table.capacity} IS NULL OR ${table.capacity} > 0`),
     check("trips_image_url_chk", sql`${table.imageUrl} IS NULL OR ${table.imageUrl} LIKE 'https://%'`),
+    check(
+      "trips_official_url_chk",
+      sql`${table.officialUrl} IS NULL OR ${table.officialUrl} LIKE 'https://%'`,
+    ),
+    check(
+      "trips_installments_price_usd_chk",
+      sql`${table.installmentsPriceUsd} IS NULL OR ${table.installmentsPriceUsd} >= 0`,
+    ),
+    check("trips_deposit_usd_chk", sql`${table.depositUsd} IS NULL OR ${table.depositUsd} >= 0`),
+    check(
+      "trips_companion_price_usd_chk",
+      sql`${table.companionPriceUsd} IS NULL OR ${table.companionPriceUsd} >= 0`,
+    ),
+    check("trips_excludes_chk", sql`cardinality(${table.excludes}) <= 20`),
   ],
 );
 

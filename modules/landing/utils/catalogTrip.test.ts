@@ -36,6 +36,13 @@ const published: PublicTrip = {
   priceUsd: 1499,
   capacity: 100,
   imageUrl: null,
+  officialUrl: null,
+  installmentsPriceUsd: null,
+  depositUsd: null,
+  companionPriceUsd: null,
+  paymentTerms: null,
+  excludes: [],
+  notes: null,
 };
 
 beforeEach(() => {

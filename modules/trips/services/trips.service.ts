@@ -30,6 +30,13 @@ const publicColumns = {
   priceUsd: trips.priceUsd,
   capacity: trips.capacity,
   imageUrl: trips.imageUrl,
+  officialUrl: trips.officialUrl,
+  installmentsPriceUsd: trips.installmentsPriceUsd,
+  depositUsd: trips.depositUsd,
+  companionPriceUsd: trips.companionPriceUsd,
+  paymentTerms: trips.paymentTerms,
+  excludes: trips.excludes,
+  notes: trips.notes,
 } satisfies Record<keyof PublicTrip, unknown>;
 
 const tripIdSchema = z.uuid();
@@ -50,6 +57,13 @@ function editableColumns(input: TripInput) {
     priceUsd: input.priceUsd,
     capacity: input.capacity,
     imageUrl: input.imageUrl,
+    officialUrl: input.officialUrl,
+    installmentsPriceUsd: input.installmentsPriceUsd,
+    depositUsd: input.depositUsd,
+    companionPriceUsd: input.companionPriceUsd,
+    paymentTerms: input.paymentTerms,
+    excludes: input.excludes,
+    notes: input.notes,
   };
 }
 

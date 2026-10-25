@@ -153,11 +153,11 @@ Verificación manual con `npm run dev` contra una rama de Neon con la migración
 
 ## Plan de tareas
 ### Fase 1 — Campos nuevos en el catálogo (`trips`)
-- [ ] T1 — Columnas y checks en `trips`; generar la migración en local · archivos: `lib/db-schema.ts`, `drizzle/0004_*.sql`, `drizzle/meta/0004_snapshot.json`, `drizzle/meta/_journal.json` · depende de: — · secuencial (base)
-- [ ] T2 — Schema zod y tipos con tests · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts`, `modules/landing/utils/catalogTrip.test.ts` (solo añadir al objeto `published: PublicTrip` los siete campos nuevos vacíos —`null` y `excludes: []`— para que `npm run build` compile al ampliar `PublicTrip`; F2-T1 reescribe ese test) · depende de: T1 · secuencial
-- [ ] T3 — Service: columnas públicas y editables, con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo con T4
-- [ ] T4 — Formulario del CRM con tests · archivos: `modules/trips/components/TripForm.tsx`, `modules/trips/components/TripForm.test.tsx` · depende de: T2 · paralelo con T3
-- [ ] T5 — README (migración `0004` y contrato) · archivos: `README.md` · depende de: T3 · secuencial
+- [x] T1 — Columnas y checks en `trips`; generar la migración en local · archivos: `lib/db-schema.ts`, `drizzle/0004_*.sql`, `drizzle/meta/0004_snapshot.json`, `drizzle/meta/_journal.json` · depende de: — · secuencial (base)
+- [x] T2 — Schema zod y tipos con tests · archivos: `modules/trips/schemas/trips.schema.ts`, `modules/trips/schemas/trips.schema.test.ts`, `modules/trips/types/trips.types.ts`, `modules/landing/utils/catalogTrip.test.ts` (solo añadir al objeto `published: PublicTrip` los siete campos nuevos vacíos —`null` y `excludes: []`— para que `npm run build` compile al ampliar `PublicTrip`; F2-T1 reescribe ese test) · depende de: T1 · secuencial
+- [x] T3 — Service: columnas públicas y editables, con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T2 · paralelo con T4
+- [x] T4 — Formulario del CRM con tests · archivos: `modules/trips/components/TripForm.tsx`, `modules/trips/components/TripForm.test.tsx` · depende de: T2 · paralelo con T3
+- [x] T5 — README (migración `0004` y contrato) · archivos: `README.md` · depende de: T3 · secuencial
 
 ### Fase 2 — Plantilla minimalista (`landing`)
 Empieza solo con la Fase 1 en `main` y la precondición operativa F1 cumplida.
