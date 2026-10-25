@@ -17,7 +17,7 @@ import type {
   LeadOwnerOption,
   LeadTripOption,
 } from "../types/leads.types";
-import { LEAD_SOURCE_LABELS, leadTripLabel } from "../utils/leadDisplay";
+import { LEAD_SOURCE_LABELS, leadTripLabel, SOURCE_DETAIL_HINT } from "../utils/leadDisplay";
 import { LEAD_LIST_PATH } from "../utils/leadListQuery";
 
 type EditableLead = Pick<
@@ -81,7 +81,6 @@ export function LeadForm(props: LeadFormProps) {
   }
 
   const phoneHint = "Con código de país, p. ej. +51 938 127 170.";
-  const sourceDetailHint = "Nombre del evento, aliado o campaña. No escribas datos personales de otras personas.";
   const submitLabel = lead
     ? { idle: "Guardar cambios", pending: "Guardando…" }
     : { idle: "Registrar lead", pending: "Registrando…" };
@@ -99,9 +98,9 @@ export function LeadForm(props: LeadFormProps) {
             ))}
           </NativeSelect>)}
         {field("sourceDetail", "Detalle del origen",
-          <Input {...fieldProps("sourceDetail", sourceDetailHint)} maxLength={120} autoComplete="off"
+          <Input {...fieldProps("sourceDetail", SOURCE_DETAIL_HINT)} maxLength={120} autoComplete="off"
             defaultValue={values?.sourceDetail} />,
-          sourceDetailHint)}
+          SOURCE_DETAIL_HINT)}
       </div>
       {field("ownerUserId", "Responsable *",
         <NativeSelect {...fieldProps("ownerUserId")} className="w-full"

@@ -21,6 +21,10 @@ export const LEAD_STAGE_LABELS: Record<LeadStage, string> = {
   lost: "Perdido",
 };
 
+// Help text of the source detail field, in the creation form and on the lead page (Requirement 3).
+export const SOURCE_DETAIL_HINT =
+  "Nombre del evento, aliado o campaña. No escribas datos personales de otras personas.";
+
 // In the order of leadSourceSchema (Requirement 1).
 export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   event: "Feria, carrera o activación",

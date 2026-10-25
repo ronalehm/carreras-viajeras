@@ -145,10 +145,10 @@ Fase 2 (pantallas):
 - [x] T6 — (enmienda) `leadSourceChangeSchema` acepta los 14 orígenes y sus tests · archivos: `modules/crm/schemas/leads.schema.ts`, `modules/crm/schemas/leads.schema.test.ts` · depende de: T2 · paralelo (con T3, T4 y T5)
 
 ### Fase 2
-- [ ] T1 — Acción `changeLeadSourceAction` y alta con detalle · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/index.ts` · depende de: Fase 1 · secuencial (base)
-- [ ] T2 — Alta manual: selector sin valor por defecto y detalle · archivos: `modules/crm/components/LeadForm.tsx` · depende de: T1 · paralelo (con T3 y T4)
-- [ ] T3 — Ficha: `LeadSourceForm`, detalle en `LeadDetails` e historial · archivos: `modules/crm/components/LeadSourceForm.tsx`, `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadTimeline.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T1 · paralelo (con T2 y T4)
-- [ ] T4 — Lista: filtro "Origen" · archivos: `modules/crm/components/LeadFilters.tsx`, `app/crm/(protected)/leads/page.tsx` · depende de: T1 · paralelo (con T2 y T3)
+- [x] T1 — Acción `changeLeadSourceAction` y alta con detalle · archivos: `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/index.ts` · depende de: Fase 1 · secuencial (base)
+- [x] T2 — Alta manual: selector sin valor por defecto y detalle · archivos: `modules/crm/components/LeadForm.tsx` · depende de: T1 · paralelo (con T3 y T4)
+- [x] T3 — Ficha: `LeadSourceForm`, detalle en `LeadDetails` e historial · archivos: `modules/crm/components/LeadSourceForm.tsx`, `modules/crm/components/LeadDetails.tsx`, `modules/crm/components/LeadTimeline.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de: T1 · paralelo (con T2 y T4)
+- [x] T4 — Lista: filtro "Origen" · archivos: `modules/crm/components/LeadFilters.tsx`, `app/crm/(protected)/leads/page.tsx` · depende de: T1 · paralelo (con T2 y T3)
 
 ## Cambios que requiere en otras specs
 - `crm-leads-capture.md`: el tipo del payload `lead.created` y de `source` en la lectura para n8n pasa de `"web_form" | "whatsapp" | "other"` a los 14 valores del Requisito 1, sin cambiar `payload_version`. Hay que enmendarla (y volver a aprobarla) antes de implementar la F1 de esta spec, o aceptar esta spec como enmienda explícita. El flujo de n8n debe tratar cualquier origen distinto de `web_form` como alta manual.

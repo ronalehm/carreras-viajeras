@@ -8,7 +8,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { changeLeadSourceAction } from "../actions/leads.actions";
 import { manualLeadSourceSchema } from "../schemas/leads.schema";
 import type { LeadActionState, LeadSource } from "../types/leads.types";
-import { LEAD_SOURCE_LABELS } from "../utils/leadDisplay";
+import { LEAD_SOURCE_LABELS, SOURCE_DETAIL_HINT } from "../utils/leadDisplay";
 
 type LeadSourceFormProps = {
   leadId: string;
@@ -78,7 +78,7 @@ export function LeadSourceForm({ leadId, source, sourceDetail }: LeadSourceFormP
             aria-describedby={detailError ? "lead-source-help lead-source-detail-error" : "lead-source-help"}
           />
           <p id="lead-source-help" className="text-sm text-muted-foreground">
-            Nombre del evento, aliado o campaña. No escribas datos personales de otras personas.
+            {SOURCE_DETAIL_HINT}
           </p>
           {detailError && (
             <p id="lead-source-detail-error" role="alert" className="text-sm text-destructive">{detailError}</p>

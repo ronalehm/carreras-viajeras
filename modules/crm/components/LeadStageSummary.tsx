@@ -10,7 +10,7 @@ type LeadStageSummaryProps = {
   filters: LeadListFilters;
 };
 
-// Funnel: one link per stage (Requirement 1 order) to the list filtered by it, keeping the owner filter.
+// Funnel: one link per stage (Requirement 1 order) to the list filtered by it, keeping the other filters.
 export function LeadStageSummary({ stageCounts, filters }: LeadStageSummaryProps) {
   return (
     <nav aria-label="Embudo">
