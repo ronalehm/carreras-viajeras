@@ -7,8 +7,10 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
+  smallint,
   text,
   time,
   timestamp,
@@ -164,6 +166,7 @@ export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "note",
   "call",
   "message",
+  "automation",
 ]);
 
 // Leads are archived, never deleted. paid and lost are closed stages: no next action there.
@@ -181,18 +184,16 @@ export const leads = pgTable(
     source: leadSourceEnum("source").notNull(),
     stage: leadStageEnum("stage").notNull().default("new"),
     lostReason: text("lost_reason"),
-    ownerUserId: text("owner_user_id")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    // NULL = unassigned (web form leads); the CRM assigns the first owner by hand.
+    ownerUserId: text("owner_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
     nextActionDate: date("next_action_date", { mode: "string" }),
     nextActionNote: text("next_action_note"),
     consentVersion: text("consent_version").notNull(),
     consentedAt: timestamp("consented_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    createdBy: text("created_by")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    // NULL only for web form leads (leads_created_by_chk).
+    createdBy: text("created_by").references(() => profiles.userId, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -203,6 +204,9 @@ export const leads = pgTable(
     archivedBy: text("archived_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    // Web form idempotency: submissionId from the browser and SHA-256 hex of the normalized data.
+    idempotencyKey: uuid("idempotency_key"),
+    submissionHash: text("submission_hash"),
   },
   (table) => [
     check("leads_full_name_chk", sql`char_length(${table.fullName}) BETWEEN 2 AND 120`),
@@ -229,6 +233,66 @@ export const leads = pgTable(
       sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
     ),
     check("leads_archived_chk", sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`),
+    check("leads_created_by_chk", sql`${table.createdBy} IS NOT NULL OR ${table.source} = 'web_form'`),
+    check(
+      "leads_submission_chk",
+      sql`(${table.idempotencyKey} IS NULL) = (${table.submissionHash} IS NULL) AND (${table.submissionHash} IS NULL OR ${table.submissionHash} ~ '^[0-9a-f]{64}$')`,
+    ),
+    uniqueIndex("leads_idempotency_key_uq").on(table.idempotencyKey),
+  ],
+);
+
+export const outboxEventTypeEnum = pgEnum("outbox_event_type", ["lead.created", "lead.stage_changed"]);
+export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "succeeded", "dead"]);
+
+// Durable events for n8n (pull model, at-least-once). id is the event_id n8n deduplicates on.
+// payload is minimal and never holds personal data. A lease (lease_token + lease_until) exists
+// only while processing; available_at is the next attempt time.
+export const outboxEvents = pgTable(
+  "outbox_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: outboxEventTypeEnum("type").notNull(),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "restrict" }),
+    payloadVersion: smallint("payload_version").notNull().default(1),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+    status: outboxStatusEnum("status").notNull().default("pending"),
+    attempts: integer("attempts").notNull().default(0),
+    availableAt: timestamp("available_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    leaseUntil: timestamp("lease_until", { withTimezone: true }),
+    leaseToken: uuid("lease_token"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    processedAt: timestamp("processed_at", { withTimezone: true }),
+    lastErrorCode: text("last_error_code"),
+  },
+  (table) => [
+    check("outbox_events_payload_version_chk", sql`${table.payloadVersion} >= 1`),
+    check(
+      "outbox_events_payload_chk",
+      sql`jsonb_typeof(${table.payload}) = 'object' AND octet_length(${table.payload}::text) <= 1024`,
+    ),
+    check("outbox_events_attempts_chk", sql`${table.attempts} BETWEEN 0 AND 8`),
+    check(
+      "outbox_events_lease_chk",
+      sql`(${table.status} = 'processing') = (${table.leaseToken} IS NOT NULL) AND (${table.leaseToken} IS NULL) = (${table.leaseUntil} IS NULL)`,
+    ),
+    check(
+      "outbox_events_processed_chk",
+      sql`(${table.status} IN ('succeeded', 'dead')) = (${table.processedAt} IS NOT NULL)`,
+    ),
+    check(
+      "outbox_events_last_error_code_chk",
+      sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} ~ '^[a-z0-9_]{1,40}$'`,
+    ),
+    index("outbox_events_ready_idx")
+      .on(table.availableAt)
+      .where(sql`${table.status} IN ('pending', 'processing')`),
   ],
 );
 
@@ -246,28 +310,40 @@ export const leadActivities = pgTable(
     stageTo: leadStageEnum("stage_to"),
     ownerFrom: text("owner_from").references(() => profiles.userId, { onDelete: "restrict" }),
     ownerTo: text("owner_to").references(() => profiles.userId, { onDelete: "restrict" }),
-    actorUserId: text("actor_user_id")
-      .notNull()
-      .references(() => profiles.userId, { onDelete: "restrict" }),
+    // NULL only for system activities: created (web form) and automation (n8n).
+    actorUserId: text("actor_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
+    // The outbox event an automation activity comes from (one activity per event).
+    sourceEventId: uuid("source_event_id").references(() => outboxEvents.id, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    // body: required for manual follow-up, optional on created/stage_changed, forbidden otherwise.
+    // body: required for manual follow-up, required (≤ 500) for automation, optional on
+    // created/stage_changed, forbidden otherwise.
     check(
       "lead_activities_body_chk",
-      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} IN ('created', 'stage_changed') THEN true ELSE ${table.body} IS NULL END`,
+      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} = 'automation' THEN ${table.body} IS NOT NULL AND char_length(${table.body}) <= 500 WHEN ${table.type} IN ('created', 'stage_changed') THEN true ELSE ${table.body} IS NULL END`,
     ),
     check(
       "lead_activities_stage_chk",
       sql`CASE WHEN ${table.type} = 'stage_changed' THEN ${table.stageFrom} IS NOT NULL AND ${table.stageTo} IS NOT NULL AND ${table.stageFrom} <> ${table.stageTo} ELSE ${table.stageFrom} IS NULL AND ${table.stageTo} IS NULL END`,
     ),
+    // owner_from is NULL when the first owner is assigned (web form leads).
     check(
       "lead_activities_owner_chk",
-      sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerFrom} IS NOT NULL AND ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} <> ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+      sql`CASE WHEN ${table.type} = 'owner_changed' THEN ${table.ownerTo} IS NOT NULL AND ${table.ownerFrom} IS DISTINCT FROM ${table.ownerTo} ELSE ${table.ownerFrom} IS NULL AND ${table.ownerTo} IS NULL END`,
+    ),
+    check(
+      "lead_activities_actor_chk",
+      sql`${table.actorUserId} IS NOT NULL OR ${table.type} IN ('created', 'automation')`,
+    ),
+    check(
+      "lead_activities_event_chk",
+      sql`(${table.type} = 'automation') = (${table.sourceEventId} IS NOT NULL)`,
     ),
     index("lead_activities_lead_created_idx").on(table.leadId, table.createdAt),
+    uniqueIndex("lead_activities_source_event_uq").on(table.sourceEventId),
   ],
 );
 

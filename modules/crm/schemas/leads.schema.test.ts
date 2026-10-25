@@ -3,13 +3,21 @@ import { z } from "zod";
 import { leadActivityTypeEnum, leadSourceEnum, leadStageEnum } from "@/lib/db-schema";
 import {
   createLeadSchema,
+  leadActivityFormSchema,
   leadActivityTypeSchema,
+  leadIdSchema,
   leadListQuerySchema,
+  leadOwnerChangeSchema,
   leadSourceSchema,
+  leadStageChangeSchema,
   leadStageSchema,
+  nextActionSchema,
+  phoneSchema,
+  updateLeadSchema,
 } from "./leads.schema";
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
+const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 
 // Strings as Object.fromEntries(formData) delivers them: blanks are "", the checkbox is "on".
 const validForm = {
@@ -25,8 +33,8 @@ const validForm = {
   consent: "on",
 };
 
-function fieldErrors(input: Record<string, unknown>) {
-  const result = createLeadSchema.safeParse(input);
+function fieldErrors(input: Record<string, unknown>, schema: z.ZodType = createLeadSchema) {
+  const result = schema.safeParse(input);
   if (result.success) throw new Error("expected a validation error");
   return z.flattenError(result.error).fieldErrors as Record<string, string[] | undefined>;
 }
@@ -36,6 +44,21 @@ describe("lead enums", () => {
     expect(leadStageSchema.options).toEqual(leadStageEnum.enumValues);
     expect(leadSourceSchema.options).toEqual(leadSourceEnum.enumValues);
     expect(leadActivityTypeSchema.options).toEqual(leadActivityTypeEnum.enumValues);
+  });
+
+  it("include the automation activity type (n8n)", () => {
+    expect(leadActivityTypeSchema.options).toContain("automation");
+    expect(leadActivityTypeEnum.enumValues).toContain("automation");
+  });
+});
+
+describe("phoneSchema", () => {
+  it("normalizes to E.164 and rejects a number without country code", () => {
+    expect(phoneSchema.parse("+51 938-127 170")).toBe("+51938127170");
+    expect(phoneSchema.parse("+56 (9) 1234.5678")).toBe("+56912345678");
+    const result = phoneSchema.safeParse("938 127 170");
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0].message).toBe("Escribe el número con código de país, p. ej. +51 938 127 170.");
   });
 });
 
@@ -85,6 +108,21 @@ describe("createLeadSchema", () => {
       destinationText: "Panamá",
       source: "other",
       note: "Quiere la 21K.",
+    });
+  });
+
+  it("turns missing optional keys into null without errors", () => {
+    const optionalKeys = ["email", "location", "tripId", "destinationText", "note"];
+    const required = Object.fromEntries(Object.entries(validForm).filter(([key]) => !optionalKeys.includes(key)));
+    const result = createLeadSchema.safeParse(required);
+
+    expect(result.success).toBe(true);
+    expect(result.data).toMatchObject({
+      email: null,
+      location: null,
+      tripId: null,
+      destinationText: null,
+      note: null,
     });
   });
 
@@ -174,5 +212,248 @@ describe("leadListQuerySchema", () => {
 
   it("accepts the last page (1000)", () => {
     expect(leadListQuerySchema.parse({ pagina: "1000" }).pagina).toBe(1000);
+  });
+
+  it.each(["vencidos", "pendientes"])("parses seguimiento=%s", (seguimiento) => {
+    expect(leadListQuerySchema.parse({ seguimiento }).seguimiento).toBe(seguimiento);
+  });
+
+  it.each([["foo"], ["overdue"], ["pending"], [""], [["vencidos", "vencidos"]]])(
+    "treats an invalid seguimiento %j as no filter",
+    (seguimiento) => {
+      expect(leadListQuerySchema.parse({ seguimiento, etapa: "new" })).toEqual({
+        etapa: "new",
+        responsable: undefined,
+        seguimiento: undefined,
+        pagina: 1,
+      });
+    },
+  );
+});
+
+describe("leadListQuerySchema: archivados", () => {
+  it("accepts etapa=archivados (archived leads)", () => {
+    expect(leadListQuerySchema.parse({ etapa: "archivados", responsable: "mios" })).toEqual({
+      etapa: "archivados",
+      responsable: "mios",
+      seguimiento: undefined,
+      pagina: 1,
+    });
+  });
+
+  it.each([["archived"], ["Archivados"], [["archivados", "archivados"]]])(
+    "treats etapa=%j as no stage filter",
+    (etapa) => {
+      expect(leadListQuerySchema.parse({ etapa }).etapa).toBeUndefined();
+    },
+  );
+});
+
+describe("leadIdSchema", () => {
+  it("keeps only the lead id", () => {
+    expect(leadIdSchema.parse({ leadId: LEAD_ID, archivedBy: "intruder", stage: "paid" })).toEqual({
+      leadId: LEAD_ID,
+    });
+  });
+
+  it.each([[{ leadId: "abc" }], [{}]])("rejects %j with «El lead no es válido.»", (input) => {
+    expect(fieldErrors(input, leadIdSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
+describe("updateLeadSchema", () => {
+  const validEdit = {
+    leadId: LEAD_ID,
+    fullName: " Ana Pérez ",
+    phone: "+51 938 127 170",
+    email: "",
+    location: " Lima ",
+    tripId: TRIP_ID,
+    destinationText: "",
+  };
+
+  it("normalizes the contact fields and drops every other key", () => {
+    const result = updateLeadSchema.parse({
+      ...validEdit,
+      stage: "paid",
+      source: "web_form",
+      ownerUserId: "intruder",
+      actorUserId: "intruder",
+      consent: "on",
+    });
+    expect(result).toEqual({
+      leadId: LEAD_ID,
+      fullName: "Ana Pérez",
+      phone: "+51938127170",
+      email: null,
+      location: "Lima",
+      tripId: TRIP_ID,
+      destinationText: null,
+    });
+  });
+
+  it.each([["missing", undefined], ["not a UUID", "abc"]])("rejects a leadId %s", (_, leadId) => {
+    expect(fieldErrors({ ...validEdit, leadId }, updateLeadSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+
+  it("rejects an invalid email with the same message as the manual form", () => {
+    expect(fieldErrors({ ...validEdit, email: "ana@" }, updateLeadSchema).email).toEqual([
+      "Introduce un correo válido.",
+    ]);
+  });
+});
+
+describe("leadStageChangeSchema", () => {
+  it("requires a lost reason for lost", () => {
+    for (const lostReason of [undefined, "", "   "]) {
+      expect(fieldErrors({ leadId: LEAD_ID, stage: "lost", lostReason }, leadStageChangeSchema).lostReason).toEqual([
+        "Indica el motivo de la pérdida.",
+      ]);
+    }
+  });
+
+  it.each(["ab", "x".repeat(201)])("rejects a lost reason of %#: outside 3–200 characters", (lostReason) => {
+    expect(fieldErrors({ leadId: LEAD_ID, stage: "lost", lostReason }, leadStageChangeSchema).lostReason).toEqual([
+      "El motivo debe tener entre 3 y 200 caracteres.",
+    ]);
+  });
+
+  it("trims and keeps the reason for lost", () => {
+    expect(leadStageChangeSchema.parse({ leadId: LEAD_ID, stage: "lost", lostReason: "  Eligió otra agencia " })).toEqual({
+      leadId: LEAD_ID,
+      stage: "lost",
+      lostReason: "Eligió otra agencia",
+    });
+  });
+
+  it("forces the reason to null in any other stage", () => {
+    expect(
+      leadStageChangeSchema.parse({ leadId: LEAD_ID, stage: "quoted", lostReason: "x", actorUserId: "intruder" }),
+    ).toEqual({ leadId: LEAD_ID, stage: "quoted", lostReason: null });
+  });
+
+  it("rejects an unknown stage and a leadId that is not a UUID", () => {
+    const errors = fieldErrors({ leadId: "abc", stage: "archived", lostReason: "" }, leadStageChangeSchema);
+    expect(errors.stage).toEqual(["Elige una etapa."]);
+    expect(errors.leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
+describe("leadOwnerChangeSchema", () => {
+  it("accepts an owner id and drops other keys", () => {
+    expect(leadOwnerChangeSchema.parse({ leadId: LEAD_ID, ownerUserId: "user-2", actorUserId: "x" })).toEqual({
+      leadId: LEAD_ID,
+      ownerUserId: "user-2",
+    });
+  });
+
+  it.each([["missing", undefined], ["empty", ""]])("never leaves a lead without owner: %s owner is rejected", (_, ownerUserId) => {
+    expect(fieldErrors({ leadId: LEAD_ID, ownerUserId }, leadOwnerChangeSchema).ownerUserId).toEqual([
+      "Elige un responsable.",
+    ]);
+  });
+});
+
+describe("leadActivityFormSchema", () => {
+  const valid = { leadId: LEAD_ID, type: "call", body: "  Llamó para preguntar por el viaje.  " };
+
+  it("accepts a manual follow-up, trims the text and drops other keys", () => {
+    expect(leadActivityFormSchema.parse({ ...valid, actorUserId: "intruder", stageFrom: "new" })).toEqual({
+      leadId: LEAD_ID,
+      type: "call",
+      body: "Llamó para preguntar por el viaje.",
+    });
+  });
+
+  it("only offers manual types, all of them activity types", () => {
+    expect(leadActivityFormSchema.shape.type.options).toEqual(["note", "call", "message"]);
+    for (const type of leadActivityFormSchema.shape.type.options) {
+      expect(leadActivityTypeSchema.options).toContain(type);
+    }
+  });
+
+  it.each(["created", "stage_changed", "owner_changed", "archived", "automation", ""])(
+    "rejects the system type %j",
+    (type) => {
+      expect(fieldErrors({ ...valid, type }, leadActivityFormSchema).type).toEqual(["Elige el tipo de seguimiento."]);
+    },
+  );
+
+  it.each([["empty", ""], ["blank", "   "], ["missing", undefined]])("rejects a %s text", (_, body) => {
+    expect(fieldErrors({ ...valid, body }, leadActivityFormSchema).body).toEqual(["Escribe el texto del seguimiento."]);
+  });
+
+  it("accepts 2000 characters and rejects 2001", () => {
+    expect(leadActivityFormSchema.safeParse({ ...valid, body: "a".repeat(2000) }).success).toBe(true);
+    expect(fieldErrors({ ...valid, body: "a".repeat(2001) }, leadActivityFormSchema).body).toEqual([
+      "El texto puede tener hasta 2000 caracteres.",
+    ]);
+  });
+
+  it("rejects a leadId that is not a UUID", () => {
+    expect(fieldErrors({ ...valid, leadId: "abc" }, leadActivityFormSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+});
+
+describe("nextActionSchema", () => {
+  const valid = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "  Enviar la cotización.  " };
+
+  it("accepts a date with a note, trims the note and drops other keys", () => {
+    expect(nextActionSchema.parse({ ...valid, stage: "paid", actorUserId: "intruder" })).toEqual({
+      leadId: LEAD_ID,
+      nextActionDate: "2026-10-25",
+      nextActionNote: "Enviar la cotización.",
+    });
+  });
+
+  it("accepts a date without a note", () => {
+    expect(nextActionSchema.parse({ ...valid, nextActionNote: "  " })).toEqual({
+      leadId: LEAD_ID,
+      nextActionDate: "2026-10-25",
+      nextActionNote: null,
+    });
+  });
+
+  it.each([["empty", { nextActionDate: "", nextActionNote: "" }], ["missing", {}]])(
+    "turns %s fields into null/null (clears the next action)",
+    (_, fields) => {
+      expect(nextActionSchema.parse({ leadId: LEAD_ID, ...fields })).toEqual({
+        leadId: LEAD_ID,
+        nextActionDate: null,
+        nextActionNote: null,
+      });
+    },
+  );
+
+  it("rejects a note without a date with «Indica la fecha.» on the date", () => {
+    expect(fieldErrors({ ...valid, nextActionDate: "" }, nextActionSchema)).toEqual({
+      nextActionDate: ["Indica la fecha."],
+    });
+  });
+
+  it.each(["2026-02-30", "2026-13-01", "25/10/2026", "2026-10-25T10:00", "mañana"])(
+    "rejects the invalid date %j",
+    (nextActionDate) => {
+      expect(fieldErrors({ ...valid, nextActionDate }, nextActionSchema).nextActionDate).toEqual([
+        "Indica una fecha válida.",
+      ]);
+    },
+  );
+
+  it("accepts a 200-character note and rejects 201", () => {
+    expect(nextActionSchema.safeParse({ ...valid, nextActionNote: "a".repeat(200) }).success).toBe(true);
+    expect(fieldErrors({ ...valid, nextActionNote: "a".repeat(201) }, nextActionSchema).nextActionNote).toEqual([
+      "La nota puede tener hasta 200 caracteres.",
+    ]);
+  });
+
+  it("rejects a leadId that is not a UUID", () => {
+    expect(fieldErrors({ ...valid, leadId: "abc" }, nextActionSchema).leadId).toEqual(["El lead no es válido."]);
+  });
+
+  it("never echoes the input in its messages", () => {
+    const result = nextActionSchema.safeParse({ ...valid, nextActionDate: "secreto", nextActionNote: "b".repeat(201) });
+    expect(result.success).toBe(false);
+    expect(JSON.stringify(result.error?.issues.map((issue) => issue.message))).not.toMatch(/secreto|bbbb/);
   });
 });

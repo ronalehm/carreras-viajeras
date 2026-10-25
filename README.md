@@ -17,7 +17,7 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Operación posterior | Outbox persistente en Neon y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
-No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Aún no hay tablas de leads, organizaciones de colaboradores ni captura durable de leads: requieren sus specs.
+No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (migración pendiente de aplicar) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0004` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)); ambas están pendientes de aplicar (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
 
 ## Preparación local
 
@@ -39,6 +39,11 @@ Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo
 | `DATABASE_URL` | Conexión PostgreSQL con TLS de un rol de aplicación con permisos mínimos |
 | `NEON_AUTH_BASE_URL` | Endpoint HTTPS de Neon Auth, no el dominio de la aplicación |
 | `NEON_AUTH_COOKIE_SECRET` | Secreto aleatorio de al menos 32 caracteres, solo servidor |
+| `N8N_API_TOKEN` | Opcional. Token de la API privada para n8n (al menos 32 caracteres), solo servidor. Ver [Secretos de integraciones](#secretos-de-integraciones) |
+| `TURNSTILE_SECRET_KEY` | Opcional. Secret Key de Turnstile (antispam del formulario), solo servidor. Ver [Activar la protección antispam (Turnstile)](#activar-la-protección-antispam-turnstile) |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Opcional. Site Key de Turnstile: es pública y se incrusta al compilar; solo en `.env.local` y en las variables de build |
+
+Las tres variables opcionales se validan solo cuando se usan: si faltan, el CRM y el acceso siguen funcionando, y compilar no las exige.
 
 El origen previsto de producción es `https://carreras-viajeras.mentec.dev`. Para desarrollo, usar el origen local. Neon Auth incluye localhost preconfigurado; comprobar el callback y el origen local si aparece un problema de autenticación. La configuración se valida al usarla en una petición; compilar no debe conectarse a Neon ni exigir secretos.
 
@@ -61,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cuatro migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)) y `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay cinco migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)) y `drizzle/0004_fluffy_prodigy.sql` prepara la captura y el outbox (pendiente, después de `0003` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -71,7 +76,7 @@ Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión
 4. El CRM exige correo verificado y una asignación de staff activa por ID de usuario, con denegación por defecto (ver [Acceso al CRM](#acceso-al-crm)); Access puede ser una defensa adicional.
 5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
-Los futuros leads y sus eventos se confirmarán juntos en Neon; n8n local los procesará con reintentos mediante API privada. No hay formulario, outbox ni integración WhatsApp API implementados todavía.
+Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya escribe el evento `lead.created` en el outbox (`outbox_events`, migración `0004`). n8n local los recoge con reintentos mediante una API privada (ver [Automatizaciones con n8n](#automatizaciones-con-n8n)); el formulario web conectado llega en las Fases 3 y 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md). No hay integración con la API de WhatsApp.
 
 ## Acceso al CRM
 
@@ -238,7 +243,7 @@ Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon
 3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
 4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0002` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0002_tough_warpath.sql`.
 5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
-6. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass) ORDER BY 1, 2;` lista 22 restricciones (dos `*_pkey`, doce `*_chk` y ocho `*_fk`), y `SELECT count(*) FROM leads;` devuelve 0.
+6. Comprobar las tablas: `SELECT conrelid::regclass, conname FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass) AND contype IN ('p','c','f') ORDER BY 1, 2;` lista 22 restricciones (dos `*_pkey`, doce `*_chk` y ocho `*_fk`), y `SELECT count(*) FROM leads;` devuelve 0.
 
 No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
 
@@ -253,6 +258,241 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 
 Un lead válido (`'+51938127170'`, email en minúsculas, `source = 'whatsapp'`, `consent_version = 'crm-manual-v1'`) y su actividad `created` sí se insertan.
 
+### Migración de captura y outbox
+
+`drizzle/0004_fluffy_prodigy.sql` prepara la captura automática del formulario web y el outbox para n8n ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)). Está pendiente de aplicar por el usuario. **Primero se prueba en una rama de desarrollo de Neon**, y después se aplica en `production`.
+
+**Orden: `0001` → `0002` → `0003` → `0004`.** `0004` solo depende de `0002`, pero aplicarlas en orden evita confusiones. Hoy ninguna de las cuatro está aplicada en Neon, así que en cada rama hay que aplicar, en este orden:
+
+1. `0001` (viajes), siguiendo [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes);
+2. `0002` (leads), siguiendo [Migración de la tabla de leads](#migración-de-la-tabla-de-leads);
+3. `0003` (reservas), siguiendo [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas);
+4. `0004` (esta sección), **en dos bloques**.
+
+No volver a aplicar `0000` (ya está en `production`) ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace `0004`** (todo en `public`):
+
+- crea los enums `outbox_event_type` y `outbox_status`, y la tabla `outbox_events` (seis CHECK, la clave foránea hacia `leads` y el índice `outbox_events_ready_idx`);
+- añade el tipo de actividad `automation` (`ALTER TYPE … ADD VALUE 'automation'`);
+- en `leads`: el responsable (`owner_user_id`) y el autor (`created_by`) pasan a ser opcionales (los leads del formulario web nacen sin ellos), y añade `idempotency_key`, `submission_hash`, el índice único `leads_idempotency_key_uq` y los CHECK `leads_created_by_chk` y `leads_submission_chk`;
+- en `lead_activities`: el autor (`actor_user_id`) pasa a ser opcional, añade `source_event_id` (clave foránea hacia `outbox_events` e índice único `lead_activities_source_event_uq`), los CHECK `lead_activities_actor_chk` y `lead_activities_event_chk`, y sustituye `lead_activities_body_chk` y `lead_activities_owner_chk`.
+
+Revisión previa: `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0004_fluffy_prodigy.sql` no devuelve nada. Los únicos `DROP` del archivo son tres `DROP NOT NULL` y los dos `DROP CONSTRAINT` de los CHECK sustituidos. No toca `profiles`, `staff_*`, `trips` ni las tablas de reservas de `0003`.
+
+**Por qué en dos bloques:** PostgreSQL no deja usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos usan `'automation'`. Si se pega el archivo entero en una sola transacción, falla con `unsafe use of new value "automation"` y no se guarda nada (se puede repetir bien después).
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0002` ya está aplicada en esa rama: `SELECT to_regclass('public.leads');` no debe devolver `NULL`. Comprobar también que `0004` **no** está aplicada: `SELECT to_regclass('public.outbox_events');` debe devolver `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. **Bloque 1.** Ejecutar solo esta línea, sin `BEGIN;` ni `COMMIT;`, y esperar a que termine:
+
+   ```sql
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 'automation';
+   ```
+
+   Comprobar: `SELECT enum_range(NULL::lead_activity_type);` termina en `automation`.
+4. **Bloque 2.** Copiar el contenido de `drizzle/0004_fluffy_prodigy.sql` y **borrar la línea del paso 3** (`ALTER TYPE "public"."lead_activity_type" ADD VALUE 'automation';--> statement-breakpoint`, la tercera del archivo). Pegar el resto entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Si por error se deja esa línea, la transacción falla con `enum label "automation" already exists` y no cambia nada: quitarla y repetir. Si repites todo el procedimiento y el **bloque 1** responde `already exists`, no pasa nada: el bloque 1 ya estaba aplicado; sigue directamente con el bloque 2.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   L="ALTER TYPE \"public\".\"lead_activity_type\" ADD VALUE 'automation';"
+   psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -c "$L"
+   grep -vF "$L" drizzle/0004_fluffy_prodigy.sql | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+5. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar: `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass, 'public.outbox_events'::regclass) AND contype IN ('p','c','f');` devuelve 35 (tres `*_pkey`, veintidós `*_chk` y diez `*_fk`), y `SELECT count(*) FROM outbox_events;` devuelve 0.
+
+Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (se pueden repetir las inserciones; nada queda guardado). Con dos perfiles de staff de prueba creados en esa misma transacción:
+
+- la base **acepta** un lead `source = 'web_form'` sin `owner_user_id` ni `created_by` (`consent_version = 'web-form-v1'`), su actividad `created` sin autor, y una actividad `owner_changed` con `owner_from` nulo y `owner_to` = uno de los perfiles;
+- la base **rechaza** en `leads` y `lead_activities`: un lead `whatsapp` sin `created_by`; un `idempotency_key` sin `submission_hash`; un `idempotency_key` repetido; una actividad `note` sin autor; una actividad `automation` sin `source_event_id` o sin texto; un `owner_changed` sin `owner_to`;
+- la base **rechaza** en `outbox_events`: `status = 'processing'` sin `lease_token`; `attempts = 9`; `last_error_code = 'Error de SMTP'`; un `payload` de más de 1 KiB; `status = 'succeeded'` sin `processed_at`.
+
+### Activar la protección antispam (Turnstile)
+
+Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en el formulario de `/contacto` y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
+
+1. Entra en el panel de Cloudflare (dash.cloudflare.com) con la cuenta del dominio `mentec.dev` y abre el menú **Turnstile** → **Add widget**.
+2. Rellena: nombre "Carreras Viajeras – formulario de contacto"; hostname `carreras-viajeras.mentec.dev`; modo **Managed**; sin *pre-clearance*. Guarda.
+3. Cloudflare muestra dos claves: la **Site Key** (pública) y la **Secret Key** (privada). Cópialas a un lugar seguro, como tu gestor de contraseñas. No compartas nunca la Secret Key.
+4. **En tu computadora:**
+   - abre `.env.local` (la copia de `.env.example`) y pega `NEXT_PUBLIC_TURNSTILE_SITE_KEY=<tu Site Key>` y `TURNSTILE_SECRET_KEY=<tu Secret Key>`;
+   - abre `.dev.vars` (la copia de `.dev.vars.example`) y pega solo `TURNSTILE_SECRET_KEY=<tu Secret Key>`.
+
+   Para probar en local sin el widget real, usa las **claves de prueba** que publica Cloudflare: Site Key `1x00000000000000000000AA` y Secret Key `1x0000000000000000000000000000000AA` (siempre aprueban). Solo funcionan con `npm run dev`: fuera de desarrollo el servidor las rechaza. Al revés, tu widget real solo funciona en `carreras-viajeras.mentec.dev`, así que con `npm run dev` usa siempre las de prueba. En `.dev.vars` (que usa `npm run preview`, en modo producción) no pongas claves de prueba.
+5. **En Cloudflare (producción):** Workers & Pages → `carreras-viajeras` → **Settings** → **Variables and Secrets** → **Add** → tipo **Secret**, nombre `TURNSTILE_SECRET_KEY`, valor tu Secret Key → guardar. Si prefieres la terminal: `npx wrangler secret put TURNSTILE_SECRET_KEY` y pega el valor cuando lo pida.
+6. **Variable de build:** en el mismo Worker, **Settings** → **Build** → *Variables and secrets* → añade `NEXT_PUBLIC_TURNSTILE_SITE_KEY` con tu Site Key. Es pública y se incrusta al compilar. Si despliegas desde tu computadora con `npm run deploy`, se toma de `.env.local`: **antes de desplegar, comprueba que ahí está tu Site Key real y no la de prueba**; si no, el formulario rechazará todos los envíos.
+7. **Comprobar:** tras el siguiente despliegue (solo cuando lo autorices), abre `/contacto`. Debe verse la casilla de verificación de Cloudflare y, al enviar una consulta de prueba, el mensaje "¡Listo! Recibimos tu consulta…". Si aparece "No pudimos verificar el envío", revisa que el hostname del widget sea `carreras-viajeras.mentec.dev` y que las dos claves sean las correctas. (El formulario conectado llega en la Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md); hasta entonces solo se cargan las claves.)
+8. **Si una clave se filtra:** en Turnstile → tu widget → **Rotate secret key**, y actualiza el Secret `TURNSTILE_SECRET_KEY` del Worker (paso 5) y tus archivos locales (paso 4).
+
+### Secretos de integraciones
+
+`N8N_API_TOKEN` protege la API privada que usa n8n (ver [Automatizaciones con n8n](#automatizaciones-con-n8n)). No es `DATABASE_URL`: n8n nunca recibe credenciales de la base.
+
+1. Genera un valor aleatorio de al menos 32 caracteres en tu computadora, por ejemplo con `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`.
+2. Guárdalo como **Secret** del Worker con el nombre `N8N_API_TOKEN` (igual que en el paso 5 de Turnstile, o con `npx wrangler secret put N8N_API_TOKEN`).
+3. Para pruebas locales, pégalo en `.env.local` y en `.dev.vars` como `N8N_API_TOKEN=<valor>`.
+4. En n8n, el mismo valor va en una credencial de cabecera (`Authorization: Bearer <valor>`); ver [Automatizaciones con n8n](#automatizaciones-con-n8n).
+
+Si falta, la API de n8n responderá que no está configurada y el resto de la aplicación sigue funcionando. Si se filtra, genera otro valor y actualiza el Secret, tus archivos locales y la credencial de n8n.
+
+### Automatizaciones con n8n
+
+n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
+
+Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0004` aplicada.
+
+#### 1. Credenciales (solo dentro de n8n)
+
+En n8n → **Credentials** → **Add credential**:
+
+1. **Header Auth** (para hablar con la web): nombre `Authorization`, valor `Bearer <tu N8N_API_TOKEN>` (la palabra `Bearer`, un espacio y el mismo valor que guardaste como Secret, ver [Secretos de integraciones](#secretos-de-integraciones)).
+2. **SMTP** (para enviarte los correos): los datos del servidor de correo de tu cuenta.
+3. **Google Gemini** (para redactar los borradores): la API key que creas en Google AI Studio.
+
+Estas tres credenciales viven **solo en n8n**. Nunca se copian al repositorio, a `.env.local`, a `.dev.vars` ni al Worker. La API key de Gemini nunca llega a la web.
+
+#### 2. La API privada (qué puede pedir n8n)
+
+Todas las peticiones usan la credencial *Header Auth* y, si llevan cuerpo, `Content-Type: application/json` (como máximo 4 KiB). Las respuestas no se guardan en caché.
+
+| Petición | Cuerpo | Respuesta correcta |
+|---|---|---|
+| `POST /api/integrations/n8n/events/claim` | `{ "limit": 10 }` (de 1 a 25; sin cuerpo, 10) | `200 { "events": [...] }` (lista vacía si no hay nada) |
+| `POST /api/integrations/n8n/events/{id}/ack` | `{ "leaseToken": "..." }` | `200 { "status": "succeeded" }` |
+| `POST /api/integrations/n8n/events/{id}/fail` | `{ "leaseToken": "...", "errorCode": "smtp_error" }` | `200 { "status": "pending", "availableAt": "..." }` o `200 { "status": "dead" }` |
+| `GET /api/integrations/n8n/leads/{id}` | — | `200` con los datos del lead (abajo) |
+
+- **claim** ("reclamar"): entrega hasta `limit` eventos listos, los más antiguos primero, y los reserva para ti durante **5 minutos** (*lease*). Cada evento trae `id`, `type` (`lead.created` o `lead.stage_changed`), `leadId`, `payloadVersion`, `payload` (para `lead.created`, `{ "source": "web_form" | "whatsapp" | "other" }`), `attempts` (intento actual, de 1 a 8), `leaseToken`, `leaseUntil` y `createdAt`.
+- **ack** ("listo"): confirma que el evento está procesado. Hay que enviar el `leaseToken` que llegó con ese evento.
+- **fail** ("falló"): devuelve el evento a la cola para reintentarlo más tarde (30 s, 1 min, 2 min, 4 min… con algo de variación, hasta 1 hora). `errorCode` es un código corto en minúsculas, números y `_` (máximo 40). Al octavo intento fallido el evento queda `dead` (muerto) y no se vuelve a entregar.
+- **leads/{id}**: los datos mínimos del lead: `id`, `fullName`, `firstName` (solo el nombre de pila), `email`, `phone` (con `+` y código de país), `stage`, `source`, `trip` (`{ slug, title }` o `null`), `destinationText`, `owner` (`{ email }` del responsable o `null` si no tiene), `archived` y `createdAt`. No incluye ciudad, notas, historial ni consentimiento.
+
+Errores comunes: `400 { "error": "invalid_request" }` (datos mal escritos), `401 { "error": "unauthorized" }` (token ausente o incorrecto), `404 { "error": "not_found" }` (el lead no existe), `409 { "error": "lease_lost" }` (la reserva de 5 minutos venció o ese evento se volvió a entregar), `500 { "error": "internal_error" }` y `503 { "error": "not_configured" }` (falta `N8N_API_TOKEN` en la web).
+
+Si n8n se reinicia a mitad de un evento, no pasa nada: al vencer los 5 minutos ese evento vuelve a entregarse con otro `leaseToken`. Por eso un evento puede llegar **más de una vez**, y n8n debe evitar avisarte dos veces (apartado 3, paso 5).
+
+#### 3. El workflow, paso a paso
+
+En n8n, `$json` son los datos del nodo **inmediatamente anterior**, que cambian de un paso a otro. Por eso esta guía pone **nombre** a los nodos (el texto entre comillas: haz clic en el título del nodo y escríbelo igual) y toma cada dato del nodo que lo tiene, con `$('Nombre del nodo').item.json.<campo>`. Así el ack siempre usa el `id` y el `leaseToken` del **evento**, y nunca el id del lead.
+
+1. **Schedule Trigger**: cada minuto.
+2. **HTTP Request** "Reclamar eventos": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/claim` con la credencial *Header Auth* y cuerpo `{ "limit": 10 }`.
+3. **Split Out** "Split Out" sobre el campo `events`: un item por evento. Si la lista viene vacía, el workflow termina ahí.
+4. **Loop Over Items** "Uno a uno" con *Batch Size* = `1`. Conecta su salida *loop* al paso 5 y deja sin conectar la salida *done*. Al final de cada camino (el nodo "Ack" y el nodo "Fail", vengan de donde vengan) conecta la salida **de vuelta a la entrada de "Uno a uno"**, para que pase al evento siguiente. Dentro del bucle, el evento actual es siempre `$('Uno a uno').item.json` (`id`, `leadId`, `leaseToken`, `type`, `payload`).
+
+   **Por qué el bucle:** n8n pasa los items en grupo de un nodo al siguiente. Sin el bucle, una búsqueda que no encuentra nada (paso 5) o un nodo que se queda sin salida harían que los demás eventos del lote se perdieran por el camino: volverían a llegar cada 5 minutos y podrían acabar `dead` sin procesarse. Con un solo evento por vuelta, cada uno recorre el flujo completo y termina siempre en "Ack" o en "Fail".
+5. **¿Ya lo procesé?** Crea en n8n una tabla (*Data table*) llamada `eventos_procesados` con una columna `event_id` (no la llames `id`: la tabla ya tiene una columna `id` propia).
+   - Nodo **Data table** "Buscar procesado": obtener filas donde `event_id` es igual a `{{ $('Uno a uno').item.json.id }}`. En **Settings**, activa *Always Output Data* para que el workflow siga aunque no encuentre nada. (Esa opción actúa sobre el nodo entero, no sobre cada item; por eso es correcta aquí, donde gracias al bucle solo hay un evento por vuelta.)
+   - Nodo **If** "¿Ya procesado?": si `{{ $('Buscar procesado').item.json.event_id }}` no está vacío, el correo ya se envió antes: ve directo al nodo "Ack" (paso 14) y termina. No uses un filtro que descarte el evento sin hacer el ack: volvería a llegar una y otra vez hasta quedar `dead`.
+6. **HTTP Request** "Leer lead": `GET https://carreras-viajeras.mentec.dev/api/integrations/n8n/leads/{{ $('Uno a uno').item.json.leadId }}` con la credencial *Header Auth*. En **Settings** → *On Error* elige *Continue (using error output)*: si no, un 404 detiene todo el workflow. Conecta la **salida de error** al nodo "Fail" con el código `lead_not_found` (por esa salida también llegan otros fallos de lectura, como la web caída; el evento se reintenta igual). A partir de aquí, el lead es siempre `$('Leer lead').item.json` (`fullName`, `firstName`, `email`, `phone`, `stage`, `source`, `trip`, `destinationText`, `archived`).
+7. **Edit Fields (Set)** "Datos para Gemini", con *Include Other Input Fields* **desactivado** para que solo salgan estos tres campos:
+   - `etapa`: `{{ $('Uno a uno').item.json.type === 'lead.created' ? 'new' : $('Uno a uno').item.json.payload.stageTo }}` (la etapa del evento);
+   - `firstName`: `{{ $('Leer lead').item.json.firstName }}`;
+   - `viaje`: `{{ $('Leer lead').item.json.trip ? $('Leer lead').item.json.trip.title : ($('Leer lead').item.json.destinationText || 'nuestros viajes') }}`.
+8. **If** "¿Sigue vigente?": si `{{ $('Leer lead').item.json.archived }}` es verdadero, o si `{{ $('Leer lead').item.json.stage }}` es distinto de `{{ $('Datos para Gemini').item.json.etapa }}`, el evento quedó viejo: ve al nodo "Ack" sin preparar nada.
+9. **Switch** "Etapa" sobre `{{ $('Datos para Gemini').item.json.etapa }}`, con una salida por etapa (`new`, `contacted`, `quoted`, `reserved`, `paid`, `lost`). Para `lead.created` la etapa es `new`. (Los eventos `lead.stage_changed` aún no se emiten: el CRM los enviará en la Fase 5 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md).)
+10. **Nodo de Gemini** en cada salida del Switch (crea uno y duplícalo; solo cambia el objetivo de la etapa, apartado 4). En **Settings** de cada uno: *On Error* → *Continue (using error output)* y tiempo máximo de **20 segundos** (si tu versión del nodo no tiene esa opción, llama a la API de Gemini con un nodo *HTTP Request* y en *Options* → *Timeout* pon `20000`).
+11. **Code** "Borrador" (modo *Run Once for Each Item*). Conecta aquí la salida correcta **y** la de error de los seis nodos de Gemini. Elige el texto de Gemini si sirve y, si no, la plantilla de respaldo (apartado 5). Un fallo de Gemini **no** es un error del evento: el workflow sigue con la plantilla.
+
+    ```js
+    const datos = $('Datos para Gemini').item.json;
+    // Aquí $json es la salida del nodo de Gemini que llegó (correcta o de error).
+    // Cambia "text" por el campo donde tu nodo de Gemini deja la respuesta (míralo en su salida).
+    const texto = String($json.text ?? '').trim();
+    const plantillas = {
+      new: 'Hola {firstName}, gracias por escribirnos por {viaje}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan?',
+      // …pega aquí las otras cinco plantillas del apartado 5, con su etapa.
+    };
+    const respaldo = plantillas[datos.etapa].replace('{firstName}', datos.firstName).replace('{viaje}', datos.viaje);
+    return { json: { borrador: texto && texto.length <= 1000 ? texto : respaldo } };
+    ```
+12. **Edit Fields (Set)** "Enlace WhatsApp", con un campo `enlace`: `https://wa.me/{{ $('Leer lead').item.json.phone.replace('+', '') }}?text={{ encodeURIComponent($('Borrador').item.json.borrador) }}`. Al abrirlo, WhatsApp muestra el borrador listo para revisar; no envía nada solo.
+13. **Send Email** "Enviar correo" (credencial SMTP) **a ti** (apartado 6). En **Settings** → *On Error* → *Continue (using error output)* y conecta la salida de error al nodo "Fail" con el código `smtp_error`. Después del envío correcto, nodo **Data table** "Guardar procesado": insertar una fila con `event_id` = `{{ $('Uno a uno').item.json.id }}`.
+14. **HTTP Request** "Ack": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/ack` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}" }`. En **Settings** → *On Error* → *Continue*: si responde 409 (`lease_lost`), no te preocupes; el evento volverá a llegar y el paso 5 evitará un segundo correo. Con *Continue*, un error sale por la salida normal: conéctala de vuelta a "Uno a uno". A "Ack" llegan tres caminos: el duplicado (paso 5), el evento viejo (paso 8) y el correo enviado (paso 13).
+
+**Rama de error**, nodo **HTTP Request** "Fail": `POST https://carreras-viajeras.mentec.dev/api/integrations/n8n/events/{{ $('Uno a uno').item.json.id }}/fail` con la credencial *Header Auth* y cuerpo JSON `{ "leaseToken": "{{ $('Uno a uno').item.json.leaseToken }}", "errorCode": "<código>" }`. Usa un nodo "Fail" por código (o escribe el código en un campo antes de llegar a él). Como "Ack", cada nodo "Fail" tiene *On Error* → *Continue* y su salida vuelve a "Uno a uno". Códigos sugeridos: `smtp_error` (no se pudo enviar el correo), `lead_not_found` (no se pudo leer el lead), `lead_read_error` (si separas la lectura fallida del 404) y `unexpected_error` (cualquier otro). Usa solo códigos cortos: nunca copies el texto del error del proveedor.
+
+Con 10 eventos por minuto, procesados uno a uno, y hasta 20 s de Gemini por evento, el lote cabe holgado en los 5 minutos de reserva.
+
+#### 4. Qué datos recibe Gemini y prompt por etapa
+
+**Lista cerrada de datos que se envían a Gemini:** solo `firstName` (el nombre de pila), la etapa y el viaje (`trip.title`) o el destino (`destinationText`), más el texto fijo del prompt. **Nunca** se envían el teléfono, el correo, los apellidos, las notas, el historial ni ningún id. El nodo de Gemini no recibe el lead completo: su mensaje se escribe solo con los tres campos del nodo "Datos para Gemini" (paso 7):
+
+```text
+Etapa: {{ $('Datos para Gemini').item.json.etapa }}
+Nombre de pila: {{ $('Datos para Gemini').item.json.firstName }}
+Viaje o destino: {{ $('Datos para Gemini').item.json.viaje }}
+```
+
+Ampliar esta lista exige tu decisión explícita y un cambio de la spec. Ten en cuenta que, en el plan gratuito de la API de Gemini, Google puede usar lo que le envías para mejorar sus productos.
+
+**Instrucciones comunes** (en todas las etapas; ajusta el tono si quieres):
+
+> Eres el asistente comercial de Carreras Viajeras, una agencia peruana de viajes para runners. Escribe un mensaje de WhatsApp breve (máximo 600 caracteres), cálido y en español neutro de Perú, tuteando, sin inventar precios, fechas, cupos ni condiciones que no te doy. Firma como «Equipo Carreras Viajeras». Devuelve solo el texto del mensaje.
+
+**Objetivo de cada etapa** (se añade a las instrucciones comunes):
+
+| Etapa | Objetivo del mensaje |
+|---|---|
+| `new` (Nuevo) | Dar la bienvenida, agradecer el interés en el viaje o destino y preguntar qué distancia y fechas le interesan. |
+| `contacted` (Contactado) | Retomar la conversación y ofrecer resolver dudas. |
+| `quoted` (Cotizado) | Recordar que tiene una cotización y ofrecer ayuda para reservar. |
+| `reserved` (Reservado) | Confirmar la reserva y anunciar los próximos pasos, sin detallar pagos. |
+| `paid` (Pagado) | Agradecer y dar la bienvenida al viaje. |
+| `lost` (Perdido) | Despedirse con cordialidad y dejar la puerta abierta a próximos viajes. |
+
+#### 5. Plantillas fijas de respaldo
+
+Una por etapa, en un nodo *Set* o *Code*. `{firstName}` es el nombre de pila y `{viaje}` el título del viaje o, si no hay viaje, el destino:
+
+| Etapa | Plantilla |
+|---|---|
+| `new` | Hola {firstName}, gracias por escribirnos por {viaje}. Soy del equipo de Carreras Viajeras: ¿qué distancia y fechas te interesan? |
+| `contacted` | Hola {firstName}, te escribimos de Carreras Viajeras para retomar tu consulta sobre {viaje}. ¿Tienes alguna duda en la que te podamos ayudar? |
+| `quoted` | Hola {firstName}, ¿pudiste revisar la cotización de {viaje}? Si quieres, te ayudamos con los pasos para reservar. Equipo Carreras Viajeras |
+| `reserved` | Hola {firstName}, ¡tu reserva para {viaje} ya está registrada! Muy pronto te contamos los próximos pasos. Equipo Carreras Viajeras |
+| `paid` | Hola {firstName}, ¡gracias por confiar en nosotros! Te damos la bienvenida a {viaje}. Equipo Carreras Viajeras |
+| `lost` | Hola {firstName}, gracias por tu interés en {viaje}. Si más adelante quieres correr con nosotros, aquí estaremos. Equipo Carreras Viajeras |
+
+#### 6. El correo que recibes
+
+- **Asunto:** "Nuevo lead: {fullName} · {viaje}" para un `lead.created` del formulario web (`source = "web_form"`), o "Lead {fullName}: etapa {etapa}" en los demás casos.
+- **De dónde sale cada dato:** `{fullName}`, el correo y el teléfono del lead, de `$('Leer lead').item.json` (`fullName`, `email`, `phone`); `{viaje}` y `{etapa}`, de `$('Datos para Gemini').item.json`; el borrador, de `$('Borrador').item.json.borrador`; el enlace, de `$('Enlace WhatsApp').item.json.enlace`. Para saber si es un lead del formulario web: `$('Uno a uno').item.json.type` es `lead.created` y `$('Leer lead').item.json.source` es `web_form`.
+- **Contenido:** nombre, correo y teléfono del lead, el viaje o destino, el borrador y el botón o enlace de WhatsApp (paso 12), con este aviso: "Revisa y edita el mensaje antes de enviarlo. Nada se envía automáticamente.".
+- El aviso de **"nuevo lead"** solo se envía para los leads del formulario web. Los leads que el equipo crea a mano en el CRM también generan `lead.created`, pero su correo solo lleva el borrador de la etapa.
+- El correo es el **único** canal de aviso. El mensaje al runner siempre lo revisa y lo envía una persona desde WhatsApp Business App.
+
+#### 7. Eventos muertos (`dead`)
+
+Tras 8 intentos fallidos, un evento queda `dead` y n8n ya no lo recibe. Por ahora se consultan en el SQL Editor de Neon:
+
+```sql
+SELECT id, type, lead_id, attempts, last_error_code, created_at
+FROM outbox_events WHERE status = 'dead' ORDER BY created_at DESC;
+```
+
+Reenviarlos desde el CRM queda para una spec posterior.
+
+#### 8. Prueba manual de la API (rama de desarrollo de Neon)
+
+Con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0004` aplicada y `N8N_API_TOKEN` cargado:
+
+```sh
+curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/api/integrations/n8n/events/claim
+```
+
+- Sin la cabecera, o con otro token, responde `401`.
+- Crea dos leads de prueba en el CRM y lanza dos `claim` a la vez (dos terminales, o `& wait`): ningún evento aparece en las dos respuestas.
+- Reclama un evento y no lo confirmes: a los 5 minutos vuelve a aparecer en otro `claim` con otro `leaseToken` y `attempts` sube en 1.
+
+#### 9. Regla WAF opcional contra abusos
+
+En el plan Free de Cloudflare, sin tocar código: panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → crear una regla para las peticiones `POST` a la ruta `/contacto` que bloquee una IP cuando supere unas pocas peticiones cada 10 segundos. Es una defensa adicional a Turnstile, que protegerá el formulario cuando se conecte (Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)).
+
 ## Reservas y portal del runner
 
 Especificado en [`runner-portal.md`](docs/specs/runner-portal.md). El equipo registra en el CRM las reservas, los pagos confirmados, el itinerario y los avisos de cada viaje, y el runner los consulta en una página privada de solo lectura, `/mis-carreras`. La Fase 1 añade las tablas, el permiso y las lecturas del runner; las páginas del CRM y `/mis-carreras` llegan en las fases siguientes.
@@ -266,7 +506,7 @@ Especificado en [`runner-portal.md`](docs/specs/runner-portal.md). El equipo reg
 
 ### Migración de las tablas de reservas
 
-> **Numeración.** Los PR abiertos #12 y #8 también generan una migración `0003`. Si alguno se integra antes, esta se regenera con `npm run db:generate` sobre lo que haya en `main` y pasa a ser la `0004` (con otro nombre). **No aplicar nada hasta que la rama `feat/runner-portal` esté en `main`**, y usar entonces el nombre de archivo definitivo en los pasos siguientes. Una migración ya aplicada nunca se edita.
+> **Numeración.** Esta migración ya está en `main` con su nombre definitivo, `drizzle/0003_talented_skin.sql`. La de captura y outbox del PR #12 se regeneró como `0004` (ver [Migración de captura y outbox](#migración-de-captura-y-outbox)), y cualquier otro PR abierto con una `0003` propia debe regenerarla igual sobre `main`. Una migración ya aplicada nunca se edita.
 
 Pendiente de aplicar por el usuario en `production` (y en cualquier rama de Neon que la necesite). **Orden: después de `0001` (viajes) y `0002` (leads).** Las tablas nuevas referencian `trips` y `profiles`. **No volver a aplicar `drizzle/0000_tough_thor.sql`**: ya está aplicada en `production` y crearía de nuevo las tablas de staff.
 
