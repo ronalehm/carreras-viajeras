@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { getTodayDate } from "@/lib/dates";
+import { formatDateTime, getTodayDate } from "@/lib/dates";
 import { getCrmAccess } from "@/modules/accounts";
 import {
   ActivityForm,
@@ -20,6 +20,7 @@ import {
   LeadTimeline,
   listLeadActivities,
   NextActionForm,
+  optOutLeadAction,
 } from "@/modules/crm";
 
 export const metadata: Metadata = { title: "Ficha del lead" };
@@ -66,7 +67,7 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
         <LeadDetails lead={lead} />
         <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Seguimiento</h2>
-          <LeadTimeline activities={activities} />
+          <LeadTimeline activities={activities} leadSource={lead.source} />
         </section>
         {backLink}
       </section>
@@ -90,6 +91,17 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
             confirmLabel="Archivar"
             variant="destructive"
           />
+          {!lead.contactOptOutAt && (
+            <ConfirmActionButton
+              action={optOutLeadAction}
+              fields={{ leadId: lead.id }}
+              label="Pidió no seguir"
+              title={`¿Registrar que «${lead.fullName}» pidió no seguir en contacto?`}
+              description="El lead pasará a Perdido, se quitará la próxima acción y n8n no preparará más borradores. No se puede deshacer desde el CRM."
+              confirmLabel="Pidió no seguir"
+              variant="destructive"
+            />
+          )}
         </div>
       </div>
       <LeadDetails lead={lead} />
@@ -105,7 +117,12 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
       </div>
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Próxima acción</h2>
-        {CLOSED_LEAD_STAGES.includes(lead.stage) ? (
+        {lead.contactOptOutAt ? (
+          <p className="text-muted-foreground">
+            Pidió no seguir en contacto el {formatDateTime(lead.contactOptOutAt)}. No se programan próximas acciones ni
+            se preparan borradores.
+          </p>
+        ) : CLOSED_LEAD_STAGES.includes(lead.stage) ? (
           <p className="text-muted-foreground">Lead cerrado: no tiene próxima acción.</p>
         ) : (
           <NextActionForm
@@ -119,7 +136,7 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Seguimiento</h2>
         <ActivityForm leadId={lead.id} />
-        <LeadTimeline activities={activities} />
+        <LeadTimeline activities={activities} leadSource={lead.source} />
       </section>
       {backLink}
     </section>

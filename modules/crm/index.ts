@@ -11,6 +11,7 @@ export {
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
+  optOutLeadAction,
   setNextActionAction,
   updateLeadAction,
 } from "./actions/leads.actions";
