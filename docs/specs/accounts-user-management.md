@@ -1,7 +1,7 @@
 # Gestión de usuarios: una sola pantalla para equipo, patrocinadores y runners, invitación con cualquier rol y ficha de usuario
 
 - Módulo: accounts (con un cambio en `bookings`)
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `accounts-roles-permissions.md` (aprobada, F1–F3 implementadas): `profiles`, `staff_assignments`, `staff_invitations`, aceptación atómica en `getCurrentUser`, `can()`, `requirePermission`, `getCrmAccess(permission)`, `/crm/admin/usuarios` (`InviteStaffForm`, `StaffTable`, `InvitationsTable`, `listStaffOverview`), `grantStaffRole`/`revokeStaffRole` con protección del último admin.
   - `sponsors-portal.md` (aprobada; F1 y F2 implementadas): valor `sponsor` en `staff_role`, tabla `sponsors`, `sponsor_id` en invitaciones y asignaciones (CHECK `(role::text = 'sponsor') = (sponsor_id IS NOT NULL)`), la aceptación copia `sponsor_id`, `assignmentRoleSchema`, `STAFF_ROLE_LABELS.sponsor`; F2: CRUD de marcas en `/crm/admin/patrocinadores` y `listSponsors` exportado desde `@/modules/sponsors` (requisito de la Fase 2 de esta spec, ya cumplido). Esta spec sustituye casi toda su F3 (ver "Cambios que requiere en otras specs").
