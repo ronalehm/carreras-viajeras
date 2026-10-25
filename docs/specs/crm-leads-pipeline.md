@@ -1,7 +1,7 @@
 # Leads: alta manual, embudo, ficha, responsable y seguimiento (R3 · CRM comercial)
 
 - Módulo: crm
-- Estado: borrador
+- Estado: aprobado
 - Avance: F1 implementada en `main` (`modules/crm/**`, migración `drizzle/0002_tough_warpath.sql`). En este trabajo se implementan F2 y F3, adaptadas a leads sin responsable; F4–F6 quedan para después.
 - Depende de:
   - `platform-neon-foundation.md` (Fase 1 aprobada): Neon + Drizzle `neon-http` (`getDb()` en `lib/db.ts`, `db.batch` atómico, sin transacciones interactivas), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano.
