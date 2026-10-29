@@ -934,7 +934,7 @@ Si un caso se acepta, o falla por otra restricción distinta de la del comentari
 
 ### Migración de visitas por campaña (`0013`)
 
-`drizzle/0013_cute_nebula.sql` crea el contador de visitas por campaña ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)): la tabla `campaign_visit_days`, con una fila por campaña y día de Lima y el número de aperturas del enlace o del QR de ese día. No guarda nada de la persona (ni IP, ni agente de usuario, ni UTM). Está pendiente de aplicar por el usuario: **primero en una rama de desarrollo de Neon** y, cuando las pruebas de abajo salgan bien, en `production`, solo con autorización explícita de la operación remota. Tiene que estar aplicada antes de desplegar el código de esa spec: `POST /api/campaign-visits` escribe en ella (sin la tabla, cada visita se pierde y deja `campaign visit: record failed` en el log) y, en la Fase 2, `/crm/campanas` la lee.
+`drizzle/0013_cute_nebula.sql` crea el contador de visitas por campaña ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)): la tabla `campaign_visit_days`, con una fila por campaña y día de Lima y el número de aperturas del enlace o del QR de ese día. No guarda nada de la persona (ni IP, ni agente de usuario, ni UTM). Está pendiente de aplicar por el usuario: **primero en una rama de desarrollo de Neon** y, cuando las pruebas de abajo salgan bien, en `production`, solo con autorización explícita de la operación remota. Tiene que estar aplicada antes de desplegar el código de esa spec: `POST /api/campaign-visits` escribe en ella (sin la tabla, cada visita se pierde y deja `campaign visit: record failed` en el log) y `/crm/campanas` la lee.
 
 **El número `0013` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0013`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
 
@@ -1357,7 +1357,7 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 
 #### 9. Regla WAF opcional contra abusos
 
-Son defensas adicionales que se configuran sin tocar código, en el panel de Cloudflare (periodo de 10 segundos, contadas por IP). Hay dos reglas: una para los formularios y otra para el contador de visitas por campaña.
+Son defensas adicionales que se configuran sin tocar código, en el panel de Cloudflare (periodo de 10 segundos, contadas por IP). Hay dos reglas: una para los formularios y otra para el contador de visitas por campaña. **El plan Free de Cloudflare admite una sola regla de rate limiting:** en Free, crea solo la de formularios; la de visitas necesita un plan que admita dos (ver abajo).
 
 **Regla "Formularios de captación".** Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. El aviso de visita que envía la página de registro al abrirse con `?c=` va a otra ruta (`POST /api/campaign-visits`), así que tampoco cuenta en esta regla: tiene la suya (abajo).
 
@@ -1387,16 +1387,7 @@ Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos de
 
 Por qué ese umbral: cada apertura del enlace o del QR envía un solo aviso, y en una feria muchos móviles pueden escanear el QR a la vez saliendo a Internet con la misma IP. Por eso el umbral es más alto que el de los formularios. Si aun así se supera, **un bloqueo solo pierde visitas, nunca registros**: la página y el formulario siguen funcionando, la persona no ve ningún error y el contador simplemente no suma esas aperturas durante 10 segundos. Por eso el contador es un endpoint aparte de los formularios: si las visitas fueran por la misma ruta que los envíos, gastarían su límite de 10 y un pico de escaneos en el stand podría bloquear también los registros. Si el editor no ofrece el método, basta con la ruta (`http.request.uri.path eq "/api/campaign-visits"`) y el mismo umbral: la página solo hace `POST` a esa ruta.
 
-**Si tu plan solo permite una regla de rate limiting.** Este README no ha comprobado cuántas admite el plan Free. Si el panel no te deja crear la segunda, tienes dos opciones:
-
-- **No crear la de visitas** (la más prudente para los registros): el contador sigue protegido por el control de origen del servidor y, si alguien lo infla, solo se distorsiona un dato indicativo.
-- **Ampliar la regla "Formularios de captación"** con un `or` que añada la ruta del contador:
-
-  ```txt
-  (http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and (http.request.uri.path eq "/contacto" or http.request.uri.path eq "/api/campaign-visits" or (starts_with(http.request.uri.path, "/viajes/") and ends_with(http.request.uri.path, "/registro"))))
-  ```
-
-  Efecto en el umbral: una sola regla tiene **un único contador por IP**, así que visitas y envíos se suman. Con el umbral de 10, once escaneos en 10 segundos desde el Wi-Fi de una feria bloquearían durante 10 segundos también los envíos de los formularios desde esa IP (el formulario conserva lo escrito para reintentar, pero el registro falla). Si eliges esta opción, sube el umbral a unas **40 peticiones por 10 segundos** (los 10 envíos más las 30 visitas) y acepta que un script contra los formularios tenga más margen antes del bloqueo (Turnstile sigue rechazando los envíos sin verificar) y que un bloqueo, aunque más raro, pare también los registros.
+**En el plan Free (una sola regla).** No crees la regla de visitas: la única regla disponible es la de formularios, que protege los registros. El contador sigue protegido por el control de origen del servidor y, si alguien lo infla, solo se distorsiona un dato indicativo. No amplíes la regla de formularios con la ruta del contador: compartirían el límite de 10 por IP y un pico de escaneos en una feria bloquearía también los registros, justo lo que evita tener el contador en una ruta aparte. Cuando el plan admita una segunda regla, créala como se indica arriba.
 
 #### 10. Workflow "Alta desde Google Forms"
 
