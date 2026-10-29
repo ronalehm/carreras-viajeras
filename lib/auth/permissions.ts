@@ -69,3 +69,9 @@ export function manageableRoles(roles: readonly StaffRole[]): StaffRole[] {
 export function canManageRole(roles: readonly StaffRole[], role: StaffRole): boolean {
   return manageableRoles(roles).includes(role);
 }
+
+// Disabling and deleting accounts belongs to super_admin only. Kept out of the matrix on purpose:
+// FULL_ACCESS_ROLES would grant any matrix permission to admin (accounts-role-requests, Decision 7).
+export function canRemoveAccounts(roles: readonly StaffRole[]): boolean {
+  return roles.includes("super_admin");
+}

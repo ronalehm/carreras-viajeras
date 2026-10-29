@@ -53,6 +53,7 @@ describe("registerAccountAction", () => {
     ["401 without a session", new UnauthorizedError()],
     ["403 for an unverified email", new ForbiddenError("email_unverified")],
     ["403 for a failed role lookup", new ForbiddenError("role_lookup_failed")],
+    ["403 for a disabled account", new ForbiddenError("account_disabled")],
     ["a database error", new Error("insert into profiles failed: ana@correo.com")],
   ])("%s → canAccessCrm false without logging", async (_, error) => {
     guard.mockRejectedValue(error);

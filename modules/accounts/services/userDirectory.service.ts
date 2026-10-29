@@ -3,6 +3,7 @@ import { and, asc, desc, eq, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookings, profiles, runnerProfiles, sponsors, staffAssignments } from "@/lib/db-schema";
 import type { StaffRole } from "@/lib/auth/permissions";
+import type { AccountStatus } from "../types/accountStatus.types";
 import type { UserDetail, UserListFilter, UserListItem } from "../types/userDirectory.types";
 
 // Admin-only reads (the pages call them after getCrmAccess("staff.manage") returns ok).
@@ -24,7 +25,16 @@ type UserListRow = {
   is_runner: boolean;
   // count(*) is bigint: text on the wire.
   active_bookings: string | number;
+  // Never "deleted": deleted accounts are not listed (accounts-role-requests R16).
+  status: AccountStatus;
 };
+
+// Deleted accounts keep their profiles row (authorship) but leave the directory; their detail
+// page is only for super_admin (the page decides).
+function accountStatus(disabledAt: Date | null, deletedAt: Date | null): AccountStatus {
+  if (deletedAt !== null) return "deleted";
+  return disabledAt !== null ? "disabled" : "active";
+}
 
 function listConditions({ q, role }: UserListFilter): SQL {
   const conditions: SQL[] = [];
@@ -41,6 +51,7 @@ function listConditions({ q, role }: UserListFilter): SQL {
 
 // One statement: every known account (profiles: everyone who signed in with a verified email or
 // was backfilled), plus runner profiles and linked bookings. Every listed account is a Runner.
+// Deleted accounts (profiles.deleted_at) are left out; disabled ones carry their status.
 // Only presentation columns: no phone, birth date, document, emergency contact, medical notes,
 // internal notes or amounts. One extra row tells whether the list was cut at the limit.
 async function readUsers(
@@ -59,7 +70,8 @@ async function readUsers(
              coalesce(a.roles, '{}') AS roles,
              a.sponsor_name,
              true AS is_runner,
-             coalesce(bk.active, 0) AS active_bookings
+             coalesce(bk.active, 0) AS active_bookings,
+             CASE WHEN p.disabled_at IS NOT NULL THEN 'disabled' ELSE 'active' END AS status
       FROM ids
       LEFT JOIN profiles p ON p.user_id = ids.user_id
       LEFT JOIN runner_profiles rp ON rp.user_id = ids.user_id
@@ -81,8 +93,9 @@ async function readUsers(
         ORDER BY b.created_at DESC, b.id
         LIMIT 1
       ) lb ON true
+      WHERE p.deleted_at IS NULL
     )
-    SELECT user_id, name, email, roles, sponsor_name, is_runner, active_bookings
+    SELECT user_id, name, email, roles, sponsor_name, is_runner, active_bookings, status
     FROM directory
     ${listConditions(filter)}
     ORDER BY lower(coalesce(name, email)), user_id
@@ -98,6 +111,7 @@ async function readUsers(
       sponsorName: row.sponsor_name,
       isRunner: row.is_runner,
       activeBookings: Number(row.active_bookings),
+      status: row.status,
     })),
     truncated: rows.length > USER_LIST_LIMIT,
   };
@@ -110,7 +124,10 @@ async function readUserDetail(userId: string): Promise<UserDetail | null> {
 
   const db = getDb();
   const [profileRows, assignmentRows, runnerRows, bookingRows] = await db.batch([
-    db.select({ email: profiles.email }).from(profiles).where(eq(profiles.userId, userId)),
+    db
+      .select({ email: profiles.email, disabledAt: profiles.disabledAt, deletedAt: profiles.deletedAt })
+      .from(profiles)
+      .where(eq(profiles.userId, userId)),
     db
       .select({
         role: staffAssignments.role,
@@ -156,6 +173,7 @@ async function readUserDetail(userId: string): Promise<UserDetail | null> {
         : null,
     // Every account of the directory is a Runner (accounts-role-requests R3).
     isRunner: true,
+    status: profile ? accountStatus(profile.disabledAt, profile.deletedAt) : "active",
   };
 }
 

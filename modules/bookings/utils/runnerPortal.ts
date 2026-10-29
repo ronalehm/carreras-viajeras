@@ -26,6 +26,8 @@ export async function getRunnerPortal(bookingParam: unknown): Promise<RunnerPort
     throw error;
   }
   if (!user) return { status: "unauthenticated" };
+  // Disabled or deleted from the CRM: fail closed without reading bookings (accounts-role-requests R12).
+  if (user.blocked) return { status: "error" };
 
   const name = user.name ? { name: user.name } : {};
   // Requirement 3: an unverified email never links nor reads bookings.

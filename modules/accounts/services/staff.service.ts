@@ -77,7 +77,8 @@ export async function revokeInvitation(
   return rows.length > 0;
 }
 
-// false = no_change: the user has no staff profile or the role is already active.
+// false = no_change: the user has no staff profile, is disabled or deleted (deleting implies
+// disabling: profiles_deleted_chk), or the role is already active.
 export async function grantStaffRole(
   input: StaffRoleChangeInput,
   actorUserId: string,
@@ -86,7 +87,7 @@ export async function grantStaffRole(
     INSERT INTO staff_assignments (user_id, role, reason, granted_by)
     SELECT profiles.user_id, ${input.role}::staff_role, 'crm-admin', ${actorUserId}
     FROM profiles
-    WHERE profiles.user_id = ${input.userId}
+    WHERE profiles.user_id = ${input.userId} AND profiles.disabled_at IS NULL
     ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING
     RETURNING id
   `);

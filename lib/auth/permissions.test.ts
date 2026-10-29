@@ -7,6 +7,7 @@ import { authErrorResponse, ForbiddenError, UnauthorizedError } from "@/lib/auth
 import {
   can,
   canManageRole,
+  canRemoveAccounts,
   manageableRoles,
   type Permission,
   type StaffRole,
@@ -207,6 +208,25 @@ describe("canManageRole", () => {
 
   it("never allows managing super_admin", () => {
     expect(canManageRole([...ALL_ROLES], "super_admin")).toBe(false);
+  });
+});
+
+describe("canRemoveAccounts", () => {
+  it.each(ALL_ROLES.map((role) => [role, role === "super_admin"] as [StaffRole, boolean]))(
+    "role %s → %s",
+    (role, expected) => {
+      expect(canRemoveAccounts([role])).toBe(expected);
+    },
+  );
+
+  it("is false without roles and for admin, even though admin holds every matrix permission", () => {
+    expect(canRemoveAccounts([])).toBe(false);
+    expect(canRemoveAccounts(["admin", "commercial", "organizer", "sponsor"])).toBe(false);
+    expect(can(["admin"], "staff.manage")).toBe(true);
+  });
+
+  it("is true whenever super_admin is among several roles", () => {
+    expect(canRemoveAccounts(["commercial", "super_admin"])).toBe(true);
   });
 });
 

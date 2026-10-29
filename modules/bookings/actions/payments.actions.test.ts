@@ -39,8 +39,8 @@ function signIn(roles: ("commercial" | "admin" | "organizer" | "sponsor")[], ema
   currentUser.mockResolvedValue({ id: "staff-1", primaryEmailAddressId: "primary", emailAddresses: [
     { id: "primary", emailAddress: "agent@example.com", verification: { status: emailVerified ? "verified" : "unverified" } },
   ] });
-  vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue(roles);
-  vi.mocked(loadStaffRoles).mockResolvedValue(roles);
+  vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue({ staffRoles: roles, blocked: false });
+  vi.mocked(loadStaffRoles).mockResolvedValue({ staffRoles: roles, blocked: false });
 }
 
 beforeEach(() => {

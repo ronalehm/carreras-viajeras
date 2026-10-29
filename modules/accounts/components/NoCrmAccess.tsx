@@ -34,7 +34,8 @@ async function readPendingRequest(userId: string): Promise<OwnPendingRoleRequest
 
 async function readContent(): Promise<ReactNode> {
   const user = await readUser();
-  if (!user) return <p>{NO_ACCESS}</p>;
+  // A blocked account (disabled from the CRM) cannot request access: plain text, no button.
+  if (!user || user.blocked) return <p>{NO_ACCESS}</p>;
   if (!user.emailVerified) {
     return <p>{NO_ACCESS} Verifica tu correo para poder solicitar acceso.</p>;
   }

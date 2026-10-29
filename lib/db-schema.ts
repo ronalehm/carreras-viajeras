@@ -36,6 +36,8 @@ export const staffRoleEnum = pgEnum("staff_role", [
 // Known accounts: every Clerk account with a verified primary email that signed in (registered by the
 // guard) or was backfilled, with or without roles. user_id is the stable Clerk user id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
+// Blocked = disabled_at IS NOT NULL (the guards fail closed). Deleted accounts keep their row as
+// author of the history, with the email anonymized; deleting implies blocking (profiles_deleted_chk).
 export const profiles = pgTable(
   "profiles",
   {
@@ -44,9 +46,18 @@ export const profiles = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    disabledBy: text("disabled_by").references((): AnyPgColumn => profiles.userId, {
+      onDelete: "restrict",
+    }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: text("deleted_by").references((): AnyPgColumn => profiles.userId, {
+      onDelete: "restrict",
+    }),
   },
   (table) => [
     check("profiles_email_lowercase_chk", sql`${table.email} = lower(${table.email})`),
+    check("profiles_deleted_chk", sql`${table.deletedAt} IS NULL OR ${table.disabledAt} IS NOT NULL`),
   ],
 );
 

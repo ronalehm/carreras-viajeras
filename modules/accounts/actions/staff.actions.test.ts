@@ -81,8 +81,8 @@ function signedIn({
   userId?: string;
 }) {
   mockSession(emailVerified, userId);
-  accept.mockResolvedValue(roles);
-  load.mockResolvedValue(roles);
+  accept.mockResolvedValue({ staffRoles: roles, blocked: false });
+  load.mockResolvedValue({ staffRoles: roles, blocked: false });
 }
 
 const signedInAdmin = () => signedIn({ roles: ["admin"] });

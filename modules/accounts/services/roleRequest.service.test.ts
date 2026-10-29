@@ -152,7 +152,9 @@ describe("approveRoleRequest", () => {
     expect(statement).toBe(
       "WITH approved AS ( UPDATE role_requests " +
         "SET status = 'approved', decided_at = now(), decided_by = $1 " +
-        "WHERE id = $2 AND status = 'pending' RETURNING id, user_id, role ), " +
+        "WHERE id = $2 AND status = 'pending' " +
+        "AND NOT EXISTS ( SELECT 1 FROM profiles p WHERE p.user_id = role_requests.user_id AND p.disabled_at IS NOT NULL ) " +
+        "RETURNING id, user_id, role ), " +
         "granted AS ( INSERT INTO staff_assignments (user_id, role, reason, granted_by) " +
         "SELECT user_id, role, 'role_request:' || id::text, $3 FROM approved " +
         "ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING RETURNING id ) " +
@@ -165,6 +167,19 @@ describe("approveRoleRequest", () => {
   it("returns false (not_found) when the request is no longer pending", async () => {
     useFakeExecute({ rows: [] });
     await expect(approveRoleRequest(REQUEST_ID, "super-1")).resolves.toBe(false);
+  });
+
+  it("never approves the request of a disabled or deleted account (the UPDATE itself excludes it)", async () => {
+    const fake = useFakeExecute({ rows: [] });
+
+    await expect(approveRoleRequest(REQUEST_ID, "super-1")).resolves.toBe(false);
+    const statement = normalize(fake.queries[0].sql);
+    // The condition sits inside the UPDATE, so the request stays pending and the INSERT gets nothing.
+    const update = statement.slice(statement.indexOf("UPDATE role_requests"), statement.indexOf("RETURNING id, user_id, role"));
+    expect(update).toContain(
+      "AND NOT EXISTS ( SELECT 1 FROM profiles p WHERE p.user_id = role_requests.user_id AND p.disabled_at IS NOT NULL )",
+    );
+    expect(statement).toMatch(/SELECT user_id, role, 'role_request:' \|\| id::text, \$3 FROM approved/);
   });
 
   it("propagates database rejections", async () => {

@@ -36,6 +36,7 @@ function listRow(overrides: Record<string, unknown> = {}) {
     sponsor_name: null,
     is_runner: true,
     active_bookings: "0",
+    status: "active",
     ...overrides,
   };
 }
@@ -70,6 +71,18 @@ describe("listUsers", () => {
     expect(statement).toContain("coalesce(p.email, rp.email, lb.participant_email) AS email");
     expect(statement).toContain("true AS is_runner");
     expect(statement).not.toMatch(/IS NOT NULL\)? AS is_runner/);
+  });
+
+  it("leaves deleted accounts out and returns active or disabled (accounts-role-requests R16)", async () => {
+    const fake = useFakeDb();
+    await listUsers({ q: "ana", role: "runner" });
+
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toContain(
+      "CASE WHEN p.disabled_at IS NOT NULL THEN 'disabled' ELSE 'active' END AS status",
+    );
+    expect(statement).toContain(") lb ON true WHERE p.deleted_at IS NULL )");
+    expect(statement).toContain("SELECT user_id, name, email, roles, sponsor_name, is_runner, active_bookings, status FROM directory");
   });
 
   it("orders by name (or email) then id and asks for one row past the limit, without filters", async () => {
@@ -169,17 +182,17 @@ describe("listUsers", () => {
           listRow({ user_id: "user-c2", email: "c2@example.com", roles: ["commercial"], is_runner: true, active_bookings: "2" }),
           listRow({ user_id: "user-r", name: "Ana Pérez", email: "ana@example.com", is_runner: true, active_bookings: "1" }),
           listRow({ user_id: "user-s", email: "lucia@marca.com", roles: ["sponsor"], sponsor_name: "Marca Norte" }),
-          listRow({ user_id: "user-e", email: "e@example.com" }),
+          listRow({ user_id: "user-e", email: "e@example.com", status: "disabled" }),
         ],
       ],
     });
 
     await expect(listUsers({})).resolves.toEqual({
       users: [
-        { userId: "user-c2", name: null, email: "c2@example.com", roles: ["commercial"], sponsorName: null, isRunner: true, activeBookings: 2 },
-        { userId: "user-r", name: "Ana Pérez", email: "ana@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 1 },
-        { userId: "user-s", name: null, email: "lucia@marca.com", roles: ["sponsor"], sponsorName: "Marca Norte", isRunner: true, activeBookings: 0 },
-        { userId: "user-e", name: null, email: "e@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 0 },
+        { userId: "user-c2", name: null, email: "c2@example.com", roles: ["commercial"], sponsorName: null, isRunner: true, activeBookings: 2, status: "active" },
+        { userId: "user-r", name: "Ana Pérez", email: "ana@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 1, status: "active" },
+        { userId: "user-s", name: null, email: "lucia@marca.com", roles: ["sponsor"], sponsorName: "Marca Norte", isRunner: true, activeBookings: 0, status: "active" },
+        { userId: "user-e", name: null, email: "e@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 0, status: "disabled" },
       ],
       truncated: false,
     });
@@ -260,7 +273,9 @@ describe("getUserDetail", () => {
     expect(fake.transaction).toHaveBeenCalledTimes(1);
     expect(fake.queries).toHaveLength(4);
     const [profile, assignments, runner, booking] = fake.queries.map(({ sql }) => normalize(sql));
-    expect(profile).toBe('select "email" from "profiles" where "profiles"."user_id" = $1');
+    expect(profile).toBe(
+      'select "email", "disabled_at", "deleted_at" from "profiles" where "profiles"."user_id" = $1',
+    );
     expect(assignments).toBe(
       'select "staff_assignments"."role", "staff_assignments"."granted_at", "staff_assignments"."sponsor_id", "sponsors"."name" ' +
         'from "staff_assignments" left join "sponsors" on "sponsors"."id" = "staff_assignments"."sponsor_id" ' +
@@ -284,7 +299,7 @@ describe("getUserDetail", () => {
   it("builds the member from the active roles of a staff account without a name", async () => {
     useFakeDb({
       responses: detailResponses({
-        profile: [["c@example.com"]],
+        profile: [["c@example.com", null, null]],
         assignments: [
           ["commercial", GRANTED, null, null],
           ["admin", "2026-10-22 10:00:00+00", null, null],
@@ -307,11 +322,20 @@ describe("getUserDetail", () => {
       },
       sponsor: null,
       isRunner: true,
+      status: "active",
     });
   });
 
+  it.each([
+    ["disabled", [["c@example.com", "2026-10-29 10:00:00+00", null]]],
+    ["deleted", [["deleted-abc@invalid", "2026-10-29 10:00:00+00", "2026-10-29 11:00:00+00"]]],
+  ])("returns the %s status from profiles", async (status, profile) => {
+    useFakeDb({ responses: detailResponses({ profile }) });
+    await expect(getUserDetail(USER)).resolves.toMatchObject({ status, hasRoleProfile: true });
+  });
+
   it("has a null member when the role profile has no active roles", async () => {
-    useFakeDb({ responses: detailResponses({ profile: [["e@example.com"]] }) });
+    useFakeDb({ responses: detailResponses({ profile: [["e@example.com", null, null]] }) });
 
     await expect(getUserDetail(USER)).resolves.toMatchObject({
       email: "e@example.com",
@@ -325,7 +349,7 @@ describe("getUserDetail", () => {
   it("takes the sponsor from the active sponsor assignment", async () => {
     useFakeDb({
       responses: detailResponses({
-        profile: [["lucia@marca.com"]],
+        profile: [["lucia@marca.com", null, null]],
         assignments: [["sponsor", GRANTED, SPONSOR_ID, "Marca Norte"]],
       }),
     });
@@ -351,6 +375,8 @@ describe("getUserDetail", () => {
       member: null,
       sponsor: null,
       isRunner: true,
+      // Without profiles there is nothing to disable: always active.
+      status: "active",
     });
   });
 
@@ -368,7 +394,7 @@ describe("getUserDetail", () => {
   it("prefers the role profile email over the runner profile and booking ones", async () => {
     useFakeDb({
       responses: detailResponses({
-        profile: [["c2@example.com"]],
+        profile: [["c2@example.com", null, null]],
         assignments: [["commercial", GRANTED, null, null]],
         runner: [["Carla Díaz", "carla@example.com"]],
         booking: [["Carla D.", "carla.d@example.com"]],

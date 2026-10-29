@@ -15,18 +15,21 @@ import {
 type Query = { sql: string; params: unknown[] };
 
 // Fake Neon HTTP client: records every statement sent and answers without a network.
-// selectRows overrides the rows answered to every select (default: one row per role).
+// Selects on profiles answer the blocked flag (null = no profiles row); every other select answers
+// selectRows (default: one row per role).
 function useFakeDb({
   roles = [] as string[],
+  blocked = false as boolean | null,
   selectRows,
   failWith,
-}: { roles?: string[]; selectRows?: unknown[][]; failWith?: Error } = {}) {
+}: { roles?: string[]; blocked?: boolean | null; selectRows?: unknown[][]; failWith?: Error } = {}) {
   const queries: Query[] = [];
   const query = vi.fn(async (text: string, params: unknown[]) => {
     queries.push({ sql: text, params });
     if (failWith) throw failWith;
-    const rows = selectRows ?? roles.map((role) => [role]);
-    return { rows: text.trimStart().startsWith("select") ? rows : [] };
+    if (!text.trimStart().startsWith("select")) return { rows: [] };
+    if (text.includes('from "profiles"')) return { rows: blocked === null ? [] : [[blocked]] };
+    return { rows: selectRows ?? roles.map((role) => [role]) };
   });
   const transaction = vi.fn((pending: Promise<unknown>[]) => Promise.all(pending));
   const client = Object.assign(query, { transaction });
@@ -39,16 +42,30 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 beforeEach(() => vi.mocked(getDb).mockReset());
 
 describe("acceptInvitationAndLoadStaffRoles", () => {
-  it("sends a single batch of three statements and returns the active roles", async () => {
+  it("sends a single batch of four statements and returns the active roles", async () => {
     const fake = useFakeDb({ roles: ["commercial"] });
 
-    await expect(acceptInvitationAndLoadStaffRoles("user-1", "ana@example.com")).resolves.toEqual([
-      "commercial",
-    ]);
+    await expect(acceptInvitationAndLoadStaffRoles("user-1", "ana@example.com")).resolves.toEqual({
+      staffRoles: ["commercial"],
+      blocked: false,
+    });
 
     expect(fake.transaction).toHaveBeenCalledTimes(1);
-    expect(fake.transaction.mock.calls[0][0]).toHaveLength(3);
-    expect(fake.queries).toHaveLength(3);
+    expect(fake.transaction.mock.calls[0][0]).toHaveLength(4);
+    expect(fake.queries).toHaveLength(4);
+  });
+
+  it("returns blocked = true (with the stored roles) for a disabled account", async () => {
+    const fake = useFakeDb({ roles: ["commercial"], blocked: true });
+
+    await expect(acceptInvitationAndLoadStaffRoles("user-1", "ana@example.com")).resolves.toEqual({
+      staffRoles: ["commercial"],
+      blocked: true,
+    });
+    expect(normalize(fake.queries[3].sql)).toBe(
+      'select "disabled_at" IS NOT NULL from "profiles" where "profiles"."user_id" = $1',
+    );
+    expect(fake.queries[3].params).toEqual(["user-1"]);
   });
 
   it("first registers the account in profiles, refreshing only a changed email", async () => {
@@ -57,8 +74,10 @@ describe("acceptInvitationAndLoadStaffRoles", () => {
 
     const register = normalize(fake.queries[0].sql);
     expect(register).toMatch(
-      /^INSERT INTO profiles \(user_id, email\) VALUES \(\$1, \$2\) ON CONFLICT \(user_id\) DO UPDATE SET email = excluded\.email WHERE profiles\.email <> excluded\.email$/,
+      /^INSERT INTO profiles \(user_id, email\) VALUES \(\$1, \$2\) ON CONFLICT \(user_id\) DO UPDATE SET email = excluded\.email WHERE profiles\.email <> excluded\.email AND profiles\.deleted_at IS NULL$/,
     );
+    // Never writes the disabled or deleted columns.
+    expect(register).not.toMatch(/SET .*(disabled_|deleted_)\w* =/);
     expect(fake.queries[0].params).toEqual(["user-1", "ana@example.com"]);
     // The acceptance comes after the registration.
     expect(normalize(fake.queries[1].sql)).toMatch(/^WITH accepted AS/);
@@ -71,6 +90,10 @@ describe("acceptInvitationAndLoadStaffRoles", () => {
     const accept = normalize(fake.queries[1].sql);
     expect(accept).toMatch(/^WITH accepted AS \( UPDATE staff_invitations SET accepted_at = now\(\)/);
     expect(accept).toMatch(/WHERE email = \$\d+ AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > now\(\)/);
+    // A blocked account accepts nothing, so no assignment is inserted from the invitation.
+    expect(accept).toMatch(
+      /expires_at > now\(\) AND NOT EXISTS \( SELECT 1 FROM profiles WHERE user_id = \$\d+ AND disabled_at IS NOT NULL \) RETURNING/,
+    );
     expect(accept).toContain("RETURNING id, email, role, invited_by, sponsor_id )");
     expect(accept).toMatch(
       /INSERT INTO profiles \(user_id, email\) SELECT \$\d+, accepted\.email FROM accepted ON CONFLICT \(user_id\) DO NOTHING/,
@@ -79,10 +102,10 @@ describe("acceptInvitationAndLoadStaffRoles", () => {
       /INSERT INTO staff_assignments \(user_id, role, reason, granted_by, sponsor_id\) SELECT \$\d+, accepted\.role, 'invitation:' \|\| accepted\.id::text, accepted\.invited_by, accepted\.sponsor_id FROM accepted ON CONFLICT DO NOTHING$/,
     );
     expect(accept.match(/;/g)).toBeNull();
-    expect(fake.queries[1].params).toEqual(["user-1", "ana@example.com", "user-1", "user-1"]);
+    expect(fake.queries[1].params).toEqual(["user-1", "ana@example.com", "user-1", "user-1", "user-1"]);
   });
 
-  it("loads roles filtered by user_id and revoked_at IS NULL", async () => {
+  it("loads roles filtered by user_id and revoked_at IS NULL, then the blocked flag", async () => {
     const fake = useFakeDb();
     await acceptInvitationAndLoadStaffRoles("user-1", "ana@example.com");
 
@@ -101,29 +124,42 @@ describe("acceptInvitationAndLoadStaffRoles", () => {
 });
 
 describe("loadStaffRoles", () => {
-  it("only selects active roles and never touches staff_invitations", async () => {
+  it("only reads active roles and the blocked flag, in one batch, and never writes", async () => {
     const fake = useFakeDb({ roles: ["commercial", "admin"] });
 
-    await expect(loadStaffRoles("user-1")).resolves.toEqual(["commercial", "admin"]);
+    await expect(loadStaffRoles("user-1")).resolves.toEqual({
+      staffRoles: ["commercial", "admin"],
+      blocked: false,
+    });
 
-    expect(fake.transaction).not.toHaveBeenCalled();
-    expect(fake.queries).toHaveLength(1);
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    expect(fake.queries).toHaveLength(2);
     // Unverified accounts are never registered: no profiles write, no invitation acceptance.
-    expect(fake.queries[0].sql).not.toMatch(/staff_invitations|profiles|insert|update/i);
+    for (const { sql } of fake.queries) {
+      expect(sql).not.toMatch(/staff_invitations|insert|update/i);
+    }
     expect(fake.queries[0].sql).toMatch(/"user_id" = \$1 and "staff_assignments"\."revoked_at" is null/);
     expect(fake.queries[0].params).toEqual(["user-1"]);
+    expect(normalize(fake.queries[1].sql)).toBe(
+      'select "disabled_at" IS NOT NULL from "profiles" where "profiles"."user_id" = $1',
+    );
+    expect(fake.queries[1].params).toEqual(["user-1"]);
   });
 
-  it("returns no roles when nothing is active", async () => {
-    useFakeDb();
-    await expect(loadStaffRoles("user-1")).resolves.toEqual([]);
+  it("returns no roles when nothing is active, and not blocked without a profiles row", async () => {
+    useFakeDb({ blocked: null });
+    await expect(loadStaffRoles("user-1")).resolves.toEqual({ staffRoles: [], blocked: false });
+  });
+
+  it("returns blocked = true for a disabled account", async () => {
+    useFakeDb({ roles: ["admin"], blocked: true });
+    await expect(loadStaffRoles("user-1")).resolves.toEqual({ staffRoles: ["admin"], blocked: true });
   });
 
   it("propagates database rejections", async () => {
     const failure = new Error("connection refused");
     useFakeDb({ failWith: failure });
-    // Drizzle wraps single-query failures; the original error stays as cause.
-    await expect(loadStaffRoles("user-1")).rejects.toMatchObject({ cause: failure });
+    await expect(loadStaffRoles("user-1")).rejects.toBe(failure);
   });
 });
 

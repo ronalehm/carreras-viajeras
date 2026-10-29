@@ -168,10 +168,21 @@ describe("grantStaffRole", () => {
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
       "INSERT INTO staff_assignments (user_id, role, reason, granted_by) " +
-        "SELECT profiles.user_id, $1::staff_role, 'crm-admin', $2 FROM profiles WHERE profiles.user_id = $3 " +
+        "SELECT profiles.user_id, $1::staff_role, 'crm-admin', $2 FROM profiles " +
+        "WHERE profiles.user_id = $3 AND profiles.disabled_at IS NULL " +
         "ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING RETURNING id",
     );
     expect(fake.queries[0].params).toEqual(["admin", "admin-1", "user-2"]);
+  });
+
+  it("never grants to a disabled or deleted account: the profile must have disabled_at IS NULL", async () => {
+    const fake = useFakeDb();
+
+    // A disabled (or deleted, which implies disabled) profile yields no row: no_change.
+    await expect(grantStaffRole({ userId: "user-2", role: "commercial" }, "admin-1")).resolves.toBe(false);
+    expect(normalize(fake.queries[0].sql)).toMatch(
+      /FROM profiles WHERE profiles\.user_id = \$3 AND profiles\.disabled_at IS NULL ON CONFLICT/,
+    );
   });
 
   it("returns false (no_change) when no row is inserted", async () => {

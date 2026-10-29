@@ -39,13 +39,19 @@ export async function listPendingRoleRequests(): Promise<PendingRoleRequest[]> {
 
 // One statement: the UPDATE only matches a pending request (a concurrent decision waits on the row
 // lock and then matches nothing), and the INSERT only grants what that UPDATE returned.
-// Data-modifying CTEs always run to completion. false = not_found (missing or already decided).
+// Data-modifying CTEs always run to completion. false = not_found (missing, already decided, or the
+// account is disabled or deleted: the request stays pending and nothing is granted).
 export async function approveRoleRequest(requestId: string, actorUserId: string): Promise<boolean> {
   const result = await getDb().execute<{ id: string }>(sql`
     WITH approved AS (
       UPDATE role_requests
       SET status = 'approved', decided_at = now(), decided_by = ${actorUserId}
-      WHERE id = ${requestId} AND status = 'pending'
+      WHERE id = ${requestId}
+        AND status = 'pending'
+        AND NOT EXISTS (
+          SELECT 1 FROM profiles p
+          WHERE p.user_id = role_requests.user_id AND p.disabled_at IS NOT NULL
+        )
       RETURNING id, user_id, role
     ),
     granted AS (
