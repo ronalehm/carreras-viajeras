@@ -163,10 +163,10 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 ## Plan de tareas
 
 ### Fase 1: datos y endpoint (4 tareas, 13 archivos: 2 generados por drizzle-kit)
-- [ ] T1 — Tabla `campaign_visit_days`; `npm run db:generate` y revisión del SQL · archivos: `lib/db-schema.ts`, `drizzle/0013_*.sql` (generado), `drizzle/meta/0013_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — `campaignVisitSchema`, `recordCampaignVisit`, `visitCount` y tipos, con tests; export en la API pública · archivos: `modules/crm/schemas/campaigns.schema.ts`, `modules/crm/schemas/campaigns.schema.test.ts`, `modules/crm/services/campaigns.service.ts`, `modules/crm/services/campaigns.service.test.ts`, `modules/crm/types/campaigns.types.ts`, `modules/crm/index.ts` · depende de: T1 · secuencial (`index.ts`)
-- [ ] T3 — Route Handler `POST /api/campaign-visits`, con tests · archivos: `app/api/campaign-visits/route.ts`, `app/api/campaign-visits/route.test.ts` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — README: "Migración de visitas por campaña" · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [x] T1 — Tabla `campaign_visit_days`; `npm run db:generate` y revisión del SQL · archivos: `lib/db-schema.ts`, `drizzle/0013_*.sql` (generado), `drizzle/meta/0013_snapshot.json` (generado), `drizzle/meta/_journal.json` · depende de: — · secuencial (base, `lib/`)
+- [x] T2 — `campaignVisitSchema`, `recordCampaignVisit`, `visitCount` y tipos, con tests; export en la API pública · archivos: `modules/crm/schemas/campaigns.schema.ts`, `modules/crm/schemas/campaigns.schema.test.ts`, `modules/crm/services/campaigns.service.ts`, `modules/crm/services/campaigns.service.test.ts`, `modules/crm/types/campaigns.types.ts`, `modules/crm/index.ts` · depende de: T1 · secuencial (`index.ts`)
+- [x] T3 — Route Handler `POST /api/campaign-visits`, con tests · archivos: `app/api/campaign-visits/route.ts`, `app/api/campaign-visits/route.test.ts` · depende de: T2 · paralelo (con T4)
+- [x] T4 — README: "Migración de visitas por campaña" · archivos: `README.md` · depende de: T1 · paralelo (con T3)
 
 ### Fase 2: ficha, contador y CRM (5 tareas, 13 archivos)
 - [ ] T1 — `registrationHref` y `CampaignVisitBeacon`, con tests; export en la API pública · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/components/CampaignVisitBeacon.tsx`, `modules/landing/components/CampaignVisitBeacon.test.tsx`, `modules/landing/index.ts` · depende de: Fase 1 · secuencial (`index.ts`)
