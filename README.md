@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local: antes de desplegar Clerk, comprueba además que `/crm/acceso` muestra el `<SignIn>` y que `GET /api/crm/me` sin sesión responde 401, no 500 (paso 5 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). El inicio de sesión completo con la instancia de producción de Clerk solo se valida en el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay diez migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk). Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay catorce migraciones (`0000`–`0013`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0013`, en orden y siguiendo sus secciones. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0013_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0013)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -931,6 +931,89 @@ ROLLBACK;
 ```
 
 Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
+
+### Migración de visitas por campaña (`0013`)
+
+`drizzle/0013_cute_nebula.sql` crea el contador de visitas por campaña ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)): la tabla `campaign_visit_days`, con una fila por campaña y día de Lima y el número de aperturas del enlace o del QR de ese día. No guarda nada de la persona (ni IP, ni agente de usuario, ni UTM). Está pendiente de aplicar por el usuario: **primero en una rama de desarrollo de Neon** y, cuando las pruebas de abajo salgan bien, en `production`, solo con autorización explícita de la operación remota. Tiene que estar aplicada antes de desplegar el código de esa spec: `POST /api/campaign-visits` escribe en ella (sin la tabla, cada visita se pierde y deja `campaign visit: record failed` en el log) y, en la Fase 2, `/crm/campanas` la lee.
+
+**El número `0013` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0013`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
+
+**Orden: `0000` → … → `0012` → esta.** Necesita `campaigns` (`0007`) y va después de `0012`, respetando el journal de Drizzle. Si falta alguna anterior en esa rama, aplicarla antes siguiendo su sección (para `0010`, [Migración incremental de la integración](#migración-incremental-de-la-integración); para `0011` y `0012`, [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)). No volver a aplicar ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- crea la tabla `campaign_visit_days` con `campaign_id` (`uuid`), `day` (`date`, el día en Lima) y `visits` (`integer`), las tres obligatorias;
+- la clave primaria `campaign_visit_days_campaign_id_day_pk (campaign_id, day)`: una sola fila por campaña y día. La aplicación suma cada visita a la fila del día con una sola sentencia (`INSERT … ON CONFLICT (campaign_id, day) DO UPDATE SET visits = campaign_visit_days.visits + 1`);
+- el CHECK `campaign_visit_days_visits_chk` (`visits > 0`);
+- la clave foránea `campaign_visit_days_campaign_id_campaigns_id_fk` hacia `campaigns`, `ON DELETE restrict` (las campañas nunca se borran, se cierran).
+
+No cambia ninguna tabla existente. La tabla nueva queda vacía: las visitas empiezan a contar con el despliegue, sin histórico.
+
+Revisión previa:
+
+- `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0013_cute_nebula.sql` no devuelve nada;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0013_cute_nebula.sql` devuelve solo dos líneas, `CREATE TABLE "campaign_visit_days"` y `ALTER TABLE "campaign_visit_days" ADD CONSTRAINT …` (la clave foránea): solo crea `campaign_visit_days` y no altera `campaigns`, `trips`, `leads`, `profiles` ni ninguna otra tabla.
+
+**Un solo bloque, con el archivo tal cual.** No hay `ALTER TYPE … ADD VALUE` ni enums nuevos, así que todo va en una transacción.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0012` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regclass('public.campaigns'), to_regprocedure('public.cv_reconcile_rewards(text)'), to_regclass('public.campaign_visit_days');` devuelve `campaigns`, `cv_reconcile_rewards(text)` (una función de `0012`) y `NULL`. Si alguna de las dos primeras es `NULL`, falta una migración anterior: aplicarla antes. Si la tercera no es `NULL`, la `0013` ya está aplicada: no repetirla.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. Escribir `BEGIN;`, debajo el archivo `drizzle/0013_cute_nebula.sql` completo y, al final, `COMMIT;`, y ejecutarlo todo junto. La línea `--> statement-breakpoint` es un comentario de SQL y se puede dejar.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0013_cute_nebula.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f "$F"
+   ```
+
+   `-1` lo ejecuta todo en una sola transacción. Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+
+   Si falla, la transacción se deshace entera y no se guarda nada. Errores que se pueden ver:
+   - `relation "campaigns" does not exist`: falta `0007` en esa rama; aplicarla antes (y las que falten hasta `0012`).
+   - `relation "campaign_visit_days" already exists`: repetir la consulta del paso 1; si la tercera columna no es `NULL`, la migración ya estaba aplicada y no hay que repetir nada.
+   - cualquier otro error: la rama no está en el estado esperado; parar y revisar.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+5. Comprobar:
+   - las columnas: `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'campaign_visit_days' ORDER BY ordinal_position;` devuelve `campaign_id` `uuid` `NO`, `day` `date` `NO` y `visits` `integer` `NO`;
+   - las restricciones: `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'public.campaign_visit_days'::regclass AND contype IN ('p','c','f') ORDER BY 1;` devuelve tres: `campaign_visit_days_campaign_id_campaigns_id_fk` (`f`), `campaign_visit_days_campaign_id_day_pk` (`p`) y `campaign_visit_days_visits_chk` (`c`);
+   - la regla de borrado de la clave foránea: `SELECT confrelid::regclass, confdeltype FROM pg_constraint WHERE conname = 'campaign_visit_days_campaign_id_campaigns_id_fk';` devuelve `campaigns` y `r` (`restrict`);
+   - los datos: `SELECT count(*) FROM campaign_visit_days;` devuelve 0.
+
+Prueba manual de las restricciones, **solo en la rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil, un viaje y una campaña de prueba, una fila de visitas con `visits = 1` y una segunda visita del mismo día sumada como lo hace la aplicación). La consulta final devuelve una fila: `2026-10-29` con `2` visitas:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-visitas', 'visitas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-visitas', 'Maratón de prueba', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba');
+INSERT INTO campaigns (id, code, trip_id, channel, name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000002', 'prueba-visitas', '00000000-0000-4000-8000-000000000001', 'event', 'Campaña de prueba', 'test-visitas');
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES
+  ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1);
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES
+  ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1)
+  ON CONFLICT (campaign_id, day) DO UPDATE SET visits = campaign_visit_days.visits + 1;
+SELECT day, visits FROM campaign_visit_days WHERE campaign_id = '00000000-0000-4000-8000-000000000002';
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- campaign_visit_days_visits_chk: visits = 0 (otro día, para no chocar con la clave primaria)
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000002', '2026-10-30', 0);
+-- campaign_visit_days_campaign_id_day_pk: segunda fila con la misma campaña y el mismo día, sin ON CONFLICT
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1);
+-- campaign_visit_days_campaign_id_campaigns_id_fk: campaña inexistente
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000099', '2026-10-29', 1);
+ROLLBACK;
+```
+
+Después del `ROLLBACK;`, `SELECT count(*) FROM campaign_visit_days;` sigue devolviendo 0 y no queda el perfil `test-visitas`. Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
 
 ### Campañas, QR y modo stand
 
