@@ -20,10 +20,13 @@ const environmentSchema = z.object({
       && ["http://localhost:3000", "http://localhost:8787"].includes(value))),
 });
 
+// Its message carries field names only, so callers may log it.
+export class InvalidEnvironmentError extends Error {}
+
 // Never attach Zod issues or input to the error: field names only.
-function invalidEnvironment(error: z.ZodError): Error {
+function invalidEnvironment(error: z.ZodError): InvalidEnvironmentError {
   const fields = [...new Set(error.issues.map((issue) => issue.path[0]))];
-  return new Error(`Invalid environment fields: ${fields.join(", ")}`);
+  return new InvalidEnvironmentError(`Invalid environment fields: ${fields.join(", ")}`);
 }
 
 // Validate only at request time. Never attach Zod issues or input to the error.

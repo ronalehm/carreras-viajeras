@@ -18,6 +18,7 @@ import {
 } from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import type { StaffRole } from "@/lib/auth/permissions";
+import { InvalidEnvironmentError } from "@/lib/env";
 import {
   getCurrentUser,
   requireCrmUser,
@@ -262,6 +263,19 @@ describe("roles from the database", () => {
     expect(logError).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
     expect(JSON.stringify(logError.mock.calls)).not.toContain("password");
+    logError.mockRestore();
+  });
+
+  it("names the misconfigured environment field, never its value", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    accept.mockRejectedValue(new InvalidEnvironmentError("Invalid environment fields: CLERK_SECRET_KEY"));
+
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "auth: role lookup failed (Invalid environment fields: CLERK_SECRET_KEY)",
+    );
     logError.mockRestore();
   });
 
