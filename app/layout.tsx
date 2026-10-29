@@ -1,4 +1,3 @@
-import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Archivo, Plus_Jakarta_Sans } from "next/font/google";
@@ -32,11 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={cn("font-sans", jakarta.variable, archivo.variable)}
     >
-      <body>
-        <ClerkProvider>
-          {children}
-        </ClerkProvider>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
