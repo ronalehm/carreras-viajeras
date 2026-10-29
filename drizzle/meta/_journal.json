@@ -64,6 +64,13 @@
       "when": 1793255102316,
       "tag": "0008_moaning_roulette",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793292829139,
+      "tag": "0009_client_stage_emails",
+      "breakpoints": true
     }
   ]
 }

@@ -62,6 +62,24 @@ export function getIntegrationEnv(): { N8N_API_TOKEN: string } | null {
   return result.data;
 }
 
+const clientEmailEnvSchema = z.object({
+  CRM_EMAIL_FROM: z.email().max(254),
+  CRM_EMAIL_AUTOMATION_START_AT: z.iso.datetime({ offset: true }),
+});
+
+// Deliberately off unless explicitly enabled. SMTP credentials live only in n8n.
+export function getClientEmailEnv(): { from: string; startAt: Date } | null {
+  const enabled = readOptional("CRM_EMAIL_AUTOMATION_ENABLED");
+  if (enabled === undefined || enabled === "false") return null;
+  if (enabled !== "true") throw new Error("Invalid environment fields: CRM_EMAIL_AUTOMATION_ENABLED");
+  const result = clientEmailEnvSchema.safeParse({
+    CRM_EMAIL_FROM: readOptional("CRM_EMAIL_FROM"),
+    CRM_EMAIL_AUTOMATION_START_AT: readOptional("CRM_EMAIL_AUTOMATION_START_AT"),
+  });
+  if (!result.success) throw invalidEnvironment(result.error);
+  return { from: result.data.CRM_EMAIL_FROM, startAt: new Date(result.data.CRM_EMAIL_AUTOMATION_START_AT) };
+}
+
 // Test secrets documented by Cloudflare (always pass, always fail, already spent).
 // Their responses carry no real hostname or action, so they are allowed only in development.
 const TURNSTILE_TEST_SECRETS: readonly string[] = [

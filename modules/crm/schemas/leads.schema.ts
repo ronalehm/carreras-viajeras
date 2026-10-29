@@ -146,6 +146,7 @@ export const updateLeadSchema = createLeadBaseSchema
 
 // Actions on the lead as a whole (archive): only its id; any other submitted key is dropped.
 export const leadIdSchema = z.object({ leadId: leadUuidSchema });
+export const leadEmailRetrySchema = z.object({ messageId: z.uuid({ error: "El mensaje no es válido." }) });
 
 const LOST_REASON_REQUIRED = "Indica el motivo de la pérdida.";
 const LOST_REASON_LENGTH = "El motivo debe tener entre 3 y 200 caracteres.";
@@ -219,6 +220,7 @@ const stageParamSchema = z.enum([...leadStageSchema.options, "archivados"]);
 // List filters from the URL. Each key falls back to its default on any invalid value,
 // including a repeated parameter (an array), so parsing never throws.
 export const leadListQuerySchema = z.object({
+  vista: z.literal("lista").optional().catch(undefined),
   etapa: stageParamSchema.optional().catch(undefined),
   responsable: z.string().min(1).max(255).optional().catch(undefined),
   seguimiento: followUpParamSchema.optional().catch(undefined),

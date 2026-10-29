@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { tripStatusEnum } from "@/lib/db-schema";
+import type { clientEmailStatusEnum, tripStatusEnum } from "@/lib/db-schema";
 import type {
   contactPreferenceSchema,
   createLeadSchema,
@@ -35,6 +35,7 @@ export type LeadListFilters = {
   owner?: "mine" | "unassigned" | string;
   followUp?: "overdue" | "pending";
   channel?: LeadChannel;
+  view?: "list";
   page: number;
 };
 
@@ -70,11 +71,35 @@ export type LeadList = {
   ownerOptions: LeadOwnerOption[];
 };
 
+export type LeadPipelineItem = LeadListItem & {
+  email: string | null;
+  contactOptOutAt: Date | null;
+  lostReason: string | null;
+  emailStatus?: LeadEmailSummary | null;
+};
+
+export type LeadEmailStatus = (typeof clientEmailStatusEnum.enumValues)[number];
+export type LeadEmailSummary = { id: string; stage: LeadStage; status: LeadEmailStatus; lastErrorCode: string | null };
+export type LeadEmail = LeadEmailSummary & {
+  recipient: string | null; sender: string; subject: string; body: string;
+  templateVersion: number; attempts: number; executionId: string | null;
+  createdAt: Date; updatedAt: Date; sentAt: Date | null; canRetry: boolean;
+  currentEpisode: boolean;
+};
+export type LeadMessagesData = { messages: LeadEmail[]; automation: "enabled" | "disabled" | "invalid" };
+
+export type LeadPipelineData = {
+  columns: { stage: LeadStage; leads: LeadPipelineItem[]; total: number }[];
+  stageCounts: Record<LeadStage, number>;
+  ownerOptions: LeadOwnerOption[];
+};
+
 // Lead detail page. createdBy is null for system leads (web form, Google Forms, import: no
 // author); archivedBy is null while the lead is not archived. The campaign (CRM QR or link), the
 // UTM fields and marketingOptInAt (independent promotions checkbox) are only written by the web
 // capture; contactOptOutAt is set when the contact asked not to be followed up.
 export type LeadDetail = Omit<LeadListItem, "trip"> & {
+  emailStatus?: LeadEmailSummary | null;
   email: string | null;
   location: string | null;
   lostReason: string | null;
@@ -153,7 +178,8 @@ export type LeadActionState =
         | "not_found"
         | "no_change"
         | "closed"
-        | "opted_out";
+        | "opted_out"
+        | "email_not_retryable";
       message: string;
       fieldErrors?: Record<string, string[]>;
       values?: Record<string, string>;

@@ -8,5 +8,9 @@ APP_ORIGIN=
 # Optional integrations (crm-leads-capture). Leave blank if unused.
 # Bearer token for the private n8n API: Cloudflare Secret and n8n credential, at least 32 random characters.
 N8N_API_TOKEN=
+# Customer email via n8n SMTP. SMTP credentials stay in n8n.
+CRM_EMAIL_AUTOMATION_ENABLED=false
+CRM_EMAIL_FROM=
+CRM_EMAIL_AUTOMATION_START_AT=
 # Turnstile Secret Key (Cloudflare Secret). Real key only: npm run preview runs in production mode and rejects test keys.
 TURNSTILE_SECRET_KEY=

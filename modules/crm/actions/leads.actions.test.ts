@@ -16,12 +16,14 @@ vi.mock("../services/leads.service", () => ({
   setNextAction: vi.fn(),
 }));
 vi.mock("../services/activities.service", () => ({ addLeadActivity: vi.fn() }));
+vi.mock("@/modules/integrations", () => ({ retryClientEmail: vi.fn() }));
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { ConfirmActionState } from "@/components/shared/ConfirmActionButton";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
+import { retryClientEmail } from "@/modules/integrations";
 import { createLeadSchema } from "../schemas/leads.schema";
 import { addLeadActivity } from "../services/activities.service";
 import {
@@ -43,6 +45,7 @@ import {
   optOutLeadAction,
   setNextActionAction,
   updateLeadAction,
+  retryLeadEmailAction,
 } from "./leads.actions";
 
 const IDLE: LeadActionState = { status: "idle" };
@@ -90,6 +93,31 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("retryLeadEmailAction", () => {
+  it.each([new UnauthorizedError(), new ForbiddenError()])("authorizes before reading message data", async (error) => {
+    vi.mocked(requirePermission).mockRejectedValue(error);
+    const result = await retryLeadEmailAction(IDLE, form({ messageId: LEAD_ID }));
+    expect(result.status).toBe("error");
+    expect(requirePermission).toHaveBeenCalledWith("leads.manage");
+    expect(retryClientEmail).not.toHaveBeenCalled();
+  });
+  it("rejects invalid IDs and derives the lead to revalidate from the service result", async () => {
+    expect((await retryLeadEmailAction(IDLE, form({ messageId: "invalid" }))).status).toBe("error");
+    expect(retryClientEmail).not.toHaveBeenCalled();
+    vi.mocked(retryClientEmail).mockResolvedValue(TRIP_ID);
+    const result = await retryLeadEmailAction(IDLE, form({ messageId: LEAD_ID, leadId: "tampered", to: "injected@example.test", actorUserId: "other" }));
+    expect(result.status).toBe("success");
+    expect(retryClientEmail).toHaveBeenCalledWith(LEAD_ID, "staff-1");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${TRIP_ID}`);
+    expect(revalidatePath).not.toHaveBeenCalledWith("/crm/leads/tampered");
+  });
+  it("reports a non-retryable state without invalidating pages", async () => {
+    vi.mocked(retryClientEmail).mockResolvedValue(null);
+    expect(await retryLeadEmailAction(IDLE, form({ messageId: LEAD_ID }))).toMatchObject({ status: "error", code: "email_not_retryable" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 });
 
 describe("createLeadAction: permisos en llamadas directas", () => {

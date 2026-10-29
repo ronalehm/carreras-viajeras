@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import type { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission, type CurrentUser } from "@/lib/auth/guards";
+import { retryClientEmail } from "@/modules/integrations";
 import {
   createLeadSchema,
   leadActivityFormSchema,
   leadIdSchema,
+  leadEmailRetrySchema,
   leadOwnerChangeSchema,
   leadStageChangeSchema,
   nextActionSchema,
@@ -41,6 +43,7 @@ const ERROR_MESSAGES: Record<LeadActionErrorCode, string> = {
   no_change: "No hay cambios.",
   closed: "El lead está cerrado o archivado.",
   opted_out: "El contacto pidió no seguir: no se programan próximas acciones.",
+  email_not_retryable: "No se puede reintentar: revisa el estado del correo, la etapa y la configuración de envíos.",
 };
 
 const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
@@ -136,6 +139,17 @@ async function runService<T>(call: () => Promise<T>): Promise<T> {
 function revalidateLead(leadId: string) {
   revalidatePath(LEAD_LIST_PATH);
   revalidatePath(leadDetailPath(leadId));
+}
+
+export async function retryLeadEmailAction(_prev: LeadActionState, formData: FormData): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+  const parsed = leadEmailRetrySchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", undefined, toFieldErrors(parsed.error));
+  const leadId = await runService(() => retryClientEmail(parsed.data.messageId, actor.id));
+  if (!leadId) return failure("email_not_retryable");
+  revalidateLead(leadId);
+  return { status: "success", message: "Reintento programado. n8n comprobará la elegibilidad antes de enviar." };
 }
 
 // Contact and origin data: the session user is the author of the 'channel_changed' activity.

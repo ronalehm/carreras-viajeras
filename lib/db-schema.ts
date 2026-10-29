@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
   boolean,
+  bigserial,
   check,
   date,
   foreignKey,
@@ -558,6 +559,9 @@ export const outboxEvents = pgTable(
   "outbox_events",
   {
     id: uuid("id").primaryKey().defaultRandom(),
+    // Allocated after the lead lock in stage mutations. Timestamps alone cannot order
+    // concurrent transitions (a waiting transaction may have an older now()).
+    sequence: bigserial("sequence", { mode: "number" }).notNull(),
     type: outboxEventTypeEnum("type").notNull(),
     leadId: uuid("lead_id")
       .notNull()
@@ -605,11 +609,55 @@ export const outboxEvents = pgTable(
     uniqueIndex("outbox_events_dedupe_key_uq")
       .on(table.dedupeKey)
       .where(sql`${table.dedupeKey} IS NOT NULL`),
+    uniqueIndex("outbox_events_sequence_uq").on(table.sequence),
+    index("outbox_events_lead_sequence_idx").on(table.leadId, table.sequence),
     index("outbox_events_ready_idx")
       .on(table.availableAt)
       .where(sql`${table.status} IN ('pending', 'processing')`),
   ],
 );
+
+export const clientEmailStatusEnum = pgEnum("client_email_status", [
+  "pending", "claimed", "sending", "sent", "failed", "skipped", "unknown",
+]);
+
+// Separate from the original n8n event consumer. Each source event has one logical message.
+// Final attempts retain their token so late/repeated callbacks can be reconciled safely.
+export const clientEmails = pgTable("client_emails", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  sourceEventId: uuid("source_event_id").notNull().references(() => outboxEvents.id, { onDelete: "restrict" }),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "restrict" }),
+  stage: leadStageEnum("stage").notNull(),
+  templateVersion: smallint("template_version").notNull().default(1),
+  recipient: text("recipient"),
+  sender: text("sender").notNull(),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  status: clientEmailStatusEnum("status").notNull().default("pending"),
+  attempts: integer("attempts").notNull().default(0),
+  attemptToken: uuid("attempt_token"),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  executionId: text("execution_id"),
+  smtpMessageId: text("smtp_message_id"),
+  lastErrorCode: text("last_error_code"),
+  retryRequestedBy: text("retry_requested_by").references(() => profiles.userId, { onDelete: "restrict" }),
+  retryRequestedAt: timestamp("retry_requested_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("client_emails_event_uq").on(table.sourceEventId),
+  index("client_emails_lead_created_idx").on(table.leadId, table.createdAt),
+  index("client_emails_ready_idx").on(table.status, table.createdAt),
+  check("client_emails_attempts_chk", sql`${table.attempts} BETWEEN 0 AND 3`),
+  check("client_emails_lease_chk", sql`(${table.status} IN ('claimed', 'sending')) = (${table.leaseUntil} IS NOT NULL)`),
+  check("client_emails_token_chk", sql`${table.status} NOT IN ('claimed', 'sending', 'sent', 'unknown') OR ${table.attemptToken} IS NOT NULL`),
+  check("client_emails_sent_chk", sql`(${table.status} = 'sent') = (${table.sentAt} IS NOT NULL)`),
+  check("client_emails_content_chk", sql`char_length(${table.subject}) BETWEEN 1 AND 200 AND char_length(${table.body}) BETWEEN 1 AND 4000 AND char_length(${table.sender}) BETWEEN 3 AND 254 AND (${table.recipient} IS NULL OR char_length(${table.recipient}) BETWEEN 3 AND 254)`),
+  check("client_emails_error_chk", sql`${table.lastErrorCode} IS NULL OR ${table.lastErrorCode} ~ '^[a-z0-9_]{1,40}$'`),
+  check("client_emails_execution_chk", sql`${table.executionId} IS NULL OR char_length(${table.executionId}) BETWEEN 1 AND 120`),
+  check("client_emails_smtp_id_chk", sql`${table.smtpMessageId} IS NULL OR char_length(${table.smtpMessageId}) BETWEEN 1 AND 254`),
+]);
 
 // Append-only history: never updated or deleted. Typed columns per activity type (no JSON).
 export const leadActivities = pgTable(
