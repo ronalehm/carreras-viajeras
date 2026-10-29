@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getCatalogTrip, SiteFooter, SiteHeader, TripDetail } from "@/modules/landing";
+import {
+  firstParam,
+  getCatalogOffer,
+  getCatalogTrip,
+  SiteFooter,
+  SiteHeader,
+  TripDetail,
+} from "@/modules/landing";
 
 // Rendered per request: the catalog read calls connection(). No generateStaticParams.
 export async function generateMetadata({ params }: PageProps<"/viajes/[slug]">): Promise<Metadata> {
@@ -13,14 +20,17 @@ export async function generateMetadata({ params }: PageProps<"/viajes/[slug]">):
   };
 }
 
-export default async function TripPage({ params }: PageProps<"/viajes/[slug]">) {
-  const trip = await getCatalogTrip((await params).slug);
+export default async function TripPage({ params, searchParams }: PageProps<"/viajes/[slug]">) {
+  const { slug } = await params;
+  // ?c= only selects a valid campaign offer (decided by the server); every other parameter is ignored.
+  const campaignCode = firstParam((await searchParams).c) ?? null;
+  const [trip, offer] = await Promise.all([getCatalogTrip(slug), getCatalogOffer(slug, campaignCode)]);
   if (!trip) notFound();
   return (
     <>
       <SiteHeader />
       <main>
-        <TripDetail trip={trip} />
+        <TripDetail trip={trip} offer={offer} />
       </main>
       <SiteFooter />
     </>

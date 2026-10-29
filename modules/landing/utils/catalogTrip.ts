@@ -2,12 +2,14 @@ import { cache } from "react";
 import {
   formatTripDate,
   formatTripDateRange,
-  formatTripPrice,
   getPublishedTripBySlug,
   type PublicTrip,
 } from "@/modules/trips";
 
-/** What the trip page renders, built only from the published catalog. */
+/**
+ * What the trip page renders, built only from the published catalog. No prices: the price lives in
+ * the commercial offers (catalogOffer.ts); the old price fields of trips are no longer published.
+ */
 export type TripLanding = {
   slug: string;
   title: string;
@@ -19,22 +21,13 @@ export type TripLanding = {
   travelDates: string | null;
   capacity: string; // "100 cupos" | "Cupos por confirmar"
   officialUrl: string | null;
-  price: string; // includes "Precio a consultar"
-  installmentsPrice: string | null;
-  deposit: string | null;
-  companionPrice: string | null;
-  paymentTerms: string[]; // paragraphs
   includes: string[];
   excludes: string[];
   notes: string[]; // paragraphs
 };
 
-function optionalPrice(priceUsd: number | null): string | null {
-  return priceUsd === null ? null : formatTripPrice(priceUsd);
-}
-
 /** One paragraph per non-empty line, trimmed. */
-function paragraphs(text: string | null): string[] {
+export function paragraphs(text: string | null): string[] {
   if (text === null) return [];
   return text
     .split(/\r?\n/)
@@ -55,11 +48,6 @@ function toTripLanding(trip: PublicTrip): TripLanding {
       trip.startDate && trip.endDate ? formatTripDateRange(trip.startDate, trip.endDate) : null,
     capacity: trip.capacity === null ? "Cupos por confirmar" : `${trip.capacity} cupos`,
     officialUrl: trip.officialUrl,
-    price: formatTripPrice(trip.priceUsd),
-    installmentsPrice: optionalPrice(trip.installmentsPriceUsd),
-    deposit: optionalPrice(trip.depositUsd),
-    companionPrice: optionalPrice(trip.companionPriceUsd),
-    paymentTerms: paragraphs(trip.paymentTerms),
     includes: trip.includes,
     excludes: trip.excludes,
     notes: paragraphs(trip.notes),
