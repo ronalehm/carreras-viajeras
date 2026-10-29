@@ -1,7 +1,7 @@
 # Local Workers secrets only. Never commit .dev.vars with real values.
 DATABASE_URL=
-NEON_AUTH_BASE_URL=
-NEON_AUTH_COOKIE_SECRET=
+# Clerk secret key (sk_test_… / sk_live_…): server only, Cloudflare Secret in production.
+CLERK_SECRET_KEY=
 # Production origin: https://carreras-viajeras.mentec.dev
 # Development only: http://localhost:3000 or http://localhost:8787
 APP_ORIGIN=
