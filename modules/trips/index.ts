@@ -7,7 +7,9 @@ export { formatTripDate, formatTripDateRange, formatTripPrice } from "./utils/tr
 export { listTrips, getTripById } from "./services/trips.service";
 export { TripTable } from "./components/TripTable";
 export { TripForm } from "./components/TripForm";
-export type { Trip } from "./types/trips.types";
+export type { Trip, TripScope } from "./types/trips.types";
+// Server-only: the CRM actor's trip scope, required by every CRM trip read and write.
+export { tripScopeFor } from "./utils/tripScope";
 
 // Commercial offers and USD→PEN exchange rate. Server-only reads: getActiveOffer for the bookings
 // specs, getPublicOffer for the landing and getCurrentExchangeRate for bookings-mercadopago.

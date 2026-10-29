@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { manageableRoles } from "@/lib/auth/permissions";
 import {
   getCrmAccess,
   InvitationsTable,
@@ -29,18 +30,20 @@ export default async function StaffAdminPage() {
   }
 
   const { staff, invitations } = await listStaffOverview();
+  // UI hint only: each Server Action re-checks canManageRole for the actor.
+  const roles = manageableRoles(access.user.staffRoles);
 
   return (
     <section className="flex flex-col gap-8">
       <h1 className="text-xl font-semibold">Usuarios del equipo</h1>
-      <InviteStaffForm />
+      {roles.length > 0 && <InviteStaffForm roles={roles} />}
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Equipo activo</h2>
-        <StaffTable staff={staff} />
+        <StaffTable staff={staff} manageableRoles={roles} />
       </section>
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Invitaciones pendientes</h2>
-        <InvitationsTable invitations={invitations} />
+        <InvitationsTable invitations={invitations} manageableRoles={roles} />
       </section>
     </section>
   );

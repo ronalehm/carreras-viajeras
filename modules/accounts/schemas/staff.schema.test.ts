@@ -12,8 +12,10 @@ const issuePaths = (result: { error?: { issues: { path: PropertyKey[] }[] } }) =
   result.error?.issues.map((issue) => issue.path);
 
 describe("staffRoleSchema", () => {
-  it("matches the staff_role database enum", () => {
-    expect(staffRoleSchema.options).toEqual(staffRoleEnum.enumValues);
+  it("matches the staff_role database enum minus super_admin", () => {
+    const managedRoles = staffRoleEnum.enumValues.filter((role) => role !== "super_admin");
+
+    expect([...staffRoleSchema.options].sort()).toEqual([...managedRoles].sort());
   });
 });
 
@@ -32,7 +34,13 @@ describe("inviteStaffSchema", () => {
     expect(issuePaths(result)).toEqual([["email"]]);
   });
 
-  it.each(["operations", "moderator", "", "ADMIN", undefined])("rejects the role %j", (role) => {
+  it("accepts the organizer role", () => {
+    const result = inviteStaffSchema.safeParse({ email: "luis@example.com", role: "organizer" });
+
+    expect(result.data).toEqual({ email: "luis@example.com", role: "organizer" });
+  });
+
+  it.each(["operations", "moderator", "", "ADMIN", "super_admin", undefined])("rejects the role %j", (role) => {
     const result = inviteStaffSchema.safeParse({ email: "luis@example.com", role });
 
     expect(result.success).toBe(false);
@@ -83,8 +91,14 @@ describe("staffRoleChangeSchema", () => {
     expect(issuePaths(result)).toEqual([["userId"]]);
   });
 
-  it("rejects a role outside commercial|admin", () => {
-    const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role: "moderator" });
+  it("accepts the organizer role", () => {
+    const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role: "organizer" });
+
+    expect(result.data).toEqual({ userId: "user-1", role: "organizer" });
+  });
+
+  it.each(["moderator", "super_admin"])("rejects the role %j", (role) => {
+    const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role });
 
     expect(result.success).toBe(false);
     expect(issuePaths(result)).toEqual([["role"]]);
