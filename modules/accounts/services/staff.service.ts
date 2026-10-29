@@ -1,5 +1,6 @@
 import "server-only";
-import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
 import { profiles, staffAssignments, staffInvitations } from "@/lib/db-schema";
 import type {
@@ -84,12 +85,24 @@ export async function createInvitation(
   return inserted[0] ?? "pending_invitation_exists";
 }
 
-// false = not_found: missing, already accepted or already revoked.
-export async function revokeInvitation(invitationId: string, actorUserId: string): Promise<boolean> {
+// false = not_found: missing, already accepted, already revoked or its role is not one of `roles`
+// (the roles the actor may manage). The role filter lives in the same UPDATE, so there is no TOCTOU.
+export async function revokeInvitation(
+  invitationId: string,
+  actorUserId: string,
+  roles: readonly StaffRole[],
+): Promise<boolean> {
+  if (roles.length === 0) return false;
   const rows = await getDb()
     .update(staffInvitations)
     .set({ revokedAt: sql`now()`, revokedBy: actorUserId })
-    .where(and(eq(staffInvitations.id, invitationId), pendingInvitation))
+    .where(
+      and(
+        eq(staffInvitations.id, invitationId),
+        pendingInvitation,
+        inArray(staffInvitations.role, roles),
+      ),
+    )
     .returning({ id: staffInvitations.id });
   return rows.length > 0;
 }

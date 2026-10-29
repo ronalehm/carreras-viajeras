@@ -22,6 +22,7 @@ vi.mock("../services/staff.service", () => ({
 
 import { revalidatePath } from "next/cache";
 import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
+import type { StaffRole } from "@/lib/auth/permissions";
 import {
   createInvitation,
   grantStaffRole,
@@ -55,10 +56,10 @@ function form(fields: Record<string, string>) {
   return formData;
 }
 
-function mockSession(emailVerified = true) {
-  auth.mockResolvedValue({ userId: "admin-1" });
+function mockSession(emailVerified = true, userId = "admin-1") {
+  auth.mockResolvedValue({ userId });
   currentUser.mockResolvedValue({
-    id: "admin-1",
+    id: userId,
     primaryEmailAddressId: "idn_primary",
     emailAddresses: [
       {
@@ -70,13 +71,22 @@ function mockSession(emailVerified = true) {
   });
 }
 
-function signedIn({ roles, emailVerified = true }: { roles: ("commercial" | "admin")[]; emailVerified?: boolean }) {
-  mockSession(emailVerified);
+function signedIn({
+  roles,
+  emailVerified = true,
+  userId = "admin-1",
+}: {
+  roles: StaffRole[];
+  emailVerified?: boolean;
+  userId?: string;
+}) {
+  mockSession(emailVerified, userId);
   accept.mockResolvedValue(roles);
   load.mockResolvedValue(roles);
 }
 
 const signedInAdmin = () => signedIn({ roles: ["admin"] });
+const signedInSuperAdmin = () => signedIn({ roles: ["super_admin"], userId: "super-1" });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -112,7 +122,7 @@ const actions: ActionCase[] = [
     name: "grantStaffRoleAction",
     action: grantStaffRoleAction,
     service: services.grantStaffRole,
-    valid: { userId: "user-2", role: "admin" },
+    valid: { userId: "user-2", role: "commercial" },
   },
   {
     name: "revokeStaffRoleAction",
@@ -133,6 +143,8 @@ describe.each(actions)("$name called directly", ({ action, service, valid }) => 
 
   it.each([
     ["a verified commercial", { roles: ["commercial"] as const }],
+    ["a verified organizer", { roles: ["organizer"] as const }],
+    ["a verified commercial and organizer", { roles: ["commercial", "organizer"] as const }],
     ["a verified account without roles", { roles: [] }],
     ["an admin with an unverified email", { roles: ["admin"] as const, emailVerified: false }],
   ])("returns forbidden for %s and does not call the service", async (_, session) => {
@@ -202,7 +214,7 @@ describe("inviteStaffAction", () => {
     signedInAdmin();
     services.createInvitation.mockResolvedValue("pending_invitation_exists");
 
-    await expect(inviteStaffAction(IDLE, form({ email: "luis@example.com", role: "admin" }))).resolves.toMatchObject({
+    await expect(inviteStaffAction(IDLE, form({ email: "luis@example.com", role: "commercial" }))).resolves.toMatchObject({
       status: "error",
       code: "pending_invitation_exists",
     });
@@ -239,7 +251,7 @@ describe("revokeInvitationAction", () => {
     await expect(
       revokeInvitationAction(IDLE, form({ invitationId: INVITATION_ID, revokedBy: "attacker" })),
     ).resolves.toMatchObject({ status: "success" });
-    expect(services.revokeInvitation).toHaveBeenCalledExactlyOnceWith(INVITATION_ID, "admin-1");
+    expect(services.revokeInvitation).toHaveBeenCalledExactlyOnceWith(INVITATION_ID, "admin-1", ["commercial"]);
   });
 
   it("rejects a malformed invitation id", async () => {
@@ -268,15 +280,15 @@ describe("grantStaffRoleAction", () => {
   it("uses the session user as actor even when the form sends grantedBy", async () => {
     signedInAdmin();
 
-    await grantStaffRoleAction(IDLE, form({ userId: "user-2", role: "admin", grantedBy: "attacker" }));
-    expect(services.grantStaffRole).toHaveBeenCalledExactlyOnceWith({ userId: "user-2", role: "admin" }, "admin-1");
+    await grantStaffRoleAction(IDLE, form({ userId: "user-2", role: "commercial", grantedBy: "attacker" }));
+    expect(services.grantStaffRole).toHaveBeenCalledExactlyOnceWith({ userId: "user-2", role: "commercial" }, "admin-1");
   });
 
   it("maps no insert to no_change", async () => {
     signedInAdmin();
     services.grantStaffRole.mockResolvedValue(false);
 
-    await expect(grantStaffRoleAction(IDLE, form({ userId: "user-2", role: "admin" }))).resolves.toMatchObject({
+    await expect(grantStaffRoleAction(IDLE, form({ userId: "user-2", role: "commercial" }))).resolves.toMatchObject({
       status: "error",
       code: "no_change",
     });
@@ -295,16 +307,16 @@ describe("grantStaffRoleAction", () => {
 
 describe("revokeStaffRoleAction", () => {
   it("passes the role change and the session actor", async () => {
-    signedInAdmin();
+    signedInSuperAdmin();
 
     await expect(
       revokeStaffRoleAction(IDLE, form({ userId: "admin-1", role: "admin", revokedBy: "attacker" })),
     ).resolves.toMatchObject({ status: "success" });
-    expect(services.revokeStaffRole).toHaveBeenCalledExactlyOnceWith({ userId: "admin-1", role: "admin" }, "admin-1");
+    expect(services.revokeStaffRole).toHaveBeenCalledExactlyOnceWith({ userId: "admin-1", role: "admin" }, "super-1");
   });
 
   it.each(["not_found", "last_admin"] as const)("maps %s and does not revalidate", async (code) => {
-    signedInAdmin();
+    signedInSuperAdmin();
     services.revokeStaffRole.mockResolvedValue(code);
 
     await expect(revokeStaffRoleAction(IDLE, form({ userId: "admin-1", role: "admin" }))).resolves.toMatchObject({
@@ -313,5 +325,224 @@ describe("revokeStaffRoleAction", () => {
       message: expect.any(String),
     });
     expect(revalidate).not.toHaveBeenCalled();
+  });
+});
+
+// Role management matrix (actor × target role). Expected outcomes are written out by hand, not
+// derived from canManageRole, so the test pins the rules of the spec.
+type Outcome = "success" | "forbidden" | "invalid_input";
+const TARGET_ROLES: readonly StaffRole[] = ["commercial", "organizer", "admin", "super_admin"];
+
+const ALL_FORBIDDEN: Record<StaffRole, Outcome> = {
+  commercial: "forbidden",
+  organizer: "forbidden",
+  admin: "forbidden",
+  super_admin: "forbidden",
+};
+const AS_SUPER_ADMIN: Record<StaffRole, Outcome> = {
+  commercial: "success",
+  organizer: "success",
+  admin: "success",
+  super_admin: "invalid_input",
+};
+const AS_ADMIN: Record<StaffRole, Outcome> = {
+  commercial: "success",
+  organizer: "forbidden",
+  admin: "forbidden",
+  super_admin: "invalid_input",
+};
+
+const ACTORS: { label: string; roles: StaffRole[]; outcomes: Record<StaffRole, Outcome> }[] = [
+  { label: "super_admin", roles: ["super_admin"], outcomes: AS_SUPER_ADMIN },
+  { label: "admin", roles: ["admin"], outcomes: AS_ADMIN },
+  { label: "commercial", roles: ["commercial"], outcomes: ALL_FORBIDDEN },
+  { label: "organizer", roles: ["organizer"], outcomes: ALL_FORBIDDEN },
+  { label: "super_admin + admin", roles: ["super_admin", "admin"], outcomes: AS_SUPER_ADMIN },
+  { label: "admin + commercial", roles: ["admin", "commercial"], outcomes: AS_ADMIN },
+  { label: "admin + organizer", roles: ["admin", "organizer"], outcomes: AS_ADMIN },
+  { label: "commercial + organizer", roles: ["commercial", "organizer"], outcomes: ALL_FORBIDDEN },
+];
+
+type RoleActionCase = {
+  name: string;
+  action: (prev: StaffActionState, formData: FormData) => Promise<StaffActionState>;
+  service: MockInstance;
+  fields: (role: StaffRole) => Record<string, string>;
+  serviceInput: (role: StaffRole) => unknown;
+};
+
+const roleActions: RoleActionCase[] = [
+  {
+    name: "inviteStaffAction",
+    action: inviteStaffAction,
+    service: services.createInvitation,
+    fields: (role) => ({ email: "luis@example.com", role }),
+    serviceInput: (role) => ({ email: "luis@example.com", role }),
+  },
+  {
+    name: "grantStaffRoleAction",
+    action: grantStaffRoleAction,
+    service: services.grantStaffRole,
+    fields: (role) => ({ userId: "user-2", role }),
+    serviceInput: (role) => ({ userId: "user-2", role }),
+  },
+  {
+    name: "revokeStaffRoleAction",
+    action: revokeStaffRoleAction,
+    service: services.revokeStaffRole,
+    fields: (role) => ({ userId: "user-2", role }),
+    serviceInput: (role) => ({ userId: "user-2", role }),
+  },
+];
+
+const matrix = roleActions.flatMap((roleAction) =>
+  ACTORS.flatMap((actor) =>
+    TARGET_ROLES.map((role) => ({ ...roleAction, actor, role, expected: actor.outcomes[role] })),
+  ),
+);
+
+describe("role management matrix", () => {
+  it.each(matrix)(
+    "$name: $actor.label on $role → $expected",
+    async ({ action, service, fields, serviceInput, actor, role, expected }) => {
+      signedIn({ roles: actor.roles });
+
+      const state = await action(IDLE, form(fields(role)));
+
+      if (expected === "success") {
+        expect(state).toMatchObject({ status: "success" });
+        expect(service).toHaveBeenCalledExactlyOnceWith(serviceInput(role), "admin-1");
+        expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+      } else {
+        expect(state).toMatchObject({ status: "error", code: expected });
+        expect(service).not.toHaveBeenCalled();
+        expect(revalidate).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("returns the fixed forbidden message when the role is not manageable", async () => {
+    signedInAdmin();
+
+    await expect(inviteStaffAction(IDLE, form({ email: "luis@example.com", role: "admin" }))).resolves.toEqual({
+      status: "error",
+      code: "forbidden",
+      message: "No tienes permiso para gestionar el equipo.",
+    });
+  });
+
+  it("flags super_admin on the role field as invalid_input", async () => {
+    signedInSuperAdmin();
+
+    await expect(grantStaffRoleAction(IDLE, form({ userId: "user-2", role: "super_admin" }))).resolves.toMatchObject({
+      code: "invalid_input",
+      fieldErrors: { role: ["Elige un rol válido."] },
+    });
+    expect(services.grantStaffRole).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["admin", ["admin"], "admin", "forbidden"],
+    ["admin", ["admin"], "super_admin", "invalid_input"],
+    ["admin + commercial", ["admin", "commercial"], "admin", "forbidden"],
+    ["super_admin", ["super_admin"], "super_admin", "invalid_input"],
+  ] as [string, StaffRole[], StaffRole, Outcome][])(
+    "%s cannot grant itself %s (%s)",
+    async (_, roles, target, code) => {
+      signedIn({ roles });
+
+      await expect(grantStaffRoleAction(IDLE, form({ userId: "admin-1", role: target }))).resolves.toMatchObject({
+        status: "error",
+        code,
+      });
+      expect(services.grantStaffRole).not.toHaveBeenCalled();
+    },
+  );
+
+  it("lets an admin revoke commercial from someone who is also admin (management is per role)", async () => {
+    signedInAdmin();
+
+    await expect(revokeStaffRoleAction(IDLE, form({ userId: "admin-2", role: "commercial" }))).resolves.toMatchObject({
+      status: "success",
+    });
+    expect(services.revokeStaffRole).toHaveBeenCalledExactlyOnceWith({ userId: "admin-2", role: "commercial" }, "admin-1");
+  });
+
+  it("keeps the last admin protection when a super_admin revokes admin", async () => {
+    signedInSuperAdmin();
+    services.revokeStaffRole.mockResolvedValue("last_admin");
+
+    await expect(revokeStaffRoleAction(IDLE, form({ userId: "admin-1", role: "admin" }))).resolves.toEqual({
+      status: "error",
+      code: "last_admin",
+      message: "No se puede revocar el rol del último admin activo.",
+    });
+    expect(revalidate).not.toHaveBeenCalled();
+  });
+});
+
+describe("revokeInvitationAction by actor", () => {
+  it.each([
+    ["super_admin", ["super_admin"], ["commercial", "organizer", "admin"]],
+    ["admin", ["admin"], ["commercial"]],
+    ["super_admin + admin", ["super_admin", "admin"], ["commercial", "organizer", "admin"]],
+    ["admin + commercial", ["admin", "commercial"], ["commercial"]],
+    ["admin + organizer", ["admin", "organizer"], ["commercial"]],
+  ] as [string, StaffRole[], StaffRole[]][])(
+    "%s passes its manageable roles to the service",
+    async (_, roles, manageable) => {
+      signedIn({ roles });
+
+      await expect(revokeInvitationAction(IDLE, form({ invitationId: INVITATION_ID }))).resolves.toMatchObject({
+        status: "success",
+      });
+      expect(services.revokeInvitation).toHaveBeenCalledExactlyOnceWith(INVITATION_ID, "admin-1", manageable);
+    },
+  );
+
+  it.each([
+    ["commercial", ["commercial"]],
+    ["organizer", ["organizer"]],
+    ["commercial + organizer", ["commercial", "organizer"]],
+  ] as [string, StaffRole[]][])("%s gets forbidden without calling the service", async (_, roles) => {
+    signedIn({ roles });
+
+    await expect(revokeInvitationAction(IDLE, form({ invitationId: INVITATION_ID }))).resolves.toMatchObject({
+      status: "error",
+      code: "forbidden",
+    });
+    expect(services.revokeInvitation).not.toHaveBeenCalled();
+  });
+
+  describe("given a pending admin invitation", () => {
+    // Fake service honoring the role filter of the UPDATE: only revoked when "admin" is manageable.
+    beforeEach(() => {
+      services.revokeInvitation.mockImplementation(async (_id, _actor, roles) => roles.includes("admin"));
+    });
+
+    it("an admin gets not_found and nothing is revalidated", async () => {
+      signedInAdmin();
+
+      await expect(revokeInvitationAction(IDLE, form({ invitationId: INVITATION_ID }))).resolves.toMatchObject({
+        status: "error",
+        code: "not_found",
+      });
+      expect(services.revokeInvitation).toHaveBeenCalledExactlyOnceWith(INVITATION_ID, "admin-1", ["commercial"]);
+      expect(revalidate).not.toHaveBeenCalled();
+    });
+
+    it("a super_admin revokes it", async () => {
+      signedInSuperAdmin();
+
+      await expect(revokeInvitationAction(IDLE, form({ invitationId: INVITATION_ID }))).resolves.toMatchObject({
+        status: "success",
+      });
+      expect(services.revokeInvitation).toHaveBeenCalledExactlyOnceWith(INVITATION_ID, "super-1", [
+        "commercial",
+        "organizer",
+        "admin",
+      ]);
+      expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+    });
   });
 });
