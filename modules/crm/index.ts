@@ -1,6 +1,10 @@
 // Server Components only for the services: they are server-only.
 export { listLeadActivities } from "./services/activities.service";
-export { getLeadById, getLeadFormOptions, getLeadList } from "./services/leads.service";
+export {
+  getLeadById,
+  getLeadFormOptions,
+  getLeadList,
+} from "./services/leads.service";
 export { getLeadReport } from "./services/leadReport.service";
 export { leadReportQuerySchema } from "./schemas/leads.schema";
 export { leadListHref, parseLeadListQuery } from "./utils/leadListQuery";
@@ -19,7 +23,10 @@ export {
 } from "./actions/leads.actions";
 // Campaigns (QR and links): same reason, the CRM routes import both actions from this API.
 export { listCampaigns, getCampaignById } from "./services/campaigns.service";
-export { closeCampaignAction, createCampaignAction } from "./actions/campaigns.actions";
+export {
+  closeCampaignAction,
+  createCampaignAction,
+} from "./actions/campaigns.actions";
 export { CampaignForm } from "./components/CampaignForm";
 export { CampaignQr } from "./components/CampaignQr";
 export { CampaignTable } from "./components/CampaignTable";
@@ -35,6 +42,7 @@ export { LeadForm } from "./components/LeadForm";
 export { LeadOwnerForm } from "./components/LeadOwnerForm";
 export { LeadPagination } from "./components/LeadPagination";
 export { LeadReportFilters } from "./components/LeadReportFilters";
+export { CrmDashboard } from "./components/CrmDashboard";
 export { LeadReportTable } from "./components/LeadReportTable";
 export { LeadStageForm } from "./components/LeadStageForm";
 export { LeadStageSummary } from "./components/LeadStageSummary";
