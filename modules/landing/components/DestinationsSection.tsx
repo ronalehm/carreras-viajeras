@@ -13,7 +13,7 @@ const DESTINATIONS = [
     alt: "Salida de la Maratón de Santiago con los corredores en la línea de partida",
     flag: "🇨🇱",
     status: "Preventa abierta",
-    statusTone: "bg-highlight text-white",
+    statusTone: "bg-highlight text-night",
     date: santiago.raceDate,
     tagline: "Destino principal",
     name: "Santiago",
@@ -29,7 +29,7 @@ const DESTINATIONS = [
     alt: "Vista aérea de Río de Janeiro con el Cristo Redentor",
     flag: "🇧🇷",
     status: "En exploración",
-    statusTone: "bg-primary text-primary-foreground",
+    statusTone: "bg-night text-primary-foreground",
     date: "Fecha por confirmar",
     tagline: "Sin cupos asignados",
     name: "Río",
@@ -45,7 +45,7 @@ const DESTINATIONS = [
     alt: "El Coliseo de Roma al atardecer",
     flag: "🇮🇹",
     status: "En exploración",
-    statusTone: "bg-primary text-primary-foreground",
+    statusTone: "bg-night text-primary-foreground",
     date: "Fecha por confirmar",
     tagline: "Sin cupos asignados",
     name: "Roma",
@@ -62,28 +62,25 @@ export function DestinationsSection() {
     <section
       id="destinos"
       aria-labelledby="destinations-title"
-      className="px-[6%] py-10 text-primary sm:px-[8%] sm:py-14"
+      className="bg-background px-[6%] py-18 text-primary sm:px-[8%] lg:py-28"
     >
-      <div className="mb-6 gap-8 sm:mb-9 sm:flex sm:items-end sm:justify-between">
+      <div className="mb-10 gap-8 sm:flex sm:items-end sm:justify-between lg:mb-14">
         <div>
-          <p className="mb-6 text-xs font-bold tracking-[0.2em]">ESTO RECIÉN EMPIEZA</p>
-          <h2
-            id="destinations-title"
-            className="font-heading text-5xl leading-none font-bold tracking-tight"
-          >
+          <p className="mb-4 text-sm font-semibold text-asphalt">Esto recién empieza</p>
+          <h2 id="destinations-title" className="display-title text-display-section">
             Más ciudades.
             <br />
             Más razones para correr.
           </h2>
         </div>
-        <p className="mt-4 text-xs leading-relaxed sm:mt-0">
+        <p className="mt-5 text-base leading-relaxed text-asphalt sm:mt-0 sm:shrink-0 sm:text-right">
           Elige tu próximo destino.
           <br />
           Te contamos cuando haya novedades.
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-3">
         {DESTINATIONS.map(
           ({
             href,
@@ -105,29 +102,29 @@ export function DestinationsSection() {
               key={href}
               href={href}
               className={cn(
-                "group flex flex-col overflow-hidden rounded-2xl border no-underline transition-all hover:-translate-y-1 hover:shadow-xl",
+                "group flex flex-col overflow-hidden rounded-2xl border no-underline transition-colors",
                 active
-                  ? "border-highlight/50 bg-background shadow-sm"
-                  : "border-primary/20 bg-background shadow-sm",
+                  ? "border-highlight bg-background hover:border-primary"
+                  : "border-primary/15 bg-background hover:border-primary",
               )}
             >
-              <div className="relative aspect-video overflow-hidden border-b border-primary/15 bg-primary/10">
+              <div className="relative aspect-video overflow-hidden bg-night">
                 <Image
                   src={image}
                   alt={alt}
                   fill
                   sizes="(min-width: 768px) 30vw, 100vw"
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  className="object-cover transition-transform duration-500 motion-safe:group-hover:scale-105"
                 />
                 <span
                   aria-hidden
-                  className="absolute top-3 left-3 z-10 rounded-xl bg-white/95 px-2 py-1 text-2xl shadow-sm backdrop-blur-md"
+                  className="absolute top-3 left-3 z-10 rounded-full bg-background px-2 py-0.5 text-2xl"
                 >
                   {flag}
                 </span>
                 <span
                   className={cn(
-                    "absolute top-3 right-3 z-10 rounded-full px-3 py-1 text-[11px] font-bold tracking-wider text-white uppercase shadow-sm",
+                    "absolute top-3 right-3 z-10 rounded-full px-3 py-1 text-xs font-semibold",
                     statusTone,
                   )}
                 >
@@ -136,19 +133,17 @@ export function DestinationsSection() {
               </div>
 
               <div className="flex grow flex-col p-5 lg:p-6">
-                <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold text-primary/70">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-sm text-asphalt">
                   <span className="inline-flex items-center gap-1.5">
-                    <CalendarDays aria-hidden className="size-3.5" />
+                    <CalendarDays aria-hidden className="size-4" />
                     {date}
                   </span>
-                  <span className="font-bold text-highlight">{tagline}</span>
+                  <span className="font-semibold text-primary">{tagline}</span>
                 </div>
 
-                <h3 className="mb-1 font-heading text-2xl leading-tight font-bold tracking-tight lg:text-3xl">
-                  {name}
-                </h3>
-                <p className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-primary/70">
-                  <MapPin aria-hidden className="size-3.5" />
+                <h3 className="mb-2 display-title text-5xl leading-none">{name}</h3>
+                <p className="mb-4 inline-flex items-center gap-1.5 text-sm text-asphalt">
+                  <MapPin aria-hidden className="size-4" />
                   {location}
                 </p>
 
@@ -157,7 +152,7 @@ export function DestinationsSection() {
                     {tags.map((tag) => (
                       <span
                         key={tag}
-                        className="rounded-lg border border-highlight/30 bg-highlight/10 px-2.5 py-0.5 text-xs font-bold text-highlight"
+                        className="rounded-full bg-sky px-3 py-1 text-sm font-semibold"
                       >
                         {tag}
                       </span>
@@ -166,9 +161,9 @@ export function DestinationsSection() {
                 )}
 
                 <div className="mt-auto space-y-3 border-t border-primary/15 pt-4">
-                  <p className="text-xs leading-relaxed">{note}</p>
-                  <span className="inline-flex items-center gap-1 border-b-3 border-highlight pt-1 text-xs font-bold">
-                    {action} <ArrowUpRight aria-hidden className="size-3.5" />
+                  <p className="text-sm leading-relaxed text-asphalt">{note}</p>
+                  <span className="inline-flex items-center gap-1 text-base font-semibold underline decoration-highlight decoration-2 underline-offset-[6px]">
+                    {action} <ArrowUpRight aria-hidden className="size-4" />
                   </span>
                 </div>
               </div>

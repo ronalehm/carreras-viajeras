@@ -120,11 +120,11 @@ Cambio solo de presentación: según `docs/SETUP.md`, los componentes presentaci
 - [x] T5 — Verificación visual (capturas antes/después, 360 px, `/contacto`, `/cuenta`, `/viajes/*`) · archivos: — · depende de: T2, T3, T4 · secuencial
 
 ### Fase 2 — Resto de la portada
-- [ ] T1 — Comunidad y por qué viajar · archivos: `modules/landing/components/CommunitySection.tsx`, `modules/landing/components/WhyUsSection.tsx` · depende de: Fase 1 · paralelo
-- [ ] T2 — Blog · archivos: `modules/landing/components/BlogSection.tsx`, `modules/landing/components/TipList.tsx` · depende de: Fase 1 · paralelo
-- [ ] T3 — Destinos y FAQ (con cifras de MAZ) · archivos: `modules/landing/components/DestinationsSection.tsx`, `modules/landing/components/FaqSection.tsx` · depende de: Fase 1 · paralelo
-- [ ] T4 — Pie y CTA móvil · archivos: `modules/landing/components/SiteFooter.tsx`, `modules/landing/components/MobileCta.tsx` · depende de: Fase 1 · paralelo
-- [ ] T5 — Verificación visual de la portada completa · archivos: — · depende de: T1–T4 · secuencial
+- [x] T1 — Comunidad y por qué viajar · archivos: `modules/landing/components/CommunitySection.tsx`, `modules/landing/components/WhyUsSection.tsx` · depende de: Fase 1 · paralelo
+- [x] T2 — Blog · archivos: `modules/landing/components/BlogSection.tsx`, `modules/landing/components/TipList.tsx` · depende de: Fase 1 · paralelo
+- [x] T3 — Destinos y FAQ (con cifras de MAZ) · archivos: `modules/landing/components/DestinationsSection.tsx`, `modules/landing/components/FaqSection.tsx` · depende de: Fase 1 · paralelo
+- [x] T4 — Pie y CTA móvil · archivos: `modules/landing/components/SiteFooter.tsx`, `modules/landing/components/MobileCta.tsx` · depende de: Fase 1 · paralelo
+- [x] T5 — Verificación visual de la portada completa · archivos: — · depende de: T1–T4 · secuencial
 
 ## Preguntas abiertas
 1. ¿Hay una versión del logo en blanco o con fondo transparente? Con ella la cabecera podría ir sobre la foto del hero, como en la maqueta. Sin ella, la cabecera sigue blanca (Requisito 5). No bloquea la implementación.
