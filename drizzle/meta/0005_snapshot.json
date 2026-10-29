@@ -1,6 +1,6 @@
 {
-  "id": "9dab9b90-5cc6-4133-bf32-f94acd07134c",
-  "prevId": "cf7822d8-d7e6-43ef-9eba-6015cb24ae96",
+  "id": "6a6ccc2f-fb58-4645-8d62-7f96677b1cf3",
+  "prevId": "cfd31f1f-0eed-4a16-9dbd-029d244c3b49",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -177,12 +177,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "lead_id": {
-          "name": "lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "status": {
           "name": "status",
           "type": "booking_status",
@@ -265,22 +259,6 @@
           "method": "btree",
           "with": {}
         },
-        "bookings_lead_active_uq": {
-          "name": "bookings_lead_active_uq",
-          "columns": [
-            {
-              "expression": "lead_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"bookings\".\"status\" <> 'cancelled'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "bookings_runner_user_idx": {
           "name": "bookings_runner_user_idx",
           "columns": [
@@ -320,19 +298,6 @@
           "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "bookings_lead_id_leads_id_fk": {
-          "name": "bookings_lead_id_leads_id_fk",
-          "tableFrom": "bookings",
-          "tableTo": "leads",
-          "columnsFrom": [
-            "lead_id"
           ],
           "columnsTo": [
             "id"
@@ -657,20 +622,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "channel_from": {
-          "name": "channel_from",
-          "type": "lead_channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "channel_to": {
-          "name": "channel_to",
-          "type": "lead_channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
         "actor_user_id": {
           "name": "actor_user_id",
           "type": "text",
@@ -812,10 +763,6 @@
           "name": "lead_activities_owner_chk",
           "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" IS DISTINCT FROM \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
         },
-        "lead_activities_channel_chk": {
-          "name": "lead_activities_channel_chk",
-          "value": "CASE WHEN \"lead_activities\".\"type\" = 'channel_changed' THEN \"lead_activities\".\"channel_from\" IS NOT NULL AND \"lead_activities\".\"channel_to\" IS NOT NULL AND \"lead_activities\".\"channel_from\" <> \"lead_activities\".\"channel_to\" ELSE \"lead_activities\".\"channel_from\" IS NULL AND \"lead_activities\".\"channel_to\" IS NULL END"
-        },
         "lead_activities_actor_chk": {
           "name": "lead_activities_actor_chk",
           "value": "\"lead_activities\".\"actor_user_id\" IS NOT NULL OR \"lead_activities\".\"type\" IN ('created', 'automation')"
@@ -880,64 +827,6 @@
           "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
-        },
-        "channel": {
-          "name": "channel",
-          "type": "lead_channel",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'unknown'"
-        },
-        "origin_detail": {
-          "name": "origin_detail",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "utm_source": {
-          "name": "utm_source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "utm_medium": {
-          "name": "utm_medium",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "utm_campaign": {
-          "name": "utm_campaign",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "referred_by": {
-          "name": "referred_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "referral_permission": {
-          "name": "referral_permission",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "contact_preference": {
-          "name": "contact_preference",
-          "type": "contact_preference",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "contact_opt_out_at": {
-          "name": "contact_opt_out_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
         },
         "stage": {
           "name": "stage",
@@ -1142,27 +1031,7 @@
         },
         "leads_created_by_chk": {
           "name": "leads_created_by_chk",
-          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import')"
-        },
-        "leads_origin_detail_chk": {
-          "name": "leads_origin_detail_chk",
-          "value": "\"leads\".\"origin_detail\" IS NULL OR char_length(\"leads\".\"origin_detail\") BETWEEN 2 AND 120"
-        },
-        "leads_utm_chk": {
-          "name": "leads_utm_chk",
-          "value": "(\"leads\".\"utm_source\" IS NULL OR char_length(\"leads\".\"utm_source\") BETWEEN 1 AND 100) AND (\"leads\".\"utm_medium\" IS NULL OR char_length(\"leads\".\"utm_medium\") BETWEEN 1 AND 100) AND (\"leads\".\"utm_campaign\" IS NULL OR char_length(\"leads\".\"utm_campaign\") BETWEEN 1 AND 100)"
-        },
-        "leads_referred_by_chk": {
-          "name": "leads_referred_by_chk",
-          "value": "\"leads\".\"referred_by\" IS NULL OR char_length(\"leads\".\"referred_by\") BETWEEN 2 AND 120"
-        },
-        "leads_referral_permission_chk": {
-          "name": "leads_referral_permission_chk",
-          "value": "NOT \"leads\".\"referral_permission\" OR \"leads\".\"referred_by\" IS NOT NULL"
-        },
-        "leads_opt_out_chk": {
-          "name": "leads_opt_out_chk",
-          "value": "\"leads\".\"contact_opt_out_at\" IS NULL OR \"leads\".\"next_action_date\" IS NULL"
+          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" = 'web_form'"
         },
         "leads_submission_chk": {
           "name": "leads_submission_chk",
@@ -1260,31 +1129,9 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "dedupe_key": {
-          "name": "dedupe_key",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {
-        "outbox_events_dedupe_key_uq": {
-          "name": "outbox_events_dedupe_key_uq",
-          "columns": [
-            {
-              "expression": "dedupe_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"outbox_events\".\"dedupe_key\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
         "outbox_events_ready_idx": {
           "name": "outbox_events_ready_idx",
           "columns": [
@@ -1344,10 +1191,6 @@
         "outbox_events_last_error_code_chk": {
           "name": "outbox_events_last_error_code_chk",
           "value": "\"outbox_events\".\"last_error_code\" IS NULL OR \"outbox_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,40}$'"
-        },
-        "outbox_events_dedupe_key_chk": {
-          "name": "outbox_events_dedupe_key_chk",
-          "value": "(\"outbox_events\".\"dedupe_key\" IS NULL OR char_length(\"outbox_events\".\"dedupe_key\") BETWEEN 1 AND 120) AND (\"outbox_events\".\"type\" <> 'lead.follow_up_due' OR \"outbox_events\".\"dedupe_key\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -1854,6 +1697,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "official_url": {
+          "name": "official_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "installments_price_usd": {
+          "name": "installments_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deposit_usd": {
+          "name": "deposit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "companion_price_usd": {
+          "name": "companion_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_terms": {
+          "name": "payment_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "excludes": {
+          "name": "excludes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "trip_status",
@@ -1926,6 +1812,26 @@
         "trips_image_url_chk": {
           "name": "trips_image_url_chk",
           "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
+        },
+        "trips_official_url_chk": {
+          "name": "trips_official_url_chk",
+          "value": "\"trips\".\"official_url\" IS NULL OR \"trips\".\"official_url\" LIKE 'https://%'"
+        },
+        "trips_installments_price_usd_chk": {
+          "name": "trips_installments_price_usd_chk",
+          "value": "\"trips\".\"installments_price_usd\" IS NULL OR \"trips\".\"installments_price_usd\" >= 0"
+        },
+        "trips_deposit_usd_chk": {
+          "name": "trips_deposit_usd_chk",
+          "value": "\"trips\".\"deposit_usd\" IS NULL OR \"trips\".\"deposit_usd\" >= 0"
+        },
+        "trips_companion_price_usd_chk": {
+          "name": "trips_companion_price_usd_chk",
+          "value": "\"trips\".\"companion_price_usd\" IS NULL OR \"trips\".\"companion_price_usd\" >= 0"
+        },
+        "trips_excludes_chk": {
+          "name": "trips_excludes_chk",
+          "value": "cardinality(\"trips\".\"excludes\") <= 20"
         }
       },
       "isRLSEnabled": false
@@ -1939,15 +1845,6 @@
         "pending",
         "confirmed",
         "cancelled"
-      ]
-    },
-    "public.contact_preference": {
-      "name": "contact_preference",
-      "schema": "public",
-      "values": [
-        "whatsapp",
-        "email",
-        "call"
       ]
     },
     "public.itinerary_kind": {
@@ -1986,29 +1883,7 @@
         "note",
         "call",
         "message",
-        "automation",
-        "channel_changed",
-        "opted_out"
-      ]
-    },
-    "public.lead_channel": {
-      "name": "lead_channel",
-      "schema": "public",
-      "values": [
-        "event",
-        "partner",
-        "referral",
-        "whatsapp",
-        "whatsapp_status",
-        "instagram",
-        "facebook",
-        "tiktok",
-        "youtube",
-        "google_ads",
-        "luma",
-        "web",
-        "other",
-        "unknown"
+        "automation"
       ]
     },
     "public.lead_source": {
@@ -2017,9 +1892,7 @@
       "values": [
         "whatsapp",
         "web_form",
-        "other",
-        "google_form",
-        "import"
+        "other"
       ]
     },
     "public.lead_stage": {
@@ -2039,9 +1912,7 @@
       "schema": "public",
       "values": [
         "lead.created",
-        "lead.stage_changed",
-        "lead.follow_up_due",
-        "lead.opted_out"
+        "lead.stage_changed"
       ]
     },
     "public.outbox_status": {

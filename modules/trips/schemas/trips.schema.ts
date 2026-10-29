@@ -7,6 +7,7 @@ export const tripStatusSchema = z.enum(["draft", "published", "archived"], {
 
 const SLUG_MESSAGE = "Usa minúsculas, números y guiones (p. ej. maraton-santiago-2027).";
 const PRICE_MESSAGE = "Indica un precio en dólares, sin decimales.";
+const HTTPS_URL_MESSAGE = "Indica una URL que empiece por https://.";
 const CAPACITY_MESSAGE = "Indica un número entero de cupos entre 1 y 10,000.";
 const DATE_MESSAGE = "Indica una fecha válida.";
 const TRIP_ID_MESSAGE = "El viaje no es válido.";
@@ -46,6 +47,33 @@ const textList = (separator: RegExp | string) =>
 const wholeNumber = (message: string) =>
   z.string().regex(/^\d+$/, message).transform(Number);
 
+// Optional whole amount in USD (priceUsd and the other trip prices).
+const usdAmount = () =>
+  blankToNull(
+    wholeNumber(PRICE_MESSAGE).pipe(
+      z.number().int().max(1_000_000, "El precio no puede superar 1,000,000 USD."),
+    ),
+  );
+
+// Optional external https:// URL (imageUrl, officialUrl).
+const httpsUrl = (message: string) =>
+  blankToNull(
+    z
+      .url({ protocol: /^https$/, error: message })
+      .startsWith("https://", message)
+      .max(2048, "La URL puede tener hasta 2048 caracteres."),
+  );
+
+// One item per line (includes, excludes).
+const lineList = () =>
+  textList(/\r?\n/).pipe(
+    z
+      .array(z.string().max(160, "Cada elemento puede tener hasta 160 caracteres."))
+      .max(20, "Indica como máximo 20 elementos."),
+  );
+
+const longText = () => blankToNull(z.string().max(1000, "Puede tener hasta 1000 caracteres."));
+
 const TRAVEL_DATE_FIELDS: PropertyKey[] = ["raceDate", "startDate", "endDate"];
 
 // Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as status.
@@ -65,27 +93,21 @@ export const tripFormSchema = z
         .max(10, "Indica como máximo 10 distancias."),
     ),
     summary: requiredText(10, 300, "El resumen debe tener entre 10 y 300 caracteres."),
-    includes: textList(/\r?\n/).pipe(
-      z
-        .array(z.string().max(160, "Cada elemento puede tener hasta 160 caracteres."))
-        .max(20, "Indica como máximo 20 elementos."),
-    ),
-    priceUsd: blankToNull(
-      wholeNumber(PRICE_MESSAGE).pipe(
-        z.number().int().max(1_000_000, "El precio no puede superar 1,000,000 USD."),
-      ),
-    ),
+    includes: lineList(),
+    excludes: lineList(),
+    priceUsd: usdAmount(),
+    installmentsPriceUsd: usdAmount(),
+    depositUsd: usdAmount(),
+    companionPriceUsd: usdAmount(),
+    paymentTerms: longText(),
+    notes: longText(),
     capacity: blankToNull(
       wholeNumber(CAPACITY_MESSAGE).pipe(
         z.number().int().min(1, CAPACITY_MESSAGE).max(10_000, CAPACITY_MESSAGE),
       ),
     ),
-    imageUrl: blankToNull(
-      z
-        .url({ protocol: /^https$/, error: "Indica una URL que empiece por https://." })
-        .startsWith("https://", "Indica una URL que empiece por https://.")
-        .max(2048, "La URL puede tener hasta 2048 caracteres."),
-    ),
+    imageUrl: httpsUrl(HTTPS_URL_MESSAGE),
+    officialUrl: httpsUrl(HTTPS_URL_MESSAGE),
   })
   .superRefine((trip, ctx) => {
     // Zod still runs this refinement when a field failed: compare dates only if all of them are valid.

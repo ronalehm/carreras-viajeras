@@ -6,7 +6,11 @@ import { getCatalogTrip, SiteFooter, SiteHeader, TripDetail } from "@/modules/la
 export async function generateMetadata({ params }: PageProps<"/viajes/[slug]">): Promise<Metadata> {
   const trip = await getCatalogTrip((await params).slug);
   if (!trip) notFound();
-  return { title: trip.name, description: trip.description };
+  return {
+    title: trip.title,
+    description: trip.summary,
+    ...(trip.imageUrl ? { openGraph: { images: [trip.imageUrl] } } : {}),
+  };
 }
 
 export default async function TripPage({ params }: PageProps<"/viajes/[slug]">) {

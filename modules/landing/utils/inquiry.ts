@@ -34,6 +34,18 @@ export function buildInquiryMessage(input: {
   ].join("\n");
 }
 
+/** Consulta por WhatsApp desde la página de un viaje del catálogo (sin precio, para no quedar desfasada). */
+export function buildTripInquiryMessage(input: {
+  title: string;
+  raceDate: string;
+  location: string;
+}): string {
+  return [
+    `Hola, me interesa el viaje ${input.title} (${input.raceDate}, ${input.location}). Quisiera conocer disponibilidad, inclusiones y condiciones finales.`,
+    "Entiendo que esta consulta no constituye reserva ni pago.",
+  ].join("\n");
+}
+
 /** Enlace `wa.me` con el texto codificado, o `null` si el número no es válido. */
 export function buildWhatsAppUrl(number: string, text: string): string | null {
   const digits = number.replace(/\D/g, "");

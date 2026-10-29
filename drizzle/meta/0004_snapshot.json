@@ -1,5 +1,5 @@
 {
-  "id": "cf7822d8-d7e6-43ef-9eba-6015cb24ae96",
+  "id": "cfd31f1f-0eed-4a16-9dbd-029d244c3b49",
   "prevId": "44660d44-81be-4a18-b5fa-d0b786d60358",
   "version": "7",
   "dialect": "postgresql",
@@ -626,13 +626,7 @@
           "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "source_event_id": {
-          "name": "source_event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -660,21 +654,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "lead_activities_source_event_uq": {
-          "name": "lead_activities_source_event_uq",
-          "columns": [
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -732,19 +711,6 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
-        },
-        "lead_activities_source_event_id_outbox_events_id_fk": {
-          "name": "lead_activities_source_event_id_outbox_events_id_fk",
-          "tableFrom": "lead_activities",
-          "tableTo": "outbox_events",
-          "columnsFrom": [
-            "source_event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -753,7 +719,7 @@
       "checkConstraints": {
         "lead_activities_body_chk": {
           "name": "lead_activities_body_chk",
-          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" = 'automation' THEN \"lead_activities\".\"body\" IS NOT NULL AND char_length(\"lead_activities\".\"body\") <= 500 WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
+          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
         },
         "lead_activities_stage_chk": {
           "name": "lead_activities_stage_chk",
@@ -761,15 +727,7 @@
         },
         "lead_activities_owner_chk": {
           "name": "lead_activities_owner_chk",
-          "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" IS DISTINCT FROM \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
-        },
-        "lead_activities_actor_chk": {
-          "name": "lead_activities_actor_chk",
-          "value": "\"lead_activities\".\"actor_user_id\" IS NOT NULL OR \"lead_activities\".\"type\" IN ('created', 'automation')"
-        },
-        "lead_activities_event_chk": {
-          "name": "lead_activities_event_chk",
-          "value": "(\"lead_activities\".\"type\" = 'automation') = (\"lead_activities\".\"source_event_id\" IS NOT NULL)"
+          "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_from\" IS NOT NULL AND \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" <> \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
         }
       },
       "isRLSEnabled": false
@@ -846,7 +804,7 @@
           "name": "owner_user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "next_action_date": {
           "name": "next_action_date",
@@ -877,7 +835,7 @@
           "name": "created_by",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -904,37 +862,9 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
-        },
-        "idempotency_key": {
-          "name": "idempotency_key",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "submission_hash": {
-          "name": "submission_hash",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
-      "indexes": {
-        "leads_idempotency_key_uq": {
-          "name": "leads_idempotency_key_uq",
-          "columns": [
-            {
-              "expression": "idempotency_key",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
+      "indexes": {},
       "foreignKeys": {
         "leads_trip_id_trips_id_fk": {
           "name": "leads_trip_id_trips_id_fk",
@@ -1028,169 +958,6 @@
         "leads_archived_chk": {
           "name": "leads_archived_chk",
           "value": "(\"leads\".\"archived_at\" IS NULL) = (\"leads\".\"archived_by\" IS NULL)"
-        },
-        "leads_created_by_chk": {
-          "name": "leads_created_by_chk",
-          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" = 'web_form'"
-        },
-        "leads_submission_chk": {
-          "name": "leads_submission_chk",
-          "value": "(\"leads\".\"idempotency_key\" IS NULL) = (\"leads\".\"submission_hash\" IS NULL) AND (\"leads\".\"submission_hash\" IS NULL OR \"leads\".\"submission_hash\" ~ '^[0-9a-f]{64}$')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.outbox_events": {
-      "name": "outbox_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "type": {
-          "name": "type",
-          "type": "outbox_event_type",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lead_id": {
-          "name": "lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_version": {
-          "name": "payload_version",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "outbox_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "available_at": {
-          "name": "available_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_token": {
-          "name": "lease_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_code": {
-          "name": "last_error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "outbox_events_ready_idx": {
-          "name": "outbox_events_ready_idx",
-          "columns": [
-            {
-              "expression": "available_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"outbox_events\".\"status\" IN ('pending', 'processing')",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "outbox_events_lead_id_leads_id_fk": {
-          "name": "outbox_events_lead_id_leads_id_fk",
-          "tableFrom": "outbox_events",
-          "tableTo": "leads",
-          "columnsFrom": [
-            "lead_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "outbox_events_payload_version_chk": {
-          "name": "outbox_events_payload_version_chk",
-          "value": "\"outbox_events\".\"payload_version\" >= 1"
-        },
-        "outbox_events_payload_chk": {
-          "name": "outbox_events_payload_chk",
-          "value": "jsonb_typeof(\"outbox_events\".\"payload\") = 'object' AND octet_length(\"outbox_events\".\"payload\"::text) <= 1024"
-        },
-        "outbox_events_attempts_chk": {
-          "name": "outbox_events_attempts_chk",
-          "value": "\"outbox_events\".\"attempts\" BETWEEN 0 AND 8"
-        },
-        "outbox_events_lease_chk": {
-          "name": "outbox_events_lease_chk",
-          "value": "(\"outbox_events\".\"status\" = 'processing') = (\"outbox_events\".\"lease_token\" IS NOT NULL) AND (\"outbox_events\".\"lease_token\" IS NULL) = (\"outbox_events\".\"lease_until\" IS NULL)"
-        },
-        "outbox_events_processed_chk": {
-          "name": "outbox_events_processed_chk",
-          "value": "(\"outbox_events\".\"status\" IN ('succeeded', 'dead')) = (\"outbox_events\".\"processed_at\" IS NOT NULL)"
-        },
-        "outbox_events_last_error_code_chk": {
-          "name": "outbox_events_last_error_code_chk",
-          "value": "\"outbox_events\".\"last_error_code\" IS NULL OR \"outbox_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,40}$'"
         }
       },
       "isRLSEnabled": false
@@ -1697,6 +1464,49 @@
           "primaryKey": false,
           "notNull": false
         },
+        "official_url": {
+          "name": "official_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "installments_price_usd": {
+          "name": "installments_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "deposit_usd": {
+          "name": "deposit_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "companion_price_usd": {
+          "name": "companion_price_usd",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payment_terms": {
+          "name": "payment_terms",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "excludes": {
+          "name": "excludes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "trip_status",
@@ -1769,6 +1579,26 @@
         "trips_image_url_chk": {
           "name": "trips_image_url_chk",
           "value": "\"trips\".\"image_url\" IS NULL OR \"trips\".\"image_url\" LIKE 'https://%'"
+        },
+        "trips_official_url_chk": {
+          "name": "trips_official_url_chk",
+          "value": "\"trips\".\"official_url\" IS NULL OR \"trips\".\"official_url\" LIKE 'https://%'"
+        },
+        "trips_installments_price_usd_chk": {
+          "name": "trips_installments_price_usd_chk",
+          "value": "\"trips\".\"installments_price_usd\" IS NULL OR \"trips\".\"installments_price_usd\" >= 0"
+        },
+        "trips_deposit_usd_chk": {
+          "name": "trips_deposit_usd_chk",
+          "value": "\"trips\".\"deposit_usd\" IS NULL OR \"trips\".\"deposit_usd\" >= 0"
+        },
+        "trips_companion_price_usd_chk": {
+          "name": "trips_companion_price_usd_chk",
+          "value": "\"trips\".\"companion_price_usd\" IS NULL OR \"trips\".\"companion_price_usd\" >= 0"
+        },
+        "trips_excludes_chk": {
+          "name": "trips_excludes_chk",
+          "value": "cardinality(\"trips\".\"excludes\") <= 20"
         }
       },
       "isRLSEnabled": false
@@ -1819,8 +1649,7 @@
         "archived",
         "note",
         "call",
-        "message",
-        "automation"
+        "message"
       ]
     },
     "public.lead_source": {
@@ -1842,24 +1671,6 @@
         "reserved",
         "paid",
         "lost"
-      ]
-    },
-    "public.outbox_event_type": {
-      "name": "outbox_event_type",
-      "schema": "public",
-      "values": [
-        "lead.created",
-        "lead.stage_changed"
-      ]
-    },
-    "public.outbox_status": {
-      "name": "outbox_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "processing",
-        "succeeded",
-        "dead"
       ]
     },
     "public.staff_role": {
