@@ -81,7 +81,9 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
       ? await acceptInvitationAndLoadStaffRoles(id, email)
       : await loadStaffRoles(id);
   } catch {
-    // Fail closed without exposing the original database message.
+    // Fail closed without exposing the original database message, but leave a trace
+    // (e.g. a DATABASE_URL for another Neon branch). Fixed text only.
+    console.error("auth: role lookup failed");
     throw new ForbiddenError();
   }
 }
