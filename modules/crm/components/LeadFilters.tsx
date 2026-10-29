@@ -23,11 +23,13 @@ type LeadFiltersProps = {
 // Native GET form, no client JavaScript: the filters travel in the URL and a new filter starts at page 1.
 export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
   return (
-    <form method="get" action={LEAD_LIST_PATH} className="flex flex-wrap items-end gap-4">
-      <div className="flex flex-col gap-2">
+    <form method="get" action={LEAD_LIST_PATH} className="flex min-w-0 flex-wrap items-end gap-4">
+      {filters.view === "list" && <input type="hidden" name={QUERY_KEYS.view} value="lista" />}
+      <div className="flex min-w-0 max-w-full flex-col gap-2">
         <Label htmlFor="lead-filter-stage">Etapa</Label>
         <NativeSelect
           id="lead-filter-stage"
+          className="max-w-full"
           name={QUERY_KEYS.stage}
           defaultValue={filters.stage ? stageToParam(filters.stage) : ""}
         >
@@ -40,10 +42,11 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
           <NativeSelectOption value={STAGE_PARAMS.archived}>Archivados</NativeSelectOption>
         </NativeSelect>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 max-w-full flex-col gap-2">
         <Label htmlFor="lead-filter-owner">Responsable</Label>
         <NativeSelect
           id="lead-filter-owner"
+          className="max-w-full"
           name={QUERY_KEYS.owner}
           defaultValue={filters.owner ? ownerToParam(filters.owner) : ""}
         >
@@ -57,10 +60,11 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
           ))}
         </NativeSelect>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 max-w-full flex-col gap-2">
         <Label htmlFor="lead-filter-follow-up">Seguimiento</Label>
         <NativeSelect
           id="lead-filter-follow-up"
+          className="max-w-full"
           name={QUERY_KEYS.followUp}
           defaultValue={filters.followUp ? FOLLOW_UP_PARAMS[filters.followUp] : ""}
         >
@@ -69,9 +73,9 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
           <NativeSelectOption value={FOLLOW_UP_PARAMS.pending}>Pendientes (hoy o vencidos)</NativeSelectOption>
         </NativeSelect>
       </div>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 max-w-full flex-col gap-2">
         <Label htmlFor="lead-filter-channel">Origen</Label>
-        <NativeSelect id="lead-filter-channel" name={QUERY_KEYS.channel} defaultValue={filters.channel ?? ""}>
+        <NativeSelect id="lead-filter-channel" className="max-w-full" name={QUERY_KEYS.channel} defaultValue={filters.channel ?? ""}>
           <NativeSelectOption value="">Todos</NativeSelectOption>
           {leadChannelSchema.options.map((channel) => (
             <NativeSelectOption key={channel} value={channel}>
@@ -82,7 +86,7 @@ export function LeadFilters({ filters, ownerOptions }: LeadFiltersProps) {
       </div>
       <div className="flex gap-2">
         <Button type="submit" variant="outline">Filtrar</Button>
-        <Link href={LEAD_LIST_PATH} className={buttonVariants({ variant: "ghost" })}>Limpiar</Link>
+        <Link href={filters.view === "list" ? `${LEAD_LIST_PATH}?vista=lista` : LEAD_LIST_PATH} className={buttonVariants({ variant: "ghost" })}>Limpiar</Link>
       </div>
     </form>
   );

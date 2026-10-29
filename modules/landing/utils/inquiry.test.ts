@@ -7,6 +7,7 @@ import {
   buildWhatsAppUrl,
   firstParam,
   GENERAL_INQUIRY_MESSAGE,
+  registrationHref,
   resolveDestination,
   searchParamsToRecord,
   WHATSAPP_NUMBER,
@@ -120,6 +121,49 @@ describe("attributionParams", () => {
 
   it("devuelve un objeto vacío sin parámetros", () => {
     expect(attributionParams({})).toEqual({});
+  });
+});
+
+describe("registrationHref", () => {
+  it("añade los parámetros presentes codificados con URLSearchParams", () => {
+    expect(registrationHref("maraton-santiago-2027", { c: "mml26", ref: "club lima" })).toBe(
+      "/viajes/maraton-santiago-2027/registro?c=mml26&ref=club+lima",
+    );
+  });
+
+  it("sin parámetros no añade `?`", () => {
+    expect(registrationHref("maraton-santiago-2027", {})).toBe(
+      "/viajes/maraton-santiago-2027/registro",
+    );
+  });
+
+  it("sigue el orden de las claves de atribución", () => {
+    expect(
+      registrationHref("maraton-santiago-2027", {
+        ref: "club-lima",
+        utm_campaign: "preventa",
+        utm_medium: "social",
+        utm_source: "instagram",
+        c: "mml26",
+      }),
+    ).toBe(
+      "/viajes/maraton-santiago-2027/registro?c=mml26&utm_source=instagram&utm_medium=social&utm_campaign=preventa&ref=club-lima",
+    );
+  });
+
+  it("codifica caracteres reservados", () => {
+    expect(registrationHref("maraton-santiago-2027", { ref: "a&b=c?d#e" })).toBe(
+      "/viajes/maraton-santiago-2027/registro?ref=a%26b%3Dc%3Fd%23e",
+    );
+  });
+
+  it("compone con attributionParams", () => {
+    expect(
+      registrationHref(
+        "maraton-santiago-2027",
+        attributionParams({ c: "mml26", utm_source: "instagram", modo: "stand" }),
+      ),
+    ).toBe("/viajes/maraton-santiago-2027/registro?c=mml26&utm_source=instagram");
   });
 });
 

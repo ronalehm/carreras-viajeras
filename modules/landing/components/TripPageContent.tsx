@@ -3,10 +3,18 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
+import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { cn } from "@/lib/utils";
 import { useCatalogTrip } from "../hooks/useCatalogTrip";
 import { useTripPageParams } from "../hooks/useTripPageParams";
-import { firstParam, GENERAL_INQUIRY_MESSAGE, WHATSAPP_NUMBER, buildWhatsAppUrl } from "../utils/inquiry";
+import {
+  attributionParams,
+  firstParam,
+  GENERAL_INQUIRY_MESSAGE,
+  registrationHref,
+  WHATSAPP_NUMBER,
+  buildWhatsAppUrl,
+} from "../utils/inquiry";
 import { WhatsAppLink } from "./LeadCaptureForm";
 import { TripDetail } from "./TripDetail";
 
@@ -64,5 +72,7 @@ export function TripPageContent() {
   }, [title]);
 
   if (!data) return <TripPageState notFound={data === null} failed={status === "error"} />;
-  return <TripDetail trip={data.trip} offer={data.offer} />;
+  // ?c=, UTM and ref are carried to «Registrarme», hidden while the registration is closed (gate P-L).
+  const registration = isRegistrationOpen() ? registrationHref(slug, attributionParams(query)) : null;
+  return <TripDetail trip={data.trip} offer={data.offer} registrationHref={registration} />;
 }

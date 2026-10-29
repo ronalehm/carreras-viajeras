@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local: antes de desplegar Clerk, comprueba además que `/crm/acceso` muestra el `<SignIn>` y que `GET /api/crm/me` sin sesión responde 401, no 500 (paso 5 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). El inicio de sesión completo con la instancia de producción de Clerk solo se valida en el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay diez migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk). Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay quince migraciones (`0000`–`0014`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **la `0013_client_stage_emails` (de `main`) no consta como aplicada en `production`**: sigue su sección. Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ### Caché estática en Workers Free
 
@@ -638,7 +638,7 @@ Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fas
 - **Una landing por carrera publicada:** cada viaje publicado en `/crm/viajes` tiene su página en `/viajes/<slug>`, sin tocar código ni redesplegar. Para difundir una carrera nueva se comparte esa URL (no hay listado `/viajes` ni enlaces desde `/` a carreras distintas de Santiago).
 - **El contenido sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas y cupos formateados; `notes` dividido en un párrafo por línea no vacía). No lee `TRIPS`.
 - **El precio sale de las ofertas, no de `trips`:** los campos de precio de `trips` (`price_usd`, `deposit_usd`, `installments_price_usd`, `companion_price_usd` y `payment_terms`) **ya no se publican**, aunque tengan valor: `TripLanding` ya no los tiene. El precio de la página es la oferta comercial vigente que el admin aprobó y activó en `/crm/ofertas` (ver [Ofertas comerciales](#migración-de-ofertas-comerciales-0008)).
-- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, pintado en el navegador por `TripPageContent`): una columna centrada con cabecera ("Ciudad, País · distancias", título, resumen e imagen si hay `imageUrl`), datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), la sección de precio (bloque financiero o aviso sin oferta, ver abajo) y después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos (con o sin oferta). Ningún bloque aparece vacío.
+- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, pintado en el navegador por `TripPageContent`): en el móvil, una columna con cabecera ("Ciudad, País · distancias", título y resumen), imagen si hay `imageUrl`, datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), la sección de precio (bloque financiero o aviso sin oferta, ver abajo) y después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos (con o sin oferta). Ningún bloque aparece vacío. En PC (≥ 1024 px) la ficha usa todo el ancho de la pantalla, con los mismos márgenes laterales que la cabecera del sitio. El encabezado ocupa todo el ancho y debajo hay dos columnas: a la izquierda la imagen, los datos clave y las secciones de detalle, y a la derecha la tarjeta de precio y registro, que baja con la página como el resto del contenido. En la tarjeta, los botones van arriba y el precio debajo, completo y sin scroll propio.
 - **Bloque financiero** (`OfferSummary`, componente presentacional): en el servidor, `getCatalogOffer(slug, código)` (`modules/landing/utils/catalogOffer.ts`, con `cache` de React) llama a `getPublicOffer` de `@/modules/trips` (una sola consulta: oferta vigente y último tipo de cambio) y la convierte con la función pura `toOfferView`. Muestra «Precio y condiciones»:
   - precio total, descuento (solo si es mayor que 0) y precio final, en USD con su importe en soles entre paréntesis;
   - cada anticipo permitido con su saldo (precio final − anticipo) y la fecha límite del saldo, y «El anticipo se descuenta del precio final.»; sin anticipos, «Pago único del precio final.»;
@@ -651,7 +651,7 @@ Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fas
 - **Qué oferta se muestra (la decide el servidor):** con `?c=<código>` y una oferta de esa campaña activa, vigente (hoy en hora de Lima entre `valid_from` y `valid_until`), de una campaña activa y de la misma carrera, se muestra esa; si no, la oferta general vigente; si tampoco hay, ninguna. Nunca se suman dos ofertas. `?c=` solo **elige** entre ofertas aprobadas y activadas: una campaña cerrada, inexistente o de otra carrera se trata como sin campaña. Cualquier otro parámetro (`price`, `discount`, `deposit`, `offer`, `offerId`, `modo`…) se ignora, y ningún importe sale de la URL ni del navegador.
 - **Sin oferta aplicable** (sin ofertas, solo borradores o aprobadas, todas cerradas o la activa vencida): la sección de precio muestra solo «Todavía no publicamos el precio de este viaje.», sin importes, «Desde», «Reserva con», anticipos ni beneficios.
 - **Registro de la carrera** (`/viajes/<slug>/registro`): el mismo bloque aparece entre el encabezado y el formulario, con la misma oferta (también según `?c=`); sin oferta no hay bloque, y con `?modo=stand` nunca. «Ver el paquete completo» conserva `?c=`, así que lleva a la misma oferta.
-- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto` ni al registro de la carrera (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
+- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`. Con el registro abierto, «Registrarme» lleva al registro de la carrera (un solo botón, encima de WhatsApp, que pasa a ser el botón secundario); mientras siga el texto legal provisional no aparece (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
 - **Metadatos:** el HTML estático lleva un título y una descripción genéricos y no hay `og:image` por viaje; el navegador fija el título del documento («<título> | Carreras Viajeras» y «Registro · <título> | Carreras Viajeras»). `robots` sigue en `noindex`.
 - **Viaje no encontrado (404 suave):** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `GET /api/viajes/[slug]` responde `404 trip_not_found`; la página muestra «Viaje no encontrado» con enlace a la portada, con HTTP `200`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. Una URL de `/viajes/` con un segmento fuera del formato del slug (por ejemplo, con mayúsculas) no se reescribe y recibe el 404 de Next.
 - **Lectura por petición del endpoint:** `GET /api/viajes/[slug]` lee el viaje (`getCatalogTrip`) y la oferta (`getCatalogOffer`) en paralelo.
@@ -948,13 +948,96 @@ ROLLBACK;
 
 Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
 
+### Migración de visitas por campaña (`0014`)
+
+`drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)): la tabla `campaign_visit_days`, con una fila por campaña y día de Lima y el número de aperturas del enlace o del QR de ese día. No guarda nada de la persona (ni IP, ni agente de usuario, ni UTM). **Aplicada el 2026-10-29 en la rama de desarrollo de Neon y en `production`** (comprobadas sus tres restricciones, la tabla vacía y los casos de rechazo). En cualquier otra rama, aplicarla primero en desarrollo y, en `production`, solo con autorización explícita de la operación remota. Tiene que estar aplicada antes de desplegar el código de esa spec: `POST /api/campaign-visits` escribe en ella (sin la tabla, cada visita se pierde y deja `campaign visit: record failed` en el log) y `/crm/campanas` la lee.
+
+**Número definitivo: `0014`.** Se generó como `0013_cute_nebula` y en el merge con `main`, que ya tenía `0013_client_stage_emails`, pasó a `0014_cute_nebula` (mismo SQL; cambian el nombre del archivo, su snapshot y el journal). Si ya la aplicaste con el número provisional `0013` (como en `production` y en la rama de desarrollo), es la misma migración: **no la vuelvas a aplicar**.
+
+**Orden: `0000` → … → `0013` → esta.** Necesita `campaigns` (`0007`) y no depende de `0013_client_stage_emails`; en el journal de Drizzle va después de ella. Si falta alguna anterior en esa rama, aplicarla antes siguiendo su sección (para `0010`, [Migración incremental de la integración](#migración-incremental-de-la-integración); para `0011` y `0012`, [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)). No volver a aplicar ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- crea la tabla `campaign_visit_days` con `campaign_id` (`uuid`), `day` (`date`, el día en Lima) y `visits` (`integer`), las tres obligatorias;
+- la clave primaria `campaign_visit_days_campaign_id_day_pk (campaign_id, day)`: una sola fila por campaña y día. La aplicación suma cada visita a la fila del día con una sola sentencia (`INSERT … ON CONFLICT (campaign_id, day) DO UPDATE SET visits = campaign_visit_days.visits + 1`);
+- el CHECK `campaign_visit_days_visits_chk` (`visits > 0`);
+- la clave foránea `campaign_visit_days_campaign_id_campaigns_id_fk` hacia `campaigns`, `ON DELETE restrict` (las campañas nunca se borran, se cierran).
+
+No cambia ninguna tabla existente. La tabla nueva queda vacía: las visitas empiezan a contar con el despliegue, sin histórico.
+
+Revisión previa:
+
+- `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0014_cute_nebula.sql` no devuelve nada;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0014_cute_nebula.sql` devuelve solo dos líneas, `CREATE TABLE "campaign_visit_days"` y `ALTER TABLE "campaign_visit_days" ADD CONSTRAINT …` (la clave foránea): solo crea `campaign_visit_days` y no altera `campaigns`, `trips`, `leads`, `profiles` ni ninguna otra tabla.
+
+**Un solo bloque, con el archivo tal cual.** No hay `ALTER TYPE … ADD VALUE` ni enums nuevos, así que todo va en una transacción.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0012` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regclass('public.campaigns'), to_regprocedure('public.cv_reconcile_rewards(text)'), to_regclass('public.campaign_visit_days');` devuelve `campaigns`, `cv_reconcile_rewards(text)` (una función de `0012`) y `NULL`. Si alguna de las dos primeras es `NULL`, falta una migración anterior: aplicarla antes. Si la tercera no es `NULL`, la `0013` ya está aplicada: no repetirla.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. Escribir `BEGIN;`, debajo el archivo `drizzle/0014_cute_nebula.sql` completo y, al final, `COMMIT;`, y ejecutarlo todo junto. La línea `--> statement-breakpoint` es un comentario de SQL y se puede dejar.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0014_cute_nebula.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f "$F"
+   ```
+
+   `-1` lo ejecuta todo en una sola transacción. Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+
+   Si falla, la transacción se deshace entera y no se guarda nada. Errores que se pueden ver:
+   - `relation "campaigns" does not exist`: falta `0007` en esa rama; aplicarla antes (y las que falten hasta `0012`).
+   - `relation "campaign_visit_days" already exists`: repetir la consulta del paso 1; si la tercera columna no es `NULL`, la migración ya estaba aplicada y no hay que repetir nada.
+   - cualquier otro error: la rama no está en el estado esperado; parar y revisar.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+5. Comprobar:
+   - las columnas: `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'campaign_visit_days' ORDER BY ordinal_position;` devuelve `campaign_id` `uuid` `NO`, `day` `date` `NO` y `visits` `integer` `NO`;
+   - las restricciones: `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'public.campaign_visit_days'::regclass AND contype IN ('p','c','f') ORDER BY 1;` devuelve tres: `campaign_visit_days_campaign_id_campaigns_id_fk` (`f`), `campaign_visit_days_campaign_id_day_pk` (`p`) y `campaign_visit_days_visits_chk` (`c`);
+   - la regla de borrado de la clave foránea: `SELECT confrelid::regclass, confdeltype FROM pg_constraint WHERE conname = 'campaign_visit_days_campaign_id_campaigns_id_fk';` devuelve `campaigns` y `r` (`restrict`);
+   - los datos: `SELECT count(*) FROM campaign_visit_days;` devuelve 0.
+
+Prueba manual de las restricciones, **solo en la rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil, un viaje y una campaña de prueba, una fila de visitas con `visits = 1` y una segunda visita del mismo día sumada como lo hace la aplicación). La consulta final devuelve una fila: `2026-10-29` con `2` visitas:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-visitas', 'visitas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-visitas', 'Maratón de prueba', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba');
+INSERT INTO campaigns (id, code, trip_id, channel, name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000002', 'prueba-visitas', '00000000-0000-4000-8000-000000000001', 'event', 'Campaña de prueba', 'test-visitas');
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES
+  ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1);
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES
+  ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1)
+  ON CONFLICT (campaign_id, day) DO UPDATE SET visits = campaign_visit_days.visits + 1;
+SELECT day, visits FROM campaign_visit_days WHERE campaign_id = '00000000-0000-4000-8000-000000000002';
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- campaign_visit_days_visits_chk: visits = 0 (otro día, para no chocar con la clave primaria)
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000002', '2026-10-30', 0);
+-- campaign_visit_days_campaign_id_day_pk: segunda fila con la misma campaña y el mismo día, sin ON CONFLICT
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000002', '2026-10-29', 1);
+-- campaign_visit_days_campaign_id_campaigns_id_fk: campaña inexistente
+INSERT INTO campaign_visit_days (campaign_id, day, visits) VALUES ('00000000-0000-4000-8000-000000000099', '2026-10-29', 1);
+ROLLBACK;
+```
+
+Después del `ROLLBACK;`, `SELECT count(*) FROM campaign_visit_days;` sigue devolviendo 0 y no queda el perfil `test-visitas`. Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
+
 ### Campañas, QR y modo stand
 
-Especificado en [`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md). Cada carrera publicada tiene su página de registro en `/viajes/<slug>/registro`: nombre, ciudad y país, fecha, distancias e imagen del catálogo (el encabezado no tiene precios ni cupos), el botón «Quiero correr esta maratón», que baja al formulario, y «Ver el paquete completo», que abre `/viajes/<slug>` (conservando `?c=`). Entre el encabezado y el formulario aparece el bloque financiero de la oferta vigente, si la hay (nunca en el modo stand; ver [Qué usa hoy la landing](#qué-usa-hoy-la-landing)). El formulario pide solo nombre y apellido, WhatsApp con código de país y correo, más la aceptación del texto legal y una casilla opcional de promociones (siempre desmarcada). `/contacto` usa el mismo formulario con un selector de carrera: los viajes publicados y, después, "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades". Cada envío válido crea un lead "Nuevo" en el CRM, vía "Formulario web", sin responsable.
+Especificado en [`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md). Cada carrera publicada tiene su página de registro en `/viajes/<slug>/registro`: nombre, ciudad y país, fecha, distancias e imagen del catálogo (el encabezado no tiene precios ni cupos), el botón «Quiero correr esta maratón», que baja al formulario, y «Ver el paquete completo», que abre `/viajes/<slug>` (conservando `?c=`). Entre el encabezado y el formulario aparece el bloque financiero de la oferta vigente, si la hay (nunca en el modo stand; ver [Qué usa hoy la landing](#qué-usa-hoy-la-landing)). En el móvil todo va en una columna. En PC (≥ 1024 px) el encabezado se alinea con los márgenes de la cabecera del sitio y debajo hay dos columnas: a la izquierda «Regístrate», el texto y el precio (si hay oferta), y a la derecha el formulario; el modo stand no cambia ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)). El formulario pide solo nombre y apellido, WhatsApp con código de país y correo, más la aceptación del texto legal y una casilla opcional de promociones (siempre desmarcada). `/contacto` usa el mismo formulario con un selector de carrera: los viajes publicados y, después, "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades". Cada envío válido crea un lead "Nuevo" en el CRM, vía "Formulario web", sin responsable.
 
-Hoy el registro solo se alcanza con un QR o un enlace de campaña: ni la portada ni `/viajes/<slug>` enlazan a él.
+Además del QR y del enlace de una campaña, la ficha de la carrera (`/viajes/<slug>`) lleva al registro con el botón **«Registrarme»** ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)). Hay un solo botón, junto a WhatsApp: «Registrarme» va inmediatamente encima de «Consultar por WhatsApp», que pasa a ser el botón secundario (con borde), y debajo de los dos queda el aviso «Consulta sin compromiso…». En el móvil se ve primero el precio y después los botones. En PC, los botones van arriba de la tarjeta de la derecha (que baja con la página) y el precio debajo, completo, así que «Registrarme» se ve al cargar la página. El enlace conserva los parámetros con los que se abrió la ficha (`c`, los UTM y `ref`), así que una persona que llega a la ficha desde una campaña sigue atribuida a ella al registrarse. **Solo aparece cuando el registro está abierto:** mientras siga el texto legal provisional (P-L, abajo), la ficha no muestra «Registrarme» y queda como antes, con WhatsApp como único botón. La portada no cambia: sus botones siguen llevando a `/contacto`, que tiene el mismo formulario con un selector de carrera.
 
-**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) aplicada en `production`, las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
+**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) y la [migración de visitas por campaña (`0014`)](#migración-de-visitas-por-campaña-0014) aplicadas en `production` (la `0014`, antes de desplegar el contador; ya lo está), las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
 
 #### Crear una campaña
 
@@ -974,8 +1057,25 @@ Cómo se atribuye cada lead:
 - Un lead registrado desde el enlace o el QR de una campaña **activa y de la misma carrera** queda con el canal de la campaña, la campaña y, como detalle del origen, su evento (o su nombre si no tiene). Se ve en la ficha del lead, tarjeta "Registro" → "Campaña".
 - Sin campaña válida (enlace sin `?c=`, campaña cerrada, inexistente o de otra carrera), el registro funciona igual y el lead queda con el canal "Web". El comercial puede corregir el origen en la ficha; el cambio queda en el historial.
 - Puedes añadir UTM al enlace (`&utm_source=instagram&utm_medium=social&utm_campaign=preventa`) o un aliado (`&ref=club-lima`). Se guardan en la ficha ("UTM", referente), pero **no cambian el canal**: lo decide solo la campaña. Ningún parámetro cambia importes, etapa, responsable ni consentimiento: `?c=` solo elige la oferta de una campaña activa de esa carrera, si tiene una vigente.
-- En la lista de campañas, la columna de registros **cuenta leads nuevos, no visitas**: abrir la página o escanear el QR no guarda nada. El informe origen × etapa de `/crm` sigue contando por canal.
+- En la lista de campañas, la columna "Registros" **cuenta leads nuevos** atribuidos a la campaña; las aperturas del enlace o del QR van aparte, en "Visitas" (ver [Visitas y conversión](#visitas-y-conversión)). El informe origen × etapa de `/crm` sigue contando por canal.
 - **Sin duplicados:** si la misma persona (el mismo correo, sin importar mayúsculas) vuelve a registrarse en la misma carrera, no se crea otro lead: su ficha recibe una actividad "Volvió a registrarse" con la campaña, los UTM, la versión del texto legal y su elección de promociones. El lead existente no cambia (ni origen, ni campaña, ni promociones), y la persona ve el mismo mensaje de éxito. Dos personas con el mismo teléfono y correos distintos son dos leads.
+
+#### Visitas y conversión
+
+En **Campañas** (`/crm/campanas`) y en la ficha de cada campaña, después de "Registros", aparecen "Visitas" y "Conversión". Sirven para comparar campañas (un stand con una publicación, por ejemplo) y para ver si un QR se escanea pero el formulario no convence.
+
+**Qué cuenta como visita:** cada vez que alguien abre el enlace público o escanea el QR de una campaña **activa** de **esa misma carrera** y la página de registro se carga en un navegador con JavaScript. Al cargarse, la página envía un aviso a `POST /api/campaign-visits` y el contador de ese día sube en 1. Cuenta también mientras el registro está cerrado por la puerta P-L: un QR impreso ya suma visitas aunque muestre el aviso de "El registro en línea abrirá pronto".
+
+**Qué no cuenta:**
+
+- el modo stand (`&modo=stand`): la tableta del equipo no envía el aviso, así que sus registros no tienen visitas detrás;
+- las previsualizaciones que generan WhatsApp o las redes al compartir el enlace, los robots sin JavaScript y la precarga de páginas;
+- las campañas cerradas, los códigos que no existen y los de una campaña de otra carrera (la página se abre igual, pero el contador no cambia);
+- `/contacto`, la ficha `/viajes/<slug>?c=…` y los enlaces sin `?c=`.
+
+**Es un dato indicativo, no un recuento de personas:** cada apertura cuenta una vez, aunque sea la misma persona (recargar la página suma otra visita), y alguien con conocimientos técnicos podría inflarlo enviando avisos a mano (lo limitan el control de origen del servidor y la [regla WAF](#9-regla-waf-opcional-contra-abusos)). Se guarda **sin ningún dato de la persona**: solo la campaña, el día (hora de Lima) y el número de visitas; ni IP, ni cookies, ni navegador, ni UTM. Las visitas **empiezan a contar desde el despliegue** de este cambio: no hay histórico, y las campañas creadas antes empiezan en 0. Requiere la [migración `0014`](#migración-de-visitas-por-campaña-0014) aplicada **antes de desplegar**: sin la tabla, las visitas se pierden y `/crm/campanas` falla al leerla.
+
+**Conversión** = registros ÷ visitas, redondeada a un porcentaje entero. Sin visitas se muestra "—". Puede pasar del 100 %: los registros hechos desde el modo stand (que no suma visitas) y los anteriores al contador cuentan como registros pero no tienen visita. Se muestra tal cual.
 
 #### Imprimir el QR
 
@@ -994,7 +1094,7 @@ Para registrar corredores en una feria desde una tableta:
 1. Abre en la tableta el **enlace del modo stand** de la ficha de la campaña (es el enlace público con `&modo=stand`). No lo publiques ni lo conviertas en QR: está pensado para la tableta del equipo (no da ningún permiso especial, solo cambia la presentación).
 2. La página muestra solo el nombre de la carrera y el formulario, con campos y botones grandes, sin la cabecera ni el pie del sitio.
 3. Cada corredor escribe sus datos y pulsa "Enviar mis datos". Tras un envío correcto se ve "Registro guardado. ¡Gracias!", sin ningún dato del corredor, y el botón **Registrar a otra persona**, que abre un formulario vacío para el siguiente.
-4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
+4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Tampoco cuenta visitas: abrir o recargar el enlace del modo stand no suma nada en "Visitas" (los registros que se hagan desde la tableta sí suman en "Registros"). Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
 5. La verificación de Cloudflare (Turnstile) se repite en cada registro; si pide una comprobación, el corredor la resuelve antes de enviar.
 
 Si el servidor rechaza el envío (datos incompletos, verificación fallida o servicio no disponible), el formulario conserva lo escrito para reintentar y, salvo en los errores de datos, ofrece "Escríbenos por WhatsApp" como alternativa.
@@ -1003,7 +1103,7 @@ Si el servidor rechaza el envío (datos incompletos, verificación fallida o ser
 
 El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
 
-**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso.
+**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso (y su visita sí se cuenta). Mientras tanto, la ficha `/viajes/<slug>` tampoco muestra «Registrarme»: el botón aparece automáticamente al abrir el registro, sin tocar la ficha.
 
 Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
 
@@ -1041,6 +1141,8 @@ Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de 
 Si falta, la API de n8n responderá que no está configurada y el resto de la aplicación sigue funcionando. Si se filtra, genera otro valor y actualiza el Secret, tus archivos locales y la credencial de n8n.
 
 ### Automatizaciones con n8n
+
+Este apartado describe los borradores y avisos al equipo para revisión humana. El canal adicional de correo automático al cliente y el flujo para tu n8n en Docker se explican en [Embudo visual y correos al cliente](#embudo-visual-y-correos-al-cliente-desde-n8n-en-docker).
 
 n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, y cada vez que el equipo le cambia la etapa en el CRM, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
 
@@ -1273,7 +1375,9 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 
 #### 9. Regla WAF opcional contra abusos
 
-Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. Se configura sin tocar código, en el plan Free de Cloudflare (una regla, periodo de 10 segundos, contada por IP):
+Son defensas adicionales que se configuran sin tocar código, en el panel de Cloudflare (periodo de 10 segundos, contadas por IP). Hay dos reglas: una para los formularios y otra para el contador de visitas por campaña. **El plan Free de Cloudflare admite una sola regla de rate limiting:** en Free, crea solo la de formularios; la de visitas necesita un plan que admita dos (ver abajo).
+
+**Regla "Formularios de captación".** Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. El aviso de visita que envía la página de registro al abrirse con `?c=` va a otra ruta (`POST /api/campaign-visits`), así que tampoco cuenta en esta regla: tiene la suya (abajo).
 
 1. Panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → **Create rule** (si ya existía la regla antigua solo para `POST /contacto`, edítala en lugar de crear otra).
 2. Nombre: "Formularios de captación". En **Edit expression**, pega:
@@ -1285,7 +1389,23 @@ Es una defensa adicional a Turnstile para los dos formularios públicos: `/conta
 3. **Characteristics:** IP. **When rate exceeds:** 10 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
 4. Guarda y despliega la regla.
 
-Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las visitas. Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
+Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las aperturas de esas páginas (sus `GET`). Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
+
+**Regla "Visitas de campaña".** Limita los avisos de visita de `POST /api/campaign-visits` (ver [Visitas y conversión](#visitas-y-conversión)), para que un script no infle el contador sin freno:
+
+1. En la misma pantalla (**Rate limiting rules**) → **Create rule**.
+2. Nombre: "Visitas de campaña". En **Edit expression**, pega:
+
+   ```txt
+   http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and http.request.uri.path eq "/api/campaign-visits"
+   ```
+
+3. **Characteristics:** IP. **When rate exceeds:** 30 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
+4. Guarda y despliega la regla.
+
+Por qué ese umbral: cada apertura del enlace o del QR envía un solo aviso, y en una feria muchos móviles pueden escanear el QR a la vez saliendo a Internet con la misma IP. Por eso el umbral es más alto que el de los formularios. Si aun así se supera, **un bloqueo solo pierde visitas, nunca registros**: la página y el formulario siguen funcionando, la persona no ve ningún error y el contador simplemente no suma esas aperturas durante 10 segundos. Por eso el contador es un endpoint aparte de los formularios: si las visitas fueran por la misma ruta que los envíos, gastarían su límite de 10 y un pico de escaneos en el stand podría bloquear también los registros. Si el editor no ofrece el método, basta con la ruta (`http.request.uri.path eq "/api/campaign-visits"`) y el mismo umbral: la página solo hace `POST` a esa ruta.
+
+**En el plan Free (una sola regla).** No crees la regla de visitas: la única regla disponible es la de formularios, que protege los registros. El contador sigue protegido por el control de origen del servidor y, si alguien lo infla, solo se distorsiona un dato indicativo. No amplíes la regla de formularios con la ruta del contador: compartirían el límite de 10 por IP y un pico de escaneos en una feria bloquearía también los registros, justo lo que evita tener el contador en una ruta aparte. Cuando el plan admita una segunda regla, créala como se indica arriba.
 
 #### 10. Workflow "Alta desde Google Forms"
 
@@ -1539,6 +1659,52 @@ Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` 
 
 El outbox del PR #8 ([`automation-outbox.md`](docs/specs/automation-outbox.md)) se retiró al integrar este trabajo: el sistema usa un único outbox (`outbox_events`) y la API `/api/integrations/n8n/*` descritos en [«Automatizaciones con n8n»](#automatizaciones-con-n8n).
 
+## Embudo visual y correos al cliente desde n8n en Docker
+
+`/crm/leads` abre el embudo **Nuevo → Contactado → Cotizado → Reservado → Pagado**; **Perdido** es una salida desde cualquier etapa. Cada columna tiene hasta 10 contactos y el total completo. La vista **Lista** conserva la tabla, los filtros y la paginación (`?vista=lista`). Los archivados se consultan en lista, como solo lectura.
+
+Al abrir una ficha se ven el recorrido registrado, los avisos y el historial de correos de cada etapa. Un salto Nuevo → Reservado deja las etapas intermedias como «Sin registro». Los avisos distinguen seguimiento vencido, hoy, falta de responsable o próxima acción, correo ausente y errores de envío. «No contactar» conserva prioridad incluso si el contacto cambia otra vez de etapa.
+
+### Preparar el entorno
+
+1. Ejecutar `npm ci`. Los tests nuevos usan PostgreSQL embebido (PGlite), sin credenciales ni conexión a Neon: `npx vitest run modules/integrations/services/clientEmails.service.test.ts modules/crm/services/leadMessages.service.test.ts`.
+2. Revisar [`0013_client_stage_emails.sql`](drizzle/0013_client_stage_emails.sql) y aplicarla mediante el procedimiento autorizado en la rama Neon **dev-test**, antes de ejecutar este código contra esa base. Añade la tabla de correos y una secuencia a los eventos para ordenar cambios concurrentes; no borra datos. Las pruebas aplican todas las migraciones en memoria. No se ha aplicado esta migración a ninguna base remota desde este trabajo.
+3. Configurar la aplicación mediante su entorno seguro:
+
+   | Variable | Uso |
+   | --- | --- |
+   | `N8N_API_TOKEN` | Token privado compartido con la credencial Header Auth de n8n; mínimo 32 caracteres aleatorios. |
+   | `CRM_EMAIL_AUTOMATION_ENABLED` | `false` por defecto. `true` habilita la preparación y autorización. |
+   | `CRM_EMAIL_FROM` | Dirección de correo autorizada por tu cuenta SMTP. |
+   | `CRM_EMAIL_AUTOMATION_START_AT` | Fecha y hora ISO con zona, elegida **después** de la migración y del despliegue, por ejemplo `2026-11-01T15:00:00Z`. |
+
+   Las credenciales SMTP se guardan en tu instancia existente de n8n. La aplicación no necesita su contraseña. El CRM puede arrancar sin configurar estos correos.
+
+### Importar en tu n8n existente
+
+1. Importar [`scripts/n8n/client-stage-email.json`](scripts/n8n/client-stage-email.json) desde el editor de tu **n8n 2.43.7**. Los tipos de nodos se han contrastado con el código de esa versión; la importación y conexión SMTP deben probarse en tu instancia. Se importa **inactivo**, como flujo separado del que prepara borradores de WhatsApp para revisión humana.
+2. En **CRM connection**, editar el campo `crmOrigin`:
+
+   | Ubicación del CRM | URL vista desde n8n en Docker |
+   | --- | --- |
+   | `npm run dev` en tu PC con Docker Desktop | `http://host.docker.internal:3000` |
+   | CRM desplegado | Su URL pública HTTPS. |
+
+   El flujo usa este nodo de configuración, disponible en n8n Community; no requiere Variables de pago. Desde Docker, `localhost` apunta al propio contenedor. Si usas Docker Engine en Linux, añadir `extra_hosts: ["host.docker.internal:host-gateway"]` a tu servicio de n8n. Comprobar primero desde un nodo HTTP Request que `GET <crmOrigin>/api/health` devuelve `{ "status": "ok" }`.
+3. En cada nodo HTTP seleccionar la misma credencial **Header Auth**, con nombre de cabecera `Authorization` y valor `Bearer <N8N_API_TOKEN>`. En **Send SMTP once**, seleccionar tu credencial SMTP existente. El archivo exportado no contiene credenciales.
+4. Preparar un contacto con una dirección de prueba autorizada, establecer la fecha de corte y habilitar la aplicación. Crear o cambiar de etapa **después** de esa fecha; ejecutar **Prueba manual** y revisar el resultado en la ficha. Activar **Cada minuto** tras validar esa prueba. El flujo procesa un contacto por ejecución; mantener su límite en 1 para conservar la relación entre los nodos.
+
+### Resultados y recuperación
+
+El flujo reclama un mensaje, pide autorización justo antes de SMTP, envía una sola vez y confirma el resultado. El servidor vuelve a revisar etapa, evento vigente, destinatario, archivo y baja de contacto. Los eventos originales siguen disponibles para el consumidor anterior de n8n. Los eventos anteriores al corte y las importaciones se excluyen del envío automático. Los avisos de seguimiento vencido siguen siendo internos.
+
+**Enviado** significa que el servidor SMTP aceptó al destinatario. Esta conexión no confirma la entrega final. **Por confirmar** indica una respuesta ambigua o una ejecución interrumpida después de autorizar SMTP: revisar su ID de ejecución en n8n y evitar ejecutar otra vez el nodo SMTP o la ejecución completa. Si el resultado anterior confirma aceptación, reintentar únicamente **Confirm accepted** con los datos guardados de ese mismo intento; el callback es idempotente y puede resolver el estado incierto.
+
+Los callbacks HTTP tienen retries; SMTP y su autorización no. El nodo **Revisar ejecución** termina los resultados inciertos como error después de registrarlos, para conservar la información necesaria en n8n. Una reclamación que expire antes de autorizar puede volver a la cola, hasta tres intentos. **Reintentar correo** en el CRM solo aparece para un fallo confirmado anterior al envío, con automatización activa y contacto todavía elegible. Los mensajes aceptados, inciertos, de otra etapa o de un episodio anterior no admiten reenvío desde ese botón. El cambio de etapa conserva «No contactar» y no habilita nuevos envíos para quien pidió la baja.
+
+Al pausar los correos, poner `CRM_EMAIL_AUTOMATION_ENABLED=false` y desactivar el flujo programado. Al reactivarlos, elegir un corte nuevo si se quiere excluir lo ocurrido durante la pausa. Un correo ya aceptado por SMTP no puede retirarse mediante una baja posterior. Las ejecuciones con error pueden conservar datos necesarios para revisarlas: ajustar su retención en n8n; las ejecuciones correctas de este flujo no se guardan.
+
+La activación requiere probar la conexión desde tu contenedor y un destinatario autorizado. Las verificaciones locales de este cambio no han enviado correos reales ni configurado tu Docker desde la nube.
 ## Perfiles, patrocinadores y directorio de usuarios (PR #22)
 
 La integración conserva **Clerk como único proveedor de identidad**, los roles

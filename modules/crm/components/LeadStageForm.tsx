@@ -33,12 +33,13 @@ export function LeadStageForm({ leadId, stage }: LeadStageFormProps) {
   return (
     <form noValidate onSubmit={handleSubmit} className="flex flex-col gap-4">
       <input type="hidden" name="leadId" value={leadId} />
-      <fieldset disabled={pending} className="flex flex-col gap-4 sm:flex-row sm:items-start">
+      <fieldset disabled={pending} className="flex min-w-0 flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start">
         <legend className="sr-only">Cambiar etapa</legend>
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 max-w-full flex-col gap-2">
           <Label htmlFor="lead-stage">Etapa</Label>
           <NativeSelect
             id="lead-stage"
+            className="max-w-full"
             name="stage"
             value={selected}
             onChange={(event) => setSelected(event.target.value as LeadStage)}
@@ -50,7 +51,7 @@ export function LeadStageForm({ leadId, stage }: LeadStageFormProps) {
         </div>
         {/* The reason only applies to "lost": hidden (and not sent) for any other stage. */}
         {selected === "lost" && (
-          <div className="flex flex-col gap-2 sm:w-80">
+          <div className="flex min-w-0 max-w-full flex-col gap-2 sm:w-80">
             <Label htmlFor="lead-lostReason">Motivo de la pérdida *</Label>
             <Input
               id="lead-lostReason"
@@ -65,7 +66,7 @@ export function LeadStageForm({ leadId, stage }: LeadStageFormProps) {
             )}
           </div>
         )}
-        <Button type="submit" disabled={pending} className="sm:mt-6">
+        <Button type="submit" disabled={pending} className="self-start sm:self-end">
           {pending ? "Cambiando…" : "Cambiar etapa"}
         </Button>
       </fieldset>

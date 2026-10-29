@@ -1,0 +1,443 @@
+{
+  "name": "Carreras Viajeras · Correos de etapas (SMTP)",
+  "active": false,
+  "nodes": [
+    {
+      "id": "manual",
+      "name": "Prueba manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "schedule",
+      "name": "Cada minuto",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "connection",
+      "name": "CRM connection",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        120,
+        100
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "crm-origin",
+              "name": "crmOrigin",
+              "value": "http://host.docker.internal:3000",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "notes": "URL desde el contenedor de n8n. Docker Desktop: http://host.docker.internal:3000. Para el CRM desplegado, su URL HTTPS pública. Este dato no es una credencial.",
+      "notesInFlow": true
+    },
+    {
+      "id": "claim",
+      "name": "Claim email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        100
+      ],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('CRM connection').first().json.crmOrigin + '/api/integrations/n8n/email/claim' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ executionId: String($execution.id), limit: 1 }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "notes": "Seleccionar la credencial Header Auth de n8n: Authorization: Bearer <token privado>. No guardar el token en el flujo.",
+      "notesInFlow": true
+    },
+    {
+      "id": "items",
+      "name": "Un mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        100
+      ],
+      "parameters": {
+        "jsCode": "return ($input.first().json.messages ?? []).map(message => ({ json: message }));"
+      }
+    },
+    {
+      "id": "authorize",
+      "name": "Authorize email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        100
+      ],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('CRM connection').first().json.crmOrigin + '/api/integrations/n8n/email/' + $json.id + '/authorize' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ attemptToken: $json.attemptToken }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "notes": "Seleccionar la credencial Header Auth de n8n: Authorization: Bearer <token privado>. No guardar el token en el flujo.",
+      "notesInFlow": true
+    },
+    {
+      "id": "allowed",
+      "name": "Envío autorizado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "allowed-condition",
+              "leftValue": "={{ $json.status === 'authorized' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "smtp",
+      "name": "Send SMTP once",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        0
+      ],
+      "retryOnFail": false,
+      "onError": "continueErrorOutput",
+      "parameters": {
+        "operation": "send",
+        "fromEmail": "={{ $json.message.from }}",
+        "toEmail": "={{ $json.message.to }}",
+        "subject": "={{ $json.message.subject }}",
+        "emailFormat": "text",
+        "text": "={{ $json.message.text }}",
+        "options": {
+          "appendAttribution": false,
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "notes": "Seleccionar la credencial SMTP existente. Mantener retry desactivado. No volver a ejecutar este nodo cuando el resultado sea incierto.",
+      "notesInFlow": true
+    },
+    {
+      "id": "accepted",
+      "name": "SMTP aceptó al destinatario?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        -100
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "accepted-condition",
+              "leftValue": "={{ !$json.error && Array.isArray($json.accepted) && $json.accepted.some(address => String(address).toLowerCase() === $('Authorize email').first().json.message.to.toLowerCase()) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ack",
+      "name": "Confirm accepted",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        -200
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('CRM connection').first().json.crmOrigin + '/api/integrations/n8n/email/' + $('Authorize email').first().json.message.id + '/ack' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ attemptToken: $('Authorize email').first().json.message.attemptToken, ...($json.messageId ? { smtpMessageId: $json.messageId } : {}) }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "notes": "Seleccionar la credencial Header Auth de n8n: Authorization: Bearer <token privado>. No guardar el token en el flujo.",
+      "notesInFlow": true
+    },
+    {
+      "id": "unknown",
+      "name": "Record unknown outcome",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        100
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('CRM connection').first().json.crmOrigin + '/api/integrations/n8n/email/' + $('Authorize email').first().json.message.id + '/fail' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ attemptToken: $('Authorize email').first().json.message.attemptToken, kind: 'smtp_unknown' }) }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "notes": "Seleccionar la credencial Header Auth de n8n: Authorization: Bearer <token privado>. No guardar el token en el flujo.",
+      "notesInFlow": true
+    },
+    {
+      "id": "guide",
+      "name": "Configuración y límites",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        -420
+      ],
+      "parameters": {
+        "width": 900,
+        "height": 280,
+        "content": "## n8n 2.43.7 · Configurar antes de activar\n1. Editar crmOrigin en CRM connection: Docker Desktop → http://host.docker.internal:3000; CRM desplegado → su URL HTTPS. Compatible con n8n Community en Docker, sin Variables de pago.\n2. Seleccionar Header Auth en cada nodo HTTP y la credencial SMTP existente en Send SMTP once.\n3. Aplicar la migración revisada y definir CRM_EMAIL_FROM, CRM_EMAIL_AUTOMATION_START_AT y CRM_EMAIL_AUTOMATION_ENABLED=true en la aplicación.\n4. Probar solo con destinatarios autorizados.\nUn contacto por ejecución. No cambiar el límite sin adaptar el flujo. No reintentar SMTP ni una ejecución completa si ya se autorizó el envío. Los callbacks sí admiten retries. Enviado indica aceptación SMTP, sin confirmar entrega."
+      }
+    },
+    {
+      "id": "unknown-stop",
+      "name": "Revisar ejecución",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1920,
+        100
+      ],
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "Resultado SMTP por confirmar. Revisa esta ejecución; no vuelvas a ejecutar el envío."
+      },
+      "notes": "El resultado incierto termina como error para conservar los datos necesarios para revisarlo. No reintentar SMTP.",
+      "notesInFlow": true
+    }
+  ],
+  "connections": {
+    "Prueba manual": {
+      "main": [
+        [
+          {
+            "node": "CRM connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cada minuto": {
+      "main": [
+        [
+          {
+            "node": "CRM connection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim email": {
+      "main": [
+        [
+          {
+            "node": "Un mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Un mensaje": {
+      "main": [
+        [
+          {
+            "node": "Authorize email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authorize email": {
+      "main": [
+        [
+          {
+            "node": "Envío autorizado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Envío autorizado?": {
+      "main": [
+        [
+          {
+            "node": "Send SMTP once",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Send SMTP once": {
+      "main": [
+        [
+          {
+            "node": "SMTP aceptó al destinatario?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record unknown outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SMTP aceptó al destinatario?": {
+      "main": [
+        [
+          {
+            "node": "Confirm accepted",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Record unknown outcome",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM connection": {
+      "main": [
+        [
+          {
+            "node": "Claim email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record unknown outcome": {
+      "main": [
+        [
+          {
+            "node": "Revisar ejecución",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "executionTimeout": 120,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

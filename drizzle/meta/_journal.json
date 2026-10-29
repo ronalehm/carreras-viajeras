@@ -92,6 +92,20 @@
       "when": 1793287453259,
       "tag": "0012_reward_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793295322455,
+      "tag": "0013_client_stage_emails",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793302787993,
+      "tag": "0014_cute_nebula",
+      "breakpoints": true
     }
   ]
 }

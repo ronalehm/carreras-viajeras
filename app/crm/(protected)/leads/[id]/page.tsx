@@ -14,9 +14,12 @@ import {
   CLOSED_LEAD_STAGES,
   getLeadById,
   getLeadFormOptions,
+  getLeadMessages,
   LEAD_STAGE_BADGE_VARIANTS,
   LEAD_STAGE_LABELS,
   LeadDetails,
+  LeadJourney,
+  LeadMessages,
   LeadOwnerForm,
   LeadStageForm,
   LeadTimeline,
@@ -27,7 +30,9 @@ import {
 
 export const metadata: Metadata = { title: "Ficha del lead" };
 
-export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[id]">) {
+export default async function LeadDetailPage({
+  params,
+}: PageProps<"/crm/leads/[id]">) {
   const access = await getCrmAccess("leads.manage");
   if (access.status === "unauthenticated") redirect("/crm/acceso");
   if (access.status === "forbidden") {
@@ -35,28 +40,37 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
       <section className="flex flex-col gap-2">
         <h1 className="text-xl font-semibold">Ficha del lead</h1>
         <p className="text-muted-foreground">
-          No tienes permiso para gestionar leads. Si lo necesitas, pídeselo a un administrador.
+          No tienes permiso para gestionar leads. Si lo necesitas, pídeselo a un
+          administrador.
         </p>
       </section>
     );
   }
   const { id } = await params;
   const canManageBookings = can(access.user.staffRoles, "bookings.manage");
-  const [lead, { ownerOptions }, activities, booking] = await Promise.all([
-    getLeadById(id),
-    getLeadFormOptions(),
-    listLeadActivities(id),
-    canManageBookings ? getLeadBooking(id) : null,
-  ]);
+  const [lead, { ownerOptions }, activities, booking, messages] =
+    await Promise.all([
+      getLeadById(id),
+      getLeadFormOptions(),
+      listLeadActivities(id),
+      canManageBookings ? getLeadBooking(id) : null,
+      getLeadMessages(id),
+    ]);
   if (!lead) notFound();
 
   // At most one active booking per lead: link to it, or offer to create it (not for archived leads).
   const bookingLink = booking ? (
-    <Link href={`/crm/reservas/${booking.id}`} className={buttonVariants({ variant: "outline" })}>
+    <Link
+      href={`/crm/reservas/${booking.id}`}
+      className={buttonVariants({ variant: "outline" })}
+    >
       Ver reserva ({BOOKING_STATUS_LABELS[booking.status]})
     </Link>
   ) : canManageBookings && !lead.archivedAt ? (
-    <Link href={`/crm/reservas/nueva?lead=${lead.id}`} className={buttonVariants({ variant: "outline" })}>
+    <Link
+      href={`/crm/reservas/nueva?lead=${lead.id}`}
+      className={buttonVariants({ variant: "outline" })}
+    >
       Crear reserva
     </Link>
   ) : null;
@@ -64,12 +78,16 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
   const header = (
     <div className="flex flex-wrap items-center gap-3">
       <h1 className="text-xl font-semibold">{lead.fullName}</h1>
-      <Badge variant={LEAD_STAGE_BADGE_VARIANTS[lead.stage]}>{LEAD_STAGE_LABELS[lead.stage]}</Badge>
+      <Badge variant={LEAD_STAGE_BADGE_VARIANTS[lead.stage]}>
+        {LEAD_STAGE_LABELS[lead.stage]}
+      </Badge>
     </div>
   );
   const backLink = (
     <div>
-      <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>Volver a leads</Link>
+      <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
+        Volver a leads
+      </Link>
     </div>
   );
 
@@ -82,6 +100,17 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
           {bookingLink}
         </div>
         <p className="text-muted-foreground">Lead archivado: solo lectura.</p>
+        <LeadJourney
+          lead={{
+            ...lead,
+            emailStatus: messages.messages.find(
+              (message) => message.currentEpisode,
+            ),
+          }}
+          activities={activities}
+          today={getTodayDate()}
+        />
+        <LeadMessages data={messages} />
         <LeadDetails lead={lead} />
         <section className="flex flex-col gap-4">
           <h2 className="text-lg font-semibold">Seguimiento</h2>
@@ -98,7 +127,10 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
         {header}
         <div className="flex flex-wrap items-center gap-2">
           {bookingLink}
-          <Link href={`/crm/leads/${lead.id}/editar`} className={buttonVariants({ variant: "outline" })}>
+          <Link
+            href={`/crm/leads/${lead.id}/editar`}
+            className={buttonVariants({ variant: "outline" })}
+          >
             Editar datos
           </Link>
           <ConfirmActionButton
@@ -124,25 +156,43 @@ export default async function LeadDetailPage({ params }: PageProps<"/crm/leads/[
         </div>
       </div>
       <LeadDetails lead={lead} />
+      <LeadJourney
+        lead={{
+          ...lead,
+          emailStatus: messages.messages.find(
+            (message) => message.currentEpisode,
+          ),
+        }}
+        activities={activities}
+        today={getTodayDate()}
+      />
+      <LeadMessages data={messages} />
       <div className="grid gap-6 sm:grid-cols-2">
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Etapa</h2>
-          <LeadStageForm key={lead.stage} leadId={lead.id} stage={lead.stage} />
+          <LeadStageForm key={lead.id} leadId={lead.id} stage={lead.stage} />
         </section>
         <section className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold">Responsable</h2>
-          <LeadOwnerForm leadId={lead.id} ownerUserId={lead.owner?.userId ?? null} ownerOptions={ownerOptions} />
+          <LeadOwnerForm
+            leadId={lead.id}
+            ownerUserId={lead.owner?.userId ?? null}
+            ownerOptions={ownerOptions}
+          />
         </section>
       </div>
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">Próxima acción</h2>
         {lead.contactOptOutAt ? (
           <p className="text-muted-foreground">
-            Pidió no seguir en contacto el {formatDateTime(lead.contactOptOutAt)}. No se programan próximas acciones ni
-            se preparan borradores.
+            Pidió no seguir en contacto el{" "}
+            {formatDateTime(lead.contactOptOutAt)}. No se programan próximas
+            acciones ni se preparan borradores.
           </p>
         ) : CLOSED_LEAD_STAGES.includes(lead.stage) ? (
-          <p className="text-muted-foreground">Lead cerrado: no tiene próxima acción.</p>
+          <p className="text-muted-foreground">
+            Lead cerrado: no tiene próxima acción.
+          </p>
         ) : (
           <NextActionForm
             leadId={lead.id}

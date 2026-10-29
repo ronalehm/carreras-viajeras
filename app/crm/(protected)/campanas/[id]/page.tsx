@@ -13,6 +13,7 @@ import {
   CampaignQr,
   campaignLinks,
   closeCampaignAction,
+  formatConversion,
   getCampaignById,
   LEAD_CHANNEL_LABELS,
 } from "@/modules/crm";
@@ -46,7 +47,9 @@ export default async function CampaignPage({ params }: PageProps<"/crm/campanas/
     ["Viaje", campaign.trip.title],
     ["Canal", LEAD_CHANNEL_LABELS[campaign.channel]],
     ["Evento o stand", campaign.eventName ?? "—"],
-    ["Registros (no visitas)", String(campaign.leadCount)],
+    ["Registros", String(campaign.leadCount)],
+    ["Visitas", String(campaign.visitCount)],
+    ["Conversión", formatConversion(campaign.leadCount, campaign.visitCount)],
     ["Creada", `${formatDateTime(campaign.createdAt)} por ${campaign.createdBy.email}`],
   ];
   if (campaign.closedAt) {
