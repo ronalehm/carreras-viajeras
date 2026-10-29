@@ -8,5 +8,5 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 export default clerkMiddleware();
 
 export const config = {
-  matcher: ["/crm/:path*", "/api/crm/:path*"],
+  matcher: ["/crm/:path*", "/api/crm/:path*", "/cuenta/perfil/:path*"],
 };

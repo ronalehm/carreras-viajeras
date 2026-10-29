@@ -1,6 +1,8 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
+import Link from "next/link";
+import { buttonVariants } from "@/components/ui/button";
 import { AccessPanel } from "./AccessPanel";
 import { SignOutButton } from "./SignOutButton";
 
@@ -22,7 +24,12 @@ export function RunnerAccount() {
     <div className="flex flex-col items-start gap-4">
       <h1 className="text-2xl font-semibold">Qué bueno verte de nuevo.</h1>
       <p className="text-muted-foreground">{user.primaryEmailAddress?.emailAddress}</p>
-      <SignOutButton redirectTo="/cuenta" />
+      <div className="flex flex-wrap items-start gap-3">
+        <Link href="/cuenta/perfil" className={buttonVariants({ variant: "outline" })}>
+          Mi perfil
+        </Link>
+        <SignOutButton redirectTo="/cuenta" />
+      </div>
     </div>
   );
 }

@@ -14,7 +14,7 @@ import { AccessPanel } from "./AccessPanel";
 
 const STAFF_NOTICE = "Solo para personas invitadas por un administrador.";
 const RUNNER_NOTICE =
-  "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.";
+  "Este paso identifica tu acceso al sitio. Después podrás completar tu perfil; no te inscribe en un evento.";
 
 function expectSignInTo(destination: string) {
   expect(screen.getByTestId("clerk-sign-in")).toBeTruthy();

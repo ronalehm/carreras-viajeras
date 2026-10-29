@@ -15,6 +15,7 @@ import {
   Menu,
   Plane,
   Settings2,
+  Store,
   Tag,
   UsersRound,
   X,
@@ -32,6 +33,7 @@ const ICONS = {
   offers: Tag,
   bookings: CalendarCheck2,
   users: UsersRound,
+  sponsors: Store,
   settings: Settings2,
 };
 const GROUPS = [

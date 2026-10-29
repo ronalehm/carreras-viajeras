@@ -23,18 +23,22 @@ const ALL_PERMISSIONS = [
   "bookings.manage",
   "offers.manage",
   "offers.view",
+  "sponsors.manage",
+  "sponsor.portal",
 ] as const satisfies readonly Permission[];
 
 // Expected matrix from docs/specs/accounts-clerk-rbac.md ("Diseño técnico").
 const EXPECTED_MATRIX: Record<Permission, Record<StaffRole, boolean>> = {
-  "crm.access": { commercial: true, organizer: true, admin: true, super_admin: true },
-  "staff.manage": { commercial: false, organizer: false, admin: true, super_admin: true },
-  "trips.manage": { commercial: true, organizer: true, admin: true, super_admin: true },
-  "trips.manage_all": { commercial: true, organizer: false, admin: true, super_admin: true },
-  "leads.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
-  "bookings.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
-  "offers.manage": { commercial: false, organizer: false, admin: true, super_admin: true },
-  "offers.view": { commercial: true, organizer: false, admin: true, super_admin: true },
+  "crm.access": { commercial: true, organizer: true, admin: true, super_admin: true, sponsor: false },
+  "staff.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "trips.manage": { commercial: true, organizer: true, admin: true, super_admin: true, sponsor: false },
+  "trips.manage_all": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "leads.manage": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "bookings.manage": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "offers.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "offers.view": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "sponsors.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "sponsor.portal": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: true },
 };
 
 const MATRIX_CELLS = ALL_PERMISSIONS.flatMap((permission) =>
@@ -43,7 +47,7 @@ const MATRIX_CELLS = ALL_PERMISSIONS.flatMap((permission) =>
   ),
 );
 
-// Every non-empty combination of roles (2^4 - 1 subsets).
+// Every non-empty combination of the current database roles.
 const ROLE_COMBINATIONS: StaffRole[][] = Array.from(
   { length: 2 ** ALL_ROLES.length - 1 },
   (_, index) => ALL_ROLES.filter((_, bit) => ((index + 1) >> bit) & 1),
@@ -51,7 +55,7 @@ const ROLE_COMBINATIONS: StaffRole[][] = Array.from(
 
 describe("can", () => {
   it("covers every staff_role enum value", () => {
-    expect(ALL_ROLES).toEqual(["commercial", "admin", "super_admin", "organizer"]);
+    expect(ALL_ROLES).toEqual(["commercial", "admin", "super_admin", "organizer", "sponsor"]);
   });
 
   it.each(MATRIX_CELLS)("role %s with %s → %s", (role, permission, expected) => {
@@ -115,6 +119,7 @@ const EXPECTED_MANAGEABLE: Record<StaffRole, StaffRole[]> = {
   admin: ["commercial"],
   commercial: [],
   organizer: [],
+  sponsor: [],
 };
 
 describe("manageableRoles", () => {
@@ -125,6 +130,7 @@ describe("manageableRoles", () => {
     [["super_admin", "admin"], ["commercial", "organizer", "admin"]],
     [["commercial"], []],
     [["organizer"], []],
+    [["sponsor"], []],
     [["commercial", "organizer"], []],
     [["commercial", "admin"], ["commercial"]],
     [["organizer", "super_admin"], ["commercial", "organizer", "admin"]],
@@ -187,6 +193,10 @@ describe("canManageRole", () => {
     for (const target of ALL_ROLES) {
       expect(canManageRole([], target)).toBe(false);
     }
+  });
+
+  it("never allows managing sponsor through team role actions", () => {
+    expect(canManageRole([...ALL_ROLES], "sponsor")).toBe(false);
   });
 
   it("never allows managing super_admin", () => {

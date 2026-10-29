@@ -52,7 +52,7 @@ describe("RunnerAccount", () => {
     expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("greets the runner with their primary email and signs out back to /cuenta", () => {
+  it("greets the runner with their primary email, links to their profile and signs out back to /cuenta", () => {
     userState({
       isLoaded: true,
       isSignedIn: true,
@@ -62,6 +62,10 @@ describe("RunnerAccount", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Qué bueno verte de nuevo." })).toBeTruthy();
     expect(screen.getByText("runner@example.com")).toBeTruthy();
+    const profileLink = screen.getByRole("link", { name: "Mi perfil" });
+    const signOut = screen.getByRole("button", { name: "Cerrar sesión" });
+    expect(profileLink.getAttribute("href")).toBe("/cuenta/perfil");
+    expect(profileLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(signOutProps).toHaveBeenCalledWith({ redirectUrl: "/cuenta" });
     expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
     expect(signInProps).not.toHaveBeenCalled();

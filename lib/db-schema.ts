@@ -26,9 +26,10 @@ export const staffRoleEnum = pgEnum("staff_role", [
   "admin",
   "super_admin",
   "organizer",
+  "sponsor",
 ]);
 
-// Staff accounts only. user_id is the stable Clerk user id (no cross-schema FK).
+// Accounts with an assigned role (staff or sponsor). user_id is the stable Clerk user id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
 export const profiles = pgTable(
   "profiles",
@@ -44,7 +45,50 @@ export const profiles = pgTable(
   ],
 );
 
+// Brands. Never deleted; slug fixed at creation. updated_at is set by the service.
+export const sponsors = pgTable(
+  "sponsors",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    name: text("name").notNull(),
+    logoUrl: text("logo_url"),
+    websiteUrl: text("website_url"),
+    description: text("description"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("sponsors_slug_uq").on(table.slug),
+    check(
+      "sponsors_slug_format_chk",
+      sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${table.slug}) BETWEEN 3 AND 80`,
+    ),
+    check("sponsors_name_chk", sql`char_length(${table.name}) BETWEEN 2 AND 80`),
+    check(
+      "sponsors_logo_url_chk",
+      sql`${table.logoUrl} IS NULL OR (${table.logoUrl} LIKE 'https://%' AND char_length(${table.logoUrl}) <= 2048)`,
+    ),
+    check(
+      "sponsors_website_url_chk",
+      sql`${table.websiteUrl} IS NULL OR (${table.websiteUrl} LIKE 'https://%' AND char_length(${table.websiteUrl}) <= 2048)`,
+    ),
+    check(
+      "sponsors_description_chk",
+      sql`${table.description} IS NULL OR char_length(${table.description}) BETWEEN 10 AND 500`,
+    ),
+  ],
+);
+
 // Active assignment = revoked_at IS NULL. granted_by NULL = bootstrap script.
+// sponsor_id is set exactly on sponsor rows; role::text keeps the migration single-transaction.
 export const staffAssignments = pgTable(
   "staff_assignments",
   {
@@ -64,15 +108,21 @@ export const staffAssignments = pgTable(
     revokedBy: text("revoked_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
   },
   (table) => [
     uniqueIndex("staff_assignments_active_uq")
       .on(table.userId, table.role)
       .where(sql`${table.revokedAt} IS NULL`),
+    check(
+      "staff_assignments_sponsor_chk",
+      sql`(${table.role}::text = 'sponsor') = (${table.sponsorId} IS NOT NULL)`,
+    ),
   ],
 );
 
 // Pending invitation = accepted_at IS NULL AND revoked_at IS NULL (expiry checked at query time).
+// sponsor_id is set exactly on sponsor invitations and copied on acceptance.
 export const staffInvitations = pgTable(
   "staff_invitations",
   {
@@ -96,11 +146,16 @@ export const staffInvitations = pgTable(
     revokedBy: text("revoked_by").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
   },
   (table) => [
     check(
       "staff_invitations_email_lowercase_chk",
       sql`${table.email} = lower(${table.email})`,
+    ),
+    check(
+      "staff_invitations_sponsor_chk",
+      sql`(${table.role}::text = 'sponsor') = (${table.sponsorId} IS NOT NULL)`,
     ),
     uniqueIndex("staff_invitations_pending_email_uq")
       .on(table.email)
@@ -109,10 +164,12 @@ export const staffInvitations = pgTable(
 );
 
 export const tripStatusEnum = pgEnum("trip_status", ["draft", "published", "archived"]);
+export const tripReviewStatusEnum = pgEnum("trip_review_status", ["in_review", "changes_requested"]);
 
 // Trips are archived, never deleted, so a future leads.trip_id FK never dangles.
 // Dates are calendar dates (YYYY-MM-DD); price_usd is an integer "from" price, always USD.
 // updated_at is set by the service on every UPDATE (no trigger).
+// sponsor_id NULL = team trip; review_* only on sponsor drafts. sponsor_id is never updated.
 export const trips = pgTable(
   "trips",
   {
@@ -142,6 +199,10 @@ export const trips = pgTable(
     organizerId: text("organizer_id").references(() => profiles.userId, {
       onDelete: "restrict",
     }),
+    sponsorId: uuid("sponsor_id").references(() => sponsors.id, { onDelete: "restrict" }),
+    featured: boolean("featured").notNull().default(false),
+    reviewStatus: tripReviewStatusEnum("review_status"),
+    reviewNote: text("review_note"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -179,6 +240,17 @@ export const trips = pgTable(
       sql`${table.companionPriceUsd} IS NULL OR ${table.companionPriceUsd} >= 0`,
     ),
     check("trips_excludes_chk", sql`cardinality(${table.excludes}) <= 20`),
+    index("trips_sponsor_idx").on(table.sponsorId),
+    check("trips_featured_chk", sql`NOT ${table.featured} OR ${table.status} = 'published'`),
+    check(
+      "trips_review_chk",
+      sql`${table.reviewStatus} IS NULL OR (${table.sponsorId} IS NOT NULL AND ${table.status} = 'draft')`,
+    ),
+    // IS NOT DISTINCT FROM: a NULL review_status must not let the CHECK pass.
+    check(
+      "trips_review_note_chk",
+      sql`(${table.reviewStatus} IS NOT DISTINCT FROM 'changes_requested') = (${table.reviewNote} IS NOT NULL) AND (${table.reviewNote} IS NULL OR char_length(${table.reviewNote}) BETWEEN 3 AND 500)`,
+    ),
   ],
 );
 
@@ -880,5 +952,107 @@ export const tripUpdates = pgTable(
     index("trip_updates_trip_published_idx").on(table.tripId, table.publishedAt),
     check("trip_updates_title_chk", sql`char_length(${table.title}) BETWEEN 3 AND 120`),
     check("trip_updates_body_chk", sql`char_length(${table.body}) BETWEEN 1 AND 2000`),
+  ],
+);
+
+export const travelDocumentTypeEnum = pgEnum("travel_document_type", [
+  "passport",
+  "national_id",
+  "foreign_id",
+]);
+export const shirtSizeEnum = pgEnum("shirt_size", ["xs", "s", "m", "l", "xl", "xxl"]);
+export const raceDistanceEnum = pgEnum("race_distance", ["5k", "10k", "21k", "42k", "ultra"]);
+
+// One runner profile per Clerk account (user_id, no cross-schema FK); staff can have one too.
+// email is a lowercase, display-only copy of the session's verified email: never used to authorize
+// or to link bookings. document_*, medical_notes (and by extension birth_date and the emergency
+// contact) are sensitive: never in logs or errors. updated_at and consented_at are set by the service.
+export const runnerProfiles = pgTable(
+  "runner_profiles",
+  {
+    userId: text("user_id").primaryKey(),
+    email: text("email").notNull(),
+    fullName: text("full_name").notNull(),
+    phone: text("phone").notNull(),
+    country: text("country"),
+    city: text("city"),
+    birthDate: date("birth_date", { mode: "string" }),
+    documentType: travelDocumentTypeEnum("document_type"),
+    documentNumber: text("document_number"),
+    documentExpiresOn: date("document_expires_on", { mode: "string" }),
+    shirtSize: shirtSizeEnum("shirt_size"),
+    preferredDistance: raceDistanceEnum("preferred_distance"),
+    personalBest: text("personal_best"),
+    club: text("club"),
+    emergencyContactName: text("emergency_contact_name"),
+    emergencyContactPhone: text("emergency_contact_phone"),
+    medicalNotes: text("medical_notes"),
+    consentVersion: text("consent_version").notNull(),
+    consentedAt: timestamp("consented_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "runner_profiles_email_chk",
+      sql`${table.email} = lower(${table.email}) AND char_length(${table.email}) <= 254`,
+    ),
+    check("runner_profiles_full_name_chk", sql`char_length(${table.fullName}) BETWEEN 2 AND 120`),
+    check("runner_profiles_phone_chk", sql`${table.phone} ~ '^\\+[1-9][0-9]{7,14}$'`),
+    check(
+      "runner_profiles_country_chk",
+      sql`${table.country} IS NULL OR char_length(${table.country}) BETWEEN 2 AND 80`,
+    ),
+    check(
+      "runner_profiles_city_chk",
+      sql`${table.city} IS NULL OR char_length(${table.city}) BETWEEN 2 AND 80`,
+    ),
+    // "Not in the future" is validated by zod: a CHECK with current_date is not immutable.
+    check(
+      "runner_profiles_birth_date_chk",
+      sql`${table.birthDate} IS NULL OR ${table.birthDate} >= '1900-01-01'`,
+    ),
+    check(
+      "runner_profiles_document_number_chk",
+      sql`${table.documentNumber} IS NULL OR ${table.documentNumber} ~ '^[A-Z0-9]{4,20}$'`,
+    ),
+    check(
+      "runner_profiles_document_chk",
+      sql`(${table.documentType} IS NULL) = (${table.documentNumber} IS NULL) AND (${table.documentExpiresOn} IS NULL OR ${table.documentType} IS NOT NULL)`,
+    ),
+    check(
+      "runner_profiles_personal_best_chk",
+      sql`${table.personalBest} IS NULL OR char_length(${table.personalBest}) <= 60`,
+    ),
+    check(
+      "runner_profiles_club_chk",
+      sql`${table.club} IS NULL OR char_length(${table.club}) <= 80`,
+    ),
+    check(
+      "runner_profiles_emergency_contact_name_chk",
+      sql`${table.emergencyContactName} IS NULL OR char_length(${table.emergencyContactName}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "runner_profiles_emergency_contact_phone_chk",
+      sql`${table.emergencyContactPhone} IS NULL OR ${table.emergencyContactPhone} ~ '^\\+[1-9][0-9]{7,14}$'`,
+    ),
+    check(
+      "runner_profiles_emergency_chk",
+      sql`(${table.emergencyContactName} IS NULL) = (${table.emergencyContactPhone} IS NULL)`,
+    ),
+    check(
+      "runner_profiles_medical_notes_chk",
+      sql`${table.medicalNotes} IS NULL OR char_length(${table.medicalNotes}) <= 500`,
+    ),
+    check(
+      "runner_profiles_consent_version_chk",
+      sql`char_length(${table.consentVersion}) BETWEEN 1 AND 40`,
+    ),
   ],
 );

@@ -34,6 +34,7 @@ vi.mock("./SignOutButton", () => ({
 }));
 
 import { CrmShell } from "./CrmShell";
+import type { StaffRole } from "@/lib/auth/permissions";
 
 beforeEach(() => {
   location.pathname = "/crm";
@@ -56,7 +57,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function shell(roles: ("admin" | "commercial")[] = ["admin"]) {
+function shell(roles: StaffRole[] = ["admin"]) {
   return render(
     <CrmShell email="equipo@example.test" roles={roles}>
       <p>Contenido del CRM</p>
@@ -86,6 +87,7 @@ describe("CRM navigation", () => {
     ["/crm/viajes/un-viaje", "", "Viajes"],
     ["/crm/ofertas/nueva", "", "Ofertas"],
     ["/crm/admin/usuarios", "", "Usuarios"],
+    ["/crm/admin/patrocinadores/una-marca", "", "Patrocinadores"],
     ["/crm/configuraciones", "", "Configuraciones"],
   ])(
     "selects only the appropriate item on %s?%s",
@@ -113,6 +115,9 @@ describe("CRM navigation", () => {
         .getByRole("link", { name: "Configuraciones" })
         .getAttribute("href"),
     ).toBe("/crm/configuraciones");
+    expect(
+      screen.getByRole("link", { name: "Patrocinadores" }).getAttribute("href"),
+    ).toBe("/crm/admin/patrocinadores");
     expect(screen.getByText("equipo@example.test")).toBeTruthy();
     expect(screen.getByText("Admin")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
@@ -121,6 +126,7 @@ describe("CRM navigation", () => {
   it("keeps commercial destinations and excludes admin-only navigation", () => {
     shell(["commercial"]);
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Configuraciones" })).toBeNull();
     for (const name of [
       "Dashboard",
@@ -132,6 +138,20 @@ describe("CRM navigation", () => {
       "Reservas",
     ])
       expect(screen.getByRole("link", { name })).toBeTruthy();
+  });
+
+  it("preserves organizer destinations without exposing staff or sponsor management", () => {
+    shell(["organizer"]);
+    expect(screen.getByRole("link", { name: "Viajes" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Reservas" })).toBeNull();
+  });
+
+  it("exposes sponsor management to super admins", () => {
+    shell(["super_admin"]);
+    expect(screen.getByRole("link", { name: "Patrocinadores" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Usuarios" })).toBeTruthy();
   });
 
   it("opens the mobile dialog, closes with Escape and restores focus", async () => {

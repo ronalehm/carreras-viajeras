@@ -9,7 +9,7 @@ const AUDIENCE_CONFIG: Record<AccessAudience, { destination: AuthDestination; no
   runner: {
     destination: "/cuenta",
     notice:
-      "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.",
+      "Este paso identifica tu acceso al sitio. Después podrás completar tu perfil; no te inscribe en un evento.",
   },
 };
 

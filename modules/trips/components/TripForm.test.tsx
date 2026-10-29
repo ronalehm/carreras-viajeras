@@ -41,7 +41,8 @@ it("edita un publicado con identificador de solo lectura y envía su id", async 
     distances: ["42K", "21K"], includes: ["Hotel", "Traslados"], summary: "Viaje a Santiago.",
     priceUsd: 0, capacity: null, imageUrl: null, officialUrl: null, installmentsPriceUsd: null, depositUsd: null,
     companionPriceUsd: null, paymentTerms: null, excludes: [], notes: null,
-    status: "published", organizerId: null, createdAt: new Date(), updatedAt: new Date(),
+    status: "published", organizerId: null, sponsorId: null, featured: false, reviewStatus: null, reviewNote: null,
+    createdAt: new Date(), updatedAt: new Date(),
   };
   vi.mocked(updateTripAction).mockResolvedValue({ status: "error", code: "archived", message: "Archivado por otra persona." });
   render(<TripForm trip={trip} />);
@@ -69,7 +70,8 @@ it("pinta los campos nuevos con los valores del viaje, excludes uno por línea, 
     imageUrl: null, officialUrl: "https://maratondesantiago.cl/", installmentsPriceUsd: 1799, depositUsd: 300,
     companionPriceUsd: 1300, paymentTerms: "Reserva con US$ 300.\nSaldo en cuotas.",
     excludes: ["Vuelos internos", "Gastos personales"], notes: "Horario por confirmar.",
-    status: "draft", organizerId: null, createdAt: new Date(), updatedAt: new Date(),
+    status: "draft", organizerId: null, sponsorId: null, featured: false, reviewStatus: null, reviewNote: null,
+    createdAt: new Date(), updatedAt: new Date(),
   };
   render(<TripForm trip={trip} />);
   const value = (label: string) => screen.getByLabelText<HTMLInputElement | HTMLTextAreaElement>(label).value;
