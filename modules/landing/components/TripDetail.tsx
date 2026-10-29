@@ -108,7 +108,9 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
           section,
           "grid min-w-0 gap-8",
           "lg:sticky lg:top-32 lg:col-start-2 lg:row-start-2 lg:self-start lg:rounded-xl lg:border lg:bg-card lg:p-6",
-          // Capped to the viewport below the site header: the price scrolls inside, the actions stay.
+          // Capped to the viewport below the site header once stuck: the price scrolls inside, the
+          // actions (first on lg) stay. On load the card starts lower, so its end may fall below the
+          // fold, but the actions at its top are already visible.
           "lg:flex lg:max-h-[calc(100dvh-9rem)] lg:flex-col lg:gap-4",
           hasDetails && "lg:row-span-2",
         )}
@@ -126,7 +128,8 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
           )}
         </div>
 
-        <div className="lg:shrink-0 lg:border-t lg:border-primary/15 lg:pt-4">
+        {/* On lg the actions are shown first (CSS order only; the DOM keeps price first). */}
+        <div className="lg:order-first lg:shrink-0 lg:border-b lg:border-primary/15 lg:pb-4">
           {registrationLink}
           {whatsAppUrl && (
             <a
