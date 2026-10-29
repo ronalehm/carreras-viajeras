@@ -239,11 +239,11 @@ El admin pidió (2026-10-29):
 - [x] T4 — Script de backfill con test y README · archivos: `scripts/export-clerk-accounts.mjs`, `scripts/export-clerk-accounts.test.ts`, `README.md` · depende de: — · paralelo (con T2, T3)
 
 ### Fase 2: solicitud del rol Admin
-- [ ] T1 — Schema `role_requests` y migración generada · archivos: `lib/db-schema.ts`, `drizzle/0015_*.sql`, `drizzle/meta/*` · depende de: Fase 1 · secuencial (base)
-- [ ] T2 — Schema Zod, tipos y servicio con tests · archivos: `modules/accounts/schemas/roleRequest.schema.ts`, `modules/accounts/schemas/roleRequest.schema.test.ts`, `modules/accounts/types/roleRequest.types.ts`, `modules/accounts/services/roleRequest.service.ts`, `modules/accounts/services/roleRequest.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Acciones con tests · archivos: `modules/accounts/actions/roleRequest.actions.ts`, `modules/accounts/actions/roleRequest.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `NoCrmAccess` async, `RequestAdminRoleForm` y `RoleRequestsTable` · archivos: `modules/accounts/components/NoCrmAccess.tsx`, `modules/accounts/components/RequestAdminRoleForm.tsx`, `modules/accounts/components/RequestAdminRoleForm.test.tsx`, `modules/accounts/components/RoleRequestsTable.tsx` · depende de: T3 · secuencial
-- [ ] T5 — Exports, sección en la página de usuarios y README · archivos: `modules/accounts/index.ts`, `app/crm/(protected)/admin/usuarios/page.tsx`, `README.md` · depende de: T4 · secuencial
+- [x] T1 — Schema `role_requests` y migración generada · archivos: `lib/db-schema.ts`, `drizzle/0015_*.sql`, `drizzle/meta/*` · depende de: Fase 1 · secuencial (base)
+- [x] T2 — Schema Zod, tipos y servicio con tests · archivos: `modules/accounts/schemas/roleRequest.schema.ts`, `modules/accounts/schemas/roleRequest.schema.test.ts`, `modules/accounts/types/roleRequest.types.ts`, `modules/accounts/services/roleRequest.service.ts`, `modules/accounts/services/roleRequest.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Acciones con tests · archivos: `modules/accounts/actions/roleRequest.actions.ts`, `modules/accounts/actions/roleRequest.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `NoCrmAccess` async, `RequestAdminRoleForm` y `RoleRequestsTable` · archivos: `modules/accounts/components/NoCrmAccess.tsx`, `modules/accounts/components/RequestAdminRoleForm.tsx`, `modules/accounts/components/RequestAdminRoleForm.test.tsx`, `modules/accounts/components/RoleRequestsTable.tsx` · depende de: T3 · secuencial
+- [x] T5 — Exports, sección en la página de usuarios y README · archivos: `modules/accounts/index.ts`, `app/crm/(protected)/admin/usuarios/page.tsx`, `README.md` · depende de: T4 · secuencial
 
 ### Fase 3: desactivar y eliminar cuentas
 - [ ] T1 — Columnas de baja, migración, `canRemoveAccounts`, `blocked` en la guarda y aceptación de invitaciones, con tests · archivos: `lib/db-schema.ts`, `drizzle/0016_*.sql`, `drizzle/meta/*`, `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts`, `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts` · depende de: Fase 2 · secuencial (base, `lib/`)

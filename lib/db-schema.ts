@@ -168,6 +168,38 @@ export const staffInvitations = pgTable(
   ],
 );
 
+export const roleRequestStatusEnum = pgEnum("role_request_status", ["pending", "approved", "rejected"]);
+
+// Self-service role requests from accounts without CRM access. Only admin can be requested today
+// (role::text keeps the migration single-transaction). A decided request records when and who;
+// at most one pending request per account.
+export const roleRequests = pgTable(
+  "role_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    role: staffRoleEnum("role").notNull(),
+    status: roleRequestStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => profiles.userId, { onDelete: "restrict" }),
+  },
+  (table) => [
+    check("role_requests_role_chk", sql`${table.role}::text = 'admin'`),
+    check(
+      "role_requests_decision_chk",
+      sql`(${table.status} = 'pending') = (${table.decidedAt} IS NULL AND ${table.decidedBy} IS NULL)`,
+    ),
+    uniqueIndex("role_requests_pending_user_uq")
+      .on(table.userId)
+      .where(sql`${table.status} = 'pending'`),
+  ],
+);
+
 export const tripStatusEnum = pgEnum("trip_status", ["draft", "published", "archived"]);
 export const tripReviewStatusEnum = pgEnum("trip_review_status", ["in_review", "changes_requested"]);
 

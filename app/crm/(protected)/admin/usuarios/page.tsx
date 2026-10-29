@@ -10,13 +10,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { manageableRoles } from "@/lib/auth/permissions";
+import { canManageRole, manageableRoles } from "@/lib/auth/permissions";
 import {
   getCrmAccess,
   InvitationsTable,
   InviteStaffForm,
   listPendingInvitations,
+  listPendingRoleRequests,
   listUsers,
+  RoleRequestsTable,
   UserFilters,
   userListFilterSchema,
   UserTable,
@@ -41,9 +43,12 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
 
   // Invalid, empty or repeated values are dropped: the list shows without that filter.
   const filter = userListFilterSchema.parse(await searchParams);
-  const [{ users, truncated }, invitations] = await Promise.all([
+  // Only super_admin may grant admin, so only it reads and resolves admin role requests.
+  const canResolveRoleRequests = canManageRole(access.user.staffRoles, "admin");
+  const [{ users, truncated }, invitations, roleRequests] = await Promise.all([
     listUsers(filter),
     listPendingInvitations(),
+    canResolveRoleRequests ? listPendingRoleRequests() : null,
   ]);
   // Presentation only: the actions re-check canManageRole with the current actor.
   const roles = manageableRoles(access.user.staffRoles);
@@ -73,6 +78,19 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
         <Card className="shadow-none">
           <CardContent>
             <InviteStaffForm roles={roles} />
+          </CardContent>
+        </Card>
+      )}
+      {roleRequests && (
+        <Card className="gap-5 overflow-hidden shadow-none">
+          <CardHeader className="border-b pb-5">
+            <CardTitle>Solicitudes de rol</CardTitle>
+            <CardDescription>
+              Cuentas sin acceso al CRM que piden el rol Admin. Aprueba o rechaza cada solicitud.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="min-w-0">
+            <RoleRequestsTable requests={roleRequests} />
           </CardContent>
         </Card>
       )}
