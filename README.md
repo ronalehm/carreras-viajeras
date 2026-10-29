@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay siete migraciones y todas se aplican a mano (las pendientes, en el orden `0001` → `0002` → `0003` → `0004` → `0005` → `0006`): `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0003`, aunque solo depende de `0001`, y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay ocho migraciones y todas se aplican a mano (las pendientes, en el orden `0001` → `0002` → `0003` → `0004` → `0005` → `0006` → `0007`): `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0003`, aunque solo depende de `0001`, y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -421,6 +421,108 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 - la base **rechaza** en `lead_activities`: un `channel_changed` sin `channel_to`, o con el mismo origen y destino (`event` → `event`); un `channel_from` en una actividad `note`; un `opted_out` o un `channel_changed` sin autor (`lead_activities_actor_chk`) o con texto (`lead_activities_body_chk`);
 - la base **rechaza** en `outbox_events` y `bookings`: un `lead.follow_up_due` sin `dedupe_key`; un segundo evento con el mismo `dedupe_key` (`outbox_events_dedupe_key_uq`); una segunda reserva no cancelada con el mismo `lead_id` (`bookings_lead_active_uq`); una reserva con un `lead_id` inexistente (`bookings_lead_id_leads_id_fk`).
 
+### Migración de campañas y registro
+
+`drizzle/0007_awesome_dust.sql` prepara la captación omnicanal ([`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md)): las campañas (cada QR o enlace del CRM, con su carrera y su canal), qué campaña trajo a cada lead, la casilla de promociones y el registro repetido de una misma persona en la misma carrera ("Volvió a registrarse"). Es una sola migración para todas las fases de esa spec. Está pendiente de aplicar por el usuario: **primero en una rama de pruebas de Neon** y, cuando las pruebas de abajo salgan bien, **en `production`, antes del merge**. La ficha del lead de esta rama ya lee las columnas nuevas, así que una versión con este código solo funciona contra una rama de Neon que ya tenga la migración.
+
+**El número `0007` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0007`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
+
+**Orden: `0000` → … → `0006` → esta.** Necesita `0006` (usa el enum `lead_channel`) y, a través de ella, `0001`, `0002`, `0003` y `0005`. Si alguna falta en esa rama, aplicarla antes siguiendo su sección; [Migración de captura y outbox](#migración-de-captura-y-outbox) lista el orden completo. No volver a aplicar `0000` (ya está en `production`) ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- añade el tipo de actividad `re_registered` al final de `lead_activity_type` (un `ALTER TYPE … ADD VALUE`);
+- crea el enum `campaign_status` (`active`, `closed`) y la tabla `campaigns`: código único (`campaigns_code_uq`), carrera (`trip_id`, con el índice `campaigns_trip_idx`), canal, nombre, evento opcional, estado, autor y cierre. Tiene cinco CHECK: `campaigns_code_chk` (3–32 caracteres, minúsculas, números y guiones simples), `campaigns_channel_chk` (nunca `unknown`), `campaigns_name_chk` (2–80), `campaigns_event_name_chk` (2–120) y `campaigns_closed_chk` (una campaña cerrada tiene `closed_at` y `closed_by`; una activa, ninguno). Sus tres claves foráneas, hacia `trips` y `profiles`, son `ON DELETE restrict`: las campañas nunca se borran, se cierran;
+- en `leads`: `campaign_id` (clave foránea hacia `campaigns`, índice parcial `leads_campaign_idx` y CHECK `leads_campaign_chk`: solo un lead `web_form` puede tener campaña) y `marketing_opt_in_at` (promociones aceptadas);
+- en `lead_activities`: `submission_id` (índice único `lead_activities_submission_uq` y CHECK `lead_activities_submission_chk`: obligatorio en `re_registered` y prohibido en cualquier otro tipo), y sustituye `lead_activities_actor_chk` (una `re_registered` puede no tener autor) y `lead_activities_body_chk` (una `re_registered` exige texto de hasta 500 caracteres, como `automation`).
+
+Los leads y actividades que ya existen no cambian: las columnas nuevas quedan vacías y los dos CHECK sustituidos solo amplían la regla para `re_registered`, así que las filas actuales los cumplen.
+
+Revisión previa: `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0007_awesome_dust.sql` no devuelve nada. Los únicos `DROP` del archivo son los dos `DROP CONSTRAINT` de `lead_activities_body_chk` y `lead_activities_actor_chk`, que se vuelven a crear al final con la regla nueva. No toca `neon_auth`, `profiles`, `staff_*`, `trips`, `bookings` ni `outbox_events`.
+
+**Por qué en dos bloques:** PostgreSQL no deja usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos usan `'re_registered'`. Si se pega el archivo entero en una sola transacción, falla con `unsafe use of new value "re_registered"` y no se guarda nada (se puede repetir bien después). El bloque 1 es solo la línea `ALTER TYPE … ADD VALUE` (la segunda del archivo); el `CREATE TYPE "campaign_status"` va en el bloque 2, porque un tipo nuevo sí se puede usar en la misma transacción que lo crea. Los comentarios `-- Block 1` y `-- Block 2` del archivo marcan el corte.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0006` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regtype('public.lead_channel'), to_regclass('public.campaigns');` devuelve `lead_channel` y `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. **Bloque 1.** Ejecutar solo esta línea, sin `BEGIN;` ni `COMMIT;` (o en su propia transacción, confirmada con `COMMIT;`), y esperar a que termine:
+
+   ```sql
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 're_registered';
+   ```
+
+   Comprobar: `SELECT enum_range(NULL::lead_activity_type);` termina en `re_registered`. Si repites el procedimiento y el bloque 1 responde `enum label "re_registered" already exists`, no pasa nada: ya estaba aplicado; sigue con el bloque 2.
+4. **Bloque 2.** Copiar el contenido de `drizzle/0007_awesome_dust.sql` y **borrar la línea del paso 3** (`ALTER TYPE "public"."lead_activity_type" ADD VALUE 're_registered';--> statement-breakpoint`, la segunda del archivo y la única que contiene `ADD VALUE`). Pegar el resto entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` y los comentarios `--` son comentarios de SQL y se pueden dejar. Si por error queda la línea `ADD VALUE`, la transacción falla con `enum label "re_registered" already exists` y no cambia nada: quitarla y repetir. Si el bloque 2 responde `type "campaign_status" already exists`, la migración ya estaba aplicada en esa rama: no repetir nada.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0007_awesome_dust.sql
+   grep -F 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -f -
+   grep -vF 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+
+   La primera orden ejecuta el bloque 1 sin transacción (se confirma sola) y la segunda, el bloque 2 en una sola transacción (`-1`). Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+5. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar:
+   - las restricciones de las tablas existentes: `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass, 'public.outbox_events'::regclass) AND contype IN ('p','c','f');` devuelve 45 (tres `*_pkey`, treinta y un `*_chk` y once `*_fk`);
+   - las de `campaigns`: `SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.campaigns'::regclass AND contype IN ('p','c','f');` devuelve 9 (un `*_pkey`, cinco `*_chk` y tres `*_fk`);
+   - las nuevas o sustituidas: `SELECT conname FROM pg_constraint WHERE conname IN ('leads_campaign_chk', 'leads_campaign_id_campaigns_id_fk', 'lead_activities_submission_chk', 'lead_activities_actor_chk', 'lead_activities_body_chk');` devuelve esas cinco;
+   - los índices: `SELECT indexname FROM pg_indexes WHERE indexname IN ('campaigns_code_uq', 'campaigns_trip_idx', 'leads_campaign_idx', 'lead_activities_submission_uq');` devuelve los cuatro;
+   - los datos: `SELECT count(*) FROM campaigns;` devuelve 0, y `SELECT count(*) FROM leads WHERE campaign_id IS NOT NULL OR marketing_opt_in_at IS NOT NULL;` devuelve 0.
+
+Prueba manual de las restricciones, **solo en la rama de pruebas de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil y un viaje de prueba, una campaña activa válida, un lead `web_form` con esa campaña, un lead `whatsapp` creado a mano, una actividad `re_registered` sin autor en ese lead de WhatsApp y una campaña cerrada válida):
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-campanas', 'campanas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-campanas', 'Maratón de prueba', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba');
+INSERT INTO campaigns (id, code, trip_id, channel, name, event_name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000002', 'expo-lima-26', '00000000-0000-4000-8000-000000000001', 'event', 'Stand Expo Lima', 'Expo de prueba 2026', 'test-campanas');
+INSERT INTO leads (id, full_name, phone, email, trip_id, source, channel, campaign_id, consent_version) VALUES
+  ('00000000-0000-4000-8000-000000000003', 'Ana Prueba', '+51900000001', 'ana@example.com', '00000000-0000-4000-8000-000000000001', 'web_form', 'event', '00000000-0000-4000-8000-000000000002', 'web-form-v1');
+INSERT INTO leads (id, full_name, phone, trip_id, source, channel, consent_version, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000004', 'Beto Prueba', '+51900000002', '00000000-0000-4000-8000-000000000001', 'whatsapp', 'whatsapp', 'crm-manual-v1', 'test-campanas');
+INSERT INTO lead_activities (lead_id, type, body, submission_id) VALUES
+  ('00000000-0000-4000-8000-000000000004', 're_registered', 'Volvió a registrarse desde la web · prueba', '00000000-0000-4000-8000-000000000005');
+INSERT INTO campaigns (code, trip_id, channel, name, status, created_by, closed_at, closed_by) VALUES
+  ('ig-cerrada', '00000000-0000-4000-8000-000000000001', 'instagram', 'Publicación cerrada', 'closed', 'test-campanas', now(), 'test-campanas');
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- campaigns_code_chk: repetir cambiando 'AB' por 'Mml26' y por '-mml'
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('AB', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'test-campanas');
+-- campaigns_channel_chk
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('prueba-canal', '00000000-0000-4000-8000-000000000001', 'unknown', 'Prueba', 'test-campanas');
+-- campaigns_name_chk: repetir cambiando 'A' por repeat('a', 81)
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('prueba-nombre', '00000000-0000-4000-8000-000000000001', 'event', 'A', 'test-campanas');
+-- campaigns_closed_chk: cerrada sin closed_at
+INSERT INTO campaigns (code, trip_id, channel, name, status, created_by) VALUES ('prueba-cerrada', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'closed', 'test-campanas');
+-- campaigns_closed_chk: activa con closed_by
+INSERT INTO campaigns (code, trip_id, channel, name, created_by, closed_by) VALUES ('prueba-activa', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'test-campanas', 'test-campanas');
+-- campaigns_code_uq: mismo código que la campaña de la preparación
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('expo-lima-26', '00000000-0000-4000-8000-000000000001', 'tiktok', 'Prueba', 'test-campanas');
+-- leads_campaign_chk: un lead whatsapp con campaña
+INSERT INTO leads (full_name, phone, source, channel, campaign_id, consent_version, created_by) VALUES ('Caro Prueba', '+51900000003', 'whatsapp', 'whatsapp', '00000000-0000-4000-8000-000000000002', 'crm-manual-v1', 'test-campanas');
+-- lead_activities_submission_chk: re_registered sin submission_id
+INSERT INTO lead_activities (lead_id, type, body) VALUES ('00000000-0000-4000-8000-000000000004', 're_registered', 'Prueba');
+-- lead_activities_body_chk: re_registered sin texto
+INSERT INTO lead_activities (lead_id, type, submission_id) VALUES ('00000000-0000-4000-8000-000000000004', 're_registered', gen_random_uuid());
+-- lead_activities_submission_chk: una note con submission_id
+INSERT INTO lead_activities (lead_id, type, body, actor_user_id, submission_id) VALUES ('00000000-0000-4000-8000-000000000003', 'note', 'Prueba', 'test-campanas', gen_random_uuid());
+-- lead_activities_submission_uq: mismo submission_id que la actividad de la preparación
+INSERT INTO lead_activities (lead_id, type, body, submission_id) VALUES ('00000000-0000-4000-8000-000000000003', 're_registered', 'Prueba', '00000000-0000-4000-8000-000000000005');
+ROLLBACK;
+```
+
+Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
+
 ### Activar la protección antispam (Turnstile)
 
 Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en el formulario de `/contacto` y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
@@ -670,7 +772,7 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
   ```
 
   La primera vez responde `201 { "status": "recorded" }` y el historial del lead muestra la actividad de "n8n"; repetida, `200 { "status": "duplicate" }`; con el `leadId` de otro lead, `404`; con un `body` vacío o de más de 500 caracteres, `400`.
-- Alta por Google Forms (necesita `0006` aplicada en esa rama). Usa un teléfono de prueba que no esté en el CRM:
+- Alta por Google Forms (necesita `0007` aplicada en esa rama). Usa un teléfono de prueba que no esté en el CRM:
 
   ```sh
   curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \
@@ -785,9 +887,9 @@ Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lim
 
    `created` son leads nuevos; `duplicate`, filas ya importadas en una ejecución anterior; `existing`, personas que ya estaban en el CRM con ese teléfono (no se tocan). Las filas con `conflict` (la fila cambió desde la importación anterior), `invalid_request` (algún dato no cumple el formato) o `unknown_trip` se revisan a mano; las de `sin_respuesta` basta con volver a ejecutar el workflow.
 
-**Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0006` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
+**Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0007` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
 
-**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0006` aplicada en producción. Repetirla por error no duplica personas, siempre que las filas se envíen una a una y en secuencia, como hace el paso 4: dos peticiones simultáneas con el mismo teléfono y distinto `externalId` pueden crear dos leads.
+**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0007` aplicada en producción. Repetirla por error no duplica personas, siempre que las filas se envíen una a una y en secuencia, como hace el paso 4: dos peticiones simultáneas con el mismo teléfono y distinto `externalId` pueden crear dos leads.
 
 #### 12. Workflow "Recordatorios diarios"
 
@@ -805,7 +907,7 @@ La web decide quién recibe recordatorio; n8n no filtra nada aquí:
 
 Llamar a la petición dos veces el mismo día (o reintentarla) no duplica nada. Cada recordatorio llega al workflow principal como un evento `lead.follow_up_due` en el siguiente minuto, y ahí se prepara el borrador y te llega el correo (apartado 13).
 
-**Prueba manual (rama de desarrollo de Neon, `0006` aplicada, `npm run dev`):** en el CRM deja cuatro leads de prueba: uno en "Contactado" con la próxima acción de **ayer**; otro con "Pidió no seguir"; otro en "Reservado" con la próxima acción vencida; y otro con la próxima acción para **mañana**. Luego:
+**Prueba manual (rama de desarrollo de Neon, `0007` aplicada, `npm run dev`):** en el CRM deja cuatro leads de prueba: uno en "Contactado" con la próxima acción de **ayer**; otro con "Pidió no seguir"; otro en "Reservado" con la próxima acción vencida; y otro con la próxima acción para **mañana**. Luego:
 
 ```sh
 curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \

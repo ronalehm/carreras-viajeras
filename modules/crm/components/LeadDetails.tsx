@@ -33,6 +33,8 @@ type LeadDetailsProps = {
     | "referralPermission"
     | "contactPreference"
     | "contactOptOutAt"
+    | "campaign"
+    | "marketingOptInAt"
   >;
 };
 
@@ -61,7 +63,8 @@ function DetailCard({ title, items }: { title: string; items: Item[] }) {
 }
 
 // Presentation only. Dates are left out (the creation date, also the manual consent date,
-// belongs to the history) except the opt-out. A system lead (web form, Google Forms, import) has
+// belongs to the history) except the opt-out and the promotions opt-in. "Campaña" is the CRM
+// campaign (QR or link); "UTM" joins the UTM values. A system lead (web form, Google Forms, import) has
 // no author: "Registrado por" shows its entry path.
 export function LeadDetails({ lead }: LeadDetailsProps) {
   const link = "underline underline-offset-4 hover:text-primary";
@@ -70,7 +73,9 @@ export function LeadDetails({ lead }: LeadDetailsProps) {
   if (lead.contactOptOutAt) {
     management.push({ label: "Contacto", value: `Pidió no seguir el ${formatDateTime(lead.contactOptOutAt)}` });
   }
-  const campaign = [lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(" / ");
+  const campaign = lead.campaign ? `${lead.campaign.name} (${lead.campaign.code})` : EMPTY;
+  const utm = [lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(" / ");
+  const marketing = lead.marketingOptInAt ? `Aceptó el ${formatDateTime(lead.marketingOptInAt)}` : "No aceptó";
   const referral = lead.referredBy
     ? `${lead.referredBy} (${lead.referralPermission ? "puede mencionarse" : "no mencionarlo"})`
     : EMPTY;
@@ -103,13 +108,15 @@ export function LeadDetails({ lead }: LeadDetailsProps) {
         items={[
           { label: "Vía de entrada", value: LEAD_SOURCE_LABELS[lead.source] },
           { label: "Origen", value: leadChannelLabel(lead.channel, lead.originDetail) },
-          { label: "Campaña", value: campaign || EMPTY },
+          { label: "Campaña", value: campaign },
+          { label: "UTM", value: utm || EMPTY },
           { label: "Referido por", value: referral },
           {
             label: "Prefiere",
             value: lead.contactPreference ? CONTACT_PREFERENCE_LABELS[lead.contactPreference] : EMPTY,
           },
           { label: "Consentimiento", value: `Versión ${lead.consentVersion}` },
+          { label: "Promociones", value: marketing },
           { label: "Registrado por", value: lead.createdBy?.email ?? LEAD_SOURCE_LABELS[lead.source] },
         ]}
       />

@@ -86,12 +86,15 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   automation: "Automatización (n8n)",
   channel_changed: "Origen",
   opted_out: "Pidió no seguir",
+  re_registered: "Volvió a registrarse",
 };
 
-// Author of the automation activities, which have none: n8n. Other activities without an author
-// show the lead's entry path (LEAD_SOURCE_LABELS) instead, see LeadTimeline.
+// Authors of the system activities that have none and are not tied to the lead's entry path: n8n
+// (automation) and the web form (re_registered, also on a lead created by hand). The created
+// activity without an author shows the lead's entry path (LEAD_SOURCE_LABELS), see LeadTimeline.
 export const SYSTEM_ACTOR_LABELS = {
   automation: "n8n",
+  re_registered: LEAD_SOURCE_LABELS.web_form,
 } as const satisfies Partial<Record<LeadActivityType, string>>;
 
 // Closed stages: no next action. Every other stage is open.

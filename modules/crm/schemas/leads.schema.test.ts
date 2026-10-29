@@ -8,6 +8,7 @@ import {
   leadStageEnum,
 } from "@/lib/db-schema";
 import {
+  blankToNull,
   contactPreferenceSchema,
   createLeadSchema,
   leadActivityFormSchema,
@@ -100,6 +101,28 @@ describe("lead enums", () => {
   it("include the automation activity type (n8n)", () => {
     expect(leadActivityTypeSchema.options).toContain("automation");
     expect(leadActivityTypeEnum.enumValues).toContain("automation");
+  });
+
+  it("include the re_registered activity type (web form), last as in the database", () => {
+    expect(leadActivityTypeSchema.options.at(-1)).toBe("re_registered");
+    expect(leadActivityTypeEnum.enumValues.at(-1)).toBe("re_registered");
+  });
+});
+
+describe("blankToNull", () => {
+  const schema = blankToNull(z.string().min(2, "Mínimo 2 caracteres."));
+
+  it("turns a blank, whitespace-only or missing value into null", () => {
+    expect(schema.parse("")).toBeNull();
+    expect(schema.parse("   ")).toBeNull();
+    expect(schema.parse(undefined)).toBeNull();
+  });
+
+  it("trims a filled value and validates it with the inner schema", () => {
+    expect(schema.parse("  Lima ")).toBe("Lima");
+    const result = schema.safeParse(" a ");
+    expect(result.success).toBe(false);
+    if (!result.success) expect(result.error.issues[0].message).toBe("Mínimo 2 caracteres.");
   });
 });
 

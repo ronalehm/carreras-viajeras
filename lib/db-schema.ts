@@ -215,7 +215,53 @@ export const leadActivityTypeEnum = pgEnum("lead_activity_type", [
   "automation",
   "channel_changed",
   "opted_out",
+  "re_registered",
 ]);
+
+export const campaignStatusEnum = pgEnum("campaign_status", ["active", "closed"]);
+
+// A campaign is one QR or link of the CRM: it attributes web leads to a trip, a channel and an
+// optional event or stand. Closed, never deleted or reopened (leads keep pointing at it).
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    code: text("code").notNull(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "restrict" }),
+    channel: leadChannelEnum("channel").notNull(),
+    name: text("name").notNull(),
+    eventName: text("event_name"),
+    status: campaignStatusEnum("status").notNull().default("active"),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    closedBy: text("closed_by").references(() => profiles.userId, { onDelete: "restrict" }),
+  },
+  (table) => [
+    uniqueIndex("campaigns_code_uq").on(table.code),
+    index("campaigns_trip_idx").on(table.tripId),
+    check(
+      "campaigns_code_chk",
+      sql`${table.code} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${table.code}) BETWEEN 3 AND 32`,
+    ),
+    check("campaigns_channel_chk", sql`${table.channel} <> 'unknown'`),
+    check("campaigns_name_chk", sql`char_length(${table.name}) BETWEEN 2 AND 80`),
+    check(
+      "campaigns_event_name_chk",
+      sql`${table.eventName} IS NULL OR char_length(${table.eventName}) BETWEEN 2 AND 120`,
+    ),
+    check(
+      "campaigns_closed_chk",
+      sql`(${table.status} = 'closed') = (${table.closedAt} IS NOT NULL) AND (${table.closedAt} IS NULL) = (${table.closedBy} IS NULL)`,
+    ),
+  ],
+);
 
 // Leads are archived, never deleted. paid and lost are closed stages: no next action there.
 // phone is E.164 (normalized by the schema); email is lowercase. updated_at is set by the service.
@@ -232,6 +278,9 @@ export const leads = pgTable(
     source: leadSourceEnum("source").notNull(),
     channel: leadChannelEnum("channel").notNull().default("unknown"),
     originDetail: text("origin_detail"),
+    // channel, origin_detail and campaign_id are the first contact: a later web registration
+    // never overwrites them. campaign_id is set only by the web capture (leads_campaign_chk).
+    campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "restrict" }),
     // UTM values are written only by the web capture (lowercase, normalized); never edited.
     utmSource: text("utm_source"),
     utmMedium: text("utm_medium"),
@@ -242,6 +291,8 @@ export const leads = pgTable(
     contactPreference: contactPreferenceEnum("contact_preference"),
     // Opt-out ("Pidió no seguir"): final in the MVP; while set, the lead can never have a next action.
     contactOptOutAt: timestamp("contact_opt_out_at", { withTimezone: true }),
+    // Independent future-promotions checkbox of the web capture (same consent_version); NULL = not accepted.
+    marketingOptInAt: timestamp("marketing_opt_in_at", { withTimezone: true }),
     stage: leadStageEnum("stage").notNull().default("new"),
     lostReason: text("lost_reason"),
     // NULL = unassigned (web form leads); the CRM assigns the first owner by hand.
@@ -321,7 +372,14 @@ export const leads = pgTable(
       "leads_submission_chk",
       sql`(${table.idempotencyKey} IS NULL) = (${table.submissionHash} IS NULL) AND (${table.submissionHash} IS NULL OR ${table.submissionHash} ~ '^[0-9a-f]{64}$')`,
     ),
+    check(
+      "leads_campaign_chk",
+      sql`${table.campaignId} IS NULL OR ${table.source} = 'web_form'`,
+    ),
     uniqueIndex("leads_idempotency_key_uq").on(table.idempotencyKey),
+    index("leads_campaign_idx")
+      .on(table.campaignId)
+      .where(sql`${table.campaignId} IS NOT NULL`),
   ],
 );
 
@@ -409,20 +467,22 @@ export const leadActivities = pgTable(
     ownerTo: text("owner_to").references(() => profiles.userId, { onDelete: "restrict" }),
     channelFrom: leadChannelEnum("channel_from"),
     channelTo: leadChannelEnum("channel_to"),
-    // NULL only for system activities: created (web form) and automation (n8n).
+    // NULL only for system activities: created and re_registered (web form) and automation (n8n).
     actorUserId: text("actor_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
     // The outbox event an automation activity comes from (one activity per event).
     sourceEventId: uuid("source_event_id").references(() => outboxEvents.id, { onDelete: "restrict" }),
+    // Web form idempotency of a repeated registration (no new lead): the browser submissionId.
+    submissionId: uuid("submission_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
   },
   (table) => [
-    // body: required for manual follow-up, required (≤ 500) for automation, optional on
-    // created/stage_changed, forbidden otherwise.
+    // body: required for manual follow-up, required (≤ 500) for automation and re_registered,
+    // optional on created/stage_changed, forbidden otherwise.
     check(
       "lead_activities_body_chk",
-      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} = 'automation' THEN ${table.body} IS NOT NULL AND char_length(${table.body}) <= 500 WHEN ${table.type} IN ('created', 'stage_changed') THEN true ELSE ${table.body} IS NULL END`,
+      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} IN ('automation', 're_registered') THEN ${table.body} IS NOT NULL AND char_length(${table.body}) <= 500 WHEN ${table.type} IN ('created', 'stage_changed') THEN true ELSE ${table.body} IS NULL END`,
     ),
     check(
       "lead_activities_stage_chk",
@@ -439,14 +499,19 @@ export const leadActivities = pgTable(
     ),
     check(
       "lead_activities_actor_chk",
-      sql`${table.actorUserId} IS NOT NULL OR ${table.type} IN ('created', 'automation')`,
+      sql`${table.actorUserId} IS NOT NULL OR ${table.type} IN ('created', 'automation', 're_registered')`,
     ),
     check(
       "lead_activities_event_chk",
       sql`(${table.type} = 'automation') = (${table.sourceEventId} IS NOT NULL)`,
     ),
+    check(
+      "lead_activities_submission_chk",
+      sql`(${table.type} = 're_registered') = (${table.submissionId} IS NOT NULL)`,
+    ),
     index("lead_activities_lead_created_idx").on(table.leadId, table.createdAt),
     uniqueIndex("lead_activities_source_event_uq").on(table.sourceEventId),
+    uniqueIndex("lead_activities_submission_uq").on(table.submissionId),
   ],
 );
 
