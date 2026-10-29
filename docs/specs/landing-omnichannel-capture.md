@@ -455,11 +455,11 @@ Requisito previo: Fase 1 cerrada y la migración aplicada en la rama de pruebas 
 
 ### Fase 3: campañas en el CRM (5 tareas, 15 archivos)
 Requisito previo: Fase 2 cerrada (schema y tipos de campañas).
-- [ ] T1 — Declarar `react-qr-code@2.2.0` como dependencia directa exacta (`npm install --save-exact react-qr-code@2.2.0`; comprobar que el lockfile no añade paquetes) · archivos: `package.json`, `package-lock.json` · depende de: Fase 2 · secuencial (base, `package.json`)
-- [ ] T2 — `campaigns.service.ts` (lista, detalle, alta, cierre) y `campaignDisplay.ts` (enlaces y etiquetas), con tests · archivos: `modules/crm/services/campaigns.service.ts`, `modules/crm/services/campaigns.service.test.ts`, `modules/crm/utils/campaignDisplay.ts`, `modules/crm/utils/campaignDisplay.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Acciones de alta y cierre de campañas, con tests · archivos: `modules/crm/actions/campaigns.actions.ts`, `modules/crm/actions/campaigns.actions.test.ts` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — Componentes `CampaignForm`, `CampaignTable` y `CampaignQr` · archivos: `modules/crm/components/CampaignForm.tsx`, `modules/crm/components/CampaignTable.tsx`, `modules/crm/components/CampaignQr.tsx` · depende de: T2 · paralelo (con T3)
-- [ ] T5 — API pública, páginas `/crm/campanas` y `/crm/campanas/[id]` y enlace en el menú; medir el Worker y registrar el incremento del QR · archivos: `modules/crm/index.ts`, `app/crm/(protected)/campanas/page.tsx`, `app/crm/(protected)/campanas/[id]/page.tsx`, `modules/accounts/components/CrmShell.tsx` · depende de: T3, T4 · secuencial
+- [x] T1 — Declarar `react-qr-code@2.2.0` como dependencia directa exacta (`npm install --save-exact react-qr-code@2.2.0`; comprobar que el lockfile no añade paquetes) · archivos: `package.json`, `package-lock.json` · depende de: Fase 2 · secuencial (base, `package.json`)
+- [x] T2 — `campaigns.service.ts` (lista, detalle, alta, cierre) y `campaignDisplay.ts` (enlaces y etiquetas), con tests · archivos: `modules/crm/services/campaigns.service.ts`, `modules/crm/services/campaigns.service.test.ts`, `modules/crm/utils/campaignDisplay.ts`, `modules/crm/utils/campaignDisplay.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Acciones de alta y cierre de campañas, con tests · archivos: `modules/crm/actions/campaigns.actions.ts`, `modules/crm/actions/campaigns.actions.test.ts` · depende de: T2 · paralelo (con T4)
+- [x] T4 — Componentes `CampaignForm`, `CampaignTable` y `CampaignQr` · archivos: `modules/crm/components/CampaignForm.tsx`, `modules/crm/components/CampaignTable.tsx`, `modules/crm/components/CampaignQr.tsx` · depende de: T2 · paralelo (con T3)
+- [x] T5 — API pública, páginas `/crm/campanas` y `/crm/campanas/[id]` y enlace en el menú; medir el Worker y registrar el incremento del QR · archivos: `modules/crm/index.ts`, `app/crm/(protected)/campanas/page.tsx`, `app/crm/(protected)/campanas/[id]/page.tsx`, `modules/accounts/components/CrmShell.tsx` · depende de: T3, T4 · secuencial
 
 ### Fase 4: páginas públicas de registro y `/contacto` (5 tareas, 13 archivos)
 Requisitos previos: Fases 2 y 3 cerradas; **la rama contiene el PR #27 de `origin/main`** (lo integra el usuario; si no, el developer se detiene y lo consulta). La publicación en producción sigue bloqueada hasta P-L (Requisito 5); la implementación no espera a P-L.

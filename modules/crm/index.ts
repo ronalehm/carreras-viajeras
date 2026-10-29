@@ -17,6 +17,13 @@ export {
   setNextActionAction,
   updateLeadAction,
 } from "./actions/leads.actions";
+// Campaigns (QR and links): same reason, the CRM routes import both actions from this API.
+export { listCampaigns, getCampaignById } from "./services/campaigns.service";
+export { closeCampaignAction, createCampaignAction } from "./actions/campaigns.actions";
+export { CampaignForm } from "./components/CampaignForm";
+export { CampaignQr } from "./components/CampaignQr";
+export { CampaignTable } from "./components/CampaignTable";
+export { CAMPAIGN_STATUS_LABELS, campaignLinks } from "./utils/campaignDisplay";
 // Public web form action (landing /contacto): ContactSection (Server Component) passes it to
 // ContactForm as a prop, so the landing never imports crm from a client component.
 export { submitWebLeadAction } from "./actions/webLeads.actions";
@@ -34,4 +41,9 @@ export { LeadStageSummary } from "./components/LeadStageSummary";
 export { LeadTable } from "./components/LeadTable";
 export { LeadTimeline } from "./components/LeadTimeline";
 export { NextActionForm } from "./components/NextActionForm";
-export { CLOSED_LEAD_STAGES, LEAD_STAGE_BADGE_VARIANTS, LEAD_STAGE_LABELS } from "./utils/leadDisplay";
+export {
+  CLOSED_LEAD_STAGES,
+  LEAD_CHANNEL_LABELS,
+  LEAD_STAGE_BADGE_VARIANTS,
+  LEAD_STAGE_LABELS,
+} from "./utils/leadDisplay";

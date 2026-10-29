@@ -39,6 +39,9 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
                   >
                     Mis pendientes
                   </Link>
+                  <Link href="/crm/campanas" className={buttonVariants({ variant: "ghost" })}>
+                    Campañas
+                  </Link>
                 </>
               )}
               {canManageTrips && (
