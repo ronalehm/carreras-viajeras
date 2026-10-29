@@ -550,11 +550,11 @@ Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los eje
 
 ### Fase 2: CRM de ofertas y tipo de cambio (5 tareas, 16 archivos)
 Requisito previo: F1 cerrada y la migración aplicada en la rama de Neon de pruebas.
-- [ ] T1 — Acciones de ofertas y de tipo de cambio con tests · archivos: `modules/trips/actions/offers.actions.ts`, `modules/trips/actions/offers.actions.test.ts`, `modules/trips/actions/exchangeRates.actions.ts`, `modules/trips/actions/exchangeRates.actions.test.ts` · depende de: Fase 1 · paralelo (con T2)
-- [ ] T2 — Utilidades de presentación de ofertas con tests · archivos: `modules/trips/utils/offerDisplay.ts`, `modules/trips/utils/offerDisplay.test.ts` · depende de: Fase 1 · paralelo (con T1)
-- [ ] T3 — `OfferForm`, `OfferTable` y `OfferDetails` · archivos: `modules/trips/components/OfferForm.tsx`, `modules/trips/components/OfferTable.tsx`, `modules/trips/components/OfferDetails.tsx` · depende de: T1, T2 · paralelo (con T4)
-- [ ] T4 — `ExchangeRateForm` y `ExchangeRateTable` · archivos: `modules/trips/components/ExchangeRateForm.tsx`, `modules/trips/components/ExchangeRateTable.tsx` · depende de: T1 · paralelo (con T3)
-- [ ] T5 — API pública, páginas y menú:
+- [x] T1 — Acciones de ofertas y de tipo de cambio con tests · archivos: `modules/trips/actions/offers.actions.ts`, `modules/trips/actions/offers.actions.test.ts`, `modules/trips/actions/exchangeRates.actions.ts`, `modules/trips/actions/exchangeRates.actions.test.ts` · depende de: Fase 1 · paralelo (con T2)
+- [x] T2 — Utilidades de presentación de ofertas con tests · archivos: `modules/trips/utils/offerDisplay.ts`, `modules/trips/utils/offerDisplay.test.ts` · depende de: Fase 1 · paralelo (con T1)
+- [x] T3 — `OfferForm`, `OfferTable` y `OfferDetails` · archivos: `modules/trips/components/OfferForm.tsx`, `modules/trips/components/OfferTable.tsx`, `modules/trips/components/OfferDetails.tsx` · depende de: T1, T2 · paralelo (con T4)
+- [x] T4 — `ExchangeRateForm` y `ExchangeRateTable` · archivos: `modules/trips/components/ExchangeRateForm.tsx`, `modules/trips/components/ExchangeRateTable.tsx` · depende de: T1 · paralelo (con T3)
+- [x] T5 — API pública, páginas y menú:
   - exports de F1 y F2 en `index.ts`: lecturas, acciones, componentes, `offerDisplay` y tipos del contrato;
   - `/crm/ofertas`, `/crm/ofertas/nueva` y `/crm/ofertas/[id]`;
   - enlace "Ofertas" en `CrmShell`;
