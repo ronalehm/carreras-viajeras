@@ -25,8 +25,9 @@ export default function HomePage() {
     <>
       <SiteHeader />
       <main>
-        <HeroCarousel />
-        <TripFacts trip={TRIPS[0]} />
+        <HeroCarousel>
+          <TripFacts trip={TRIPS[0]} />
+        </HeroCarousel>
         <StorySection />
         <PackageSection />
         <CommunitySection />

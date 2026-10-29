@@ -11,7 +11,7 @@ const FAQS: { question: string; answer: ReactNode }[] = [
           href="https://maratondesantiago.cl/"
           target="_blank"
           rel="noopener noreferrer"
-          className="underline underline-offset-4"
+          className="font-semibold text-primary underline decoration-highlight decoration-2 underline-offset-4"
         >
           Consultar sitio oficial
         </a>
@@ -65,23 +65,21 @@ export function FaqSection() {
   return (
     <section
       id="preguntas"
-      className="grid gap-6 border-t border-primary/15 px-[6%] py-8 text-primary sm:px-[8%] sm:py-10 md:grid-cols-[1fr_1.4fr] md:gap-[7%]"
+      aria-labelledby="faq-title"
+      className="grid gap-10 bg-sky px-[6%] py-18 text-primary sm:px-[8%] md:grid-cols-[1fr_1.4fr] md:gap-[7%] lg:py-28"
     >
-      <div>
-        <p className="mb-3 text-xs font-bold tracking-[0.15em]">05 / RESUELVE TUS DUDAS</p>
-        <h2 className="font-heading text-4xl leading-none font-bold tracking-tight sm:text-5xl">
-          Resolvamos
-          <br />
-          esas dudas.
-        </h2>
-      </div>
-      <div>
+      <h2 id="faq-title" className="display-title text-display-section">
+        Resolvamos
+        <br />
+        esas dudas.
+      </h2>
+      <div className="border-t border-primary/20">
         {FAQS.map(({ question, answer }) => (
-          <details key={question} className="group border-b border-primary/25 py-5">
-            <summary className="relative cursor-pointer list-none pr-8 text-sm font-semibold after:absolute after:top-1/2 after:right-0 after:-translate-y-1/2 after:text-xl after:font-normal after:content-['+'] group-open:after:content-['−'] [&::-webkit-details-marker]:hidden">
+          <details key={question} className="group border-b border-primary/20">
+            <summary className="relative cursor-pointer list-none py-5 pr-10 text-base font-semibold after:absolute after:top-1/2 after:right-0 after:-translate-y-1/2 after:text-2xl after:leading-none after:font-normal after:content-['+'] group-open:after:content-['−'] sm:text-lg [&::-webkit-details-marker]:hidden">
               {question}
             </summary>
-            <p className="mt-4 text-sm leading-relaxed">{answer}</p>
+            <p className="max-w-[60ch] pb-6 text-base leading-relaxed text-asphalt">{answer}</p>
           </details>
         ))}
       </div>
