@@ -62,7 +62,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay seis migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)) y `drizzle/0005_abnormal_gladiator.sql` crea la outbox de automatización (pendiente, después de `0004`; ver [Migración del outbox](#migración-del-outbox)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay siete migraciones y todas se aplican a mano: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (pendiente; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (pendiente, después de `0001`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (pendiente, después de `0002` y solo cuando su rama esté en `main`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (pendiente, después de `0001` y **antes** de desplegar el código que la usa; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_abnormal_gladiator.sql` crea la outbox de automatización (pendiente, después de `0004`; ver [Migración del outbox](#migración-del-outbox)) y `drizzle/0006_tricky_secret_warriors.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0005` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0006)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -122,23 +122,82 @@ Ya aplicada por el usuario en `production`. Para otra rama:
 
 No hay script `migrate` ni migración automática. Si `DATABASE_URL` usa un rol distinto del owner, necesita `SELECT, INSERT` en `profiles` y `SELECT, INSERT, UPDATE` en `staff_assignments` y `staff_invitations`; esos GRANT quedan fuera de esta spec.
 
+### Migración de roles y organizador (`0006`)
+
+Especificada en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md) (Fase 3). Con esa spec, Clerk pasa a ser el proveedor de identidad. Las partes de este README que aún describen Neon Auth, y el runbook completo de puesta en producción, se actualizan en su Fase 4.
+
+`drizzle/0006_tricky_secret_warriors.sql` añade al enum `staff_role` los valores `super_admin` y `organizer`, y a `trips` la columna nula `organizer_id` (clave foránea a `profiles.user_id`, `ON DELETE restrict`) con el índice `trips_organizer_idx`. Pendiente de aplicar por el usuario: **primero en una rama de desarrollo de Neon**; en `production`, solo después de revisarla y con autorización explícita de la operación remota. **No volver a aplicar ninguna migración ya aplicada** (`0000` está en `production`).
+
+- **Compatible hacia atrás.** El código anterior ignora la columna nueva y trata un rol desconocido como sin permisos. Por eso la migración puede aplicarse antes del despliegue y no impide volver a la versión anterior del Worker.
+- **Orden respecto al despliegue: aplicar `0006` antes de desplegar el código de la Fase 3** (o antes de mergearlo en `main`, si se despliega con Workers Builds). Ese código selecciona `organizer_id` en las lecturas de viajes del CRM (`listTrips`, `getTripById`): sin la migración, `/crm/viajes` falla por columna inexistente. Lo mismo ocurre con `npm run dev` contra una rama de Neon que no la tenga. La lectura pública de la landing no selecciona esa columna.
+- **Orden respecto a las demás migraciones:** después de `0005`, respetando el journal de Drizzle. Necesita `profiles` (`0000`) y `trips` (`0001`).
+- **No se deshace.** PostgreSQL no permite quitar un valor de un enum. La vuelta atrás es reactivar la versión anterior del Worker, no revertir la migración.
+
+1. Revisar `drizzle/0006_tricky_secret_warriors.sql`: solo contiene cinco sentencias (dos `ALTER TYPE "public"."staff_role" ADD VALUE`, `ALTER TABLE "trips" ADD COLUMN "organizer_id" text`, la clave foránea `trips_organizer_id_profiles_user_id_fk` y `CREATE INDEX "trips_organizer_idx"`). No hay cambios en `profiles`, `staff_assignments` ni `staff_invitations`. `grep -inE 'neon_auth|drop|create schema' drizzle/0006_tricky_secret_warriors.sql` no devuelve nada.
+2. Comprobar el estado de esa rama: `SELECT to_regclass('public.profiles'), to_regclass('public.trips'), to_regclass('public.automation_events');` no devuelve ningún `NULL` (si falta alguna anterior, aplicarla antes siguiendo su sección), y `SELECT enum_range(NULL::staff_role);` devuelve `{commercial,admin}`. Si ya incluye `super_admin` y `organizer`, la `0006` ya está aplicada: no repetirla.
+3. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+4. En el SQL Editor de Neon, con la rama correcta seleccionada, pegar el contenido de `0006` entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` son comentarios de SQL y se pueden dejar. Alternativa: `psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0006_tricky_secret_warriors.sql`. `ALTER TYPE … ADD VALUE` puede ir dentro de una transacción (PostgreSQL 12 o superior) porque la migración no usa los valores nuevos.
+5. Repetir el paso 3 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar el resultado:
+   - `SELECT enum_range(NULL::staff_role);` devuelve `{commercial,admin,super_admin,organizer}`;
+   - `SELECT conname FROM pg_constraint WHERE conrelid = 'public.trips'::regclass AND contype = 'f';` incluye `trips_organizer_id_profiles_user_id_fk`;
+   - `SELECT to_regclass('public.trips_organizer_idx');` no devuelve `NULL`;
+   - `SELECT count(*) FROM trips WHERE organizer_id IS NOT NULL;` devuelve 0.
+
+No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
 ### Scripts manuales
 
 Se ejecutan con psql y `DATABASE_MIGRATION_URL`, cada uno en una transacción y con `ON_ERROR_STOP`. Primero en una rama de desarrollo; en `production`, solo con autorización explícita. Las instrucciones completas están en la cabecera de cada archivo.
 
-- **Bootstrap del primer admin** ([`scripts/sql/bootstrap-admin.sql`](scripts/sql/bootstrap-admin.sql)). La cuenta debe existir en Neon Auth con el correo verificado; el `user_id` exacto y el correo se copian de la consola (Auth → Users). Crea o reutiliza el perfil e inserta una asignación `admin` con `granted_by = NULL`. Falla si `reason` está vacío o si ya es admin activo. El usuario ya se dio de alta como admin en `production`.
+- **Bootstrap de un admin o del super admin** ([`scripts/sql/bootstrap-admin.sql`](scripts/sql/bootstrap-admin.sql)). La cuenta debe existir en Clerk con el correo primario verificado; el `user_id` exacto (`user_…`) y el correo se copian del panel de Clerk (Users → la cuenta). El script no comprueba la verificación. Crea o reutiliza el perfil e inserta una asignación activa con `granted_by = NULL`: `admin` por defecto, o `super_admin` con `-v role=super_admin` (requiere `0006` en esa rama). Falla sin cambiar nada si `user_id`, `email` o `reason` están vacíos, si `role` no es `admin` ni `super_admin`, o si ya tiene ese rol activo. El usuario ya se dio de alta como admin en `production` con su id de Neon Auth; su paso a Clerk se documenta en la Fase 4. Para el super admin, ver [Alta del super admin](#alta-del-super-admin).
 
   ```sh
-  psql "$DATABASE_MIGRATION_URL" -v user_id='<user_id>' -v email='<correo>' \
-    -v reason='<operador>: <motivo>' -f scripts/sql/bootstrap-admin.sql
+  psql "$DATABASE_MIGRATION_URL" -v user_id='<user_id exacto de Clerk>' -v email='<correo>' \
+    -v reason='<operador>: <motivo>' [-v role=super_admin] -f scripts/sql/bootstrap-admin.sql
   ```
 
-- **Revocación de emergencia** ([`scripts/sql/revoke-staff-role.sql`](scripts/sql/revoke-staff-role.sql)). Marca `revoked_at` en la asignación activa y devuelve la fila; 0 filas significa que no había nada que revocar. **No protege al último admin:** en condiciones normales, revocar desde el CRM.
+- **Revocación de emergencia** ([`scripts/sql/revoke-staff-role.sql`](scripts/sql/revoke-staff-role.sql)). Marca `revoked_at` en la asignación activa y devuelve la fila; 0 filas significa que no había nada que revocar. **No protege al último admin:** en condiciones normales, revocar desde el CRM. **Sí protege al último super admin:** con `role='super_admin'` bloquea las asignaciones `super_admin` activas antes de contarlas y, si el objetivo es el último, falla con "no se puede revocar el último super_admin" sin cambiar nada. `organizer` y `super_admin` requieren `0006` en esa rama.
 
   ```sh
-  psql "$DATABASE_MIGRATION_URL" -v user_id='<user_id>' -v role='<commercial|admin>' \
-    -f scripts/sql/revoke-staff-role.sql
+  psql "$DATABASE_MIGRATION_URL" -v user_id='<user_id exacto de Clerk>' \
+    -v role='<commercial|organizer|admin|super_admin>' -f scripts/sql/revoke-staff-role.sql
   ```
+
+### Alta del super admin
+
+El super admin es `linderhassinger01@gmail.com`. El rol `super_admin` tiene todos los permisos del CRM y, según [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md), será el único que cree administradores y organizadores (esa gestión por rol en `/crm/admin/usuarios` llega en la Fase 4). **El CRM nunca asigna ni revoca `super_admin`:** solo los dos scripts anteriores.
+
+Requisitos previos, en la rama de Neon donde se vaya a dar el alta:
+
+1. La migración `0006` está aplicada (paso 6 de [Migración de roles y organizador](#migración-de-roles-y-organizador-0006)). Sin ella, el script falla al convertir `super_admin` al enum.
+2. Linder crea su cuenta con Clerk en `/crm/acceso` con ese correo y la verifica con el código.
+3. El usuario copia del panel de Clerk (Users → la cuenta) el `user_id` exacto, que empieza por `user_`, y comprueba que el correo primario es `linderhassinger01@gmail.com` y está verificado. Las instancias de desarrollo y de producción de Clerk tienen usuarios e ids distintos: en una rama de desarrollo se usa el id de la instancia de desarrollo y en `production`, el de la de producción.
+
+Alta (primero en una rama de desarrollo; en `production`, solo con autorización explícita y en el momento que fije el runbook de la Fase 4, cuando Linder ya pueda crear su cuenta en la instancia de producción de Clerk):
+
+```sh
+psql "$DATABASE_MIGRATION_URL" \
+  -v user_id='<user_id exacto de Clerk: user_…>' \
+  -v email='linderhassinger01@gmail.com' \
+  -v reason='<operador>: alta del super admin' \
+  -v role=super_admin \
+  -f scripts/sql/bootstrap-admin.sql
+```
+
+Devuelve una fila con `role = super_admin`. Comprobación: `SELECT user_id, role, granted_by, reason FROM staff_assignments WHERE role = 'super_admin' AND revoked_at IS NULL;` devuelve una sola fila, con ese `user_id` y `granted_by` nulo. Con el código de la Fase 3 en ese entorno, su sesión obtiene `200` en `GET /api/crm/me` con `super_admin` en `staffRoles`.
+
+**Sustituir o revocar al super admin (emergencia).** Como el script se niega a revocar al último `super_admin` activo, primero se da de alta al sustituto con `bootstrap-admin.sql -v role=super_admin` y después se revoca al anterior con `revoke-staff-role.sql -v role=super_admin`. La revocación se aplica en la siguiente petición al CRM.
+
+**Qué no hacer:**
+
+- Asignar `super_admin` con un `INSERT` a mano, desde el CRM o con metadatos de Clerk (`publicMetadata`, `unsafeMetadata`): los roles solo se leen de Neon y solo se asignan con `bootstrap-admin.sql`.
+- Elegir la cuenta por ser el primer registro o por coincidir el correo, o mezclar ids de las instancias de desarrollo y producción de Clerk: siempre el `user_id` exacto copiado del panel.
+- Ejecutar los scripts o la migración con `DATABASE_URL` (runtime), o entregar `DATABASE_MIGRATION_URL` al Worker o a n8n.
+- Aplicar `0006` o ejecutar los scripts en `production` sin autorización explícita, editar `0006` después de aplicarla en alguna rama, o intentar deshacerla.
+- Desplegar el código de la Fase 3 en un entorno cuya rama de Neon no tenga `0006`.
+- Asignar el rol `organizer` antes de la Fase 5: hasta entonces no existe el alcance por organizador y su permiso `trips.manage` alcanzaría todos los viajes.
+- Modificar el schema `neon_auth`.
 
 ### Checklist manual
 
