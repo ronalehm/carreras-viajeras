@@ -174,6 +174,23 @@ describe("GET /api/crm/me", () => {
     logError.mockRestore();
   });
 
+  it("returns the SQLSTATE of a database error as detail, never its message", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    accept.mockRejectedValue(
+      Object.assign(new Error("Failed query"), {
+        cause: Object.assign(new Error("password authentication failed"), { code: "28P01" }),
+      }),
+    );
+
+    const response = await GET();
+    const text = await response.text();
+    expect(response.status).toBe(403);
+    expect(text).toBe(JSON.stringify({ ...forbidden("role_lookup_failed"), detail: "28P01" }));
+    expect(text).not.toContain("password");
+    logError.mockRestore();
+  });
+
   it("returns 403 when role=admin arrives via query, cookie, body or Clerk metadata", async () => {
     // GET() takes no request: this one only documents the attempted elevation, it is never read.
     const forged = new Request("https://carreras-viajeras.mentec.dev/api/crm/me?role=admin", {

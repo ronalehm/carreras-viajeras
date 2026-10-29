@@ -14,8 +14,12 @@ export type ForbiddenReason =
   | "email_unverified"
   | "missing_permission";
 
+// detail: a PostgreSQL SQLSTATE (5 characters) or "configuration"; never a message or data.
 export class ForbiddenError extends Error {
-  constructor(readonly reason?: ForbiddenReason) {
+  constructor(
+    readonly reason?: ForbiddenReason,
+    readonly detail?: string,
+  ) {
     super("forbidden");
     this.name = "ForbiddenError";
   }
