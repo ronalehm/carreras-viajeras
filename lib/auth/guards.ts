@@ -2,7 +2,11 @@ import "server-only";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { z } from "zod";
-import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
+import {
+  acceptInvitationAndLoadStaffRoles,
+  loadSponsorId,
+  loadStaffRoles,
+} from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
 
@@ -11,13 +15,18 @@ export type CurrentUser = {
   email: string;
   emailVerified: boolean;
   staffRoles: StaffRole[];
+  name?: string;
 };
+
+export type SponsorUser = CurrentUser & { sponsorId: string };
 
 // Minimal trusted shape of the Clerk Backend User; z.object drops every other field
 // (publicMetadata, unsafeMetadata, …), so nothing in Clerk can grant roles.
 const clerkUserSchema = z.object({
   id: z.string().min(1).max(255),
   primaryEmailAddressId: z.string().nullable(),
+  firstName: z.string().nullable().optional().catch(undefined),
+  lastName: z.string().nullable().optional().catch(undefined),
   emailAddresses: z.array(
     z.object({
       id: z.string(),
@@ -57,10 +66,12 @@ async function readSessionUser() {
   if (!parsed.success || parsed.data.id !== userId) return null;
   const { primaryEmailAddressId, emailAddresses } = parsed.data;
   const primary = emailAddresses.find((address) => address.id === primaryEmailAddressId);
+  const name = [parsed.data.firstName, parsed.data.lastName].filter(Boolean).join(" ").trim();
   return {
     id: userId,
     email: primary?.emailAddress.trim().toLowerCase() ?? "",
     emailVerified: primary?.verification?.status === "verified",
+    ...(name ? { name } : {}),
   };
 }
 
@@ -103,4 +114,21 @@ export async function requirePermission(permission: Permission): Promise<Current
 
 export function requireCrmUser(): Promise<CurrentUser> {
   return requirePermission("crm.access");
+}
+
+async function loadUserSponsorId(userId: string) {
+  try {
+    return await loadSponsorId(userId);
+  } catch {
+    // Fail closed without exposing the original database message.
+    throw new ForbiddenError();
+  }
+}
+
+// The portal always needs an active brand assignment, including full-access staff roles.
+export async function requireSponsor(): Promise<SponsorUser> {
+  const user = await requirePermission("sponsor.portal");
+  const sponsorId = await loadUserSponsorId(user.id);
+  if (!sponsorId) throw new ForbiddenError();
+  return { ...user, sponsorId };
 }

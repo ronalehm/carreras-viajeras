@@ -42,7 +42,7 @@ const PUBLIC_COLUMNS =
   '"slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "capacity", "image_url", ' +
   '"official_url", "excludes", "notes"';
 const PRICE_COLUMNS = /"price_usd"|"installments_price_usd"|"deposit_usd"|"companion_price_usd"|"payment_terms"/;
-const INTERNAL_COLUMNS = /"id"|"status"|"created_at"|"updated_at"/;
+const INTERNAL_COLUMNS = /"id"|"status"|"created_at"|"updated_at"|"organizer_id"|"sponsor_id"|"featured"|"review_status"|"review_note"/;
 
 // Rows in select order (array mode), as the Neon HTTP driver returns them.
 const santiagoRow = [
@@ -229,7 +229,7 @@ const OWN: TripScope = { kind: "own", organizerId: ORGANIZER_ID };
 const TRIP_COLUMNS =
   '"id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", ' +
   '"image_url", "official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes", "status", ' +
-  '"organizer_id", "created_at", "updated_at"';
+  '"organizer_id", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at"';
 const ORDER_BY = `order by "trips"."status" = 'archived', "trips"."race_date" asc, "trips"."slug" asc`;
 
 describe("listTrips", () => {
@@ -288,13 +288,17 @@ describe("createTrip", () => {
   // (price_usd, installments_price_usd, deposit_usd, companion_price_usd, payment_terms): never written.
   const INSERT_SQL =
     'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", ' +
-    '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes", "status", "organizer_id", "created_at", "updated_at") ' +
-    "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, default, $11, $12, $13, default, default, default, default, $14, $15, default, $16, default, default) " +
+    '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes", "status", "organizer_id", "sponsor_id", "featured", "review_status", "review_note", "created_at", "updated_at") ' +
+    "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, default, $11, $12, $13, default, default, default, default, $14, $15, default, $16, default, default, default, default, default, default) " +
     'on conflict ("slug") do nothing returning "id"';
   const withExtras = {
     ...input,
     status: "published",
     organizerId: "user_intruder",
+    sponsorId: "8a6e0804-2bd0-4672-b79d-d97027f9071a",
+    featured: true,
+    reviewStatus: "changes_requested",
+    reviewNote: "Untrusted note",
     priceUsd: 1990,
     depositUsd: 300,
     paymentTerms: "Reserva",

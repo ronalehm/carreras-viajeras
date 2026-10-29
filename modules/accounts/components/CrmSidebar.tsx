@@ -13,8 +13,11 @@ import {
   LayoutDashboard,
   Megaphone,
   Menu,
+  Newspaper,
   Plane,
   Settings2,
+  Store,
+  Star,
   Tag,
   UsersRound,
   X,
@@ -32,6 +35,9 @@ const ICONS = {
   offers: Tag,
   bookings: CalendarCheck2,
   users: UsersRound,
+  sponsors: Store,
+  content: Newspaper,
+  rewards: Star,
   settings: Settings2,
 };
 const GROUPS = [

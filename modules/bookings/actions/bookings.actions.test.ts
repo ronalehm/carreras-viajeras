@@ -7,6 +7,7 @@ vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(), loadStaffRoles: vi.fn(),
 }));
+vi.mock("./rewardReconciliation", () => ({ reconcileBookingAfterCommit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn(() => { throw new Error("NEXT_REDIRECT"); }) }));
 vi.mock("../services/bookings.service", () => ({

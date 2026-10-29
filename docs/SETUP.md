@@ -371,3 +371,11 @@ npx vitest run modules/users       # solo un módulo o archivo
 ```
 
 Los `async` Server Components no se pueden probar con Vitest; se cubren con tests E2E cuando se configuren.
+
+## 4. Codex y validación en GitHub
+
+Codex lee las instrucciones comunes de `AGENTS.md` y la configuración de roles de `.codex/config.toml` en un proyecto confiable y compatible. El agente principal coordina `spec`, `developer` y `reviewer`, conservando el flujo SDD, la aprobación humana, el alcance de archivos y las reglas de paralelismo de este documento. Cada tarea cloud ya tiene aislamiento: se usa su checkout existente y no se crea un worktree salvo petición expresa.
+
+Los hooks y las firmas de Claude Code no se dan por instalados ni ejecutados en Codex. El agente principal comprueba la aprobación real del usuario para la versión vigente de la spec; no fabrica aprobaciones ni modifica el registro firmado. El reviewer tiene sandbox de solo lectura; el agente principal ejecuta los checks que necesiten escribir outputs y entrega evidencia para su revisión.
+
+El workflow `.github/workflows/ci.yml` valida instalación con lockfile, lint, pruebas, tipos y empaquetado de Workers con permisos de lectura. La revisión nativa de Codex en GitHub requiere activación y acceso desde los ajustes de la integración; añadir estos archivos no la activa ni demuestra que CI haya pasado. Las instrucciones de uso, límites y validación están en [`docs/CODEX.md`](CODEX.md).

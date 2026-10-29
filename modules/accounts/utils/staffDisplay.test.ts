@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { staffRoleEnum } from "@/lib/db-schema";
-import { formatStaffDateTime, STAFF_ROLE_LABELS } from "./staffDisplay";
+import { formatAssignmentLabel, formatStaffDateTime, STAFF_ROLE_LABELS, USER_ROLE_FILTER_LABELS } from "./staffDisplay";
 
 describe("formatStaffDateTime", () => {
   it("formats the date and time in the CRM time zone", () => {
@@ -27,6 +27,20 @@ describe("STAFF_ROLE_LABELS", () => {
       admin: "Admin",
       super_admin: "Super admin",
       organizer: "Organizador",
+      sponsor: "Patrocinador",
     });
+  });
+});
+
+describe("formatAssignmentLabel", () => {
+  it("adds the brand only to sponsor assignments", () => {
+    expect(formatAssignmentLabel("sponsor", "Marca X")).toBe("Patrocinador · Marca X");
+    expect(formatAssignmentLabel("sponsor", null)).toBe("Patrocinador");
+    expect(formatAssignmentLabel("organizer", "Marca X")).toBe("Organizador");
+  });
+
+  it("labels every directory filter including runner", () => {
+    expect(Object.keys(USER_ROLE_FILTER_LABELS).sort()).toEqual([...staffRoleEnum.enumValues, "runner"].sort());
+    expect(USER_ROLE_FILTER_LABELS.runner).toBe("Runner");
   });
 });

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { can } from "@/lib/auth/permissions";
+import { BookingRewardsPanel } from "@/modules/rewards";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
-import { BookingForm, BookingStatusBadge, changeBookingStatusAction, getBookingById } from "@/modules/bookings";
+import { BookingForm, BookingStatusBadge, changeBookingStatusAction, getBookingById, listBookingPayments, PaymentForm, PaymentTable } from "@/modules/bookings";
 import { formatTripPrice } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reserva" };
@@ -25,6 +27,7 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
   const booking = await getBookingById(id);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
+  const payments = await listBookingPayments(id);
 
   return (
     <section className="flex flex-col gap-6">
@@ -85,8 +88,14 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           </dl>
         </>
       ) : (
-        <BookingForm booking={booking} />
+        <BookingForm booking={booking} priceLocked={booking.priceLocked} />
       )}
+      <section className="grid gap-4" aria-labelledby="payments-heading">
+        <h2 id="payments-heading" className="text-lg font-semibold">Pagos</h2>
+        <PaymentTable payments={payments} totalUsd={booking.totalUsd} editable={!cancelled} />
+        {!cancelled && <PaymentForm bookingId={booking.id} />}
+      </section>
+      <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
     </section>
   );
 }

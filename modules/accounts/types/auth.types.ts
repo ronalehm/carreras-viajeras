@@ -2,7 +2,7 @@
 export type AccessAudience = "staff" | "runner";
 
 /** Closed set of post-auth destinations. Never read from the URL. */
-export type AuthDestination = "/crm" | "/cuenta";
+export type AuthDestination = "/crm" | "/cuenta/perfil";
 
 /** Closed set of post-sign-out destinations. Never read from the URL. */
 export type SignOutDestination = "/crm/acceso" | "/cuenta";

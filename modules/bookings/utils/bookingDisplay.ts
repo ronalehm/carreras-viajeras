@@ -6,6 +6,8 @@ import type { BookingStatus, ItineraryKind, ItineraryStatus, ScheduleEdge } from
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
+export const BOOKINGS_PATH = "/crm/reservas";
+
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   pending: "Pendiente de confirmación",
   confirmed: "Confirmada",

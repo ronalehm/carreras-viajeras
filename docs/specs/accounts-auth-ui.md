@@ -2,15 +2,18 @@
 
 - Módulo: accounts
 - Estado: aprobado
+- Enmienda (2026-10-25): destinos cerrados ampliados (runner → `/mis-carreras`; audiencia `sponsor` → `/patrocinador`, salida a `/patrocinador/acceso`), enlaces "Ver mis carreras" y "Mi perfil" en `RunnerAccount`, export de `SignOutButton` y página `/patrocinador/acceso`, porque lo exigen `runner-portal.md`, `accounts-runner-profiles.md` y `sponsors-portal.md` (aprobadas). Esta spec no gana tareas: cada cambio lo implementan esas specs en la fase indicada en "Enmienda: qué implementa cada spec".
 - Depende de: accounts-roles-permissions.md (Fase 1 aprobada y desplegada en `main` eb75dd6), platform-neon-foundation.md (Fase 1 aprobada)
-- Fases 1–3 implementadas en `main`. La Fase 4 (audiencia runner) es nueva y la consume `landing-public-site.md` F3 (`/cuenta`).
+- Fases 1–4 implementadas en `main`. La Fase 4 (audiencia runner) la consume `landing-public-site.md` F3 (`/cuenta`).
+- La amplían (enmienda 2026-10-25): `runner-portal.md` (F5-T1, F6-T1, F6-T2), `accounts-runner-profiles.md` (F2-T5) y `sponsors-portal.md` (F3-T4, F4-T1, F4-T4).
 
 ## Objetivo
 Permitir que el equipo entre al CRM. `accounts-roles-permissions.md` deja esta interfaz para esta spec.
 - **Admin y comerciales con cuenta:** inician sesión con correo y contraseña de Neon Auth.
 - **Personas invitadas:** crean su cuenta y verifican el correo con un **código** (OTP).
 - **Quien olvidó su contraseña:** la recupera con un código.
-- **(F4) Runners:** se registran, inician sesión y la cierran desde la landing (`/cuenta`) con los mismos componentes, sin obtener acceso al CRM.
+- **(F4) Runners:** se registran, inician sesión y la cierran desde la landing (`/cuenta`) con los mismos componentes, sin obtener acceso al CRM. Desde `runner-portal.md` F6, tras ingresar o verificar llegan a `/mis-carreras`.
+- **(Enmienda; `sponsors-portal.md` F3–F4) Personas patrocinadoras invitadas:** crean su cuenta e ingresan en `/patrocinador/acceso` con los mismos componentes (audiencia `sponsor`) y llegan a `/patrocinador`, sin obtener acceso al CRM.
 
 Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo muestra su correo y sus roles si tiene acceso, o un aviso de "sin acceso" si no lo tiene. Toda la autorización sigue en el servidor (`requireCrmUser()`): la UI no decide permisos.
 
@@ -24,18 +27,24 @@ Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo m
   - Registrar en `docs/SETUP.md` la excepción de rutas en español.
   - (F3) README: requisitos previos manuales de Neon Auth y checklist manual en producción.
   - (F4) Audiencia runner: `AccessPanel` con `audience: "staff" | "runner"`, destino fijo por audiencia, `SignOutButton` con destino de salida cerrado y el componente `RunnerAccount`, que muestra el estado de sesión en la cuenta pública. La ruta `/cuenta` y su diseño son de `landing-public-site.md` F3.
+  - (Enmienda 2026-10-25; sin tareas en esta spec, ver "Enmienda: qué implementa cada spec"):
+    - destino del runner tras ingresar o verificar: `/mis-carreras` (`runner-portal.md` F6-T1);
+    - `RunnerAccount` con sesión: enlaces "Ver mis carreras" (`runner-portal.md` F6-T2) y "Mi perfil" (`accounts-runner-profiles.md` F2-T5);
+    - audiencia `sponsor` con destino `/patrocinador` y salida a `/patrocinador/acceso` (`sponsors-portal.md` F3-T4), y la página `/patrocinador/acceso` (`sponsors-portal.md` F4-T4);
+    - `SignOutButton` exportado desde `@/modules/accounts` (`runner-portal.md` F5-T1 o `sponsors-portal.md` F4-T1, quien llegue primero).
 - No incluye:
   - `@neondatabase/auth-ui` (`AuthView`) (ver Decisiones). No se importa.
   - Login social, magic link, MFA o passkeys.
-  - Cambio de correo o de contraseña con sesión iniciada, y perfil de usuario.
+  - Cambio de correo o de contraseña con sesión iniciada. El perfil del runner no es de esta spec: lo cubre `accounts-runner-profiles.md` (`/cuenta/perfil`).
   - Página de administración de usuarios: es la Fase 3 de `accounts-roles-permissions.md`.
   - Pantallas reales del CRM (leads, viajes).
-  - Parámetro `?next=` o cualquier destino configurable tras el login. El destino siempre es `/crm` (F1–F3). Desde F4 depende solo de la audiencia fijada en el código (`/crm` o `/cuenta`), nunca de la URL.
+  - Parámetro `?next=` o cualquier destino configurable tras el login. El destino siempre es `/crm` (F1–F3). Desde F4 depende solo de la audiencia fijada en el código, nunca de la URL: `/crm` (staff), `/cuenta` (runner, hasta `runner-portal.md` F6) y, con la enmienda, `/mis-carreras` (runner, desde `runner-portal.md` F6) y `/patrocinador` (sponsor, desde `sponsors-portal.md` F3). La lista cerrada completa está en "Seguridad → Redirecciones".
   - Envío automático del correo de invitación. El admin comparte el enlace `/crm/acceso` a mano, como decide `accounts-roles-permissions.md`.
   - `proxy.ts`/middleware: la protección va en el layout, en cada página y en cada acción.
-  - Cuentas de runners en F1–F3: eran visitantes anónimos. Desde F4, un runner tiene una cuenta de Neon Auth sin roles de staff. Siguen fuera el perfil de runner, sus datos en la base de datos, la comunidad y cualquier recurso protegido para runners.
+  - Cuentas de runners en F1–F3: eran visitantes anónimos. Desde F4, un runner tiene una cuenta de Neon Auth sin roles de staff. Siguen fuera de esta spec la comunidad y los recursos protegidos para runners, que tienen su propia spec y su propia guarda en el servidor: el perfil del runner (`runner_profiles`, `/cuenta/perfil`) es de `accounts-runner-profiles.md` y el portal de reservas (`/mis-carreras`) de `runner-portal.md`. Esta spec solo aporta los enlaces de `RunnerAccount` y el destino tras el login.
+  - El portal de patrocinadores (`/patrocinador/**`), su guarda `requireSponsor()`/`getSponsorAccess()` y el rol `sponsor`: son de `sponsors-portal.md`. Esta spec solo aporta la audiencia `sponsor` del panel y sus destinos cerrados.
   - Nuevas variables `NEXT_PUBLIC_*` o secretos en el cliente.
-  - Cambios en `lib/auth/{server,guards,errors,permissions,access.service}.ts`, `lib/db*` y la API `/api/crm/me`.
+  - Cambios en `lib/auth/{server,guards,errors,permissions,access.service}.ts`, `lib/db*` y la API `/api/crm/me` (los que hacen `runner-portal.md`, `accounts-runner-profiles.md` y `sponsors-portal.md` son de esas specs).
 
 ## Requisitos
 1. **Cliente de auth:** se crea con `createAuthClient()` de `@neondatabase/auth/next`, sin argumentos. Habla con el proxy same-origin `/api/auth/[...path]`, que ya existe. Métodos exactos (comprobados en `node_modules/@neondatabase/auth` y en better-auth 1.7.6 con el plugin `email-otp`):
@@ -66,26 +75,36 @@ Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo m
 10. **Sin textos de error de terceros:** no se muestra el `error.message` de Neon o Better Auth (está en inglés y puede filtrar detalles); solo mensajes propios.
 11. **Tamaño del Worker:** el Worker comprimido debe seguir por debajo del límite de 3 MiB de Workers Free. Se mide en cada fase sin desplegar.
 12. **(F4) Audiencia runner.**
-    - **Audiencias y destinos.** `AccessPanel` recibe `audience?: "staff" | "runner"`, con `"staff"` por defecto. La audiencia es el único lugar del que sale el destino:
+    - **Audiencias y destinos.** `AccessPanel` recibe `audience?: "staff" | "runner"`, con `"staff"` por defecto (la enmienda añade `"sponsor"`, ver abajo). La audiencia es el único lugar del que sale el destino:
       - `staff` → `/crm`, enlace al alta "¿Te invitaron? Crea tu cuenta" y aviso "Solo para personas invitadas por un administrador.". Es exactamente el comportamiento de F1–F3.
-      - `runner` → `/cuenta`, enlace al alta "Registrarse" y aviso "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento." (texto de `cuenta.html`).
-      - Los formularios reciben el destino como unión cerrada `"/crm" | "/cuenta"`; no hay ningún `string` libre ni lectura de la URL.
+      - `runner` → `/cuenta` (F4) y, **desde `runner-portal.md` F6-T1, `/mis-carreras`**. Enlace al alta "Registrarse" y aviso "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento." (texto de `cuenta.html`; sigue siendo cierto con `accounts-runner-profiles.md`, porque registrarse no crea el perfil). Vale también para una cuenta de staff que ingresa desde `/cuenta`: llega a `/mis-carreras`, no a `/crm`.
+      - **(Enmienda; implementado en `sponsors-portal.md` F3-T4)** `sponsor` → `/patrocinador`, enlace al alta "¿Te invitaron? Crea tu cuenta" y aviso "Solo para marcas invitadas por Carreras Viajeras. Usa el correo de la invitación.".
+      - Los formularios reciben el destino como unión cerrada `AuthDestination`; no hay ningún `string` libre ni lectura de la URL. Valor en F4: `"/crm" | "/cuenta"`. Valor final tras la enmienda: `"/crm" | "/mis-carreras" | "/patrocinador"` (`runner-portal.md` F6-T1 sustituye `"/cuenta"` por `"/mis-carreras"`; `sponsors-portal.md` F3-T4 añade `"/patrocinador"`; quien vaya segundo conserva lo del otro). `/cuenta` deja de ser destino tras ingresar y queda solo como destino de salida.
     - **`/crm/acceso` no cambia.** Sigue usando `<AccessPanel />` sin prop, sigue redirigiendo a `/crm` si hay sesión, y todos los tests de F1–F3 pasan sin modificarse.
-    - **Mismo flujo para todos.** Las dos audiencias usan los mismos métodos de Neon Auth, schemas, mensajes sin enumeración de cuentas, verificación por código, `EMAIL_NOT_VERIFIED` y recuperación. Tampoco cambian `requireCrmUser()`, `getCrmAccess()`, `lib/auth/*`, la base de datos ni la matriz de permisos.
+    - **Mismo flujo para todos.** Todas las audiencias (`staff`, `runner` y, con la enmienda, `sponsor`) usan los mismos métodos de Neon Auth, schemas, mensajes sin enumeración de cuentas, verificación por código, `EMAIL_NOT_VERIFIED` y recuperación. Las audiencias no cambian `requireCrmUser()`, `getCrmAccess()`, `lib/auth/*`, la base de datos ni la matriz de permisos (los cambios de `lib/auth/*` que hacen `runner-portal.md` y `sponsors-portal.md` son de esas specs).
     - **Cuenta de runner.**
       - Es una cuenta de Neon Auth sin roles de staff. No crea filas en `profiles` ni `staff_*`; lo garantiza `accounts-roles-permissions.md` F1, cuyo criterio de "registro libre" sigue vigente.
       - Si abre `/crm`, ve la pantalla "sin acceso". Si su correo verificado coincide con una invitación de staff pendiente, la invitación se acepta al abrir `/crm`, como con cualquier invitado; no es una vía nueva.
     - **Alta de staff frente a registro público.**
       - Neon Auth no distingue entre ambos: "Sign-up with Email" ya está ON (confirmado por el usuario), así que cualquier persona puede crear una cuenta, también hoy desde `/crm/acceso`.
-      - La invitación nunca controló la creación de cuentas. Controla los **roles**: se aceptan en el servidor por correo verificado y quedan ligados al `user_id` estable.
+      - La invitación nunca controló la creación de cuentas. Controla los **roles**: se aceptan en el servidor por correo verificado y quedan ligados al `user_id` estable. Con la enmienda, lo mismo vale para el rol `sponsor` (`sponsors-portal.md`): el aviso de `/patrocinador/acceso` también es orientativo.
       - Por eso no hay conflicto técnico. El aviso "Solo para personas invitadas" de `/crm/acceso` es orientativo y se mantiene.
-    - **`SignOutButton`.** Recibe `redirectTo?: "/crm/acceso" | "/cuenta"`, con `"/crm/acceso"` por defecto. `CrmShell` y `NoCrmAccess` no cambian.
+    - **`SignOutButton`.** Recibe `redirectTo?: SignOutDestination`, con `"/crm/acceso"` por defecto. Valor en F4: `"/crm/acceso" | "/cuenta"`. **(Enmienda; `sponsors-portal.md` F3-T4)** valor final: `"/crm/acceso" | "/cuenta" | "/patrocinador/acceso"`; `runner-portal.md` no lo cambia. `CrmShell` y `NoCrmAccess` no cambian. **(Enmienda; `runner-portal.md` F5-T1 o `sponsors-portal.md` F4-T1, quien llegue primero)** se exporta desde `@/modules/accounts` para que lo usen `PortalHeader`/`RunnerPortal` (`/mis-carreras`, `redirectTo="/cuenta"`) y `SponsorShell` y el layout del portal (`redirectTo="/patrocinador/acceso"`).
     - **`RunnerAccount` (cliente).** Lee la sesión con `authClient.useSession()`; es solo presentación y no protege nada. Muestra uno de estos estados:
       - cargando → `role="status"` "Cargando…";
       - sin sesión, o si `useSession` devuelve error → `<AccessPanel audience="runner" />`;
-      - con sesión → `h1` "Qué bueno verte de nuevo.", el correo y `<SignOutButton redirectTo="/cuenta" />`.
+      - con sesión → `h1` "Qué bueno verte de nuevo.", el correo y `<SignOutButton redirectTo="/cuenta" />`. Con la enmienda, entre el correo y "Cerrar sesión", en este orden:
+        - "Ver mis carreras" → `/mis-carreras` (`Link` + `buttonVariants()`), **implementado en `runner-portal.md` F6-T2**;
+        - "Mi perfil" → `/cuenta/perfil` (`Link` + `buttonVariants({ variant: "outline" })`), **implementado en `accounts-runner-profiles.md` F2-T5**.
+
+        El orden de implementación es indiferente: quien vaya segundo conserva el enlace del otro y su caso de test. `/cuenta` con sesión **no redirige** y sigue estática (`○`): no llama a guardas ni a la base.
 
       Better Auth actualiza `useSession` tras `/sign-in/email`, `/sign-up/email`, `/sign-out` y `/email-otp/verify-email`. Lo comprobé en `@neondatabase/auth/node_modules/better-auth/dist/client/config.mjs` y en `plugins/email-otp/client.mjs`.
+13. **(Enmienda; implementado en `sponsors-portal.md` F4-T4) `/patrocinador/acceso`.** Página de acceso de patrocinadores, análoga a `/crm/acceso`:
+    - Server Component que llama a `getSponsorAccess()` (`sponsors-portal.md`); con sesión (cualquier estado distinto de `unauthenticated`) → `redirect("/patrocinador")`; sin sesión → `<main>` centrado con `<AccessPanel audience="sponsor" />`.
+    - `metadata = { title: "Acceso de patrocinadores", robots: { index: false } }`.
+    - Sin bucles: una cuenta sin rol `sponsor` que llega a `/patrocinador` ve un aviso sin acceso con `<SignOutButton redirectTo="/patrocinador/acceso" />`, sin redirección (diseño de `sponsors-portal.md` F4).
+    - Mismo flujo que el resto de audiencias: métodos de Neon Auth, schemas, mensajes sin enumeración de cuentas, verificación por código, `EMAIL_NOT_VERIFIED` y recuperación. `/crm/acceso` y `/cuenta` no cambian.
 
 ## Criterios de aceptación
 Fase 1 (iniciar sesión y shell):
@@ -129,13 +148,22 @@ Fase 3 (recuperar contraseña y documentación):
 
 Fase 4 (audiencia runner):
 - [ ] (F4) Dado `<AccessPanel />` sin prop, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/crm")`. El alta muestra "¿Te invitaron? Crea tu cuenta" y "Solo para personas invitadas por un administrador.". Los tests existentes de `AccessPanel.test.tsx` pasan sin modificarse (unit test).
-- [ ] (F4) Dado `<AccessPanel audience="runner" />`, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/cuenta")` y `router.refresh()`. El enlace al alta dice "Registrarse", el alta muestra el aviso de runner y no aparece "Solo para personas invitadas…" (unit test).
+- [ ] (F4) Dado `<AccessPanel audience="runner" />`, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/cuenta")` y `router.refresh()` (así se implementó F4); **desde `runner-portal.md` F6-T1, `router.replace("/mis-carreras")`** y `router.refresh()`. El enlace al alta dice "Registrarse", el alta muestra el aviso de runner y no aparece "Solo para personas invitadas…" (unit test).
 - [ ] (F4) Dado `<AccessPanel audience="runner" />` y `EMAIL_NOT_VERIFIED` o la recuperación de contraseña, cuando se recorren, entonces el flujo y los mensajes son los mismos que para staff (unit test con un caso de cada).
-- [ ] (F4) Dado el código, entonces los destinos están tipados como `"/crm" | "/cuenta"` y `"/crm/acceso" | "/cuenta"`. Ningún componente lee `searchParams`, `location` ni `?next=`.
-- [ ] (F4) Dado `RunnerAccount` con `useSession` cargando, sin sesión o con sesión, entonces muestra "Cargando…", el panel de runner o "Qué bueno verte de nuevo." con el correo y "Cerrar sesión", respectivamente. Con sesión, "Cerrar sesión" llama a `signOut()` y luego a `router.replace("/cuenta")` (unit test).
+- [ ] (F4) Dado el código, entonces los destinos están tipados como `"/crm" | "/cuenta"` y `"/crm/acceso" | "/cuenta"` (F4). Tras la enmienda: `AuthDestination = "/crm" | "/mis-carreras" | "/patrocinador"` y `SignOutDestination = "/crm/acceso" | "/cuenta" | "/patrocinador/acceso"` (ver Requisito 12). Ningún componente lee `searchParams`, `location` ni `?next=`.
+- [ ] (F4) Dado `RunnerAccount` con `useSession` cargando, sin sesión o con sesión, entonces muestra "Cargando…", el panel de runner o "Qué bueno verte de nuevo." con el correo y "Cerrar sesión", respectivamente. Con sesión, "Cerrar sesión" llama a `signOut()` y luego a `router.replace("/cuenta")` (unit test). Con la enmienda, con sesión muestra además "Ver mis carreras" y "Mi perfil" (ver "Enmienda").
 - [ ] (F4) Dado `/crm/acceso`, cuando lo uso con o sin sesión, entonces el comportamiento es idéntico al de F1–F3. `app/crm/*`, `lib/auth/*`, `lib/db*`, `app/api/*` y `drizzle/` no cambian.
 - [ ] (F4) Dado `README.md`, entonces el modelo de acceso dice que los runners pueden tener cuenta de Neon Auth sin roles de staff (sustituye "visitantes anónimos, sin cuenta ni perfil") e incluye los pasos manuales de la Fase 4.
 - [ ] (F4) Medición del Worker como en F1, y lint, vitest y build pasan.
+
+Enmienda 2026-10-25 (sin fase propia: cada criterio lo verifica el reviewer de la spec y la fase indicadas):
+- [ ] (`runner-portal.md` F6-T1) Dado `<AccessPanel audience="runner" />`, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/mis-carreras")` y `router.refresh()`. Con `<AccessPanel />` (staff) sigue siendo `/crm` y los tests de staff pasan sin cambios.
+- [ ] (`runner-portal.md` F6-T2) Dado `RunnerAccount` con sesión, entonces muestra "Qué bueno verte de nuevo.", el correo, el enlace "Ver mis carreras" → `/mis-carreras` y "Cerrar sesión" (unit test). `/cuenta` no redirige, no llama a guardas ni a la base y sigue estática.
+- [ ] (`accounts-runner-profiles.md` F2-T5) Dado `RunnerAccount` con sesión, entonces muestra el enlace "Mi perfil" → `/cuenta/perfil` antes de "Cerrar sesión" (unit test). Si `runner-portal.md` F6-T2 ya está integrado, "Ver mis carreras" se conserva y va primero.
+- [ ] (`sponsors-portal.md` F3-T4) Dado `<AccessPanel audience="sponsor" />`, entonces el alta muestra "¿Te invitaron? Crea tu cuenta" y "Solo para marcas invitadas por Carreras Viajeras. Usa el correo de la invitación.", y tras ingresar o verificar se llama a `router.replace("/patrocinador")` (unit test). Las audiencias `staff` y `runner` mantienen el destino que tengan en ese momento (`/crm`; `/cuenta` o `/mis-carreras`).
+- [ ] (`sponsors-portal.md` F4-T4) Dado `/patrocinador/acceso` sin sesión, entonces muestra `AccessPanel audience="sponsor"`; con sesión redirige a `/patrocinador`; tiene `robots: { index: false }`.
+- [ ] (`runner-portal.md` F5-T1 o `sponsors-portal.md` F4-T1) Dado `@/modules/accounts`, entonces exporta `SignOutButton`, una sola vez.
+- [ ] (todas, al cerrar la última de las tres) Dado el código, entonces `AuthDestination = "/crm" | "/mis-carreras" | "/patrocinador"` y `SignOutDestination = "/crm/acceso" | "/cuenta" | "/patrocinador/acceso"`, y ningún componente lee `searchParams`, `location` ni `?next=`.
 
 Manual en producción (el usuario, con su autorización; agentes sin acceso a Neon desde este entorno):
 - [ ] Login de admin (ronalehm@gmail.com, tras el bootstrap) → `/crm` muestra "Admin".
@@ -144,8 +172,9 @@ Manual en producción (el usuario, con su autorización; agentes sin acceso a Ne
 - [ ] El admin invita a un correo (o se crea la invitación por SQL hasta que exista la Fase 2 de `accounts-roles-permissions.md`) → la persona crea su cuenta → recibe el código → verifica → `/crm` muestra "Comercial".
 - [ ] Recuperar la contraseña con código y volver a iniciar sesión.
 - [ ] Comprobar que llega el código de 6 dígitos y que la sesión persiste al recargar.
-- [ ] (F4) Un correo nuevo se registra en `/cuenta`, verifica el código y queda en `/cuenta` con sesión. Al abrir `/crm` ve la pantalla "sin acceso", `GET /api/crm/me` responde 403 y no aparecen filas nuevas en `profiles` ni `staff_assignments`.
+- [ ] (F4) Un correo nuevo se registra en `/cuenta`, verifica el código y queda en `/cuenta` con sesión (desde `runner-portal.md` F6: llega a `/mis-carreras`; al volver a `/cuenta` ve "Ver mis carreras" y, con `accounts-runner-profiles.md` F2, "Mi perfil"). Al abrir `/crm` ve la pantalla "sin acceso", `GET /api/crm/me` responde 403 y no aparecen filas nuevas en `profiles` ni `staff_assignments`.
 - [ ] (F4) "Cerrar sesión" en `/cuenta` vuelve a `/cuenta` sin sesión, y el login de admin en `/crm/acceso` sigue llevando a `/crm`.
+- [ ] (Enmienda; checklist de `sponsors-portal.md`) Una persona invitada como patrocinadora se registra en `/patrocinador/acceso`, verifica y llega a `/patrocinador`; "Cerrar sesión" en el portal vuelve a `/patrocinador/acceso`.
 
 ## Diseño técnico
 
@@ -197,6 +226,8 @@ Manual en producción (el usuario, con su autorización; agentes sin acceso a Ne
 
   `metadata.robots: { index: false }`.
 - `app/crm/(protected)/page.tsx` (nuevo, F1): `const access = await getCrmAccess(); if (access.status !== "ok") return null;`. Si hay acceso, devuelve la bienvenida: "Bienvenido al CRM de Carreras Viajeras" y "Pronto verás aquí tus leads y viajes.".
+- `app/patrocinador/acceso/page.tsx` (enmienda; **implementado en `sponsors-portal.md` F4-T4**, que es dueña de la ruta): Requisito 13. Esta spec solo fija su comportamiento de acceso; `getSponsorAccess()` y el resto de `/patrocinador/**` son de `sponsors-portal.md`.
+- Las demás rutas que consumen la audiencia o los destinos son de sus specs: `/cuenta` (`landing-public-site.md` F3), `/mis-carreras` (`runner-portal.md` F5), `/cuenta/perfil` (`accounts-runner-profiles.md` F2) y `/patrocinador` (`sponsors-portal.md` F4).
 
 ### Módulo `modules/accounts/`
 | Archivo | Tipo | Fase | Descripción |
@@ -222,6 +253,10 @@ Manual en producción (el usuario, con su autorización; agentes sin acceso a Ne
 | `components/VerifyEmailForm.tsx` | modificado | F4 | Prop obligatoria `destination: AuthDestination` en lugar del literal `"/crm"` |
 | `components/SignOutButton.tsx` | modificado | F4 | Prop `redirectTo?: SignOutDestination` (por defecto `"/crm/acceso"`); `CrmShell` y `NoCrmAccess` siguen sin pasarla |
 | `components/RunnerAccount.tsx` | nuevo, `"use client"` | F4 | Estados de sesión con `authClient.useSession()` (Requisito 12). Sin props ni maquetación de página: la columna de diseño de `/cuenta` la pone la landing |
+| `types/auth.types.ts` | modificado | Enmienda (`runner-portal.md` F6-T1; `sponsors-portal.md` F3-T4) | `AccessAudience = "staff" \| "runner" \| "sponsor"`; `AuthDestination = "/crm" \| "/mis-carreras" \| "/patrocinador"`; `SignOutDestination = "/crm/acceso" \| "/cuenta" \| "/patrocinador/acceso"` |
+| `components/AccessPanel.tsx` | modificado | Enmienda (`runner-portal.md` F6-T1; `sponsors-portal.md` F3-T4) | `AUDIENCE_CONFIG.runner.destination = "/mis-carreras"`; nueva entrada `AUDIENCE_CONFIG.sponsor = { destination: "/patrocinador", signUpLabel: "¿Te invitaron? Crea tu cuenta", signUpNotice: "Solo para marcas invitadas por Carreras Viajeras. Usa el correo de la invitación." }`. Pasos, estado y formularios no cambian |
+| `components/RunnerAccount.tsx` | modificado | Enmienda (`runner-portal.md` F6-T2; `accounts-runner-profiles.md` F2-T5) | Con sesión: "Ver mis carreras" (→ `/mis-carreras`, `buttonVariants()`) y "Mi perfil" (→ `/cuenta/perfil`, `buttonVariants({ variant: "outline" })`), en ese orden, antes de "Cerrar sesión". Sigue sin props |
+| `index.ts` | modificado | Enmienda (`runner-portal.md` F5-T1 o `sponsors-portal.md` F4-T1, quien llegue primero; el otro lo omite) | Añade `SignOutButton`. Las demás exportaciones nuevas de `@/modules/accounts` (perfil, staff de marcas) son de sus specs |
 
 Todos los formularios:
 - tienen estado `pending` (botón deshabilitado con texto de progreso) y errores por campo de `safeParse(...).error.flatten().fieldErrors`;
@@ -257,9 +292,27 @@ Mensaje fijo de la solicitud de recuperación: "Si existe una cuenta con ese cor
 ### Seguridad
 - **Permisos:** la UI no envía ni lee roles; el shell recibe los roles de `requireCrmUser()` en el servidor. La autorización real de las APIs y acciones sigue en `lib/auth/guards.ts`.
 - **Cliente:** sin secretos ni `NEXT_PUBLIC_*`. Las cookies de sesión las gestiona el proxy de Neon Auth (`__Secure-neon-auth.*`).
-- **Redirecciones:** solo destinos internos fijos (`/crm`, `/crm/acceso` y, desde F4, `/cuenta`), tipados como uniones cerradas y elegidos en el código, nunca desde la URL.
-- **(F4) Registro público:** no amplía la superficie. El endpoint de alta de Neon Auth ya era público ("Sign-up with Email" ON) y el control de acceso real sigue en `requireCrmUser()` (correo verificado + rol activo por `user_id`, denegado por defecto). `RunnerAccount` solo muestra el estado de sesión; cualquier recurso futuro para runners necesitará su propia guarda en el servidor.
+- **Redirecciones:** solo destinos internos fijos, tipados como uniones cerradas y elegidos en el código, nunca desde la URL. Lista cerrada completa tras la enmienda:
+  - tras ingresar o verificar (`AuthDestination`): `/crm` (staff), `/mis-carreras` (runner, desde `runner-portal.md` F6; en F4 era `/cuenta`) y `/patrocinador` (sponsor, desde `sponsors-portal.md` F3);
+  - tras cerrar sesión (`SignOutDestination`): `/crm/acceso`, `/cuenta` (solo salida) y `/patrocinador/acceso` (solo salida, desde `sponsors-portal.md` F3);
+  - redirecciones de servidor de las páginas, también fijas en el código: `/crm/acceso` con sesión → `/crm`; `/crm/**` sin sesión → `/crm/acceso`; `/patrocinador/acceso` con sesión → `/patrocinador` y `/patrocinador/**` sin sesión → `/patrocinador/acceso` (`sponsors-portal.md` F4); `/mis-carreras` sin sesión → `/cuenta` (`runner-portal.md` F5); `/cuenta/perfil` sin sesión → `/cuenta` (`accounts-runner-profiles.md` F2). Ninguna página redirige a quien tiene sesión sin permiso: muestra un aviso, así que no hay bucles.
+- **(F4) Registro público:** no amplía la superficie. El endpoint de alta de Neon Auth ya era público ("Sign-up with Email" ON) y el control de acceso real sigue en `requireCrmUser()` (correo verificado + rol activo por `user_id`, denegado por defecto). `RunnerAccount` solo muestra el estado de sesión; los recursos para runners tienen su propia guarda en el servidor (`getRunnerPortal` en `runner-portal.md`, `getRunnerProfilePage` en `accounts-runner-profiles.md`), y el portal de patrocinadores la suya (`requireSponsor()`/`getSponsorAccess()` en `sponsors-portal.md`). La audiencia `sponsor` no concede nada: el rol llega solo por invitación aceptada en el servidor.
 - **Requisitos manuales en Neon Auth:** dominio de confianza `https://carreras-viajeras.mentec.dev`, registro por email ON, verificación al registrarse con código y recuperación por código (F3). Se documentan en el README.
+
+### Enmienda: qué implementa cada spec
+Esta spec no añade tareas. Cada cambio lo implementa una sola spec, en la tarea indicada; si otra spec ya lo hizo, se omite.
+
+| Cambio | Archivos de `modules/accounts` | Lo implementa |
+|---|---|---|
+| Exportar `SignOutButton` | `index.ts` | `runner-portal.md` F5-T1 o `sponsors-portal.md` F4-T1 (quien llegue primero) |
+| Destino del runner `/mis-carreras` y `AuthDestination` sin `/cuenta` | `types/auth.types.ts`, `components/AccessPanel.tsx`, `components/AccessPanel.test.tsx` | `runner-portal.md` F6-T1 |
+| "Ver mis carreras" en `RunnerAccount` | `components/RunnerAccount.tsx`, `components/RunnerAccount.test.tsx` | `runner-portal.md` F6-T2 |
+| "Mi perfil" en `RunnerAccount` | `components/RunnerAccount.tsx`, `components/RunnerAccount.test.tsx` | `accounts-runner-profiles.md` F2-T5 |
+| Audiencia `sponsor`, `/patrocinador` en `AuthDestination` y `/patrocinador/acceso` en `SignOutDestination` | `types/auth.types.ts`, `components/AccessPanel.tsx`, `components/AccessPanel.test.tsx` | `sponsors-portal.md` F3-T4 |
+| Página `/patrocinador/acceso` | ninguno (`app/patrocinador/acceso/page.tsx`) | `sponsors-portal.md` F4-T4 |
+| README: modelo de acceso con el portal del runner, su perfil y los patrocinadores | `README.md` | `runner-portal.md` F6-T3, `accounts-runner-profiles.md` F2-T5 y `sponsors-portal.md` F5-T5, cada una con su parte |
+
+Coordinación: `runner-portal.md` F6-T1 y `sponsors-portal.md` F3-T4 tocan los mismos tres archivos, igual que `runner-portal.md` F6-T2 y `accounts-runner-profiles.md` F2-T5. Se ejecutan en secuencia, nunca en paralelo, y la segunda conserva lo de la primera (tipos, entradas de `AUDIENCE_CONFIG`, enlaces y casos de test).
 
 ## Reutilización
 - `requireCrmUser()`, `CurrentUser`, `UnauthorizedError`/`ForbiddenError` y `StaffRole` (de `lib/auth/`); el proxy `app/api/auth/[...path]/route.ts`; `getAuth()` de forma indirecta.
@@ -301,11 +354,13 @@ Vitest. Los de servidor llevan `// @vitest-environment node` y `vi.mock("server-
   - **(F4) audiencia** (casos nuevos en un `describe` aparte; los existentes no se editan):
     - `audience="runner"`: login correcto → `router.replace("/cuenta")`; verificación con sesión → `/cuenta`; el enlace al alta dice "Registrarse"; el alta muestra el aviso de runner y no el de invitación; `EMAIL_NOT_VERIFIED` → paso de verificación como en staff;
     - sin prop: el enlace "¿Te invitaron? Crea tu cuenta" y el aviso de invitación siguen presentes.
+  - **(Enmienda)** `runner-portal.md` F6-T1: los casos runner pasan a esperar `/mis-carreras`. `sponsors-portal.md` F3-T4: `describe` nuevo para `audience="sponsor"` (enlace y aviso del alta, destino `/patrocinador` tras ingresar y tras verificar con sesión). Los casos de staff no cambian.
 - `modules/accounts/components/RunnerAccount.test.tsx` (F4; `@/lib/auth/client` mockeado con `useSession`, `signOut` y los métodos del panel, más `next/navigation`):
   - `isPending` → "Cargando…";
   - sin sesión o con `error` → se ve el formulario "Iniciar sesión" con el enlace "Registrarse";
   - con sesión → "Qué bueno verte de nuevo." y el correo;
-  - "Cerrar sesión" → `signOut()` y luego `router.replace("/cuenta")`.
+  - "Cerrar sesión" → `signOut()` y luego `router.replace("/cuenta")`;
+  - **(Enmienda)** con sesión, enlace "Ver mis carreras" → `/mis-carreras` (`runner-portal.md` F6-T2) y enlace "Mi perfil" → `/cuenta/perfil` (`accounts-runner-profiles.md` F2-T5).
 - Sin unit tests (según SETUP):
   - páginas y layout de `app/` (Server Components asíncronos);
   - `CrmShell`, `NoCrmAccess` y `SignOutButton` (presentacionales o con una sola llamada, cubiertos por el checklist manual);
@@ -338,7 +393,11 @@ La consume `landing-public-site.md` F3. No toca `app/`: la ruta `/cuenta` es de 
 - [x] T2 — `RunnerAccount` con test y exports; medir el Worker · archivos: `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx`, `modules/accounts/index.ts` · depende de: F4-T1 · secuencial
 - [x] T3 — README: modelo de acceso con cuentas de runner y checklist manual de F4 · archivos: `README.md` · depende de: — · paralelo (con F4-T1 y F4-T2)
 
+### Enmienda 2026-10-25 (sin tareas en esta spec)
+La implementan `runner-portal.md` (F5-T1, F6-T1, F6-T2, F6-T3), `accounts-runner-profiles.md` (F2-T5) y `sponsors-portal.md` (F3-T4, F4-T1, F4-T4), según la tabla "Enmienda: qué implementa cada spec". Ningún developer implementa la enmienda desde esta spec.
+
 ## Preguntas abiertas
 1. **Si Neon Auth gestionado no admite la recuperación por código** (la comprobación previa de F3 lo dirá), ¿qué prefieres?
    - (a) Configurar SMTP propio (p. ej., un proveedor transaccional) y recuperar por enlace.
    - (b) Dejar la recuperación fuera del MVP, de modo que el admin la resuelva a mano desde la consola de Neon.
+2. **(No bloqueante; enmienda) Tipos literales en los criterios de `runner-portal.md` F6.** Su criterio dice "`AuthDestination` … es `"/crm" | "/mis-carreras"`; `SignOutDestination` no cambia (`"/crm/acceso" | "/cuenta"`)", pero `sponsors-portal.md` F3-T4 añade `"/patrocinador"` y `"/patrocinador/acceso"`. La propia "Coordinación" de `sponsors-portal.md` resuelve la unión. **Propuesta por defecto:** el reviewer de `runner-portal.md` F6 da por cumplido ese criterio si los tipos son `"/crm" | "/mis-carreras"` más los valores de patrocinador ya integrados (valor final: `"/crm" | "/mis-carreras" | "/patrocinador"` y `"/crm/acceso" | "/cuenta" | "/patrocinador/acceso"`), sin editar `runner-portal.md`. Del mismo modo, "las audiencias `staff` y `runner` no cambian" en `sponsors-portal.md` F3 se lee como "mantienen el destino que tengan en ese momento".
