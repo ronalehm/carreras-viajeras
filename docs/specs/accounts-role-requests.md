@@ -1,7 +1,7 @@
 # Cuentas: todo registrado es Runner, acceso al CRM desde /cuenta, solicitud del rol Admin, más roles gestionables y baja de cuentas
 
 - Módulo: accounts
-- Estado: borrador
+- Estado: aprobado
 - Depende de (aprobadas e implementadas): `accounts-clerk-rbac.md`, `accounts-user-management.md` (F1), `accounts-runner-profiles.md` (F1–F2), `sponsors-portal.md` (marcas y rol `sponsor`).
 - Enmienda: `accounts-user-management.md` (Decisiones 1 y 2; Requisitos 3 y 4; Alcance "borrar cuentas"; sus criterios con la cuenta N) y `accounts-runner-profiles.md` (Decisión 18, solo para la baja hecha desde el CRM). Las specs aprobadas no se editan: esta spec prevalece donde las contradice (ver "Enmiendas").
 
