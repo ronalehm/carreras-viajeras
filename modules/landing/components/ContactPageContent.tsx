@@ -41,7 +41,8 @@ export function ContactPageContent({ action }: { action: LeadCaptureAction }) {
   return (
     <ContactSection
       action={action}
-      trips={status === "success" ? data : []}
+      // Trips already loaded stay after a failed refetch, so the form keeps its key and what was typed.
+      trips={data ?? []}
       destination={query.destino}
       attribution={attributionParams(query)}
     />
