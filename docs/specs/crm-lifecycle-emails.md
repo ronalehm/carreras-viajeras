@@ -1,7 +1,7 @@
 # Embudo comercial completo y correos automáticos del ciclo de vida
 
 - Módulos: integrations, crm y accounts; datos compartidos en lib.
-- Estado: aprobado
+- Estado: borrador
 - Solicitud: que todo registro de un runner entre al embudo comercial y que cada paso envíe un correo automático: bienvenida con confirmación del registro, confirmación de contacto, seguimiento, confirmación de la separación y alerta para el comercial.
 - Referencias: `crm-funnel-email-automation.md` (motor de correos ya implementado), `crm-journey-automation.md` (se enmienda aquí), `crm-leads-capture.md`, `landing-omnichannel-capture.md`, `accounts-runner-profiles.md` y `docs/SETUP.md`.
 
@@ -169,7 +169,7 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 - **Migración `drizzle/0014_*.sql`**, generada con `npm run db:generate` y aplicada a mano. Se aplica en **dos bloques**:
   1. `ALTER TYPE lead_source ADD VALUE 'runner_account'` y `ALTER TYPE outbox_event_type ADD VALUE 'lead.owner_assigned'`, fuera de transacción o en la suya propia.
-  2. `CREATE TYPE client_email_kind AS ENUM ('stage', 'welcome_registration', 'welcome_contact', 'welcome_account', 'follow_up', 'booking_confirmed', 'team_alert', 'owner_alert')`; `ALTER TABLE client_emails ADD COLUMN kind client_email_kind NOT NULL DEFAULT 'stage'`; sustituir el índice único `client_emails_event_uq` por `(source_event_id, kind)`; índice `(lead_id, kind, created_at)` si las lecturas de la ficha lo necesitan.
+  2. `CREATE TYPE client_email_kind AS ENUM ('stage', 'welcome_registration', 'welcome_contact', 'welcome_account', 'follow_up', 'booking_confirmed', 'team_alert', 'owner_alert')`; `ALTER TABLE client_emails ADD COLUMN kind client_email_kind NOT NULL DEFAULT 'stage'`; sustituir el índice único `client_emails_event_uq` por `(source_event_id, kind)`; índice `(lead_id, kind, created_at)` si las lecturas de la ficha lo necesitan. Además, recrear `leads_created_by_chk` para que `runner_account` sea, como `web_form`, `google_form` e `import`, una vía que admite `created_by` NULL. El lead lo crea el propio runner, que no tiene fila en `profiles`.
   - `stage` sigue NOT NULL: guarda la etapa del lead en el momento del evento.
   - Compatibilidad con el código desplegado: el insert actual usa el valor por defecto `stage`, pero su `ON CONFLICT (source_event_id)` se queda sin índice único al cambiarlo. Por eso el código anterior falla al preparar correos si `CRM_EMAIL_AUTOMATION_ENABLED=true`. Con la automatización apagada no se ejecuta y no falla.
   - **Debe aplicarse en production antes de mergear la F1, con la automatización apagada, y debe seguir apagada hasta que la F1 esté desplegada.**
@@ -220,7 +220,11 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 - [ ] T2 — Configuración del aviso al equipo · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (`lib/`)
 - [ ] T3 — Plantillas · archivos: `modules/integrations/utils/lifecycleEmailTemplates.ts`, `modules/integrations/utils/lifecycleEmailTemplates.test.ts` · depende de: T1 · paralelo con T2
 - [ ] T4 — Preparación y elegibilidad por tipo · archivos: `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/schemas/email.schema.ts`, `modules/integrations/index.ts` · depende de: T1–T3 · secuencial
-- [ ] T5 — Pruebas del motor · archivos: `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts`, `modules/crm/services/leadMessages.service.test.ts` (mocks de `getClientEmailEnv` con `teamAlertEmail`) · depende de: T4
+- [ ] T5 — Pruebas del motor y ajustes para desplegar la F1 sola · depende de: T4. Archivos y cambios:
+  - `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts` y `modules/crm/services/leadMessages.service.test.ts`: mocks de `@/lib/env` con `teamAlertEmail` y `getEnv`.
+  - `modules/crm/utils/leadDisplay.ts` y su test: etiqueta «Cuenta web», adelantada desde F2-T5 porque `Record<LeadSource, string>` la exige para compilar.
+  - `modules/crm/services/leads.service.ts` y su test: el estado de la tarjeta del embudo ignora `team_alert` y `owner_alert`. Se adelanta desde F3-T1 para que la F1 no muestre un aviso interno como correo al cliente.
+  - Hasta la F3, la ficha puede listar los avisos internos con la etiqueta de etapa.
 
 ### Fase 2 — Entradas al embudo (5 tareas, ~14 archivos)
 
@@ -228,7 +232,7 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 - [ ] T2 — Payload del registro web · archivos: `modules/crm/services/webLeads.service.ts` y su test · depende de: F2 T1
 - [ ] T3 — Lead desde el perfil del runner · archivos: `modules/accounts/services/runnerProfile.service.ts` y su test · depende de: F1 · paralelo con T1
 - [ ] T4 — Evento de responsable · archivos: `modules/crm/services/leads.service.ts` y su test · depende de: F1 · paralelo con T1 y T3
-- [ ] T5 — Etiqueta «Cuenta web» · archivos: `modules/crm/utils/leadDisplay.ts` y su test · depende de: F1 · paralelo
+- [ ] T5 — Etiqueta «Cuenta web» · archivos: `modules/crm/utils/leadDisplay.ts` y su test · depende de: F1 · paralelo · se adelantó a F1-T5; aquí solo queda comprobar que la etiqueta aparece en filtros e informes.
 
 ### Fase 3 — CRM, n8n y activación (5 tareas, ~12 archivos)
 
