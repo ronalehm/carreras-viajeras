@@ -169,10 +169,10 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [x] T4 — README: "Migración de visitas por campaña" · archivos: `README.md` · depende de: T1 · paralelo (con T3)
 
 ### Fase 2: ficha, contador y CRM (5 tareas, 13 archivos)
-- [ ] T1 — `registrationHref` y `CampaignVisitBeacon`, con tests; export en la API pública · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/components/CampaignVisitBeacon.tsx`, `modules/landing/components/CampaignVisitBeacon.test.tsx`, `modules/landing/index.ts` · depende de: Fase 1 · secuencial (`index.ts`)
-- [ ] T2 — Contador en el registro y «Registrarme» en la ficha · archivos: `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/TripDetail.tsx`, `app/viajes/[slug]/page.tsx` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — `formatConversion` y columnas/filas del CRM, con tests · archivos: `modules/crm/utils/campaignDisplay.ts`, `modules/crm/utils/campaignDisplay.test.ts`, `modules/crm/components/CampaignTable.tsx`, `app/crm/(protected)/campanas/[id]/page.tsx` · depende de: Fase 1 · paralelo (con T2)
-- [ ] T4 — README: guía de campañas (visitas, «Registrarme», P-L) y regla WAF para `POST /api/campaign-visits` · archivos: `README.md` · depende de: T2, T3 · secuencial
+- [x] T1 — `registrationHref` y `CampaignVisitBeacon`, con tests; export en la API pública · archivos: `modules/landing/utils/inquiry.ts`, `modules/landing/utils/inquiry.test.ts`, `modules/landing/components/CampaignVisitBeacon.tsx`, `modules/landing/components/CampaignVisitBeacon.test.tsx`, `modules/landing/index.ts` · depende de: Fase 1 · secuencial (`index.ts`)
+- [x] T2 — Contador en el registro y «Registrarme» en la ficha · archivos: `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/TripDetail.tsx`, `app/viajes/[slug]/page.tsx` · depende de: T1 · paralelo (con T3)
+- [x] T3 — `formatConversion` y columnas/filas del CRM, con tests · archivos: `modules/crm/utils/campaignDisplay.ts`, `modules/crm/utils/campaignDisplay.test.ts`, `modules/crm/components/CampaignTable.tsx`, `app/crm/(protected)/campanas/[id]/page.tsx` · depende de: Fase 1 · paralelo (con T2)
+- [x] T4 — README: guía de campañas (visitas, «Registrarme», P-L) y regla WAF para `POST /api/campaign-visits` · archivos: `README.md` · depende de: T2, T3 · secuencial
 - [ ] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
 
 ## Preguntas abiertas
