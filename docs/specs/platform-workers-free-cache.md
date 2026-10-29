@@ -216,15 +216,15 @@ Criterios de aceptación de la fase:
 
 Plan:
 
-- [ ] T6 — Endpoint `GET /api/viajes` · archivos: `app/api/viajes/route.ts`,
+- [x] T6 — Endpoint `GET /api/viajes` · archivos: `app/api/viajes/route.ts`,
   `app/api/viajes/route.test.ts` · depende de: Fase 1 · paralelo con T7
-- [ ] T7 — Lectura de viajes en el navegador · archivos:
+- [x] T7 — Lectura de viajes en el navegador · archivos:
   `modules/landing/schemas/catalogTrips.schema.ts`, `modules/landing/services/catalogTrips.api.ts`
   (+ test), `modules/landing/hooks/useCatalogTripOptions.ts` · depende de: Fase 1 · paralelo con T6
-- [ ] T8 — `ContactPageContent` y página estática · archivos:
+- [x] T8 — `ContactPageContent` y página estática · archivos:
   `modules/landing/components/ContactPageContent.tsx` (+ test), `modules/landing/index.ts`,
   `app/contacto/page.tsx` · depende de: T7 · secuencial
-- [ ] T9 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
+- [x] T9 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
   T6, T8 · secuencial
 
 ### Fase 3 — páginas de viaje estáticas
@@ -280,18 +280,18 @@ Criterios de aceptación de la fase:
 
 Plan:
 
-- [ ] T10 — Spike de reescritura + caché · archivos: `next.config.ts`, ficha mínima en
+- [x] T10 — Spike de reescritura + caché · archivos: `next.config.ts`, ficha mínima en
   `app/viajes/` · depende de: Fase 2 · secuencial (bloqueante)
-- [ ] T11 — Endpoint `GET /api/viajes/[slug]` · archivos: `app/api/viajes/[slug]/route.ts` (+ test)
+- [x] T11 — Endpoint `GET /api/viajes/[slug]` · archivos: `app/api/viajes/[slug]/route.ts` (+ test)
   · depende de: T10 · paralelo con T12
-- [ ] T12 — Lectura del viaje en el navegador · archivos:
+- [x] T12 — Lectura del viaje en el navegador · archivos:
   `modules/landing/schemas/catalogTrips.schema.ts`, `modules/landing/services/catalogTrips.api.ts`
   (+ test), `modules/landing/hooks/useCatalogTrip.ts` · depende de: T10 · paralelo con T11
-- [ ] T13 — Fichas cliente de viaje y registro · archivos:
+- [x] T13 — Fichas cliente de viaje y registro · archivos:
   `modules/landing/components/TripPageContent.tsx`, `RacePageContent.tsx` (+ tests),
   `modules/landing/index.ts`, páginas de la ficha en `app/viajes/`, retirada de
   `app/viajes/[slug]/page.tsx` y `app/viajes/[slug]/registro/page.tsx` · depende de: T11, T12
-- [ ] T14 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
+- [x] T14 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
   T13 · secuencial
 
 ## Decisiones (antes preguntas abiertas)

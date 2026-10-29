@@ -7,19 +7,17 @@ export { FaqSection } from "./components/FaqSection";
 export { HeroCarousel } from "./components/HeroCarousel";
 export { MobileCta } from "./components/MobileCta";
 export { PackageSection } from "./components/PackageSection";
-export { RaceRegistrationSection } from "./components/RaceRegistrationSection";
+export { RacePageContent } from "./components/RacePageContent";
 export { SiteFooter } from "./components/SiteFooter";
 export { SiteBrand, SiteHeader } from "./components/SiteHeader";
 export { StorySection } from "./components/StorySection";
-export { TripDetail } from "./components/TripDetail";
 export { TripFacts } from "./components/TripFacts";
+export { TripPageContent, TripPageLoading } from "./components/TripPageContent";
 export { WhyUsSection } from "./components/WhyUsSection";
+// Server-only reads for GET /api/viajes/[slug]; the race pages read that endpoint in the browser.
 export { getCatalogTrip } from "./utils/catalogTrip";
 // Offer in force of a published race (slug + ?c= only); null → no price block, no amounts.
 export { getCatalogOffer } from "./utils/catalogOffer";
-// Search params of the race pages (/viajes/[slug] and /viajes/[slug]/registro); /contacto reads
-// them in the browser (ContactPageContent).
-export { attributionParams, firstParam } from "./utils/inquiry";
 export { TRIPS } from "./utils/trips";
 
 export { buildWhatsAppUrl, WHATSAPP_NUMBER } from "./utils/inquiry";

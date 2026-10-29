@@ -37,7 +37,7 @@ const WHATSAPP_FALLBACK_CODES = new Set<ErrorCode>(["unavailable", "verification
 const PHONE_HINT = "Incluye el código de país; Perú es +51.";
 
 /** "Escríbenos por WhatsApp" with the fixed text built by the section (no personal data). */
-function WhatsAppLink({ href, children }: { href: string; children: ReactNode }) {
+export function WhatsAppLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <a
       href={href}

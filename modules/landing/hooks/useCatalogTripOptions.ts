@@ -2,8 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchCatalogTrips } from "../services/catalogTrips.api";
-
-export const landingQueryKeys = { catalogTrips: ["landing", "catalog-trips"] } as const;
+import { landingQueryKeys } from "./landingQueryKeys";
 
 // At most one retry: an unavailable endpoint leaves the destinations without catalog instead of
 // retrying in a loop.
