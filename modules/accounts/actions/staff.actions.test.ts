@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi, type MockInstance } from "vitest"
 
 vi.mock("server-only", () => ({}));
 
-const getSession = vi.fn();
-vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
+const { auth, currentUser } = vi.hoisted(() => ({ auth: vi.fn(), currentUser: vi.fn() }));
+vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(),
   loadStaffRoles: vi.fn(),
@@ -55,11 +55,23 @@ function form(fields: Record<string, string>) {
   return formData;
 }
 
-function signedIn({ roles, emailVerified = true }: { roles: ("commercial" | "admin")[]; emailVerified?: boolean }) {
-  getSession.mockResolvedValue({
-    data: { session: { id: "session-1" }, user: { id: "admin-1", email: "boss@example.com", emailVerified } },
-    error: null,
+function mockSession(emailVerified = true) {
+  auth.mockResolvedValue({ userId: "admin-1" });
+  currentUser.mockResolvedValue({
+    id: "admin-1",
+    primaryEmailAddressId: "idn_primary",
+    emailAddresses: [
+      {
+        id: "idn_primary",
+        emailAddress: "boss@example.com",
+        verification: { status: emailVerified ? "verified" : "unverified" },
+      },
+    ],
   });
+}
+
+function signedIn({ roles, emailVerified = true }: { roles: ("commercial" | "admin")[]; emailVerified?: boolean }) {
+  mockSession(emailVerified);
   accept.mockResolvedValue(roles);
   load.mockResolvedValue(roles);
 }
@@ -68,7 +80,8 @@ const signedInAdmin = () => signedIn({ roles: ["admin"] });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  getSession.mockReset();
+  auth.mockReset();
+  currentUser.mockReset();
   services.createInvitation.mockResolvedValue({ id: INVITATION_ID, expiresAt: new Date("2026-10-25T12:00:00Z") });
   services.revokeInvitation.mockResolvedValue(true);
   services.grantStaffRole.mockResolvedValue(true);
@@ -111,7 +124,7 @@ const actions: ActionCase[] = [
 
 describe.each(actions)("$name called directly", ({ action, service, valid }) => {
   it("returns unauthorized without a session and does not call the service", async () => {
-    getSession.mockResolvedValue({ data: null, error: null });
+    auth.mockResolvedValue({ userId: null });
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "error", code: "unauthorized" });
     expect(service).not.toHaveBeenCalled();
@@ -131,10 +144,7 @@ describe.each(actions)("$name called directly", ({ action, service, valid }) => 
   });
 
   it("returns forbidden when the role lookup fails, without calling the service", async () => {
-    getSession.mockResolvedValue({
-      data: { session: {}, user: { id: "admin-1", email: "boss@example.com", emailVerified: true } },
-      error: null,
-    });
+    mockSession();
     accept.mockRejectedValue(new Error("password authentication failed"));
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "error", code: "forbidden" });

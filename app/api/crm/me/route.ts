@@ -1,7 +1,7 @@
 import { authErrorResponse } from "@/lib/auth/errors";
 import { requireCrmUser } from "@/lib/auth/guards";
 
-// Identity and roles come only from the Neon Auth session and the database.
+// Identity comes from Clerk; roles only from the database.
 export async function GET() {
   try {
     const user = await requireCrmUser();

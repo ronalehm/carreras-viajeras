@@ -1,14 +1,14 @@
 "use client";
 
-import { authClient } from "@/lib/auth/client";
+import { useUser } from "@clerk/nextjs";
 import { AccessPanel } from "./AccessPanel";
 import { SignOutButton } from "./SignOutButton";
 
 /** Presentation only: shows the public account state. It protects nothing. */
 export function RunnerAccount() {
-  const { data, isPending, error } = authClient.useSession();
+  const { isLoaded, isSignedIn, user } = useUser();
 
-  if (isPending) {
+  if (!isLoaded) {
     return (
       <p role="status" className="text-muted-foreground">
         Cargando…
@@ -16,12 +16,12 @@ export function RunnerAccount() {
     );
   }
 
-  if (error || !data) return <AccessPanel audience="runner" />;
+  if (!isSignedIn) return <AccessPanel audience="runner" />;
 
   return (
     <div className="flex flex-col items-start gap-4">
       <h1 className="text-2xl font-semibold">Qué bueno verte de nuevo.</h1>
-      <p className="text-muted-foreground">{data.user.email}</p>
+      <p className="text-muted-foreground">{user.primaryEmailAddress?.emailAddress}</p>
       <SignOutButton redirectTo="/cuenta" />
     </div>
   );
