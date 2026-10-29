@@ -1,11 +1,12 @@
 # Portal del runner: `/mis-carreras` (reservas, pagos, itinerario y avisos)
 
 - Módulo: bookings
-- Estado: aprobado
+- Estado: borrador
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): Neon + Drizzle `neon-http` (`getDb()`, `db.batch` atómico), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano. "Runner solo accede a recursos propios."
   - `accounts-roles-permissions.md` (aprobada, implementada): `getCurrentUser` (sesión + correo verificado + roles por `user_id`), `requirePermission`, `can()`, `getCrmAccess(permission)`, `profiles`, errores `UnauthorizedError`/`ForbiddenError`. CRM denegado por defecto.
   - `accounts-auth-ui.md` (aprobada; F4 implementada): `AccessPanel audience="runner"`, `RunnerAccount`, `SignOutButton redirectTo="/cuenta"`, destinos cerrados. **La Fase 6 de esta spec requiere enmendarla** (ver "Cambios que requiere en otras specs").
+  - `accounts-clerk-rbac.md` (aprobada, implementada en `main`): Clerk es el único proveedor de identidad; `getCurrentUser` lee `auth()` + `currentUser()` y los roles de Neon; `middleware.ts` con `clerkMiddleware()` y un `matcher` cerrado. Prevalece sobre toda mención a Neon Auth de esta spec (Decisión 24).
   - `trips-catalog.md` (aprobada; F1 y F2 en `main`): tabla `trips` (`id` UUID inmutable, nunca se borra), `getTripById`, `listTrips`, `formatTripDate`, `formatTripDateRange`, `formatTripPrice` (USD entero).
   - `landing-public-site.md` (aprobada; F1–F4 en `main`): `/cuenta`, `SiteHeader`/`SiteBrand`/`SiteFooter`, tokens de marca (`primary` #0144ae, `highlight` #7ac734), fuentes y patrones visuales.
   - `crm-leads-pipeline.md` (aprobada; F1 en `main`, F2 en PR #12): sin dependencia de datos; ver "Relación con leads".
@@ -45,7 +46,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
   - Cambios en `/crm/acceso`, en los flujos del staff, en `requireCrmUser`/`getCrmAccess`, en la matriz de los permisos existentes o en las tablas `profiles`/`staff_*`/`trips`/`leads`.
 
 ## Requisitos
-1. **Identidad del runner.** Es una cuenta de Neon Auth (registro en `/cuenta`, `accounts-auth-ui.md` F4). No se crea otro sistema de auth ni filas en `profiles`/`staff_*`. Su identidad estable es `user.id`.
+1. **Identidad del runner.** Es una cuenta de Clerk (registro en `/cuenta`, `accounts-clerk-rbac.md`). No se crea otro sistema de auth ni filas en `profiles`/`staff_*`. Su identidad estable es `user.id` (el `userId` de Clerk).
 2. **Una reserva por participante.** Cada persona que viaja, incluido un acompañante, tiene su propia reserva con su propio correo; cada una se vincula a la cuenta de esa persona.
 3. **Vínculo reserva ↔ cuenta (igual que las invitaciones del staff).**
    - El equipo crea la reserva con el **correo del participante** (`participant_email`, minúsculas).
@@ -55,7 +56,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
 4. **Guarda en el servidor de `/mis-carreras`** (reutiliza `getCurrentUser`, sin guardas nuevas en `lib/auth/`):
    - sin sesión → `redirect("/cuenta")`;
    - con sesión y correo sin verificar → estado "Verifica tu correo" (sin redirección, para no crear un bucle con `/cuenta`);
-   - fallo de Neon Auth o de la base al resolver el usuario (`ForbiddenError` de `getCurrentUser`) o al leer las reservas → estado de error;
+   - fallo de Clerk o de la base al resolver el usuario (`ForbiddenError` de `getCurrentUser`) o al leer las reservas → estado de error;
    - con sesión verificada → datos del runner.
 5. **Lecturas del runner.** Funciones `server-only` con `runner_user_id = <user.id de la sesión>` en **cada** consulta (la lista y cada lectura de detalle). Nunca se devuelven: `participant_email`, `internal_note`, `created_by`, `recorded_by`, pagos anulados, hitos con `runner_visible = false`, datos de otras reservas ni de leads o staff.
 6. **Selección de carrera por URL (`?reserva=<id>`).** El detalle se actualiza en la misma página con `<Link>`; el servidor valida el parámetro (UUID y perteneciente a las reservas del usuario). Un id ajeno, inexistente o mal formado se ignora: se muestra la reserva por defecto, sin revelar si existe (sin IDOR).
@@ -138,6 +139,7 @@ Acceso:
 - [ ] (F5) Dada una sesión con el correo sin verificar, entonces ve "Verifica tu correo para ver tus carreras." y "Cierra sesión y vuelve a ingresar: te enviaremos un código." con "Cerrar sesión" (→ `/cuenta`), sin reservas ni consulta de reservas (unit test de `getRunnerPortal`).
 - [ ] (F5) Dada una cuenta de staff o de runner, cuando abre `/mis-carreras`, entonces solo ve las reservas vinculadas a su `user_id`; no cambia ningún acceso del CRM y no se crean filas en `profiles` ni `staff_*`.
 - [ ] (F5) Dados el runner A (reserva X) y el runner B (reserva Y), cuando A abre `/mis-carreras?reserva=<Y>`, entonces ve la reserva X, igual que en `/mis-carreras`, y ningún dato de Y (unit test del service + prueba manual).
+- [ ] (F5) Dado `middleware.ts`, su `matcher` incluye `/mis-carreras`; con sesión de Clerk el portal carga en lugar de redirigir a `/cuenta`, y el saludo usa `firstName`/`lastName` de Clerk (unit test de `getCurrentUser` + prueba manual) (Decisión 24).
 
 Estados:
 - [ ] (F5) **Sin carreras:** veo "Hola, <nombre>." (o "Mis carreras" si la sesión no trae nombre), y un `Empty` con "Aún no tienes carreras registradas.", "Cuando el equipo registre tu reserva con <correo>, la verás aquí.", el enlace "Explorar experiencias" → `/#destinos` y "Escríbenos por WhatsApp" (`wa.me/51938127170`, otra pestaña).
@@ -189,7 +191,7 @@ Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` 
    - no hay bucles: `/mis-carreras` manda a `/cuenta` a quien no tiene sesión, y una sesión sin verificar se queda en `/mis-carreras` con su estado propio;
    - el staff que usa `/cuenta` no queda forzado al portal.
    El destino **tras ingresar o verificar** sí pasa a `/mis-carreras` (F6).
-5. **El nombre del corredor sale de la sesión.** `getCurrentUser` añade `name?: string` (recortado, omitido si está vacío; sin límite en el schema para no invalidar sesiones). Es opcional para no romper fixtures ni el contrato de `CurrentUser`; no participa en la autorización. Se muestra el primer nombre ("Hola, Ana.").
+5. **El nombre del corredor sale de la sesión.** `getCurrentUser` añade `name?: string` (nombre y apellido de Clerk, recortados, omitido si queda vacío; sin límite en el schema para no invalidar sesiones). Es opcional para no romper fixtures ni el contrato de `CurrentUser`; no participa en la autorización. Se muestra el primer nombre ("Hola, Ana.").
 6. **Tablas y YAGNI:**
    | Tabla | Por qué existe | Qué se descartó |
    |---|---|---|
@@ -225,6 +227,10 @@ Enmienda tras la revisión de F5:
 
 23. **Títulos del portal con `display-title`.** El rediseño de la portada (`landing-home-redesign`) retiró Barlow Condensed: `--font-heading` es ahora la sans y la landing titula con `display-title`. El portal la sigue para mantener la coherencia del Requisito 13.
 
+Enmienda tras la migración a Clerk (`accounts-clerk-rbac.md`, en `main`):
+
+24. **El portal usa la identidad de Clerk.** `user.id` es el `userId` de Clerk y `runner_user_id` guarda ese id. El nombre del saludo (Decisión 5) sale de `firstName` y `lastName` del usuario de Clerk; si la instancia no los pide, el saludo queda en "Mis carreras". `/mis-carreras` entra en el `matcher` de `middleware.ts` (regla D3 de `accounts-clerk-rbac.md`): fuera de él, `auth()` lanza, la guarda ve "sin sesión" y el portal redirigiría siempre a `/cuenta`. El correo sin verificar sigue en el estado "Verifica tu correo", aunque Clerk verifica al registrarse y casi nunca se alcanza.
+
 ### Modelo de datos: `lib/db-schema.ts` (F1)
 Todo en `public`, snake_case, sin FK hacia `neon_auth`. `updated_at` lo fija el service con `now()` en cada `UPDATE`. Las FK son `ON DELETE RESTRICT`.
 
@@ -237,7 +243,7 @@ Todo en `public`, snake_case, sin FK hacia `neon_auth`. `updated_at` lo fija el 
 | `bookings.trip_id` | `uuid not null` → `trips.id` |
 | `bookings.participant_name` | `text not null`; CHECK `char_length BETWEEN 2 AND 120` |
 | `bookings.participant_email` | `text not null`; CHECK `= lower(participant_email) AND char_length <= 254` |
-| `bookings.runner_user_id` | `text` nulo (id de Neon Auth, sin FK); NULL = sin vincular |
+| `bookings.runner_user_id` | `text` nulo (`userId` de Clerk, sin FK); NULL = sin vincular |
 | `bookings.status` | `booking_status not null default 'pending'` |
 | `bookings.package_label` | `text not null`; CHECK 1–80 (p. ej. "Paquete corredor", "Paquete acompañante") |
 | `bookings.distance` | `text` nulo; CHECK ≤ 20 (p. ej. "42K") |
@@ -298,7 +304,10 @@ export type Permission = "crm.access" | "staff.manage" | "trips.manage" | "leads
 ```
 
 ### `lib/auth/guards.ts` (F5, cambio mínimo)
-`sessionSchema.user` añade `name: z.string().optional()`; `CurrentUser` añade `name?: string` = `user.name?.trim()` si no queda vacío. Nada más cambia (roles, invitaciones, errores). `toEqual` de los tests existentes ignora la propiedad ausente.
+`clerkUserSchema` añade `firstName` y `lastName` (`z.string().nullable().optional().catch(null)`: un valor ausente o con otra forma nunca invalida la sesión). `CurrentUser` añade `name?: string` = `firstName` y `lastName` recortados y unidos por un espacio, omitido si queda vacío. Nada más cambia (roles, invitaciones, errores). `toEqual` de los tests existentes ignora la propiedad ausente.
+
+### `middleware.ts` (F5)
+El `matcher` añade `"/mis-carreras"` a `["/crm/:path*", "/api/crm/:path*"]`. Nada más cambia. `/cuenta` sigue fuera (estática).
 
 ### Rutas (`app/`)
 | Ruta | Fase | Contenido |
@@ -676,7 +685,7 @@ Los de servidor con `// @vitest-environment node` y `vi.mock("server-only", () =
 - `modules/bookings/actions/bookings.actions.test.ts` (F2): para cada acción, `unauthorized` sin sesión y `forbidden` con cuenta sin rol, sin llamar al service; `commercial` y `admin` → éxito; `invalid_input` con `fieldErrors` y `values`; mapeo de cada resultado; actor de la sesión; error del service → `"booking action failed"` sin `console.*`; `revalidatePath`/`redirect` solo si hay éxito.
 - `modules/bookings/services/payments.service.test.ts` y `actions/payments.actions.test.ts` (F3): `addPayment` rechaza reservas canceladas e inserta `recorded_by` = actor; `voidPayment` exige `voided_at IS NULL` y reserva no cancelada; `listBookingPayments` incluye anulados con el email de quien registró; acciones con las mismas garantías que F2 e ignorando `recordedBy`/`voidedBy`.
 - `modules/bookings/services/itinerary.service.test.ts` y `actions/itinerary.actions.test.ts` (F4): mismas garantías; el hito de reserva toma `trip_id` de `bookings` (un `tripId` del form se ignora); crear, editar o eliminar un hito de una reserva cancelada → `not_found`; borrar devuelve el origen para redirigir.
-- `lib/auth/guards.test.ts` (F5, ampliar): sesión con `name: "  Ana Pérez "` → `name: "Ana Pérez"`; sin nombre o vacío → sin propiedad; el resto de casos no cambia.
+- `lib/auth/guards.test.ts` (F5, ampliar): usuario de Clerk con `firstName: " Ana "` y `lastName: "Pérez "` → `name: "Ana Pérez"`; solo uno de los dos → ese; ambos ausentes, `null`, vacíos, en blanco o con otro tipo → sin propiedad y la sesión sigue válida; el resto de casos no cambia.
 - `modules/bookings/utils/runnerPortal.test.ts` (F5; `@/lib/auth/guards`, el service y `next/server` mockeados): los casos de la Decisión 11 y de los criterios de acceso y error de F5 (`connection()` antes de todo; `today` de `limaDate`).
 - `modules/accounts/components/AccessPanel.test.tsx` y `RunnerAccount.test.tsx` (F6): los casos runner pasan a esperar `/mis-carreras`; nuevo caso del enlace "Ver mis carreras"; los casos de staff no cambian.
 - Sin unit tests (SETUP §3): `lib/db-schema.ts` (migración + prueba manual), tipos, componentes de `modules/bookings/components/` (presentacionales o de un solo dominio; su lógica está en utils, schemas y acciones), `CrmShell`, páginas async de `app/` y `components/ui/`.
@@ -713,12 +722,13 @@ Requisitos previos: F1 cerrada y migración aplicada en la rama de Neon de prueb
 - [ ] T4 — Componentes: `ItineraryTable`, `ItineraryItemForm`, `TripUpdateForm`, `TripUpdateList` · archivos: `modules/bookings/components/ItineraryTable.tsx`, `modules/bookings/components/ItineraryItemForm.tsx`, `modules/bookings/components/TripUpdateForm.tsx`, `modules/bookings/components/TripUpdateList.tsx` · depende de: T3 · secuencial
 - [ ] T5 — Exports, páginas nuevas, sección de servicios en la ficha y enlace desde la lista; medir el Worker · archivos: `modules/bookings/index.ts`, `app/crm/(protected)/viajes/[id]/itinerario/page.tsx`, `app/crm/(protected)/itinerario/[id]/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx`, `app/crm/(protected)/reservas/page.tsx` · depende de: T4 · secuencial
 
-### Fase 5 — `/mis-carreras` (5 tareas, 16 archivos: 2 generados por el CLI de shadcn)
+### Fase 5 — `/mis-carreras` (6 tareas, 17 archivos: 2 generados por el CLI de shadcn)
 - [x] T1 — Base compartida: `npx shadcn@latest add empty alert` (sin sobrescribir archivos existentes); `name` opcional en `getCurrentUser` con su test; exportar `SignOutButton` de `@/modules/accounts`; exportar `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` de `@/modules/landing` · archivos: `components/ui/empty.tsx`, `components/ui/alert.tsx`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `modules/accounts/index.ts`, `modules/landing/index.ts` · depende de: Fase 4 (en código solo necesita F1; los datos de F2–F4 hacen falta para la prueba manual) · secuencial (base)
 - [x] T2 — `getRunnerPortal` (guarda y estados) con tests · archivos: `modules/bookings/utils/runnerPortal.ts`, `modules/bookings/utils/runnerPortal.test.ts` · depende de: T1 · paralelo (con T3)
 - [x] T3 — Componentes presentacionales del portal · archivos: `modules/bookings/components/PortalHeader.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/TripTimeline.tsx`, `modules/bookings/components/TripUpdates.tsx` · depende de: T1 · paralelo (con T2)
 - [x] T4 — Composición `RunnerPortal`, exports y ruta `/mis-carreras`; comprobar `ƒ /mis-carreras` y `○ /cuenta` en el build; medir el Worker · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/index.ts`, `app/mis-carreras/page.tsx` · depende de: T2, T3 · secuencial
 - [x] T5 — Enmienda (Decisión 23): `h1` y `h2` del viaje con `display-title`; títulos de grupo de `TripTimeline` y número de `RaceSelector` en `primary` con el acento en borde, punto o subrayado (contraste AA); `break-words` en el correo del estado vacío; un único `WhatsAppLink` reutilizado en `BookingOverview` (reserva cancelada) y `RunnerPortal` · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/TripTimeline.tsx` · depende de: T4 · secuencial
+- [ ] T6 — Enmienda (Decisión 24): integrar `main` con Clerk; `name` desde `firstName`/`lastName` en `getCurrentUser` con sus tests; `/mis-carreras` en el `matcher` de `middleware.ts`; lint, vitest y build (`ƒ /mis-carreras`, `○ /cuenta`) · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `middleware.ts` · depende de: T5 · secuencial
 
 ### Fase 6 — Redirección del runner tras ingresar (3 tareas, 6 archivos)
 Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` aprobadas por el usuario, y F5 cerrada (si no, el runner llegaría a una ruta inexistente).
