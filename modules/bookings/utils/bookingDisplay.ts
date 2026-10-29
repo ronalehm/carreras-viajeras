@@ -95,6 +95,7 @@ export function firstName(name?: string): string | undefined {
 }
 
 export const BOOKINGS_PATH = "/crm/reservas";
+export const LEADS_PATH = "/crm/leads";
 
 // CRM page an itinerary item is managed from: its booking's page, or its trip's itinerary.
 export function itineraryOriginPath(item: { tripId: string; bookingId: string | null }): string {

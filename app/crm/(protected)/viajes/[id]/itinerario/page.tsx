@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { getCrmAccess } from "@/modules/accounts";
 import { getTripItinerary, ItineraryItemForm, ItineraryTable, TripUpdateForm, TripUpdateList } from "@/modules/bookings";
-import { getTripById } from "@/modules/trips";
+import { getTripById, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Itinerario y avisos" };
 
@@ -21,7 +21,9 @@ export default async function TripItineraryPage({ params }: PageProps<"/crm/viaj
   }
   const { id } = await params;
   // Both return empty for a non-UUID id without querying.
-  const [trip, { items, updates }] = await Promise.all([getTripById(id), getTripItinerary(id)]);
+  const [trip, { items, updates }] = await Promise.all([
+    getTripById(id, tripScopeFor(access.user)), getTripItinerary(id),
+  ]);
   if (!trip) notFound();
 
   return (

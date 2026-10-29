@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { inviteStaffAction } from "../actions/staff.actions";
-import { staffRoleSchema } from "../schemas/staff.schema";
 import type { StaffActionState } from "../types/staff.types";
 import { STAFF_ROLE_LABELS } from "../utils/staffDisplay";
 
@@ -14,7 +14,12 @@ const INITIAL_STATE: StaffActionState = { status: "idle" };
 
 type CopyStatus = "idle" | "copied" | "failed";
 
-export function InviteStaffForm() {
+type InviteStaffFormProps = {
+  // Roles the actor may invite, computed on the server; the action still validates each one.
+  roles: readonly StaffRole[];
+};
+
+export function InviteStaffForm({ roles }: InviteStaffFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [copyStatus, setCopyStatus] = useState<CopyStatus>("idle");
   const [state, formAction, pending] = useActionState(
@@ -80,11 +85,11 @@ export function InviteStaffForm() {
           <NativeSelect
             id="invite-staff-role"
             name="role"
-            defaultValue="commercial"
+            defaultValue={roles[0]}
             aria-invalid={fieldErrors?.role ? true : undefined}
             aria-describedby={fieldErrors?.role ? "invite-staff-role-error" : undefined}
           >
-            {staffRoleSchema.options.map((role) => (
+            {roles.map((role) => (
               <NativeSelectOption key={role} value={role}>
                 {STAFF_ROLE_LABELS[role]}
               </NativeSelectOption>

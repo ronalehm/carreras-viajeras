@@ -10,11 +10,13 @@ export type {
   RunnerTripUpdate,
   ScheduleEdge,
 } from "./types/bookings.types";
-export { getBookingById, listBookings } from "./services/bookings.service";
+export { getBookingById, getLeadBooking, listBookings } from "./services/bookings.service";
 export { changeBookingStatusAction } from "./actions/bookings.actions";
 export { BookingFilters } from "./components/BookingFilters";
 export { BookingForm } from "./components/BookingForm";
-export { BookingStatusBadge, BookingTable } from "./components/BookingTable";
+export { BookingStatusBadge } from "./components/BookingStatusBadge";
+export { BookingTable } from "./components/BookingTable";
+export { BOOKING_STATUS_LABELS } from "./utils/bookingDisplay";
 export type { CrmBooking, CrmBookingListItem } from "./types/bookings.types";
 export { listBookingPayments } from "./services/payments.service";
 export { PaymentForm } from "./components/PaymentForm";
@@ -27,3 +29,5 @@ export { TripUpdateForm } from "./components/TripUpdateForm";
 export { TripUpdateList } from "./components/TripUpdateList";
 export type { CrmItineraryItem, CrmTripUpdate } from "./types/bookings.types";
 export { itineraryOriginPath } from "./utils/bookingDisplay";
+export { getRunnerPortal } from "./utils/runnerPortal";
+export { RunnerPortal } from "./components/RunnerPortal";

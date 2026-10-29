@@ -5,7 +5,7 @@ import { addPayment, voidPayment } from "../services/payments.service";
 import type { BookingActionState } from "../types/bookings.types";
 import { bookingPaths, failure, runBookingAction } from "./runBookingAction";
 
-const NOT_FOUND_MESSAGE = "La reserva o el pago ya no admiten cambios. Recarga la página.";
+const MESSAGES = { not_found: "La reserva o el pago ya no admiten cambios. Recarga la página." };
 
 export async function addPaymentAction(
   _prev: BookingActionState,
@@ -15,8 +15,8 @@ export async function addPaymentAction(
     const result = await addPayment(input, actorUserId);
     return result === "added"
       ? { revalidate: bookingPaths(input.bookingId), message: "Pago registrado." }
-      : failure("not_found", values, NOT_FOUND_MESSAGE);
-  });
+      : failure("not_found", values);
+  }, MESSAGES);
 }
 
 export async function voidPaymentAction(
@@ -26,7 +26,7 @@ export async function voidPaymentAction(
   return runBookingAction(formData, paymentVoidSchema, async ({ paymentId }, _values, actorUserId) => {
     const result = await voidPayment(paymentId, actorUserId);
     return result === "not_found"
-      ? failure("not_found", undefined, NOT_FOUND_MESSAGE)
+      ? failure("not_found")
       : { revalidate: bookingPaths(result.bookingId), message: "Pago anulado." };
-  });
+  }, MESSAGES);
 }

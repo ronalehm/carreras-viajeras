@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blankToNull } from "@/lib/blankToNull";
 
 // Same values as the database enums in lib/db-schema.ts (kept in sync by bookings.schema.test.ts).
 export const bookingStatusSchema = z.enum(["pending", "confirmed", "cancelled"], {
@@ -19,15 +20,6 @@ const BOOKING_ID_MESSAGE = "La reserva no es válida.";
 
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
-
-// Optional form inputs arrive as "" when left blank: they become null. A missing key counts as
-// blank. Same pattern as trips.schema.ts (moved to lib/ on its third real use).
-const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
-  z
-    .string()
-    .optional()
-    .transform((value = "") => value.trim() || null)
-    .pipe(schema.nullable());
 
 // Whole USD (Decision 10): digits only, so decimals ("1499.50"), signs, blanks and letters fail.
 const usdIntegerSchema = (min: number, message: string) =>
@@ -53,13 +45,15 @@ const bookingFields = {
 };
 
 // Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as
-// runnerUserId, status or createdBy: they never come from the form.
+// runnerUserId, status or createdBy: they never come from the form. leadId comes from the hidden
+// field of "Crear reserva" in the lead's page; blank means a booking without lead.
 export const bookingFormSchema = z.object({
   tripId: z.uuid({ error: "Elige un viaje." }),
+  leadId: blankToNull(z.uuid({ error: "El lead indicado no es válido." })),
   ...bookingFields,
 });
 
-// The trip cannot change after creation.
+// The trip and the lead link cannot change after creation.
 export const updateBookingSchema = z.object({
   bookingId: z.uuid({ error: BOOKING_ID_MESSAGE }),
   ...bookingFields,

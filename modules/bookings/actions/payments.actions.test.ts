@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
-const { getSession } = vi.hoisted(() => ({ getSession: vi.fn() }));
-vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
+const { auth, currentUser } = vi.hoisted(() => ({ auth: vi.fn(), currentUser: vi.fn() }));
+vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(), loadStaffRoles: vi.fn(),
 }));
@@ -32,7 +32,14 @@ function form(values: Record<string, string>) {
   return data;
 }
 function signIn(roles: ("commercial" | "admin")[], emailVerified = true) {
-  getSession.mockResolvedValue({ data: { user: { id: "staff-1", email: "agent@example.com", emailVerified } }, error: null });
+  auth.mockResolvedValue({ userId: "staff-1" });
+  currentUser.mockResolvedValue({
+    id: "staff-1",
+    primaryEmailAddressId: "idn_primary",
+    emailAddresses: [
+      { id: "idn_primary", emailAddress: "agent@example.com", verification: { status: emailVerified ? "verified" : "unverified" } },
+    ],
+  });
   vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue(roles);
   vi.mocked(loadStaffRoles).mockResolvedValue(roles);
 }
@@ -58,7 +65,7 @@ const actions: {
 
 describe.each(actions)("$name: permisos en llamadas directas", ({ action, service, values, invalid, message }) => {
   it("rechaza sin sesión antes de consultar o mutar", async () => {
-    getSession.mockResolvedValue({ data: null, error: null });
+    auth.mockResolvedValue({ userId: null });
     expect(await action(IDLE, form(values))).toEqual({
       status: "error", code: "unauthorized", message: "Tu sesión no es válida. Vuelve a iniciar sesión.",
     });

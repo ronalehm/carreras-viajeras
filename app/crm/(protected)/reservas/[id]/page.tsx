@@ -15,6 +15,7 @@ import {
   PaymentForm,
   PaymentTable,
 } from "@/modules/bookings";
+import { formatTripDate } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reserva" };
 
@@ -38,6 +39,9 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
   ]);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
+  // Decision 22: an archived trip freezes its bookings; they can only be cancelled. Its payments,
+  // items and updates are not frozen by this spec, so their forms depend on `cancelled` alone.
+  const readOnly = cancelled || booking.trip.archived;
 
   return (
     <section className="flex flex-col gap-6">
@@ -50,10 +54,18 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           <p className="text-sm text-muted-foreground">
             Cuenta: {booking.linked ? "Vinculada" : "Sin vincular"} · {booking.trip.title}
           </p>
+          {booking.lead && (
+            <p className="text-sm text-muted-foreground">
+              Lead:{" "}
+              <Link href={`/crm/leads/${booking.lead.id}`} className="text-foreground underline underline-offset-4 hover:text-primary">
+                {booking.lead.fullName}
+              </Link>
+            </p>
+          )}
         </div>
         {!cancelled && (
           <div className="flex flex-wrap gap-2">
-            {booking.status === "pending" && (
+            {booking.status === "pending" && !booking.trip.archived && (
               <ConfirmActionButton
                 action={changeBookingStatusAction} fields={{ bookingId: booking.id, status: "confirmed" }}
                 label="Confirmar reserva" title={`¿Confirmar la reserva de ${booking.participantName}?`}
@@ -70,14 +82,16 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           </div>
         )}
       </div>
-      {cancelled ? (
+      {readOnly ? (
         <>
-          <p className="text-muted-foreground">Reserva cancelada: solo lectura.</p>
+          <p className="text-muted-foreground">
+            {cancelled ? "Reserva cancelada: solo lectura." : "Viaje archivado: la reserva solo se puede cancelar."}
+          </p>
           <dl className="grid max-w-3xl gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr]">
             {[
               ["Correo", booking.participantEmail],
               ["Paquete", booking.distance ? `${booking.packageLabel} · ${booking.distance}` : booking.packageLabel],
-              ["Fecha límite del saldo", booking.balanceDueOn ?? "—"],
+              ["Fecha límite del saldo", booking.balanceDueOn ? formatTripDate(booking.balanceDueOn) : "—"],
               ["Nota interna", booking.internalNote ?? "—"],
             ].map(([term, value]) => (
               <div key={term} className="contents">

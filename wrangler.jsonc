@@ -20,7 +20,15 @@
 	],
 	// Public, non-secret config. Declared here because each deploy replaces dashboard text vars.
 	"vars": {
-		"APP_ORIGIN": "https://carreras-viajeras.mentec.dev"
+		"APP_ORIGIN": "https://carreras-viajeras.mentec.dev",
+		// Public by design (Clerk production instance). CLERK_SECRET_KEY is a Cloudflare Secret, never here.
+		"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVudGVjLmRldiQ"
+	},
+	// Workers Logs, enabled from the dashboard; declared here so each deploy keeps them on.
+	"observability": {
+		"logs": {
+			"enabled": true
+		}
 	},
 	"routes": [
 		{

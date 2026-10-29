@@ -7,21 +7,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { grantStaffRoleAction, revokeStaffRoleAction } from "../actions/staff.actions";
-import { staffRoleSchema } from "../schemas/staff.schema";
 import type { StaffMember } from "../types/staff.types";
 import { formatStaffDateTime, STAFF_ROLE_LABELS } from "../utils/staffDisplay";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 
 type StaffTableProps = {
   staff: StaffMember[];
+  // Roles the actor may grant or revoke, computed on the server; the actions still validate each one.
+  manageableRoles: readonly StaffRole[];
 };
 
 function earliestGrant(roles: StaffMember["roles"]): Date {
   return new Date(Math.min(...roles.map(({ grantedAt }) => grantedAt.getTime())));
 }
 
-export function StaffTable({ staff }: StaffTableProps) {
+export function StaffTable({ staff, manageableRoles }: StaffTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -35,9 +37,8 @@ export function StaffTable({ staff }: StaffTableProps) {
       <TableBody>
         {staff.map((member) => {
           const activeRoles = member.roles.map(({ role }) => role);
-          const missingRoles = staffRoleSchema.options.filter(
-            (role) => !activeRoles.includes(role),
-          );
+          const grantableRoles = manageableRoles.filter((role) => !activeRoles.includes(role));
+          const revocableRoles = activeRoles.filter((role) => manageableRoles.includes(role));
 
           return (
             <TableRow key={member.userId}>
@@ -54,7 +55,7 @@ export function StaffTable({ staff }: StaffTableProps) {
               <TableCell>{formatStaffDateTime(earliestGrant(member.roles))}</TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-2">
-                  {missingRoles.map((role) => {
+                  {grantableRoles.map((role) => {
                     const label = STAFF_ROLE_LABELS[role];
                     return (
                       <ConfirmActionButton
@@ -69,7 +70,7 @@ export function StaffTable({ staff }: StaffTableProps) {
                       />
                     );
                   })}
-                  {activeRoles.map((role) => {
+                  {revocableRoles.map((role) => {
                     const label = STAFF_ROLE_LABELS[role];
                     return (
                       <ConfirmActionButton

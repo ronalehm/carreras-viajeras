@@ -20,6 +20,7 @@ import {
 
 const TRIP_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
+const LEAD_ID = "22222222-2222-4222-8222-222222222222";
 
 // Strings as they come from Object.fromEntries(formData).
 const validForm = {
@@ -51,6 +52,7 @@ describe("bookingFormSchema", () => {
   it("parses a valid form into clean values with a lowercase email", () => {
     expect(parse({}).data).toEqual({
       tripId: TRIP_ID,
+      leadId: null,
       participantName: "Ana Pérez",
       participantEmail: "ana@example.com",
       packageLabel: "Paquete corredor",
@@ -98,6 +100,19 @@ describe("bookingFormSchema", () => {
     expect(issueFields(parse({ [field]: value }))).toEqual([field]);
   });
 
+  it.each([["", null], ["  ", null], [undefined, null], [LEAD_ID, LEAD_ID], [` ${LEAD_ID} `, LEAD_ID]])(
+    "parses leadId %j as %j",
+    (leadId, expected) => {
+      expect(bookingFormSchema.safeParse({ ...validForm, leadId }).data?.leadId).toBe(expected);
+    },
+  );
+
+  it.each(["abc", "123", `${LEAD_ID}x`])("rejects a non-UUID leadId %j under its field", (leadId) => {
+    const result = parse({ leadId });
+    expect(issueFields(result)).toEqual(["leadId"]);
+    expect(result.error?.issues[0].message).toBe("El lead indicado no es válido.");
+  });
+
   it("drops fields that never come from the form", () => {
     const result = bookingFormSchema.parse({
       ...validForm, runnerUserId: "user-x", status: "confirmed", createdBy: "user-y",
@@ -109,10 +124,11 @@ describe("bookingFormSchema", () => {
 });
 
 describe("updateBookingSchema", () => {
-  it("requires the booking id and drops the trip", () => {
-    const result = updateBookingSchema.parse({ ...validForm, bookingId: BOOKING_ID });
+  it("requires the booking id and drops the trip and the lead", () => {
+    const result = updateBookingSchema.parse({ ...validForm, bookingId: BOOKING_ID, leadId: LEAD_ID });
     expect(result).toMatchObject({ bookingId: BOOKING_ID, participantEmail: "ana@example.com" });
     expect(result).not.toHaveProperty("tripId");
+    expect(result).not.toHaveProperty("leadId");
     expect(issueFields(updateBookingSchema.safeParse({ ...validForm, bookingId: "abc" }))).toEqual(["bookingId"]);
   });
 });

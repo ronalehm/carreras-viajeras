@@ -4,17 +4,9 @@ import type { StaffRole } from "@/lib/auth/permissions";
 export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   commercial: "Comercial",
   admin: "Admin",
+  super_admin: "Super admin",
+  organizer: "Organizador",
 };
 
-// Provisional CRM time zone (spec accounts-roles-permissions, open question 5).
-export const CRM_TIME_ZONE = "America/Lima";
-
-const staffDateTimeFormat = new Intl.DateTimeFormat("es", {
-  dateStyle: "medium",
-  timeStyle: "short",
-  timeZone: CRM_TIME_ZONE,
-});
-
-export function formatStaffDateTime(date: Date): string {
-  return staffDateTimeFormat.format(date);
-}
+// The CRM time zone and its date formatting live in lib/dates.ts (shared with the crm module).
+export { CRM_TIME_ZONE, formatDateTime as formatStaffDateTime } from "@/lib/dates";

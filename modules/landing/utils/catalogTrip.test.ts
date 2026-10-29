@@ -9,33 +9,49 @@ vi.mock("@/modules/trips", async () => {
   return {
     getPublishedTripBySlug: vi.fn(),
     formatTripDate: display.formatTripDate,
-    formatTripPrice: display.formatTripPrice,
+    formatTripDateRange: display.formatTripDateRange,
   };
 });
 
-import { getPublishedTripBySlug, type PublicTrip } from "@/modules/trips";
+import { formatTripDateRange, getPublishedTripBySlug, type PublicTrip } from "@/modules/trips";
 import { getCatalogTrip } from "./catalogTrip";
 
 const getPublished = vi.mocked(getPublishedTripBySlug);
 
-const SLUG = "maraton-santiago-2027";
-
-// Data of the F4 operational precondition.
-const published: PublicTrip = {
-  slug: SLUG,
-  title: "Maratón de Santiago 42K 2027",
-  city: "Santiago",
-  country: "Chile",
+// Only the required fields filled in the CRM.
+const minimal: PublicTrip = {
+  slug: "maraton-lima-2027",
+  title: "Maratón de Lima 2027",
+  city: "Lima",
+  country: "Perú",
   raceDate: "2027-05-16",
   startDate: null,
   endDate: null,
-  distances: ["42K"],
-  summary:
-    "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.",
+  distances: ["42K", "21K"],
+  summary: "Corre la Maratón de Lima 2027 con Carreras Viajeras.",
   includes: [],
-  priceUsd: 1499,
-  capacity: 100,
+  capacity: null,
   imageUrl: null,
+  officialUrl: null,
+  excludes: [],
+  notes: null,
+};
+
+const complete: PublicTrip = {
+  ...minimal,
+  slug: "maraton-santiago-2027",
+  title: "Maratón de Santiago 42K 2027",
+  city: "Santiago",
+  country: "Chile",
+  startDate: "2027-05-14",
+  endDate: "2027-05-17",
+  distances: ["42K"],
+  includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
+  capacity: 100,
+  imageUrl: "https://carreras-viajeras.mentec.dev/images/cover-santiago.webp",
+  officialUrl: "https://maratondesantiago.cl/",
+  excludes: ["Tours adicionales."],
+  notes: "Aerolínea por confirmar.\n   \nHotel por confirmar.",
 };
 
 beforeEach(() => {
@@ -43,45 +59,73 @@ beforeEach(() => {
 });
 
 describe("getCatalogTrip", () => {
-  it("returns null without querying the catalog when the slug has no fixed content", async () => {
-    await expect(getCatalogTrip("otro-viaje")).resolves.toBeNull();
-    expect(getPublished).not.toHaveBeenCalled();
-  });
-
   it("returns null when the trip is not published", async () => {
     getPublished.mockResolvedValue(null);
-    await expect(getCatalogTrip(SLUG)).resolves.toBeNull();
+    await expect(getCatalogTrip("otro-viaje")).resolves.toBeNull();
     expect(getPublished).toHaveBeenCalledOnce();
-    expect(getPublished).toHaveBeenCalledWith(SLUG);
+    expect(getPublished).toHaveBeenCalledWith("otro-viaje");
   });
 
-  it("applies the catalog fields over the fixed content", async () => {
-    getPublished.mockResolvedValue(published);
-    const trip = await getCatalogTrip(SLUG);
+  it("formats a complete published trip", async () => {
+    getPublished.mockResolvedValue(complete);
 
-    expect(trip).toMatchObject({
-      name: published.title,
-      description: published.summary,
+    await expect(getCatalogTrip(complete.slug)).resolves.toEqual({
+      slug: "maraton-santiago-2027",
+      title: "Maratón de Santiago 42K 2027",
+      summary: complete.summary,
+      location: "Santiago, Chile",
+      distances: ["42K"],
+      imageUrl: "https://carreras-viajeras.mentec.dev/images/cover-santiago.webp",
       raceDate: "16 de mayo de 2027",
-      capacity: "100 cupos definidos",
-      prices: { cash: "US$ 1,499", installmentsTotal: "US$1,799" },
-      destinationId: "santiago-2027",
-      image: "/images/cover-santiago.webp",
+      travelDates: formatTripDateRange("2027-05-14", "2027-05-17"),
+      capacity: "100 cupos",
+      officialUrl: "https://maratondesantiago.cl/",
+      includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
+      excludes: ["Tours adicionales."],
+      notes: ["Aerolínea por confirmar.", "Hotel por confirmar."],
     });
-    expect(trip?.included).toHaveLength(9);
   });
 
-  it("uses the fallback texts when price and capacity are missing", async () => {
-    getPublished.mockResolvedValue({ ...published, priceUsd: null, capacity: null });
-    const trip = await getCatalogTrip(SLUG);
+  it("leaves the optional fields empty for a minimal trip", async () => {
+    getPublished.mockResolvedValue(minimal);
 
-    expect(trip?.prices.cash).toBe("Precio a consultar");
-    expect(trip?.capacity).toBe("Cupos por confirmar");
+    await expect(getCatalogTrip(minimal.slug)).resolves.toEqual({
+      slug: "maraton-lima-2027",
+      title: "Maratón de Lima 2027",
+      summary: minimal.summary,
+      location: "Lima, Perú",
+      distances: ["42K", "21K"],
+      imageUrl: null,
+      raceDate: "16 de mayo de 2027",
+      travelDates: null,
+      capacity: "Cupos por confirmar",
+      officialUrl: null,
+      includes: [],
+      excludes: [],
+      notes: [],
+    });
+  });
+
+  it("never exposes price fields, even if a row still carried the old price columns of trips", async () => {
+    // PublicTrip no longer has them; a stray row with those keys must not leak through either.
+    getPublished.mockResolvedValue({
+      ...complete,
+      priceUsd: 1499,
+      installmentsPriceUsd: 1799,
+      depositUsd: 300,
+      companionPriceUsd: 1300,
+      paymentTerms: "Saldo pagado en febrero de 2027.",
+    } as PublicTrip);
+    const trip = await getCatalogTrip(complete.slug);
+    for (const key of ["price", "installmentsPrice", "deposit", "companionPrice", "paymentTerms"]) {
+      expect(trip).not.toHaveProperty(key);
+    }
+    expect(JSON.stringify(trip)).not.toMatch(/US\$|1,499|1,799|1,300|Saldo pagado/);
   });
 
   it("propagates database errors", async () => {
     const error = new Error("database down");
     getPublished.mockRejectedValue(error);
-    await expect(getCatalogTrip(SLUG)).rejects.toBe(error);
+    await expect(getCatalogTrip(minimal.slug)).rejects.toBe(error);
   });
 });
