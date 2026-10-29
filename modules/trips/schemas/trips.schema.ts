@@ -20,12 +20,12 @@ export const tripSlugSchema = z
   .max(80, SLUG_MESSAGE)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, SLUG_MESSAGE);
 
-const requiredText = (min: number, max: number, message: string) =>
+export const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
 // Optional form inputs arrive as "" when left blank: they become null. A missing key (an action
 // called without that field) counts as blank, so it never yields zod's English type error.
-const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
+export const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
   z
     .string()
     .optional()
@@ -33,7 +33,7 @@ const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
     .pipe(schema.nullable());
 
 // Free-text list: split, trim and drop empty items before validating. A missing key is an empty list.
-const textList = (separator: RegExp | string) =>
+export const textList = (separator: RegExp | string) =>
   z
     .string()
     .optional()
@@ -44,7 +44,7 @@ const textList = (separator: RegExp | string) =>
         .filter((item) => item !== ""),
     );
 
-const wholeNumber = (message: string) =>
+export const wholeNumber = (message: string) =>
   z.string().regex(/^\d+$/, message).transform(Number);
 
 // Optional whole amount in USD (priceUsd and the other trip prices).

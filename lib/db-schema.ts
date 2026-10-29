@@ -1,6 +1,7 @@
 // Application schema (public only). Never model or manage the neon_auth schema here.
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   date,
@@ -8,6 +9,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   smallint,
@@ -260,6 +262,164 @@ export const campaigns = pgTable(
       "campaigns_closed_chk",
       sql`(${table.status} = 'closed') = (${table.closedAt} IS NOT NULL) AND (${table.closedAt} IS NULL) = (${table.closedBy} IS NULL)`,
     ),
+    // Target of the trip_offers (campaign_id, trip_id) composite FK.
+    unique("campaigns_id_trip_uq").on(table.id, table.tripId),
+  ],
+);
+
+export const tripOfferStatusEnum = pgEnum("trip_offer_status", [
+  "draft",
+  "approved",
+  "active",
+  "closed",
+]);
+
+// One row = one version of a trip's price offer. Scope = trip + optional campaign (NULL = the
+// general offer); version is sequential within the scope. A version is immutable once approved
+// (every write of its conditions requires status = 'draft') and is never deleted. The version that
+// applies is resolved at read time (in force: active, within its Lima calendar dates, published
+// trip and, for a campaign offer, an active campaign of the same trip). Amounts are integer USD.
+export const tripOffers = pgTable(
+  "trip_offers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tripId: uuid("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "restrict" }),
+    campaignId: uuid("campaign_id"),
+    version: integer("version").notNull(),
+    status: tripOfferStatusEnum("status").notNull().default("draft"),
+    // Internal name, shown only in the CRM.
+    name: text("name").notNull(),
+    totalPriceUsd: integer("total_price_usd").notNull(),
+    discountUsd: integer("discount_usd").notNull().default(0),
+    finalPriceUsd: integer("final_price_usd").generatedAlwaysAs(
+      sql`"total_price_usd" - "discount_usd"`,
+    ),
+    depositOptionsUsd: integer("deposit_options_usd").array().notNull().default([]),
+    balanceDueOn: date("balance_due_on", { mode: "string" }),
+    // Non-monetary benefit: never a discount.
+    bonusDescription: text("bonus_description"),
+    // Inclusive calendar dates evaluated in America/Lima.
+    validFrom: date("valid_from", { mode: "string" }).notNull(),
+    validUntil: date("valid_until", { mode: "string" }),
+    capacityLimit: integer("capacity_limit"),
+    termsVersion: text("terms_version").notNull(),
+    conditions: text("conditions").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Set by the service when the draft is edited (no trigger).
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    approvedBy: text("approved_by").references(() => profiles.userId, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    activatedBy: text("activated_by").references(() => profiles.userId, { onDelete: "restrict" }),
+    activatedAt: timestamp("activated_at", { withTimezone: true }),
+    closedBy: text("closed_by").references(() => profiles.userId, { onDelete: "restrict" }),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+    // The version that replaced this one when it was activated in the same scope.
+    supersededBy: uuid("superseded_by").references((): AnyPgColumn => tripOffers.id, {
+      onDelete: "restrict",
+    }),
+  },
+  (table) => [
+    // A campaign offer belongs to the campaign's trip (MATCH SIMPLE: skipped when campaign_id is NULL).
+    foreignKey({
+      name: "trip_offers_campaign_trip_fk",
+      columns: [table.campaignId, table.tripId],
+      foreignColumns: [campaigns.id, campaigns.tripId],
+    }).onDelete("restrict"),
+    index("trip_offers_trip_idx").on(table.tripId),
+    check("trip_offers_version_chk", sql`${table.version} >= 1`),
+    check("trip_offers_name_chk", sql`char_length(${table.name}) BETWEEN 2 AND 80`),
+    check(
+      "trip_offers_price_chk",
+      sql`${table.totalPriceUsd} BETWEEN 1 AND 1000000 AND ${table.discountUsd} >= 0 AND ${table.discountUsd} < ${table.totalPriceUsd}`,
+    ),
+    check(
+      "trip_offers_deposits_chk",
+      sql`cardinality(${table.depositOptionsUsd}) <= 3 AND array_position(${table.depositOptionsUsd}, NULL) IS NULL AND 0 < ALL (${table.depositOptionsUsd}) AND (${table.totalPriceUsd} - ${table.discountUsd}) > ALL (${table.depositOptionsUsd})`,
+    ),
+    check(
+      "trip_offers_balance_chk",
+      sql`(cardinality(${table.depositOptionsUsd}) = 0) = (${table.balanceDueOn} IS NULL)`,
+    ),
+    check(
+      "trip_offers_bonus_chk",
+      sql`${table.bonusDescription} IS NULL OR char_length(${table.bonusDescription}) BETWEEN 2 AND 200`,
+    ),
+    check(
+      "trip_offers_validity_chk",
+      sql`${table.validUntil} IS NULL OR ${table.validUntil} >= ${table.validFrom}`,
+    ),
+    check(
+      "trip_offers_capacity_chk",
+      sql`${table.capacityLimit} IS NULL OR ${table.capacityLimit} BETWEEN 1 AND 10000`,
+    ),
+    check(
+      "trip_offers_terms_version_chk",
+      sql`${table.termsVersion} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${table.termsVersion}) BETWEEN 3 AND 60`,
+    ),
+    check(
+      "trip_offers_conditions_chk",
+      sql`char_length(${table.conditions}) BETWEEN 10 AND 2000`,
+    ),
+    check(
+      "trip_offers_approved_chk",
+      sql`(${table.approvedAt} IS NULL) = (${table.approvedBy} IS NULL) AND (${table.status} <> 'draft' OR ${table.approvedAt} IS NULL) AND (${table.status} NOT IN ('approved', 'active') OR ${table.approvedAt} IS NOT NULL)`,
+    ),
+    check(
+      "trip_offers_activated_chk",
+      sql`(${table.activatedAt} IS NULL) = (${table.activatedBy} IS NULL) AND (${table.activatedAt} IS NULL OR ${table.approvedAt} IS NOT NULL) AND (${table.status} <> 'active' OR ${table.activatedAt} IS NOT NULL) AND (${table.status} NOT IN ('draft', 'approved') OR ${table.activatedAt} IS NULL)`,
+    ),
+    check(
+      "trip_offers_closed_chk",
+      sql`(${table.status} = 'closed') = (${table.closedAt} IS NOT NULL) AND (${table.closedAt} IS NULL) = (${table.closedBy} IS NULL) AND (${table.supersededBy} IS NULL OR (${table.status} = 'closed' AND ${table.activatedAt} IS NOT NULL))`,
+    ),
+    // Unique version numbers, one active and one pending (draft or approved) version per scope.
+    uniqueIndex("trip_offers_general_version_uq")
+      .on(table.tripId, table.version)
+      .where(sql`${table.campaignId} IS NULL`),
+    uniqueIndex("trip_offers_campaign_version_uq")
+      .on(table.campaignId, table.version)
+      .where(sql`${table.campaignId} IS NOT NULL`),
+    uniqueIndex("trip_offers_general_active_uq")
+      .on(table.tripId)
+      .where(sql`${table.status} = 'active' AND ${table.campaignId} IS NULL`),
+    uniqueIndex("trip_offers_campaign_active_uq")
+      .on(table.campaignId)
+      .where(sql`${table.status} = 'active' AND ${table.campaignId} IS NOT NULL`),
+    uniqueIndex("trip_offers_general_pending_uq")
+      .on(table.tripId)
+      .where(sql`${table.status} IN ('draft', 'approved') AND ${table.campaignId} IS NULL`),
+    uniqueIndex("trip_offers_campaign_pending_uq")
+      .on(table.campaignId)
+      .where(sql`${table.status} IN ('draft', 'approved') AND ${table.campaignId} IS NOT NULL`),
+  ],
+);
+
+// USD→PEN rate set by the team (soles per 1 USD). Insert-only: never updated or deleted. The
+// current rate is the latest row; created_at is the moment it applies from.
+export const exchangeRates = pgTable(
+  "exchange_rates",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    usdPen: numeric("usd_pen", { precision: 10, scale: 4 }).notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("exchange_rates_created_idx").on(table.createdAt),
+    check("exchange_rates_usd_pen_chk", sql`${table.usdPen} > 0 AND ${table.usdPen} < 100`),
   ],
 );
 

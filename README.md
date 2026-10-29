@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay ocho migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay nueve migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -197,6 +197,136 @@ Pendiente de aplicar por el usuario en `production` (y en la rama de Neon de pru
 No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
 
 Prueba manual opcional de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;`: la base debe rechazar un `official_url` que no empieza por `https://`, un `installments_price_usd`, `deposit_usd` o `companion_price_usd` negativo y un `excludes` con 21 elementos.
+
+### Migración de ofertas comerciales (`0008`)
+
+`drizzle/0008_moaning_roulette.sql` prepara las ofertas comerciales versionadas por carrera y el tipo de cambio USD→PEN ([`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md)). Es una sola migración para todas las fases de esa spec. Está pendiente de aplicar por el usuario: **primero en una rama de pruebas de Neon** y, cuando las pruebas de abajo salgan bien, en `production`. **Tiene que estar aplicada antes de desplegar el código de la Fase 2** (el CRM de ofertas lee y escribe estas tablas; la Fase 1 no añade rutas ni consultas que se ejecuten en la web).
+
+**El número `0008` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0008`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
+
+**Orden: `0000` → … → `0007` → esta.** Necesita `0007` (la tabla `campaigns`) y, a través de ella, `0001` (`trips`) y `0000` (`profiles`). En `production` siguen pendientes `0005`, `0006` y `0007`: se aplican antes, en ese orden y **cada una en sus dos bloques**, siguiendo [Migración de captura y outbox](#migración-de-captura-y-outbox), [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006) y [Migración de campañas y registro](#migración-de-campañas-y-registro). No volver a aplicar `0000` ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- crea el enum `trip_offer_status` (`draft`, `approved`, `active`, `closed`);
+- crea la tabla `trip_offers`: una fila por **versión** de la oferta de un viaje (sin campaña = oferta general; con campaña = oferta de esa campaña). Precio total y descuento en USD enteros, `final_price_usd` calculado por la base (columna generada `total_price_usd - discount_usd`), de 0 a 3 anticipos (`deposit_options_usd`), fecha límite del saldo, bono sin importes, vigencia en fechas de Lima, cupos opcionales, `terms_version`, condiciones, estado y auditoría (quién y cuándo creó, aprobó, activó y cerró, y qué versión la sustituyó). Tiene:
+  - trece CHECK: `trip_offers_version_chk`, `trip_offers_name_chk` (2–80), `trip_offers_price_chk` (total entre 1 y 1,000,000 y descuento menor que el total), `trip_offers_deposits_chk` (hasta 3, sin nulos, mayores que 0 y menores que el precio final), `trip_offers_balance_chk` (fecha de saldo si y solo si hay anticipos), `trip_offers_bonus_chk` (2–200), `trip_offers_validity_chk` (`valid_until ≥ valid_from`), `trip_offers_capacity_chk` (1–10,000), `trip_offers_terms_version_chk` (minúsculas, números y guiones, 3–60), `trip_offers_conditions_chk` (10–2000) y los tres de auditoría: `trip_offers_approved_chk`, `trip_offers_activated_chk` y `trip_offers_closed_chk` (**una versión aprobada o activa siempre tiene quién y cuándo la aprobó, una activa quién y cuándo la activó, y solo una cerrada que estuvo activa puede tener `superseded_by`**);
+  - siete claves foráneas `ON DELETE restrict`: el viaje, cuatro hacia `profiles` (autor, aprobación, activación y cierre), la autorreferencia `superseded_by` y la compuesta `trip_offers_campaign_trip_fk (campaign_id, trip_id) → campaigns (id, trip_id)`, que garantiza que la campaña es del mismo viaje;
+  - el índice `trip_offers_trip_idx` y seis índices únicos parciales, en pares (general por viaje, campaña por campaña): `trip_offers_general_version_uq` y `trip_offers_campaign_version_uq` (números de versión únicos en su ámbito), `trip_offers_general_active_uq` y `trip_offers_campaign_active_uq` (**una sola versión activa por ámbito**) y `trip_offers_general_pending_uq` y `trip_offers_campaign_pending_uq` (una sola versión pendiente, borrador o aprobada, por ámbito);
+- crea la tabla `exchange_rates` (solo inserciones: soles por 1 USD en `numeric(10,4)`, quién lo fijó y desde cuándo rige), con el CHECK `exchange_rates_usd_pen_chk` (mayor que 0 y menor que 100), la clave foránea hacia `profiles` y el índice `exchange_rates_created_idx`;
+- añade a `campaigns` la restricción única `campaigns_id_trip_uq (id, trip_id)`, destino de la clave foránea compuesta. Es aditiva: `id` ya es único, así que no cambia nada de las campañas existentes.
+
+No migra los precios antiguos de `trips` (`price_usd`, `deposit_usd`, etc.): las dos tablas nuevas quedan vacías y el admin carga las ofertas desde el CRM.
+
+Revisión previa:
+
+- `grep -inE 'neon_auth|create schema|drop |add value' drizzle/0008_moaning_roulette.sql` no devuelve nada: no hay `DROP`, ni `ALTER TYPE … ADD VALUE`, ni nada en `neon_auth`;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0008_moaning_roulette.sql | grep -vE '"(trip_offers|exchange_rates|trip_offer_status)"'` devuelve solo la línea de `campaigns_id_trip_uq`: no toca `trips`, `leads`, `bookings`, `profiles`, `staff_*` ni `outbox_events`.
+
+**Un solo bloque, con el archivo tal cual.** No hay `ADD VALUE` (solo se crea un enum nuevo), así que todo va en una transacción. drizzle-kit escribía la restricción de `campaigns` al final, después de la clave foránea compuesta que la necesita; en el archivo ya está movida a mano a la primera sentencia, con un comentario que lo explica: como en `0006` y `0007`, el archivo lleva una edición manual comentada. El snapshot y el journal no cambian.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0007` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regclass('public.campaigns'), to_regclass('public.trip_offers');` devuelve `campaigns` y `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. Escribir `BEGIN;`, debajo el archivo `drizzle/0008_moaning_roulette.sql` completo y, al final, `COMMIT;`, y ejecutarlo todo junto. Las líneas `--> statement-breakpoint` y los comentarios `--` son comentarios de SQL y se pueden dejar.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0008_moaning_roulette.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f "$F"
+   ```
+
+   `-1` lo ejecuta todo en una sola transacción. Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+
+   Si falla, la transacción se deshace entera y no se guarda nada. Errores que se pueden ver:
+   - `relation "campaigns" does not exist`: falta `0007` en esa rama; aplicarla antes.
+   - `relation "campaigns_id_trip_uq" already exists`: ya existe la restricción de `campaigns`. Repetir la consulta del paso 1: si `trip_offers` ya no es `NULL`, la migración ya estaba aplicada y no hay que repetir nada; si sigue en `NULL`, alguien creó la restricción por otra vía y hay que revisarlo antes de seguir.
+   - cualquier otro `already exists` (por ejemplo, `type "trip_offer_status" already exists`) o cualquier otro error: la rama no está en el estado esperado. No es la migración ya aplicada; parar y revisar.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+5. Comprobar:
+   - el enum: `SELECT enum_range(NULL::trip_offer_status);` devuelve `{draft,approved,active,closed}`;
+   - las restricciones de `trip_offers`: `SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.trip_offers'::regclass AND contype IN ('p','c','f');` devuelve 21 (un `*_pkey`, trece `*_chk` y siete claves foráneas);
+   - las de `exchange_rates`: la misma consulta con `'public.exchange_rates'::regclass` devuelve 3 (un `*_pkey`, un `*_chk` y un `*_fk`);
+   - las de `campaigns`: la misma consulta con `'public.campaigns'::regclass` y `contype IN ('p','c','f','u')` devuelve 10 (las 9 de `0007` más `campaigns_id_trip_uq`);
+   - la columna generada: `SELECT attname FROM pg_attribute WHERE attrelid = 'public.trip_offers'::regclass AND attgenerated = 's';` devuelve `final_price_usd`;
+   - los índices: `SELECT indexname FROM pg_indexes WHERE tablename IN ('trip_offers', 'exchange_rates') ORDER BY 1;` devuelve los diez: `exchange_rates_created_idx`, `exchange_rates_pkey`, `trip_offers_campaign_active_uq`, `trip_offers_campaign_pending_uq`, `trip_offers_campaign_version_uq`, `trip_offers_general_active_uq`, `trip_offers_general_pending_uq`, `trip_offers_general_version_uq`, `trip_offers_pkey` y `trip_offers_trip_idx`;
+   - los datos: `SELECT count(*) FROM trip_offers;` y `SELECT count(*) FROM exchange_rates;` devuelven 0.
+6. Solo después, desplegar el código de la Fase 2.
+
+Prueba manual de las restricciones, **solo en la rama de pruebas de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil, dos viajes de prueba con una campaña cada uno, la oferta general activa del viaje A con dos anticipos, su borrador v2, una oferta de campaña activa del mismo viaje y un tipo de cambio). La consulta final devuelve tres filas: general v1 `active` con precio final 1800, general v2 `draft` con 1900 y campaña v1 `active` con 1700:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-ofertas', 'ofertas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-ofertas-a', 'Maratón de prueba A', 'Santiago', 'Chile', '2027-04-25', ARRAY['42K'], 'Viaje de prueba A'),
+  ('00000000-0000-4000-8000-000000000002', 'prueba-ofertas-b', 'Maratón de prueba B', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba B');
+INSERT INTO campaigns (id, code, trip_id, channel, name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000011', 'prueba-oferta-a', '00000000-0000-4000-8000-000000000001', 'event', 'Campaña A', 'test-ofertas'),
+  ('00000000-0000-4000-8000-000000000012', 'prueba-oferta-b', '00000000-0000-4000-8000-000000000002', 'event', 'Campaña B', 'test-ofertas');
+-- Oferta general del viaje A, activa (v1), con dos anticipos.
+INSERT INTO trip_offers (id, trip_id, version, status, name, total_price_usd, discount_usd, deposit_options_usd, balance_due_on, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES
+  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 1, 'active', 'General A', 2000, 200, '{100,200}', '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- Borrador v2 de esa oferta general (la versión pendiente de su ámbito).
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000001', 2, 'General A v2', 1900, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- Oferta de campaña del mismo viaje, activa (v1).
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES
+  ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 1, 'active', 'Campaña A', 1700, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+INSERT INTO exchange_rates (usd_pen, created_by) VALUES (3.7512, 'test-ofertas');
+SELECT campaign_id IS NOT NULL AS campana, version, status, final_price_usd FROM trip_offers ORDER BY 1, 2;
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- trip_offers_approved_chk: aprobada sin approved_at
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'approved', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_activated_chk: activa sin approved_at (con activated_at)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_activated_chk: activa sin activated_at (aprobada)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_activated_chk: pasar el borrador v2 a activa sin auditoría
+UPDATE trip_offers SET status = 'active' WHERE version = 2 AND campaign_id IS NULL;
+-- trip_offers_price_chk: repetir cambiando el descuento 2000 por 2500 (descuento > total), y con total 0 y descuento 0
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, discount_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_deposits_chk: repetir cambiando '{0}' por '{2000}' (≥ precio final), '{100,NULL}' y '{100,200,300,400}'
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, deposit_options_usd, balance_due_on, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '{0}', '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_balance_chk: anticipos sin fecha de saldo
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, deposit_options_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '{100}', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_balance_chk: fecha de saldo sin anticipos
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, balance_due_on, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_validity_chk: valid_until anterior a valid_from
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, valid_until, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', '2026-10-31', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_terms_version_chk: terms_version con mayúsculas
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', 'Prueba-V1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_campaign_trip_fk: oferta del viaje A con la campaña del viaje B
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000012', 1, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_general_active_uq: otra general activa del viaje A
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000001', 3, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- trip_offers_campaign_active_uq: otra activa de la misma campaña
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 2, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- trip_offers_general_pending_uq: otro borrador general del viaje A
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', 3, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_campaign_pending_uq: dos borradores de la misma campaña (ejecutar las dos líneas juntas)
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 2, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 3, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_general_version_uq: otra v1 general del viaje A (cerrada, para no chocar con las otras reglas)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, closed_by, closed_at) VALUES ('00000000-0000-4000-8000-000000000001', 1, 'closed', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_campaign_version_uq: otra v1 de la misma campaña (cerrada)
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, closed_by, closed_at) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 1, 'closed', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_closed_chk: superseded_by en una versión no cerrada
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by, superseded_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', '00000000-0000-4000-8000-000000000101');
+-- exchange_rates_usd_pen_chk: repetir cambiando 0 por 100
+INSERT INTO exchange_rates (usd_pen, created_by) VALUES (0, 'test-ofertas');
+ROLLBACK;
+```
+
+Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
 
 ### Lectura pública para la landing
 

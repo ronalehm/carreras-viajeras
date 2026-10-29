@@ -536,17 +536,17 @@ Los de servidor con `// @vitest-environment node` y `vi.mock("server-only", () =
 Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los ejecuta el reviewer). Nadie aplica migraciones, despliega ni hace commits. Las fases son entregables por separado: tras F2 el admin puede cargar y aprobar ofertas, pero la web aún no las muestra; tras F3 la web solo muestra ofertas; F4 deja una sola fuente de verdad en el CRM.
 
 ### Fase 1: datos, permisos y contrato de servidor (5 tareas, 16 archivos: 2 generados por drizzle-kit)
-- [ ] T1 — Base compartida:
+- [x] T1 — Base compartida:
   - enum `trip_offer_status`, tablas `trip_offers` y `exchange_rates` y `campaigns_id_trip_uq` en el schema;
   - `npm run db:generate` y revisión del SQL (sin `ADD VALUE`, `DROP` ni `neon_auth`);
   - permisos `offers.manage` y `offers.view` con sus tests;
   - README "Migración de ofertas comerciales (`0008`)".
 
   Archivos: `lib/db-schema.ts`, `drizzle/0008_*.sql` (generado; número provisional hasta el turno de merge), `drizzle/meta/0008_snapshot.json` (generado), `drizzle/meta/_journal.json`, `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts`, `README.md` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — Cálculo y formato USD→PEN con tests · archivos: `lib/currency.ts`, `lib/currency.test.ts` · depende de: T1 · secuencial (base, `lib/`)
-- [ ] T3 — Schemas y tipos de ofertas y tipo de cambio, con tests · archivos: `modules/trips/schemas/offers.schema.ts`, `modules/trips/schemas/offers.schema.test.ts`, `modules/trips/types/offers.types.ts` · depende de: T2 · secuencial
-- [ ] T4 — `offers.service.ts` (CRM, transiciones, `getActiveOffer`, `getPublicOffer`) con tests · archivos: `modules/trips/services/offers.service.ts`, `modules/trips/services/offers.service.test.ts` · depende de: T3 · paralelo (con T5)
-- [ ] T5 — `exchangeRates.service.ts` con tests · archivos: `modules/trips/services/exchangeRates.service.ts`, `modules/trips/services/exchangeRates.service.test.ts` · depende de: T3 · paralelo (con T4)
+- [x] T2 — Cálculo y formato USD→PEN con tests · archivos: `lib/currency.ts`, `lib/currency.test.ts` · depende de: T1 · secuencial (base, `lib/`)
+- [x] T3 — Schemas y tipos de ofertas y tipo de cambio, con tests · archivos: `modules/trips/schemas/offers.schema.ts`, `modules/trips/schemas/offers.schema.test.ts`, `modules/trips/types/offers.types.ts` · depende de: T2 · secuencial
+- [x] T4 — `offers.service.ts` (CRM, transiciones, `getActiveOffer`, `getPublicOffer`) con tests · archivos: `modules/trips/services/offers.service.ts`, `modules/trips/services/offers.service.test.ts` · depende de: T3 · paralelo (con T5)
+- [x] T5 — `exchangeRates.service.ts` con tests · archivos: `modules/trips/services/exchangeRates.service.ts`, `modules/trips/services/exchangeRates.service.test.ts` · depende de: T3 · paralelo (con T4)
 
 ### Fase 2: CRM de ofertas y tipo de cambio (5 tareas, 16 archivos)
 Requisito previo: F1 cerrada y la migración aplicada en la rama de Neon de pruebas.
