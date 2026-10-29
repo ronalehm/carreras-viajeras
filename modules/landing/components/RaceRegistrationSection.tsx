@@ -6,6 +6,7 @@ import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { cn } from "@/lib/utils";
 import type { OfferView } from "../utils/catalogOffer";
 import type { TripLanding } from "../utils/catalogTrip";
+import { CampaignVisitBeacon } from "./CampaignVisitBeacon";
 import {
   GENERAL_INQUIRY_MESSAGE,
   WHATSAPP_NUMBER,
@@ -70,6 +71,8 @@ export function RaceRegistrationSection({
 
   return (
     <>
+      {/* Counts the campaign visit from the browser, also while the registration is closed (P-L). */}
+      {attribution.c && <CampaignVisitBeacon slug={trip.slug} code={attribution.c} />}
       <section
         aria-labelledby="race-title"
         className="relative isolate overflow-hidden bg-night text-primary-foreground"

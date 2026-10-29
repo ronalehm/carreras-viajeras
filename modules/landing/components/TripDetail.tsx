@@ -9,9 +9,16 @@ import { OfferSummary } from "./OfferSummary";
 
 const section = "border-t border-primary/15 pt-8";
 const sectionTitle = "mb-4 text-sm font-bold tracking-wide";
+const fullWidthButton = "h-auto w-full py-3 text-base font-bold whitespace-normal";
+
+type TripDetailProps = {
+  trip: TripLanding;
+  offer: OfferView | null;
+  registrationHref: string | null; // null → registration closed (gate P-L): WhatsApp only
+};
 
 // The price section is the offer in force (resolved by the server) or a notice without amounts.
-export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferView | null }) {
+export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
   const facts = [
     { label: "Carrera", value: trip.raceDate },
     { label: "Viaje", value: trip.travelDates ?? "Fechas por confirmar" },
@@ -22,6 +29,12 @@ export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferVie
     WHATSAPP_NUMBER,
     buildTripInquiryMessage({ title: trip.title, raceDate: trip.raceDate, location: trip.location }),
   );
+  // Plain <a>: the registration page is not prefetched.
+  const registrationLink = registrationHref ? (
+    <a href={registrationHref} className={cn(buttonVariants({ size: "lg" }), fullWidthButton)}>
+      Registrarme
+    </a>
+  ) : null;
 
   return (
     <article className="mx-auto grid max-w-2xl grid-cols-1 gap-10 px-4 py-12 text-primary sm:py-16">
@@ -86,6 +99,8 @@ export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferVie
         </section>
       )}
 
+      {registrationLink && <div>{registrationLink}</div>}
+
       {trip.includes.length > 0 && (
         <section aria-labelledby="trip-includes-title" className={section}>
           <h2 id="trip-includes-title" className={sectionTitle}>
@@ -134,14 +149,16 @@ export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferVie
       )}
 
       <div className={section}>
+        {registrationLink}
         {whatsAppUrl && (
           <a
             href={whatsAppUrl}
             target="_blank"
             rel="noopener noreferrer"
             className={cn(
-              buttonVariants({ size: "lg" }),
-              "h-auto w-full py-3 text-base font-bold whitespace-normal",
+              buttonVariants(registrationHref ? { size: "lg", variant: "outline" } : { size: "lg" }),
+              fullWidthButton,
+              registrationHref && "mt-3",
             )}
           >
             Consultar por WhatsApp <ArrowUpRight aria-hidden />
