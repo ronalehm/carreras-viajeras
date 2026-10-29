@@ -233,9 +233,9 @@ Solo `modules/landing/components/RaceRegistrationSection.tsx`. En la rama normal
 - [x] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ### Fase 4: registro para PC (3 tareas, 2 archivos)
-- [ ] T1 — `RaceRegistrationSection`: encabezado alineado y banda de registro en dos columnas en `lg` (Requisito 9) · archivos: `modules/landing/components/RaceRegistrationSection.tsx` · depende de: Fase 3 · secuencial
-- [ ] T2 — README: el registro en PC (dos columnas, precio y texto a la izquierda, formulario a la derecha) · archivos: `README.md` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — Verificación visual a 360, 1280, 1440 y 1920 px (con y sin oferta, P-L, modo stand) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
+- [x] T1 — `RaceRegistrationSection`: encabezado alineado y banda de registro en dos columnas en `lg` (Requisito 9) · archivos: `modules/landing/components/RaceRegistrationSection.tsx` · depende de: Fase 3 · secuencial
+- [x] T2 — README: el registro en PC (dos columnas, precio y texto a la izquierda, formulario a la derecha) · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [x] T3 — Verificación visual a 360, 1280, 1440 y 1920 px (con y sin oferta, P-L, modo stand) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ## Preguntas abiertas
 1. **Desglose diario.** *(Resuelta: solo el total.)* Los datos se guardan por día. ¿Quieres ya en `/crm/campanas/<id>` una lista de visitas por día (útil para comparar los días de una feria), o basta el total por ahora?

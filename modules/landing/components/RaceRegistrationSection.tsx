@@ -131,7 +131,7 @@ export function RaceRegistrationSection({
         <section
           id="registro"
           aria-labelledby="registro-title"
-          className="bg-sky px-4 py-12 text-night sm:py-16 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:grid-cols-subgrid lg:grid-rows-subgrid lg:bg-transparent lg:p-0"
+          className="bg-sky px-4 py-12 text-night sm:py-16 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:grid-cols-subgrid lg:grid-rows-subgrid lg:scroll-mt-16 lg:bg-transparent lg:p-0"
         >
           <div className="mx-auto flex max-w-md flex-col gap-6 lg:contents">
             <div className="lg:col-start-1 lg:row-start-1">
