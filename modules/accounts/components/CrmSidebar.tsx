@@ -22,6 +22,7 @@ import {
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { SignOutButton } from "./SignOutButton";
+import styles from "./CrmShell.module.css";
 
 const ICONS = {
   dashboard: LayoutDashboard,
@@ -105,7 +106,7 @@ export function CrmSidebar({ email, roleLabels, items }: CrmSidebarProps) {
           aria-current={selected ? "page" : undefined}
           onNavigate={() => setOpen(false)}
           className={cn(
-            "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-colors duration-150 motion-reduce:transition-none",
+            "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium",
             selected
               ? "bg-primary/8 text-primary"
               : "text-muted-foreground hover:bg-muted/70 hover:text-foreground",
@@ -141,7 +142,7 @@ export function CrmSidebar({ email, roleLabels, items }: CrmSidebarProps) {
             if (!links.length) return null;
             return (
               <div key={group.id} className="space-y-3">
-                <p className="px-3 text-[10px] font-medium tracking-widest text-muted-foreground uppercase">
+                <p className="px-3 text-[0.6875rem] font-medium tracking-widest text-muted-foreground uppercase">
                   {group.label}
                 </p>
                 <ul className="space-y-1">{links.map(navigationItem)}</ul>
@@ -172,7 +173,7 @@ export function CrmSidebar({ email, roleLabels, items }: CrmSidebarProps) {
             <p title={email} className="truncate text-xs font-medium">
               {email}
             </p>
-            <p className="mt-1.5 inline-flex rounded-full bg-muted/80 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <p className="mt-1.5 inline-flex rounded-full bg-muted/80 px-2 py-0.5 text-[0.6875rem] font-medium text-muted-foreground">
               {roleLabels.join(", ")}
             </p>
           </div>
@@ -195,25 +196,43 @@ export function CrmSidebar({ email, roleLabels, items }: CrmSidebarProps) {
         {account()}
       </aside>
       <Dialog.Root open={open} onOpenChange={setOpen}>
-        <header className="sticky top-0 z-30 flex h-20 items-center justify-between border-b border-border/60 bg-card px-4 lg:hidden">
+        <header
+          className={cn(
+            styles.chrome,
+            "flex h-20 items-center justify-between px-4 lg:hidden",
+          )}
+        >
           <Brand />
           <Dialog.Trigger
             aria-label="Abrir menú del CRM"
-            className={buttonVariants({ variant: "outline", size: "icon" })}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "icon" }),
+              styles.iconControl,
+              "rounded-xl",
+            )}
           >
             <Menu aria-hidden="true" />
           </Dialog.Trigger>
         </header>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-40 bg-foreground/30" />
-          <Dialog.Popup className="fixed inset-y-0 left-0 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col bg-card shadow-xl">
+          <Dialog.Backdrop className={cn(styles.scrim, "fixed inset-0 z-40")} />
+          <Dialog.Popup
+            className={cn(
+              styles.drawer,
+              "fixed inset-y-0 left-0 z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col",
+            )}
+          >
             <div className="flex items-center justify-between border-b p-4">
               <Dialog.Title className="text-sm font-semibold">
                 Carreras Viajeras · CRM
               </Dialog.Title>
               <Dialog.Close
                 aria-label="Cerrar menú"
-                className={buttonVariants({ variant: "ghost", size: "icon" })}
+                className={cn(
+                  buttonVariants({ variant: "ghost", size: "icon" }),
+                  styles.iconControl,
+                  "rounded-xl",
+                )}
               >
                 <X aria-hidden="true" />
               </Dialog.Close>
