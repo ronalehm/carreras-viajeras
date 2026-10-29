@@ -20,8 +20,11 @@ const environmentSchema = z.object({
       && ["http://localhost:3000", "http://localhost:8787"].includes(value))),
 });
 
-// Its message carries field names only, so callers may log it.
-export class InvalidEnvironmentError extends Error {}
+// Its message carries field names only, so callers may log it. Recognised by name, so modules
+// that mock @/lib/env in tests keep working.
+export class InvalidEnvironmentError extends Error {
+  override name = "InvalidEnvironmentError";
+}
 
 // Never attach Zod issues or input to the error: field names only.
 function invalidEnvironment(error: z.ZodError): InvalidEnvironmentError {
