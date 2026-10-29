@@ -30,6 +30,7 @@ export const LEAD_SOURCE_LABELS: Record<LeadSource, string> = {
   google_form: "Google Forms",
   import: "Importación",
   other: "Otro",
+  runner_account: "Cuenta web",
 };
 
 // Origin ("Origen"): how the person found us, in the order of leadChannelSchema.

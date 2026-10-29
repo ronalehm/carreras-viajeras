@@ -274,6 +274,7 @@ export const leadSourceEnum = pgEnum("lead_source", [
   "other",
   "google_form",
   "import",
+  "runner_account",
 ]);
 export const leadChannelEnum = pgEnum("lead_channel", [
   "event",
@@ -566,7 +567,7 @@ export const leads = pgTable(
     consentedAt: timestamp("consented_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
-    // NULL only for system sources: web_form, google_form and import (leads_created_by_chk).
+    // NULL only for system sources: web_form, google_form, import and runner_account (leads_created_by_chk).
     createdBy: text("created_by").references(() => profiles.userId, { onDelete: "restrict" }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -609,7 +610,7 @@ export const leads = pgTable(
     check("leads_archived_chk", sql`(${table.archivedAt} IS NULL) = (${table.archivedBy} IS NULL)`),
     check(
       "leads_created_by_chk",
-      sql`${table.createdBy} IS NOT NULL OR ${table.source} IN ('web_form', 'google_form', 'import')`,
+      sql`${table.createdBy} IS NOT NULL OR ${table.source} IN ('web_form', 'google_form', 'import', 'runner_account')`,
     ),
     check(
       "leads_origin_detail_chk",
@@ -651,6 +652,7 @@ export const outboxEventTypeEnum = pgEnum("outbox_event_type", [
   "lead.stage_changed",
   "lead.follow_up_due",
   "lead.opted_out",
+  "lead.owner_assigned",
 ]);
 export const outboxStatusEnum = pgEnum("outbox_status", ["pending", "processing", "succeeded", "dead"]);
 
@@ -722,13 +724,27 @@ export const outboxEvents = pgTable(
 export const clientEmailStatusEnum = pgEnum("client_email_status", [
   "pending", "claimed", "sending", "sent", "failed", "skipped", "unknown",
 ]);
+// What the message is for: "stage" is the per-stage client email; the rest are lifecycle
+// emails (crm-lifecycle-emails.md). team_alert/owner_alert are internal. New values go last.
+export const clientEmailKindEnum = pgEnum("client_email_kind", [
+  "stage",
+  "welcome_registration",
+  "welcome_contact",
+  "welcome_account",
+  "follow_up",
+  "booking_confirmed",
+  "team_alert",
+  "owner_alert",
+]);
 
-// Separate from the original n8n event consumer. Each source event has one logical message.
+// Separate from the original n8n event consumer. Each source event has at most one logical
+// message per kind; stage is the lead's stage when the event happened.
 // Final attempts retain their token so late/repeated callbacks can be reconciled safely.
 export const clientEmails = pgTable("client_emails", {
   id: uuid("id").primaryKey().defaultRandom(),
   sourceEventId: uuid("source_event_id").notNull().references(() => outboxEvents.id, { onDelete: "restrict" }),
   leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "restrict" }),
+  kind: clientEmailKindEnum("kind").notNull().default("stage"),
   stage: leadStageEnum("stage").notNull(),
   templateVersion: smallint("template_version").notNull().default(1),
   recipient: text("recipient"),
@@ -748,7 +764,7 @@ export const clientEmails = pgTable("client_emails", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   sentAt: timestamp("sent_at", { withTimezone: true }),
 }, (table) => [
-  uniqueIndex("client_emails_event_uq").on(table.sourceEventId),
+  uniqueIndex("client_emails_event_kind_uq").on(table.sourceEventId, table.kind),
   index("client_emails_lead_created_idx").on(table.leadId, table.createdAt),
   index("client_emails_ready_idx").on(table.status, table.createdAt),
   check("client_emails_attempts_chk", sql`${table.attempts} BETWEEN 0 AND 3`),

@@ -106,6 +106,13 @@
       "when": 1793302787993,
       "tag": "0014_cute_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793314804733,
+      "tag": "0015_client_email_kinds",
+      "breakpoints": true
     }
   ]
 }

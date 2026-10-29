@@ -11,7 +11,10 @@ import {
 import { drizzle } from "drizzle-orm/neon-http";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getClientEmailEnv: vi.fn() }));
+vi.mock("@/lib/env", () => ({
+  getClientEmailEnv: vi.fn(),
+  getEnv: vi.fn(() => ({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" })),
+}));
 import { getDb } from "@/lib/db";
 import { getClientEmailEnv } from "@/lib/env";
 import { createEmbeddedDb } from "@/lib/testing/embeddedDb";
@@ -59,6 +62,7 @@ describe("getLeadMessages", () => {
     vi.mocked(getClientEmailEnv).mockReturnValue({
       from: "sender@example.test",
       startAt: new Date("2026-10-29T00:00:00Z"),
+      teamAlertEmail: "team@example.test",
     });
     const query = fake();
     expect((await getLeadMessages(id)).automation).toBe("enabled");
@@ -100,6 +104,7 @@ describe("pipeline and messages against PostgreSQL", () => {
     vi.mocked(getClientEmailEnv).mockReturnValue({
       from: "sender@example.test",
       startAt: new Date("2000-01-01T00:00:00Z"),
+      teamAlertEmail: "team@example.test",
     });
   });
   it("reads ten contacts independently per stage with complete totals beyond a single global page", async () => {
@@ -156,5 +161,43 @@ describe("pipeline and messages against PostgreSQL", () => {
     });
     board = await getLeadPipeline({ page: 1 }, "staff", "2026-10-29");
     expect(board.columns[0].leads[0].emailStatus).toBeNull();
+  });
+  it("ignores internal alerts in the funnel card and shows the current client email", async () => {
+    await embedded.pg.query(
+      "INSERT INTO profiles(user_id,email) VALUES ('owner','owner@example.test')",
+    );
+    await embedded.pg.query(
+      "INSERT INTO leads(id,full_name,phone,email,source,consent_version,owner_user_id) VALUES ($1,'Ana Vega','+51938127170','ana@example.test','web_form','test-v1','owner')",
+      [id],
+    );
+    const created = await embedded.pg.query<{ id: string }>(
+      "INSERT INTO outbox_events(type,lead_id,payload) VALUES ('lead.created',$1,'{\"source\":\"web_form\"}') RETURNING id",
+      [id],
+    );
+    const assigned = await embedded.pg.query<{ id: string }>(
+      "INSERT INTO outbox_events(type,lead_id,payload) VALUES ('lead.owner_assigned',$1,'{}') RETURNING id",
+      [id],
+    );
+    const insertEmail = (eventId: string, kind: string, recipient: string) =>
+      embedded.pg.query(
+        `INSERT INTO client_emails(source_event_id,lead_id,kind,stage,recipient,sender,subject,body,status)
+        VALUES ($1,$2,$3::client_email_kind,'new',$4,'sender@example.test','Asunto','Cuerpo','pending')`,
+        [eventId, id, kind, recipient],
+      );
+    await insertEmail(created.rows[0].id, "team_alert", "team@example.test");
+    await insertEmail(assigned.rows[0].id, "owner_alert", "owner@example.test");
+    let board = await getLeadPipeline({ page: 1 }, "staff", "2026-10-29");
+    expect(board.columns[0].leads[0].emailStatus).toBeNull();
+    await insertEmail(created.rows[0].id, "welcome_contact", "ana@example.test");
+    const welcome = await embedded.pg.query<{ id: string }>(
+      "SELECT id FROM client_emails WHERE kind='welcome_contact'",
+    );
+    board = await getLeadPipeline({ page: 1 }, "staff", "2026-10-29");
+    expect(board.columns[0].leads[0].emailStatus).toEqual({
+      id: welcome.rows[0].id,
+      stage: "new",
+      status: "pending",
+      lastErrorCode: null,
+    });
   });
 });

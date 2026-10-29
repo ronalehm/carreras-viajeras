@@ -7,7 +7,14 @@ export { phoneSchema };
 // Same values as the lead_* enums in lib/db-schema.ts (kept in sync by leads.schema.test.ts).
 export const leadStageSchema = z.enum(["new", "contacted", "quoted", "reserved", "paid", "lost"]);
 // Entry path (source): how the record entered the CRM. Never edited.
-export const leadSourceSchema = z.enum(["whatsapp", "web_form", "other", "google_form", "import"]);
+export const leadSourceSchema = z.enum([
+  "whatsapp",
+  "web_form",
+  "other",
+  "google_form",
+  "import",
+  "runner_account",
+]);
 // Origin (channel): how the person found us, in the order of forms, filters and tables.
 export const leadChannelSchema = z.enum(
   [
@@ -43,8 +50,8 @@ export const leadActivityTypeSchema = z.enum([
   "re_registered",
 ]);
 
-// web_form, google_form and import are system entry paths (web capture and n8n): the manual form
-// never offers them.
+// web_form, google_form, import and runner_account are system entry paths (web capture, n8n and
+// the runner's account profile): the manual form never offers them.
 export const manualLeadSourceSchema = z.enum(["whatsapp", "other"], {
   error: "Elige la vía de entrada del lead.",
 });

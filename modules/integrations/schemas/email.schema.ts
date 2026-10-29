@@ -1,7 +1,12 @@
 import { z } from "zod";
-import { leadStageEnum } from "@/lib/db-schema";
+import { clientEmailKindEnum, leadStageEnum } from "@/lib/db-schema";
 
 export const emailStageSchema = z.enum(leadStageEnum.enumValues);
+// What each client_emails row is for (crm-lifecycle-emails.md, requirement 2).
+export const clientEmailKindSchema = z.enum(clientEmailKindEnum.enumValues);
+// Internal alerts to the team or the lead's owner: never a client email (no opt-out rule, never
+// counted as the funnel card's client email).
+export const internalEmailKindSchema = clientEmailKindSchema.extract(["team_alert", "owner_alert"]);
 export const emailClaimSchema = z
   .object({
     executionId: z.string().regex(/^[A-Za-z0-9_-]{1,120}$/),

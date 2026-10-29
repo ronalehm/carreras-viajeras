@@ -62,7 +62,15 @@ try {
   const migrations = readdirSync(`${root}drizzle`).filter((name) => /^\d{4}.*\.sql$/.test(name)).sort();
   for (const migration of migrations) {
     const source = readFileSync(`${root}drizzle/${migration}`, "utf8");
-    sql(Number(migration.slice(0, 4)) >= 10 ? `BEGIN;\n${source}\nCOMMIT;` : source);
+    // Two-block migrations (ALTER TYPE ... ADD VALUE): the first block autocommits, so the second
+    // can use the new enum values; the second runs in its own transaction, as applied by hand.
+    const [first, second] = source.split(/^.*migration:split-transaction.*$/m);
+    if (second !== undefined) {
+      sql(first);
+      sql(`BEGIN;\n${second}\nCOMMIT;`);
+    } else {
+      sql(Number(migration.slice(0, 4)) >= 10 ? `BEGIN;\n${source}\nCOMMIT;` : source);
+    }
   }
   check("all migrations apply on native PostgreSQL", migrations.length >= 13);
   const sequential = sql(readFileSync(new URL("fixtures/rewards.sql", import.meta.url), "utf8"));

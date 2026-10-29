@@ -17,6 +17,20 @@ export {
   recordAutomationActivity,
 } from "./services/integrationLeads.service";
 export { enqueueFollowUps } from "./services/followUps.service";
-export type { ClaimedEvent, IntegrationLead, OutboxEventType } from "./types/integrations.types";
+export type {
+  ClaimedEvent,
+  ClientEmailKind,
+  ClientEmailSkipReason,
+  IntegrationLead,
+  OutboxEventType,
+} from "./types/integrations.types";
 export { ackClientEmail, authorizeClientEmail, claimClientEmails, failClientEmail, retryClientEmail } from "./services/clientEmails.service";
-export { emailAckSchema, emailAttemptSchema, emailClaimSchema, emailFailSchema, emailOperationSchema } from "./schemas/email.schema";
+export {
+  clientEmailKindSchema,
+  emailAckSchema,
+  emailAttemptSchema,
+  emailClaimSchema,
+  emailFailSchema,
+  emailOperationSchema,
+  internalEmailKindSchema,
+} from "./schemas/email.schema";

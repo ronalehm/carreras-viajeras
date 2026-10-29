@@ -24,7 +24,7 @@ describe("client email environment", () => {
   it("requires an explicit sender and activation cutoff when enabled", async () => {
     setEnv({ CRM_EMAIL_AUTOMATION_ENABLED: "true", CRM_EMAIL_FROM: "sender@example.test", CRM_EMAIL_AUTOMATION_START_AT: "2026-10-29T18:00:00Z" });
     const { getClientEmailEnv } = await import("./env");
-    expect(getClientEmailEnv()).toEqual({ from: "sender@example.test", startAt: new Date("2026-10-29T18:00:00Z") });
+    expect(getClientEmailEnv()).toEqual({ from: "sender@example.test", startAt: new Date("2026-10-29T18:00:00Z"), teamAlertEmail: null });
     vi.stubEnv("CRM_EMAIL_AUTOMATION_START_AT", undefined);
     expect(() => getClientEmailEnv()).toThrow("Invalid environment fields: CRM_EMAIL_AUTOMATION_START_AT");
     vi.stubEnv("CRM_EMAIL_AUTOMATION_ENABLED", "yes");
@@ -34,6 +34,50 @@ describe("client email environment", () => {
     setEnv({ CRM_EMAIL_AUTOMATION_ENABLED: "true", CRM_EMAIL_FROM: "a@example.test\r\nBcc: x@example.test", CRM_EMAIL_AUTOMATION_START_AT: "yesterday" });
     const { getClientEmailEnv } = await import("./env");
     expect(() => getClientEmailEnv()).toThrow("Invalid environment fields: CRM_EMAIL_FROM, CRM_EMAIL_AUTOMATION_START_AT");
+  });
+
+  const enabledEmail = {
+    CRM_EMAIL_AUTOMATION_ENABLED: "true",
+    CRM_EMAIL_FROM: "sender@example.test",
+    CRM_EMAIL_AUTOMATION_START_AT: "2026-10-29T18:00:00Z",
+  };
+
+  it.each([undefined, ""])("leaves the team alert address null when CRM_TEAM_ALERT_EMAIL is %j", async (address) => {
+    setEnv({ ...enabledEmail, CRM_TEAM_ALERT_EMAIL: address });
+    const { getClientEmailEnv } = await import("./env");
+    expect(getClientEmailEnv()?.teamAlertEmail).toBeNull();
+  });
+
+  it("reads the team alert address in lower case", async () => {
+    setEnv({ ...enabledEmail, CRM_TEAM_ALERT_EMAIL: "Equipo.Ventas@Example.TEST" });
+    const { getClientEmailEnv } = await import("./env");
+    expect(getClientEmailEnv()).toEqual({
+      from: "sender@example.test",
+      startAt: new Date("2026-10-29T18:00:00Z"),
+      teamAlertEmail: "equipo.ventas@example.test",
+    });
+  });
+
+  it.each([
+    "not-an-email",
+    "team@example.test\r\nBcc: x@example.test",
+    `${"a".repeat(245)}@example.test`,
+  ])("rejects the team alert address %j naming only the field", async (address) => {
+    setEnv({ ...enabledEmail, CRM_TEAM_ALERT_EMAIL: address });
+    const { getClientEmailEnv } = await import("./env");
+    let error: unknown;
+    try { getClientEmailEnv(); } catch (caught) { error = caught; }
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe("Invalid environment fields: CRM_TEAM_ALERT_EMAIL");
+    expect(JSON.stringify(error)).not.toContain(address);
+    expect((error as Error).message).not.toContain(address);
+    expect((error as Error).cause).toBeUndefined();
+  });
+
+  it.each([undefined, "false"])("ignores an invalid team alert address while automation is %j", async (enabled) => {
+    setEnv({ ...enabledEmail, CRM_EMAIL_AUTOMATION_ENABLED: enabled, CRM_TEAM_ALERT_EMAIL: "not-an-email" });
+    const { getClientEmailEnv } = await import("./env");
+    expect(getClientEmailEnv()).toBeNull();
   });
 });
 
