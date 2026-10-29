@@ -99,6 +99,13 @@
       "when": 1793295322455,
       "tag": "0013_client_stage_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793310036949,
+      "tag": "0014_client_email_kinds",
+      "breakpoints": true
     }
   ]
 }

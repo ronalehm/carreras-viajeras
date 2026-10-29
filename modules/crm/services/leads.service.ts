@@ -190,10 +190,12 @@ export async function getLeadPipeline(
     nextActionDate: leads.nextActionDate, nextActionNote: leads.nextActionNote,
     email: leads.email, contactOptOutAt: leads.contactOptOutAt, lostReason: leads.lostReason,
     // Match the current stage episode, not simply the last email with the same stage label.
+    // Client emails only: internal alerts (team_alert, owner_alert) never count as the card's email.
     emailStatus: sql<LeadEmailSummary | null>`(SELECT jsonb_build_object(
       'id', m.id, 'stage', m.stage, 'status', m.status, 'lastErrorCode', m.last_error_code)
       FROM client_emails m JOIN outbox_events e ON e.id = m.source_event_id
       WHERE m.lead_id = ${leads.id} AND m.stage = ${leads.stage}
+        AND m.kind NOT IN ('team_alert', 'owner_alert')
         AND NOT EXISTS (SELECT 1 FROM outbox_events newer WHERE newer.lead_id = m.lead_id
           AND newer.type IN ('lead.created', 'lead.stage_changed', 'lead.opted_out')
           AND newer.sequence > e.sequence)

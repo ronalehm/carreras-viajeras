@@ -74,7 +74,9 @@ describe("lead enums", () => {
   });
 
   it("include the new entry paths, preferences and activity types", () => {
-    expect(leadSourceSchema.options).toEqual(expect.arrayContaining(["google_form", "import"]));
+    expect(leadSourceSchema.options).toEqual(
+      expect.arrayContaining(["google_form", "import", "runner_account"]),
+    );
     expect(contactPreferenceSchema.options).toEqual(["whatsapp", "email", "call"]);
     expect(leadActivityTypeSchema.options).toEqual(expect.arrayContaining(["channel_changed", "opted_out"]));
   });
@@ -242,7 +244,7 @@ describe("createLeadSchema", () => {
     ]);
   });
 
-  it.each(["web_form", "google_form", "import", "", undefined])(
+  it.each(["web_form", "google_form", "import", "runner_account", "", undefined])(
     "rejects the entry path %j in the manual form (system paths are never offered)",
     (source) => {
       expect(fieldErrors({ ...validForm, source }).source).toEqual(["Elige la vía de entrada del lead."]);

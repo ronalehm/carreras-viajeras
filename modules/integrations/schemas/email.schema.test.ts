@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientEmailKindSchema,
   emailAckSchema,
   emailAttemptSchema,
   emailClaimSchema,
   emailFailSchema,
   emailOperationSchema,
+  internalEmailKindSchema,
 } from "./email.schema";
 const token = "b0000000-0000-4000-8000-000000000001";
 describe("email integration contracts", () => {
@@ -42,5 +44,23 @@ describe("email integration contracts", () => {
         smtpMessageId: "a\r\nHeader",
       }).success,
     ).toBe(false);
+  });
+  it("lists every email kind and marks only the team and owner alerts as internal", () => {
+    expect(clientEmailKindSchema.options).toEqual([
+      "stage",
+      "welcome_registration",
+      "welcome_contact",
+      "welcome_account",
+      "follow_up",
+      "booking_confirmed",
+      "team_alert",
+      "owner_alert",
+    ]);
+    expect(internalEmailKindSchema.options).toEqual(["team_alert", "owner_alert"]);
+    for (const kind of clientEmailKindSchema.options.filter(
+      (kind) => kind !== "team_alert" && kind !== "owner_alert",
+    ))
+      expect(internalEmailKindSchema.safeParse(kind).success).toBe(false);
+    expect(clientEmailKindSchema.safeParse("campaign").success).toBe(false);
   });
 });

@@ -56,6 +56,7 @@ describe("lead labels", () => {
       google_form: "Google Forms",
       import: "Importación",
       other: "Otro",
+      runner_account: "Cuenta web",
     });
     expect(CONTACT_PREFERENCE_LABELS).toEqual({ whatsapp: "WhatsApp", email: "Correo", call: "Llamada" });
   });

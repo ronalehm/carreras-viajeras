@@ -1,12 +1,25 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
+import { can } from "@/lib/auth/permissions";
+import { getTodayDate } from "@/lib/dates";
 import { getDb } from "@/lib/db";
-import { clientEmails } from "@/lib/db-schema";
-import { getClientEmailEnv } from "@/lib/env";
-import { emailStageSchema } from "../schemas/email.schema";
+import { clientEmails, staffRoleEnum, type leadSourceEnum } from "@/lib/db-schema";
+import { getClientEmailEnv, getEnv } from "@/lib/env";
+import { emailStageSchema, internalEmailKindSchema } from "../schemas/email.schema";
+import type {
+  ClientEmailKind,
+  ClientEmailSkipReason,
+  OutboxEventType,
+} from "../types/integrations.types";
+import {
+  firstName,
+  lifecycleEmailTemplate,
+  raceLabel,
+} from "../utils/lifecycleEmailTemplates";
 
 type Stage = z.infer<typeof emailStageSchema>;
+type LeadSource = (typeof leadSourceEnum.enumValues)[number];
 type EmailEnv = NonNullable<ReturnType<typeof getClientEmailEnv>>;
 const TEXTS: Record<Stage, string> = {
   new: "gracias por tu interés en Carreras Viajeras. ¿Qué te gustaría conocer sobre tu próximo viaje? Puedes responder este correo.",
@@ -21,13 +34,37 @@ const TEXTS: Record<Stage, string> = {
 };
 
 export function clientEmailTemplate(stage: Stage, fullName: string) {
-  const name = fullName.trim().split(/\s+/)[0] || "viajero";
   return {
     subject: "Tu viaje con Carreras Viajeras",
-    body: `Hola ${name}, ${TEXTS[stage]}\n\nEquipo de Carreras Viajeras`,
+    body: `Hola ${firstName(fullName)}, ${TEXTS[stage]}\n\nEquipo de Carreras Viajeras`,
     templateVersion: 1,
   };
 }
+
+// Labels of internal alerts. Local on purpose: modules/crm imports this module (retry action), so
+// importing its leadDisplay labels through @/modules/crm would create an import cycle. Keep them in
+// line with LEAD_SOURCE_LABELS and LEAD_STAGE_LABELS of modules/crm/utils/leadDisplay.ts.
+const SOURCE_LABELS: Record<LeadSource, string> = {
+  whatsapp: "WhatsApp",
+  web_form: "Formulario web",
+  google_form: "Google Forms",
+  import: "Importación",
+  other: "Otro",
+  runner_account: "Cuenta web",
+};
+const STAGE_LABELS: Record<Stage, string> = {
+  new: "Nuevo",
+  contacted: "Contactado",
+  quoted: "Cotizado",
+  reserved: "Reservado",
+  paid: "Pagado",
+  lost: "Perdido",
+};
+
+const STAGE_VALUES = sql.join(
+  emailStageSchema.options.map((stage) => sql`${stage}`),
+  sql`, `,
+);
 
 // Sequence is allocated after the lead lock, unlike transaction-start timestamps. This also
 // excludes an old stage event when a contact leaves that stage and later comes back to it.
@@ -38,84 +75,263 @@ const latestEvent = sql`NOT EXISTS (
     AND newer.sequence > e.sequence
 )`;
 
-// Aliases m/e/l are fixed internal SQL identifiers. No recipient/content comes from a request.
+// Current owner's address, only while the owner holds an active role with leads.manage. Same
+// criterion as isActiveOwner in modules/crm/services/leads.service.ts, replicated here as SQL
+// because importing modules/crm from this module would create an import cycle.
+const LEAD_OWNER_ROLES = staffRoleEnum.enumValues.filter((role) => can([role], "leads.manage"));
+const activeOwnerEmail = sql`(SELECT p.email FROM profiles p WHERE p.user_id = l.owner_user_id
+  AND EXISTS (SELECT 1 FROM staff_assignments s WHERE s.user_id = p.user_id AND s.revoked_at IS NULL
+    AND s.role::text IN (${sql.join(LEAD_OWNER_ROLES.map((role) => sql`${role}`), sql`, `)})))`;
+
+// Eligibility per kind (crm-lifecycle-emails.md, requirement 3), rechecked just before SMTP and on
+// retry. prepareEmails applies the same rules through skipReason() over the same SQL facts
+// (latestEvent, activeOwnerEmail, next action due in Lima). Aliases m/e/l are fixed internal SQL
+// identifiers. No recipient/content comes from a request.
+// - Common: active (env), cutoff, payload version 1, server sender, lead not archived.
+// - Internal alerts: opt-out does not block them; recipient is the current team address or the
+//   current owner's address (active role), never a stale one. No "latest event" rule.
+// - Client emails: no opt-out, no import/bulk, recipient = leads.email. Welcomes only need the
+//   lead.created event; follow_up needs the same stage, a next action still due and no later stage
+//   event; booking_confirmed and stage keep the original rules (current event, same stage).
 function eligible(env: EmailEnv) {
-  return sql`l.archived_at IS NULL AND l.contact_opt_out_at IS NULL
-    AND l.source <> 'import' AND COALESCE(e.payload->>'bulk', 'false') <> 'true'
-    AND e.payload_version = 1 AND e.type IN ('lead.created', 'lead.stage_changed')
+  const teamRecipient = env.teamAlertEmail
+    ? sql`m.recipient = ${env.teamAlertEmail}`
+    : sql`FALSE`;
+  return sql`e.payload_version = 1
     AND e.created_at >= ${env.startAt.toISOString()}::timestamptz
-    AND l.stage = m.stage AND m.recipient IS NOT NULL AND m.recipient = l.email
-    AND m.sender = ${env.from} AND ${latestEvent}`;
+    AND m.sender = ${env.from} AND l.archived_at IS NULL AND m.recipient IS NOT NULL
+    AND CASE m.kind
+      WHEN 'team_alert' THEN e.type = 'lead.created' AND ${teamRecipient}
+      WHEN 'owner_alert' THEN e.type = 'lead.owner_assigned' AND m.recipient = ${activeOwnerEmail}
+      ELSE l.contact_opt_out_at IS NULL AND l.source <> 'import'
+        AND COALESCE(e.payload->>'bulk', 'false') <> 'true' AND m.recipient = l.email
+        AND CASE m.kind
+          WHEN 'welcome_registration' THEN e.type = 'lead.created'
+          WHEN 'welcome_contact' THEN e.type = 'lead.created'
+          WHEN 'welcome_account' THEN e.type = 'lead.created'
+          WHEN 'follow_up' THEN e.type = 'lead.follow_up_due' AND l.stage = m.stage
+            AND l.next_action_date <= ${getTodayDate()}::date AND ${latestEvent}
+          WHEN 'booking_confirmed' THEN e.type = 'lead.stage_changed' AND l.stage = m.stage
+            AND ${latestEvent}
+          ELSE e.type IN ('lead.created', 'lead.stage_changed') AND l.stage = m.stage
+            AND ${latestEvent}
+        END
+    END`;
+}
+
+// Reason stored when the recheck before SMTP fails: the specific internal-alert codes when they
+// apply, otherwise the generic "ineligible".
+function ineligibleCode(env: EmailEnv) {
+  const teamMissing = env.teamAlertEmail ? sql`FALSE` : sql`TRUE`;
+  return sql`CASE
+    WHEN l.archived_at IS NULL AND m.kind = 'team_alert' AND ${teamMissing} THEN 'missing_team_address'
+    WHEN l.archived_at IS NULL AND m.kind = 'owner_alert'
+      AND m.recipient IS DISTINCT FROM ${activeOwnerEmail} THEN 'owner_changed'
+    ELSE 'ineligible' END`;
 }
 
 type Candidate = {
   eventId: string;
   leadId: string;
-  type: string;
+  type: OutboxEventType;
   payload: Record<string, unknown>;
   fullName: string;
   email: string | null;
   currentStage: Stage;
-  source: string;
+  source: LeadSource;
   archived: boolean;
   optedOut: boolean;
   current: boolean;
+  followUpDue: boolean;
+  tripTitle: string | null;
+  destinationText: string | null;
+  bookingTripTitle: string | null;
+  ownerEmail: string | null;
 };
+
+const isBulk = (event: Candidate) =>
+  event.source === "import" || event.payload.bulk === true;
+
+const isInternal = (kind: ClientEmailKind) =>
+  (internalEmailKindSchema.options as readonly string[]).includes(kind);
+
+function welcomeKind(event: Candidate): ClientEmailKind {
+  if (event.source === "runner_account") return "welcome_account";
+  if (
+    event.source === "google_form" ||
+    (event.source === "web_form" && event.payload.form === "registration")
+  )
+    return "welcome_registration";
+  // web_form from /contacto or without form, and manual whatsapp/other entries.
+  return "welcome_contact";
+}
+
+// Kinds generated by each event (requirement 2). Welcomes replace the "new" stage email and
+// booking_confirmed replaces the "reserved" one when a confirmed booking moved the lead.
+function emailKinds(event: Candidate): ClientEmailKind[] {
+  switch (event.type) {
+    case "lead.created":
+      // Imports (source import or bulk): nothing to the client nor the team. A single skipped
+      // "stage" row with bulk_import, as before this spec, marks the event as handled so it never
+      // returns to the pending batch, and the funnel card keeps showing it as omitted.
+      return isBulk(event) ? ["stage"] : [welcomeKind(event), "team_alert"];
+    case "lead.stage_changed":
+      return event.payload.trigger === "booking" && event.payload.stageTo === "reserved"
+        ? ["booking_confirmed"]
+        : ["stage"];
+    case "lead.follow_up_due":
+      return ["follow_up"];
+    case "lead.owner_assigned":
+      return ["owner_alert"];
+    default:
+      return [];
+  }
+}
+
+// Lead stage when the event happened (client_emails.stage).
+function eventStage(event: Candidate): unknown {
+  switch (event.type) {
+    case "lead.created":
+      return "new";
+    case "lead.stage_changed":
+      return event.payload.stageTo;
+    case "lead.follow_up_due":
+      return event.payload.stage;
+    default:
+      return event.currentStage;
+  }
+}
+
+const validEmail = (value: string | null) =>
+  value && z.email().max(254).safeParse(value).success ? value : null;
+
+function recipientFor(kind: ClientEmailKind, event: Candidate, env: EmailEnv) {
+  if (kind === "team_alert") return env.teamAlertEmail;
+  if (kind === "owner_alert") return validEmail(event.ownerEmail);
+  return validEmail(event.email);
+}
+
+// Same rules as eligible(), evaluated over the facts read by prepareEmails.
+function skipReason(
+  kind: ClientEmailKind,
+  event: Candidate,
+  stage: Stage,
+  recipient: string | null,
+): ClientEmailSkipReason | null {
+  if (isInternal(kind)) {
+    if (event.archived) return "archived";
+    if (!recipient)
+      return kind === "team_alert" ? "missing_team_address" : "owner_changed";
+    return null;
+  }
+  if (event.optedOut) return "opted_out";
+  if (event.archived) return "archived";
+  if (isBulk(event)) return "bulk_import";
+  const sameEpisode = event.current && event.currentStage === stage;
+  if (kind === "follow_up" && !(sameEpisode && event.followUpDue))
+    return "obsolete_event";
+  if ((kind === "stage" || kind === "booking_confirmed") && !sameEpisode)
+    return "obsolete_event";
+  return recipient ? null : "missing_email";
+}
+
+function emailContent(
+  kind: ClientEmailKind,
+  event: Candidate,
+  stage: Stage,
+  leadUrl: () => string,
+) {
+  const tripTitle =
+    kind === "booking_confirmed"
+      ? (event.bookingTripTitle ?? event.tripTitle)
+      : event.tripTitle;
+  const client = {
+    fullName: event.fullName,
+    race: raceLabel({ tripTitle, destinationText: event.destinationText }),
+  };
+  switch (kind) {
+    case "stage":
+      return clientEmailTemplate(stage, event.fullName);
+    // Internal alerts: name, race, entry path or stage and the CRM link only. Never phone,
+    // documents, medical or internal notes.
+    case "team_alert":
+      return lifecycleEmailTemplate(kind, {
+        ...client,
+        sourceLabel: SOURCE_LABELS[event.source] ?? SOURCE_LABELS.other,
+        leadUrl: leadUrl(),
+      });
+    case "owner_alert":
+      return lifecycleEmailTemplate(kind, {
+        ...client,
+        stageLabel: STAGE_LABELS[stage],
+        leadUrl: leadUrl(),
+      });
+    default:
+      return lifecycleEmailTemplate(kind, client);
+  }
+}
 
 async function prepareEmails(env: EmailEnv) {
   const db = getDb();
+  // Pending: an event without any client_emails row. Every kind of an event is inserted by the
+  // same statement and the kinds depend only on the event (type, payload, immutable source), so an
+  // event either has all its rows or none; concurrent preparations settle on (event, kind).
+  // Events already handled before kinds existed (one "stage" row) are never prepared again.
   const result = await db.execute<Candidate>(sql`
     SELECT e.id AS "eventId", e.lead_id AS "leadId", e.type, e.payload,
       l.full_name AS "fullName", l.email, l.stage AS "currentStage", l.source,
       l.archived_at IS NOT NULL AS archived, l.contact_opt_out_at IS NOT NULL AS "optedOut",
-      ${latestEvent} AS current
-    FROM outbox_events e JOIN leads l ON l.id = e.lead_id
-    WHERE e.type IN ('lead.created', 'lead.stage_changed') AND e.payload_version = 1
-      AND (e.type = 'lead.created' OR e.payload->>'stageTo' IN ('new', 'contacted', 'quoted', 'reserved', 'paid', 'lost'))
+      ${latestEvent} AS current,
+      COALESCE(l.next_action_date <= ${getTodayDate()}::date, false) AS "followUpDue",
+      t.title AS "tripTitle", l.destination_text AS "destinationText",
+      CASE WHEN e.type = 'lead.stage_changed' AND e.payload->>'trigger' = 'booking' THEN (
+        SELECT bt.title FROM bookings b JOIN trips bt ON bt.id = b.trip_id
+        WHERE b.lead_id = l.id AND b.status <> 'cancelled' LIMIT 1
+      ) END AS "bookingTripTitle",
+      CASE WHEN e.type = 'lead.owner_assigned' THEN ${activeOwnerEmail} END AS "ownerEmail"
+    FROM outbox_events e JOIN leads l ON l.id = e.lead_id LEFT JOIN trips t ON t.id = l.trip_id
+    WHERE e.type IN ('lead.created', 'lead.stage_changed', 'lead.follow_up_due', 'lead.owner_assigned')
+      AND e.payload_version = 1
+      AND CASE e.type
+        WHEN 'lead.stage_changed' THEN COALESCE(e.payload->>'stageTo' IN (${STAGE_VALUES}), false)
+        WHEN 'lead.follow_up_due' THEN COALESCE(e.payload->>'stage' IN (${STAGE_VALUES}), false)
+        ELSE TRUE END
       AND e.created_at >= ${env.startAt.toISOString()}::timestamptz
       AND NOT EXISTS (SELECT 1 FROM client_emails m WHERE m.source_event_id = e.id)
     ORDER BY e.sequence LIMIT 100
   `);
+  let origin: string | undefined;
   const rows = result.rows.flatMap((event) => {
-    const parsedStage = emailStageSchema.safeParse(
-      event.type === "lead.created" ? "new" : event.payload.stageTo,
-    );
+    const parsedStage = emailStageSchema.safeParse(eventStage(event));
     // Unsupported payloads are never cast into a database enum or sent.
     if (!parsedStage.success) return [];
     const stage = parsedStage.data;
-    const recipient =
-      event.email && z.email().max(254).safeParse(event.email).success
-        ? event.email
-        : null;
-    const reason = event.optedOut
-      ? "opted_out"
-      : event.archived
-        ? "archived"
-        : event.source === "import" || event.payload.bulk === true
-          ? "bulk_import"
-          : !event.current || event.currentStage !== stage
-            ? "obsolete_event"
-            : !recipient
-              ? "missing_email"
-              : null;
-    return [
-      {
+    // Built on the server only, and only when an internal alert needs it.
+    const leadUrl = () =>
+      `${(origin ??= getEnv().APP_ORIGIN)}/crm/leads/${event.leadId}`;
+    return emailKinds(event).map((kind) => {
+      const recipient = recipientFor(kind, event, env);
+      const reason = skipReason(kind, event, stage, recipient);
+      return {
         sourceEventId: event.eventId,
         leadId: event.leadId,
+        kind,
         stage,
         recipient,
         sender: env.from,
-        ...clientEmailTemplate(stage, event.fullName),
+        ...emailContent(kind, event, stage, leadUrl),
         status: reason ? ("skipped" as const) : ("pending" as const),
         lastErrorCode: reason,
-      },
-    ];
+      };
+    });
   });
   if (rows.length)
     await db
       .insert(clientEmails)
       .values(rows)
-      .onConflictDoNothing({ target: clientEmails.sourceEventId });
+      .onConflictDoNothing({
+        target: [clientEmails.sourceEventId, clientEmails.kind],
+      });
 }
 
 export type EmailClaim = { id: string; attemptToken: string };
@@ -176,7 +392,8 @@ export async function authorizeClientEmail(id: string, attemptToken: string) {
     db.execute(lockLead(id)),
     db.execute<Authorized>(sql`
       WITH target AS (
-        SELECT m.id, (${eligible(env)}) AS allowed FROM client_emails m
+        SELECT m.id, (${eligible(env)}) AS allowed, ${ineligibleCode(env)} AS code
+        FROM client_emails m
         JOIN outbox_events e ON e.id = m.source_event_id JOIN leads l ON l.id = m.lead_id
         WHERE m.id = ${id}::uuid AND m.attempt_token = ${attemptToken}::uuid
           AND m.status = 'claimed' AND m.lease_until > now()
@@ -185,7 +402,7 @@ export async function authorizeClientEmail(id: string, attemptToken: string) {
       UPDATE client_emails m SET
         status = CASE WHEN target.allowed THEN 'sending'::client_email_status ELSE 'skipped'::client_email_status END,
         lease_until = CASE WHEN target.allowed THEN now() + interval '5 minutes' ELSE NULL END,
-        last_error_code = CASE WHEN target.allowed THEN NULL ELSE 'ineligible' END, updated_at = now()
+        last_error_code = CASE WHEN target.allowed THEN NULL ELSE target.code END, updated_at = now()
       FROM target WHERE m.id = target.id
       RETURNING m.id, m.status, m.sender AS "from", m.recipient AS "to", m.subject, m.body AS text
     `),

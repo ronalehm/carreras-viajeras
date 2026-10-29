@@ -102,6 +102,14 @@ describe("getLeadPipeline", () => {
     expect(result.columns.find((col) => col.stage === "quoted")).toEqual({ stage: "quoted", total: 0, leads: [] });
     expect(fake.queries[0].sql).toContain('"leads"."contact_opt_out_at"');
   });
+
+  it("reads the card's email status from client emails only, never from internal alerts", async () => {
+    const fake = useFakeDb();
+    await getLeadPipeline({ page: 1 }, "user-1", TODAY);
+    const board = normalize(fake.queries[0].sql);
+    expect(board.match(/from client_emails m /gi)).toHaveLength(6);
+    expect(board.match(/and m\.kind not in \('team_alert', 'owner_alert'\)/gi)).toHaveLength(6);
+  });
 });
 
 describe("getLeadList", () => {
