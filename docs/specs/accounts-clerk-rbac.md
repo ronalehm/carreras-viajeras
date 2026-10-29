@@ -552,10 +552,10 @@ Precondición: el usuario crea una instancia de desarrollo de Clerk y pone `NEXT
 ### Fase 4: gestión del staff por rol y puesta en producción (5 tareas, 15 archivos)
 Precondición: el usuario facilita la clave `pk_live_…` (Pregunta abierta 9).
 - [ ] T1 — Entorno: `CLERK_SECRET_KEY` en `getEnv` sin `NEON_AUTH_*`, ejemplos y clave publicable en `wrangler.jsonc`; comprobar `next-env.mjs` tras `build:worker` · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example`, `wrangler.jsonc` · depende de: Fase 3 · secuencial (base, `lib/`)
-- [ ] T2 — `revokeInvitation` filtrado por roles gestionables, con test · archivos: `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions con `canManageRole` y tests de la matriz actor × rol · archivos: `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — UI por rol: formulario, tablas y página · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx`, `app/crm/(protected)/admin/usuarios/page.tsx` · depende de: T3 · secuencial
-- [ ] T5 — `remap-user-id.sql` y README (modelo de acceso con Clerk, ajustes, variables, runbook, vuelta atrás, remapeo y checklist) · archivos: `scripts/sql/remap-user-id.sql`, `README.md` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
+- [x] T2 — `revokeInvitation` filtrado por roles gestionables, con test · archivos: `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions con `canManageRole` y tests de la matriz actor × rol · archivos: `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — UI por rol: formulario, tablas y página · archivos: `modules/accounts/components/InviteStaffForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `modules/accounts/components/InvitationsTable.tsx`, `app/crm/(protected)/admin/usuarios/page.tsx` · depende de: T3 · secuencial
+- [x] T5 — `remap-user-id.sql` y README (modelo de acceso con Clerk, ajustes, variables, runbook, vuelta atrás, remapeo y checklist) · archivos: `scripts/sql/remap-user-id.sql`, `README.md` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
 
 ### Fase 5: el organizador gestiona sus viajes y seed (5 tareas, 14 archivos)
 - [ ] T1 — `TripScope`, `tripScopeFor` con test y exports · archivos: `modules/trips/types/trips.types.ts`, `modules/trips/utils/tripScope.ts`, `modules/trips/utils/tripScope.test.ts`, `modules/trips/index.ts` · depende de: Fase 4 · secuencial (base)
