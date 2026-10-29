@@ -49,3 +49,8 @@ next-env.d.ts
 # Safe templates only
 !.env.example
 !.dev.vars.example
+
+# Local browser QA tooling and reports
+/.venv/
+/test-results/
+__pycache__/
