@@ -534,9 +534,9 @@ Sin red ni secretos. `@clerk/nextjs` y `@clerk/nextjs/server` siempre mockeados.
 
 ### Fase 1: identidad con Clerk (3 tareas, 13 archivos)
 Precondición: el usuario crea una instancia de desarrollo de Clerk y pone `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y `CLERK_SECRET_KEY` en su `.env.local`. Los tests no la necesitan.
-- [ ] T1 — Instalar Clerk, `middleware.ts` (Edge, `matcher` mínimo) y `ClerkProvider` con `esMX` · archivos: `package.json`, `package-lock.json`, `middleware.ts`, `app/layout.tsx` · depende de: — · secuencial (base)
-- [ ] T2 — Guardas con la identidad de Clerk (D4) y tests de guardas y de `/api/crm/me` · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `app/api/crm/me/route.ts`, `app/api/crm/me/route.test.ts` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — `AccessPanel` con `<SignIn>`, `RunnerAccount` con `useUser`, `SignOutButton` de Clerk y sus tests · archivos: `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/AccessPanel.test.tsx`, `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx`, `modules/accounts/components/SignOutButton.tsx` · depende de: T1 · paralelo (con T2; archivos disjuntos)
+- [x] T1 — Instalar Clerk, `middleware.ts` (Edge, `matcher` mínimo) y `ClerkProvider` con `esMX` · archivos: `package.json`, `package-lock.json`, `middleware.ts`, `app/layout.tsx` · depende de: — · secuencial (base)
+- [x] T2 — Guardas con la identidad de Clerk (D4) y tests de guardas y de `/api/crm/me` · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `app/api/crm/me/route.ts`, `app/api/crm/me/route.test.ts` · depende de: T1 · paralelo (con T3)
+- [x] T3 — `AccessPanel` con `<SignIn>`, `RunnerAccount` con `useUser`, `SignOutButton` de Clerk y sus tests · archivos: `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/AccessPanel.test.tsx`, `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx`, `modules/accounts/components/SignOutButton.tsx` · depende de: T1 · paralelo (con T2; archivos disjuntos)
 
 ### Fase 2: retirar Neon Auth del código (2 tareas, 15 archivos; 10 se borran sin más)
 - [ ] T1 — Desinstalar `@neondatabase/auth` y borrar `overrides`; borrar `lib/auth/server.ts`, `lib/auth/client.ts` y `app/api/auth/[...path]/route.ts` · archivos: `package.json`, `package-lock.json`, `lib/auth/server.ts`, `lib/auth/client.ts`, `app/api/auth/[...path]/route.ts` · depende de: Fase 1 · secuencial (base)

@@ -132,7 +132,10 @@ describe("GET /api/crm/me", () => {
     expect(accept).not.toHaveBeenCalled();
   });
 
-  it("returns 403 for a free sign-up without roles", async () => {
+  it.each([
+    ["a free sign-up without roles"],
+    ["an expired or revoked invitation (acceptance yields no roles)"],
+  ])("returns 403 for %s", async () => {
     signedInAs(clerkUser());
     accept.mockResolvedValue([]);
 
