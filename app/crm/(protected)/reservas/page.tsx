@@ -35,6 +35,14 @@ export default async function BookingsPage({ searchParams }: PageProps<"/crm/res
         <Link href="/crm/reservas/nueva" className={buttonVariants()}>Nueva reserva</Link>
       </div>
       <BookingFilters trips={trips.map(({ id, title }) => ({ id, title }))} tripId={tripId} />
+      {tripId && (
+        <Link
+          href={`/crm/viajes/${tripId}/itinerario`}
+          className="self-start text-sm font-medium underline-offset-4 hover:underline"
+        >
+          Itinerario y avisos del viaje
+        </Link>
+      )}
       <BookingTable bookings={bookings} filtered={tripId !== undefined} />
     </section>
   );

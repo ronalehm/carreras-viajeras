@@ -7,8 +7,8 @@ import {
   leadSourceEnum,
   leadStageEnum,
 } from "@/lib/db-schema";
+import { blankToNull } from "@/lib/blankToNull";
 import {
-  blankToNull,
   contactPreferenceSchema,
   createLeadSchema,
   leadActivityFormSchema,

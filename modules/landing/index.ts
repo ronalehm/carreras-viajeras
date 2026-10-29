@@ -15,10 +15,9 @@ export { TripDetail } from "./components/TripDetail";
 export { TripFacts } from "./components/TripFacts";
 export { WhyUsSection } from "./components/WhyUsSection";
 export { getCatalogTrip } from "./utils/catalogTrip";
+export { buildWhatsAppUrl, WHATSAPP_NUMBER } from "./utils/inquiry";
 // Offer in force of a published race (slug + ?c= only); null → no price block, no amounts.
 export { getCatalogOffer } from "./utils/catalogOffer";
 // Search params of the public lead pages (/viajes/[slug]/registro and /contacto).
 export { attributionParams, firstParam } from "./utils/inquiry";
 export { TRIPS } from "./utils/trips";
-
-export { buildWhatsAppUrl, WHATSAPP_NUMBER } from "./utils/inquiry";

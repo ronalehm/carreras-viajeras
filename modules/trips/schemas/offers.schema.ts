@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { formatUsdPenRate, MAX_USD_AMOUNT, parseUsdPenRate } from "@/lib/currency";
-import { blankToNull, requiredText, textList, wholeNumber } from "./trips.schema";
+import { blankToNull } from "@/lib/blankToNull";
+import { requiredText, textList, wholeNumber } from "./trips.schema";
 
 // Same values as the trip_offer_status enum in lib/db-schema.ts (kept in sync by offers.schema.test.ts).
 export const offerStatusSchema = z.enum(["draft", "approved", "active", "closed"], {

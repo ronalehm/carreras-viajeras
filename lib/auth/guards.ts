@@ -15,6 +15,7 @@ export type CurrentUser = {
   email: string;
   emailVerified: boolean;
   staffRoles: StaffRole[];
+  /** Display only; never used for authorization. */
   name?: string;
 };
 
@@ -25,8 +26,6 @@ export type SponsorUser = CurrentUser & { sponsorId: string };
 const clerkUserSchema = z.object({
   id: z.string().min(1).max(255),
   primaryEmailAddressId: z.string().nullable(),
-  firstName: z.string().nullable().optional().catch(undefined),
-  lastName: z.string().nullable().optional().catch(undefined),
   emailAddresses: z.array(
     z.object({
       id: z.string(),
@@ -34,6 +33,9 @@ const clerkUserSchema = z.object({
       verification: z.object({ status: z.string() }).nullable(),
     }),
   ),
+  // Display only: a missing or malformed name never invalidates the session.
+  firstName: z.string().nullable().optional().catch(null),
+  lastName: z.string().nullable().optional().catch(null),
 });
 
 // Verifies the session token (no database). Pending sessions count as signed out (Clerk default).
@@ -64,9 +66,9 @@ async function readSessionUser() {
   if (!userId) return null;
   const parsed = clerkUserSchema.safeParse(await readClerkUser());
   if (!parsed.success || parsed.data.id !== userId) return null;
-  const { primaryEmailAddressId, emailAddresses } = parsed.data;
+  const { primaryEmailAddressId, emailAddresses, firstName, lastName } = parsed.data;
   const primary = emailAddresses.find((address) => address.id === primaryEmailAddressId);
-  const name = [parsed.data.firstName, parsed.data.lastName].filter(Boolean).join(" ").trim();
+  const name = [firstName?.trim(), lastName?.trim()].filter(Boolean).join(" ");
   return {
     id: userId,
     email: primary?.emailAddress.trim().toLowerCase() ?? "",

@@ -9,6 +9,7 @@ import {
   firstName,
   formatScheduleEdge,
   formatShortDate,
+  itineraryOriginPath,
   limaDate,
   timeZoneLabel,
 } from "./bookingDisplay";
@@ -86,5 +87,12 @@ describe("firstName", () => {
   it("returns undefined when empty or missing", () => {
     expect(firstName("   ")).toBeUndefined();
     expect(firstName(undefined)).toBeUndefined();
+  });
+});
+
+describe("itineraryOriginPath", () => {
+  it("points a booking item to its booking and a trip item to the trip itinerary", () => {
+    expect(itineraryOriginPath({ tripId: "t-1", bookingId: "b-1" })).toBe("/crm/reservas/b-1");
+    expect(itineraryOriginPath({ tripId: "t-1", bookingId: null })).toBe("/crm/viajes/t-1/itinerario");
   });
 });

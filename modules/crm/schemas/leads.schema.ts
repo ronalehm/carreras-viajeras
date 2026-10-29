@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blankToNull } from "@/lib/blankToNull";
 import { phoneSchema } from "@/lib/phone";
 
 // Shared E.164 phone schema (lib/phone.ts), re-exported for the CRM forms (manual and web).
@@ -53,16 +54,6 @@ const CONSENT_MESSAGE = "Confirma que el contacto aceptó que guardemos sus dato
 
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
-
-// Optional form inputs arrive as "" when left blank and are missing when the field is not sent:
-// both become null (a missing key never yields a zod message in English). Exported for the web
-// capture schemas.
-export const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
-  z
-    .string()
-    .optional()
-    .transform((value) => value?.trim() || null)
-    .pipe(schema.nullable());
 
 const ownerUserIdSchema = z
   .string({ error: "Elige un responsable." })

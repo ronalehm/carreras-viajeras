@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { blankToNull, leadChannelSchema } from "./leads.schema";
+import { blankToNull } from "@/lib/blankToNull";
+import { leadChannelSchema } from "./leads.schema";
 
 const CODE_MESSAGE = "El código debe tener de 3 a 32 caracteres: minúsculas, números y guiones.";
 const NAME_MESSAGE = "Escribe un nombre de 2 a 80 caracteres.";

@@ -6,6 +6,7 @@ export { InviteStaffForm } from "./components/InviteStaffForm";
 export { NoCrmAccess } from "./components/NoCrmAccess";
 export { RunnerAccount } from "./components/RunnerAccount";
 export { RunnerProfilePanel } from "./components/RunnerProfilePanel";
+export { SignOutButton } from "./components/SignOutButton";
 export { StaffTable } from "./components/StaffTable";
 export { UserFilters } from "./components/UserFilters";
 export { UserTable } from "./components/UserTable";
@@ -17,7 +18,6 @@ export { getRunnerProfilePage } from "./utils/runnerProfilePage";
 export { formatAssignmentLabel, USER_ROLE_FILTER_LABELS } from "./utils/staffDisplay";
 export type { AccessAudience } from "./types/auth.types";
 
-export { SignOutButton } from "./components/SignOutButton";
 export { RunnerHubSummary } from "./components/RunnerHubSummary";
 export { getRunnerHub } from "./utils/runnerHub";
 export type { RunnerHubState } from "./utils/runnerHub";

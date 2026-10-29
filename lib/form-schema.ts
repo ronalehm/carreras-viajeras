@@ -7,15 +7,8 @@ import { z } from "zod";
 export const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
-// Optional form inputs arrive as "" when left blank: they become null. A missing key (an action
-// called without that field) counts as blank, so it never yields zod's English type error.
-// Otherwise the value is trimmed and validated with `schema`.
-export const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
-  z
-    .string()
-    .optional()
-    .transform((value = "") => value.trim() || null)
-    .pipe(schema.nullable());
+// Optional input helper; lives in its own module so it has a single definition.
+export { blankToNull } from "./blankToNull";
 
 // E.164: drop spaces, parentheses, dashes and dots, then "+" and 8 to 15 digits.
 export const e164PhoneSchema = (message: string) =>

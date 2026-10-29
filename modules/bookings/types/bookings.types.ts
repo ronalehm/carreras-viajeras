@@ -1,14 +1,15 @@
 import type { z } from "zod";
 import type { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
-import type { bookingFormSchema, paymentFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
+import type {
+  bookingFormSchema,
+  itineraryItemFormSchema,
+  paymentFormSchema,
+  tripUpdateFormSchema,
+  updateBookingSchema,
+  updateItineraryItemSchema,
+} from "../schemas/bookings.schema";
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
-
-export type PaymentInput = z.output<typeof paymentFormSchema>;
-export type CrmPayment = {
-  id: string; amountUsd: number; paidOn: string; concept: string;
-  recordedByEmail: string; voided: boolean;
-};
 export type ItineraryKind = (typeof itineraryKindEnum.enumValues)[number];
 export type ItineraryStatus = (typeof itineraryStatusEnum.enumValues)[number];
 
@@ -104,6 +105,7 @@ export type CrmBookingListItem = {
 };
 
 export type CrmBooking = CrmBookingListItem & {
+  trip: { archived: boolean }; // an archived trip freezes its bookings: they can only be cancelled
   priceLocked: boolean;
   distance: string | null;
   balanceDueOn: string | null; // YYYY-MM-DD
@@ -112,6 +114,43 @@ export type CrmBooking = CrmBookingListItem & {
   lead: { id: string; fullName: string } | null; // bookings.lead_id, set only on creation
 };
 
+export type PaymentInput = z.output<typeof paymentFormSchema>;
+
+// The CRM sees every payment, voided ones included, with who recorded it.
+export type CrmPayment = {
+  id: string;
+  amountUsd: number;
+  paidOn: string; // YYYY-MM-DD
+  concept: string;
+  recordedByEmail: string;
+  voided: boolean;
+};
+
+export type ItineraryItemInput = z.output<typeof itineraryItemFormSchema>;
+export type UpdateItineraryItemInput = z.output<typeof updateItineraryItemSchema>;
+export type TripUpdateInput = z.output<typeof tripUpdateFormSchema>;
+
+// Flat, as the form edits it. bookingId null = trip item, seen by every participant. Times are HH:MM.
+export type CrmItineraryItem = {
+  id: string;
+  tripId: string;
+  bookingId: string | null;
+  kind: ItineraryKind;
+  status: ItineraryStatus;
+  title: string;
+  details: string | null;
+  location: string | null;
+  startDate: string | null;
+  startTime: string | null;
+  startTimeZone: string | null;
+  endDate: string | null;
+  endTime: string | null;
+  endTimeZone: string | null;
+  runnerVisible: boolean;
+};
+
+export type CrmTripUpdate = RunnerTripUpdate;
+
 // Fits ConfirmActionState of components/shared/ConfirmActionButton.
 export type BookingActionState =
   | { status: "idle" }
@@ -119,7 +158,7 @@ export type BookingActionState =
   | {
       status: "error";
       code: "unauthorized" | "forbidden" | "invalid_input" | "invalid_trip" | "duplicate"
-        | "email_locked" | "not_found" | "invalid_transition" | "invalid_lead" | "lead_taken"
+        | "email_locked" | "not_found" | "invalid_transition" | "trip_archived" | "invalid_lead" | "lead_taken"
         | "payment_conflict" | "discount_locked";
       message: string;
       fieldErrors?: Record<string, string[]>;

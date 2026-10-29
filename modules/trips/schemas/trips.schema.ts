@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blankToNull } from "@/lib/blankToNull";
 
 // Same values as the trip_status enum in lib/db-schema.ts (kept in sync by trips.schema.test.ts).
 export const tripStatusSchema = z.enum(["draft", "published", "archived"], {
@@ -21,15 +22,6 @@ export const tripSlugSchema = z
 
 export const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
-
-// Optional form inputs arrive as "" when left blank: they become null. A missing key (an action
-// called without that field) counts as blank, so it never yields zod's English type error.
-export const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
-  z
-    .string()
-    .optional()
-    .transform((value = "") => value.trim() || null)
-    .pipe(schema.nullable());
 
 // Free-text list: split, trim and drop empty items before validating. A missing key is an empty list.
 export const textList = (separator: RegExp | string) =>

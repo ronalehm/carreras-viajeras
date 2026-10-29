@@ -6,8 +6,6 @@ import type { BookingStatus, ItineraryKind, ItineraryStatus, ScheduleEdge } from
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
-export const BOOKINGS_PATH = "/crm/reservas";
-
 export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   pending: "Pendiente de confirmación",
   confirmed: "Confirmada",
@@ -94,4 +92,12 @@ export function formatScheduleEdge(edge: ScheduleEdge): string {
 
 export function firstName(name?: string): string | undefined {
   return name?.trim().split(/\s+/)[0] || undefined;
+}
+
+export const BOOKINGS_PATH = "/crm/reservas";
+export const LEADS_PATH = "/crm/leads";
+
+// CRM page an itinerary item is managed from: its booking's page, or its trip's itinerary.
+export function itineraryOriginPath(item: { tripId: string; bookingId: string | null }): string {
+  return item.bookingId ? `${BOOKINGS_PATH}/${item.bookingId}` : `/crm/viajes/${item.tripId}/itinerario`;
 }

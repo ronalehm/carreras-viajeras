@@ -9,7 +9,7 @@ import { formatTripDate, formatTripDateRange, formatTripPrice } from "@/modules/
 import type { RunnerBookingDetail } from "../types/bookings.types";
 import { formatShortDate } from "../utils/bookingDisplay";
 import { getPaymentSummary, isTripFinished } from "../utils/runnerBookings";
-import { BookingStatusBadge } from "./BookingTable";
+import { BookingStatusBadge } from "./BookingStatusBadge";
 
 const SECTION_TITLE = "mb-4 text-xs font-bold tracking-[0.2em] uppercase";
 const LINK = "inline-flex items-center gap-0.5 font-bold underline underline-offset-4";

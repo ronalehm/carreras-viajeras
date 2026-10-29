@@ -5,8 +5,19 @@ import { can } from "@/lib/auth/permissions";
 import { BookingRewardsPanel } from "@/modules/rewards";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
-import { BookingForm, BookingStatusBadge, changeBookingStatusAction, getBookingById, listBookingPayments, PaymentForm, PaymentTable } from "@/modules/bookings";
-import { formatTripPrice } from "@/modules/trips";
+import {
+  BookingForm,
+  BookingStatusBadge,
+  changeBookingStatusAction,
+  getBookingById,
+  ItineraryItemForm,
+  ItineraryTable,
+  listBookingItems,
+  listBookingPayments,
+  PaymentForm,
+  PaymentTable,
+} from "@/modules/bookings";
+import { formatTripDate } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reserva" };
 
@@ -24,10 +35,15 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
     );
   }
   const { id } = await params;
-  const booking = await getBookingById(id);
+  // The lists return [] for a non-UUID id without querying, so all reads run in parallel.
+  const [booking, payments, items] = await Promise.all([
+    getBookingById(id), listBookingPayments(id), listBookingItems(id),
+  ]);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
-  const payments = await listBookingPayments(id);
+  // Decision 22: an archived trip freezes its bookings; they can only be cancelled. Its payments,
+  // items and updates are not frozen by this spec, so their forms depend on `cancelled` alone.
+  const readOnly = cancelled || booking.trip.archived;
 
   return (
     <section className="flex flex-col gap-6">
@@ -51,7 +67,7 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
         </div>
         {!cancelled && (
           <div className="flex flex-wrap gap-2">
-            {booking.status === "pending" && (
+            {booking.status === "pending" && !booking.trip.archived && (
               <ConfirmActionButton
                 action={changeBookingStatusAction} fields={{ bookingId: booking.id, status: "confirmed" }}
                 label="Confirmar reserva" title={`¿Confirmar la reserva de ${booking.participantName}?`}
@@ -68,16 +84,16 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           </div>
         )}
       </div>
-      {cancelled ? (
+      {readOnly ? (
         <>
-          <p className="text-muted-foreground">Reserva cancelada: solo lectura.</p>
+          <p className="text-muted-foreground">
+            {cancelled ? "Reserva cancelada: solo lectura." : "Viaje archivado: la reserva solo se puede cancelar."}
+          </p>
           <dl className="grid max-w-3xl gap-x-6 gap-y-3 sm:grid-cols-[auto_1fr]">
             {[
               ["Correo", booking.participantEmail],
               ["Paquete", booking.distance ? `${booking.packageLabel} · ${booking.distance}` : booking.packageLabel],
-              ["Total acordado", formatTripPrice(booking.totalUsd)],
-              ["Pagado", formatTripPrice(booking.paidUsd)],
-              ["Fecha límite del saldo", booking.balanceDueOn ?? "—"],
+              ["Fecha límite del saldo", booking.balanceDueOn ? formatTripDate(booking.balanceDueOn) : "—"],
               ["Nota interna", booking.internalNote ?? "—"],
             ].map(([term, value]) => (
               <div key={term} className="contents">
@@ -90,10 +106,23 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
       ) : (
         <BookingForm booking={booking} priceLocked={booking.priceLocked} />
       )}
-      <section className="grid gap-4" aria-labelledby="payments-heading">
-        <h2 id="payments-heading" className="text-lg font-semibold">Pagos</h2>
+      <section aria-labelledby="booking-payments" className="flex flex-col gap-4">
+        <h2 id="booking-payments" className="text-lg font-semibold">Pagos</h2>
         <PaymentTable payments={payments} totalUsd={booking.totalUsd} editable={!cancelled} />
         {!cancelled && <PaymentForm bookingId={booking.id} />}
+      </section>
+      <section aria-labelledby="booking-items" className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <h2 id="booking-items" className="text-lg font-semibold">Servicios de esta reserva</h2>
+          <Link
+            href={`/crm/viajes/${booking.trip.id}/itinerario`}
+            className="text-sm font-medium underline-offset-4 hover:underline"
+          >
+            Ver itinerario del viaje
+          </Link>
+        </div>
+        <ItineraryTable items={items} editable={!cancelled} />
+        {!cancelled && <ItineraryItemForm owner={{ bookingId: booking.id }} />}
       </section>
       <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
     </section>

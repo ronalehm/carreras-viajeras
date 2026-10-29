@@ -6,6 +6,7 @@
   - `platform-neon-foundation.md` (aprobada): Neon + Drizzle `neon-http` (`getDb()`, `db.batch` atómico), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano. "Runner solo accede a recursos propios."
   - `accounts-roles-permissions.md` (aprobada, implementada): `getCurrentUser` (sesión + correo verificado + roles por `user_id`), `requirePermission`, `can()`, `getCrmAccess(permission)`, `profiles`, errores `UnauthorizedError`/`ForbiddenError`. CRM denegado por defecto.
   - `accounts-auth-ui.md` (aprobada; F4 implementada): `AccessPanel audience="runner"`, `RunnerAccount`, `SignOutButton redirectTo="/cuenta"`, destinos cerrados. **La Fase 6 de esta spec requiere enmendarla** (ver "Cambios que requiere en otras specs").
+  - `accounts-clerk-rbac.md` (aprobada, implementada en `main`): Clerk es el único proveedor de identidad; `getCurrentUser` lee `auth()` + `currentUser()` y los roles de Neon; `middleware.ts` con `clerkMiddleware()` y un `matcher` cerrado. Prevalece sobre toda mención a Neon Auth de esta spec (Decisión 24).
   - `trips-catalog.md` (aprobada; F1 y F2 en `main`): tabla `trips` (`id` UUID inmutable, nunca se borra), `getTripById`, `listTrips`, `formatTripDate`, `formatTripDateRange`, `formatTripPrice` (USD entero).
   - `landing-public-site.md` (aprobada; F1–F4 en `main`): `/cuenta`, `SiteHeader`/`SiteBrand`/`SiteFooter`, tokens de marca (`primary` #0144ae, `highlight` #7ac734), fuentes y patrones visuales.
   - `crm-leads-pipeline.md` (aprobada; F1 en `main`, F2 en PR #12): sin dependencia de datos; ver "Relación con leads".
@@ -45,7 +46,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
   - Cambios en `/crm/acceso`, en los flujos del staff, en `requireCrmUser`/`getCrmAccess`, en la matriz de los permisos existentes o en las tablas `profiles`/`staff_*`/`trips`/`leads`.
 
 ## Requisitos
-1. **Identidad del runner.** Es una cuenta de Neon Auth (registro en `/cuenta`, `accounts-auth-ui.md` F4). No se crea otro sistema de auth ni filas en `profiles`/`staff_*`. Su identidad estable es `user.id`.
+1. **Identidad del runner.** Es una cuenta de Clerk (registro en `/cuenta`, `accounts-clerk-rbac.md`). No se crea otro sistema de auth ni filas en `profiles`/`staff_*`. Su identidad estable es `user.id` (el `userId` de Clerk).
 2. **Una reserva por participante.** Cada persona que viaja, incluido un acompañante, tiene su propia reserva con su propio correo; cada una se vincula a la cuenta de esa persona.
 3. **Vínculo reserva ↔ cuenta (igual que las invitaciones del staff).**
    - El equipo crea la reserva con el **correo del participante** (`participant_email`, minúsculas).
@@ -55,7 +56,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
 4. **Guarda en el servidor de `/mis-carreras`** (reutiliza `getCurrentUser`, sin guardas nuevas en `lib/auth/`):
    - sin sesión → `redirect("/cuenta")`;
    - con sesión y correo sin verificar → estado "Verifica tu correo" (sin redirección, para no crear un bucle con `/cuenta`);
-   - fallo de Neon Auth o de la base al resolver el usuario (`ForbiddenError` de `getCurrentUser`) o al leer las reservas → estado de error;
+   - fallo de Clerk o de la base al resolver el usuario (`ForbiddenError` de `getCurrentUser`) o al leer las reservas → estado de error;
    - con sesión verificada → datos del runner.
 5. **Lecturas del runner.** Funciones `server-only` con `runner_user_id = <user.id de la sesión>` en **cada** consulta (la lista y cada lectura de detalle). Nunca se devuelven: `participant_email`, `internal_note`, `created_by`, `recorded_by`, pagos anulados, hitos con `runner_visible = false`, datos de otras reservas ni de leads o staff.
 6. **Selección de carrera por URL (`?reserva=<id>`).** El detalle se actualiza en la misma página con `<Link>`; el servidor valida el parámetro (UUID y perteneciente a las reservas del usuario). Un id ajeno, inexistente o mal formado se ignora: se muestra la reserva por defecto, sin revelar si existe (sin IDOR).
@@ -79,7 +80,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
 10. **CRM (F2–F4).** Cada página nueva comprueba `getCrmAccess("bookings.manage")` y cada Server Action `requirePermission("bookings.manage")`. `bookings.manage` lo tienen **`admin` y `commercial`** (matriz `["commercial"]`; admin tiene todos los permisos). El actor es siempre el `user.id` de la sesión. Las escrituras son atómicas y deciden por la condición de su `WHERE`, como en `trips` y `leads`.
 11. **Privacidad.** Ningún dato personal ni mensaje original de la base llega a logs, `Error.message` ni respuestas de error. Los hitos de nivel viaje y los avisos los ven todos los participantes del viaje: el formulario del CRM lo advierte ("No incluyas datos de un participante concreto").
 12. **Cuentas sin rol de staff** (runners) no obtienen ningún permiso del CRM: `can([], "bookings.manage") === false`, ven `NoCrmAccess` en `/crm/*` y las acciones devuelven `forbidden`. Vincular una reserva no crea filas en `profiles` ni `staff_*`.
-13. **Coherencia visual con la landing:** cabecera con `SiteBrand`, pie `SiteFooter`, eyebrows en mayúsculas con tracking, títulos en `font-heading` (Barlow Condensed), azul `primary` y acento `highlight`, selector con subrayado verde en la opción activa (patrón de `selector-horizontal.png` y de las pestañas de `cuenta.html`). Solo tokens del tema, sin hex.
+13. **Coherencia visual con la landing:** cabecera con `SiteBrand`, pie `SiteFooter`, eyebrows en mayúsculas con tracking, el `h1` y el `h2` del viaje con la utilidad `display-title` de `app/globals.css` (Archivo condensada, la de la landing rediseñada; Decisión 23) y los `h2` de sección ("Avisos del viaje", "Tu línea de tiempo", "Tu paquete", "Pagos") como eyebrows, azul `primary` y acento `highlight`, selector con subrayado verde en la opción activa (patrón de `selector-horizontal.png` y de las pestañas de `cuenta.html`). Solo tokens del tema, sin hex.
 14. **Tamaño del Worker:** se mide al cerrar F2–F6 sin desplegar; umbral de consulta 2 MiB (límite Free 3 MiB).
 
 ## Criterios de aceptación
@@ -111,6 +112,7 @@ Orden (el CRM de reservas no existe): **datos → CRM mínimo (reservas, pagos, 
 - [ ] (F2) Dado un acompañante, cuando el equipo lo registra, entonces se crea una reserva aparte con su propio correo; el formulario no ofrece añadir participantes a una reserva existente.
 - [ ] (F2) Dada una reserva vinculada, cuando la edito, entonces el correo es de solo lectura con "La cuenta ya está vinculada; el correo no se puede cambiar." y la acción rechaza un cambio de correo (`email_locked`). El viaje no se puede cambiar después de crear la reserva.
 - [ ] (F2) Dada una reserva pendiente, cuando pulso "Confirmar reserva" y confirmo, entonces pasa a "Confirmada". "Cancelar reserva" (pendiente o confirmada) la deja "Cancelada" y en solo lectura, sin formularios. Una transición no permitida devuelve "La reserva ya no está en ese estado. Recarga la página.".
+- [ ] (F2) Dada una reserva no cancelada de un viaje archivado, entonces la ficha muestra "Viaje archivado: la reserva solo se puede cancelar.", los datos en solo lectura (como una cancelada) y solo "Cancelar reserva". Editarla o confirmarla llamando a la acción directamente devuelve "El viaje está archivado: la reserva solo se puede cancelar. Recarga la página." (`trip_archived`); cancelarla sigue permitido (Decisión 22).
 - [ ] (F2) Dadas las Server Actions de reservas llamadas directamente (unit test): sin sesión → `unauthorized`; cuenta sin rol de staff → `forbidden` sin llamar al service; `commercial` y `admin` → éxito; campos extra (`runnerUserId`, `status`, `createdBy`) se ignoran; el actor es el de la sesión; si el service lanza, la acción lanza `"booking action failed"` sin el mensaje original ni `console.*`.
 - [ ] (F2) Medición del Worker (`npm run build:worker` + `npx wrangler deploy --dry-run --outdir <scratch>`, en Linux/WSL, sin desplegar) registrada frente a la última referencia (1411 KiB en `main`; 1450 KiB si PR #12 ya está integrado) y < 2 MiB. Lint, vitest y build sin errores.
 
@@ -137,6 +139,7 @@ Acceso:
 - [ ] (F5) Dada una sesión con el correo sin verificar, entonces ve "Verifica tu correo para ver tus carreras." y "Cierra sesión y vuelve a ingresar: te enviaremos un código." con "Cerrar sesión" (→ `/cuenta`), sin reservas ni consulta de reservas (unit test de `getRunnerPortal`).
 - [ ] (F5) Dada una cuenta de staff o de runner, cuando abre `/mis-carreras`, entonces solo ve las reservas vinculadas a su `user_id`; no cambia ningún acceso del CRM y no se crean filas en `profiles` ni `staff_*`.
 - [ ] (F5) Dados el runner A (reserva X) y el runner B (reserva Y), cuando A abre `/mis-carreras?reserva=<Y>`, entonces ve la reserva X, igual que en `/mis-carreras`, y ningún dato de Y (unit test del service + prueba manual).
+- [ ] (F5) Dado `middleware.ts`, su `matcher` incluye `/mis-carreras`; con sesión de Clerk el portal carga en lugar de redirigir a `/cuenta`, y el saludo usa `firstName`/`lastName` de Clerk (unit test de `getCurrentUser` + prueba manual) (Decisión 24).
 
 Estados:
 - [ ] (F5) **Sin carreras:** veo "Hola, <nombre>." (o "Mis carreras" si la sesión no trae nombre), y un `Empty` con "Aún no tienes carreras registradas.", "Cuando el equipo registre tu reserva con <correo>, la verás aquí.", el enlace "Explorar experiencias" → `/#destinos` y "Escríbenos por WhatsApp" (`wa.me/51938127170`, otra pestaña).
@@ -156,6 +159,7 @@ Contenido:
 - [ ] (F5) Dado un viewport de 360 px, entonces no hay scroll horizontal de la página (el selector desplaza solo su propia fila) y el orden es: cabecera, saludo, selector, viaje y estado, avisos, línea de tiempo, paquete, pagos y contacto. Desde 1024 px, la línea de tiempo ocupa la columna principal y avisos, paquete, pagos y contacto la columna lateral.
 - [ ] (F5) Dado el HTML, entonces hay un único `h1`, `<title>` "Mis carreras | Carreras Viajeras" y `robots` `noindex, nofollow`. Dado el árbol de componentes, entonces no hay ningún `"use client"` nuevo (el único componente de cliente es `SignOutButton`, existente).
 - [ ] (F5) Dado `npm run build` sin `DATABASE_URL`, entonces termina sin errores, `/mis-carreras` aparece como dinámica (`ƒ`) y `/cuenta` sigue estática (`○`). Medición del Worker como en F2. Lint y vitest sin errores.
+- [ ] (F5) Dado el portal, entonces el `h1` y el `h2` del viaje usan `display-title` (como la landing) y los `h2` de sección siguen como eyebrows en mayúsculas (wireframes); los títulos de grupo de la línea de tiempo y el número del selector ("01/02") tienen contraste AA (texto `primary`; el acento `highlight` solo en borde, punto o subrayado activo), un correo largo en el estado vacío no provoca scroll horizontal a 360 px, y hay un solo enlace de WhatsApp reutilizado (también en la reserva cancelada) (Decisión 23).
 
 ### Fase 6 — Redirección del runner tras ingresar
 Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` aprobadas (ver "Cambios que requiere en otras specs").
@@ -187,7 +191,7 @@ Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` 
    - no hay bucles: `/mis-carreras` manda a `/cuenta` a quien no tiene sesión, y una sesión sin verificar se queda en `/mis-carreras` con su estado propio;
    - el staff que usa `/cuenta` no queda forzado al portal.
    El destino **tras ingresar o verificar** sí pasa a `/mis-carreras` (F6).
-5. **El nombre del corredor sale de la sesión.** `getCurrentUser` añade `name?: string` (recortado, omitido si está vacío; sin límite en el schema para no invalidar sesiones). Es opcional para no romper fixtures ni el contrato de `CurrentUser`; no participa en la autorización. Se muestra el primer nombre ("Hola, Ana.").
+5. **El nombre del corredor sale de la sesión.** `getCurrentUser` añade `name?: string` (nombre y apellido de Clerk, recortados, omitido si queda vacío; sin límite en el schema para no invalidar sesiones). Es opcional para no romper fixtures ni el contrato de `CurrentUser`; no participa en la autorización. Se muestra el primer nombre ("Hola, Ana.").
 6. **Tablas y YAGNI:**
    | Tabla | Por qué existe | Qué se descartó |
    |---|---|---|
@@ -215,6 +219,18 @@ Decisiones por defecto (antes preguntas no bloqueantes; el usuario aceptó el va
 20. **Un hito de viaje no se oculta por participante.** Lo ven todos los participantes del viaje; lo individual va como hito de reserva.
 21. **Avisos sin edición ni notificación.** Se publican y se eliminan; no se envía nada al runner.
 
+Enmienda tras la revisión de F2:
+
+22. **Un viaje archivado congela sus reservas.** Sus reservas no se editan ni se confirman; solo se pueden cancelar (para cerrar una venta caída). Se garantiza en el `WHERE` de cada escritura, como la Decisión 14. Pagos, hitos y avisos de un viaje archivado no cambian en esta spec.
+
+Enmienda tras la revisión de F5:
+
+23. **Títulos del portal con `display-title`.** El rediseño de la portada (`landing-home-redesign`) retiró Barlow Condensed: `--font-heading` es ahora la sans y la landing titula con `display-title`. El portal la sigue para mantener la coherencia del Requisito 13.
+
+Enmienda tras la migración a Clerk (`accounts-clerk-rbac.md`, en `main`):
+
+24. **El portal usa la identidad de Clerk.** `user.id` es el `userId` de Clerk y `runner_user_id` guarda ese id. El nombre del saludo (Decisión 5) sale de `firstName` y `lastName` del usuario de Clerk; si la instancia no los pide, el saludo queda en "Mis carreras". `/mis-carreras` entra en el `matcher` de `middleware.ts` (regla D3 de `accounts-clerk-rbac.md`): fuera de él, `auth()` lanza, la guarda ve "sin sesión" y el portal redirigiría siempre a `/cuenta`. El correo sin verificar sigue en el estado "Verifica tu correo", aunque Clerk verifica al registrarse y casi nunca se alcanza.
+
 ### Modelo de datos: `lib/db-schema.ts` (F1)
 Todo en `public`, snake_case, sin FK hacia `neon_auth`. `updated_at` lo fija el service con `now()` en cada `UPDATE`. Las FK son `ON DELETE RESTRICT`.
 
@@ -227,7 +243,7 @@ Todo en `public`, snake_case, sin FK hacia `neon_auth`. `updated_at` lo fija el 
 | `bookings.trip_id` | `uuid not null` → `trips.id` |
 | `bookings.participant_name` | `text not null`; CHECK `char_length BETWEEN 2 AND 120` |
 | `bookings.participant_email` | `text not null`; CHECK `= lower(participant_email) AND char_length <= 254` |
-| `bookings.runner_user_id` | `text` nulo (id de Neon Auth, sin FK); NULL = sin vincular |
+| `bookings.runner_user_id` | `text` nulo (`userId` de Clerk, sin FK); NULL = sin vincular |
 | `bookings.status` | `booking_status not null default 'pending'` |
 | `bookings.package_label` | `text not null`; CHECK 1–80 (p. ej. "Paquete corredor", "Paquete acompañante") |
 | `bookings.distance` | `text` nulo; CHECK ≤ 20 (p. ej. "42K") |
@@ -288,7 +304,10 @@ export type Permission = "crm.access" | "staff.manage" | "trips.manage" | "leads
 ```
 
 ### `lib/auth/guards.ts` (F5, cambio mínimo)
-`sessionSchema.user` añade `name: z.string().optional()`; `CurrentUser` añade `name?: string` = `user.name?.trim()` si no queda vacío. Nada más cambia (roles, invitaciones, errores). `toEqual` de los tests existentes ignora la propiedad ausente.
+`clerkUserSchema` añade `firstName` y `lastName` (`z.string().nullable().optional().catch(null)`: un valor ausente o con otra forma nunca invalida la sesión). `CurrentUser` añade `name?: string` = `firstName` y `lastName` recortados y unidos por un espacio, omitido si queda vacío. Nada más cambia (roles, invitaciones, errores). `toEqual` de los tests existentes ignora la propiedad ausente.
+
+### `middleware.ts` (F5)
+El `matcher` añade `"/mis-carreras"` a `["/crm/:path*", "/api/crm/:path*"]`. Nada más cambia. `/cuenta` sigue fuera (estática).
 
 ### Rutas (`app/`)
 | Ruta | Fase | Contenido |
@@ -313,6 +332,8 @@ Todas las páginas del CRM heredan el layout protegido (`NoCrmAccess`, `CrmShell
 | `schemas/bookings.schema.ts` | F2 (amp. F3, F4) | zod, sin `server-only` | Ver "Schemas" |
 | `services/bookings.service.ts` | F2 | `server-only` | CRM de reservas |
 | `actions/bookings.actions.ts` | F2 | `"use server"` | Acciones de reservas |
+| `actions/runBookingAction.ts` | F2 (enmienda) | `server-only`, sin `"use server"` | `runBookingAction`, `failure`, mensajes de error; base común de las acciones de F2–F4 |
+| `components/BookingStatusBadge.tsx` | F2 (enmienda) | Server | `Badge` del estado de la reserva; lo usan `BookingTable`, la ficha y `BookingOverview` |
 | `services/payments.service.ts` | F3 | `server-only` | CRM de pagos |
 | `actions/payments.actions.ts` | F3 | `"use server"` | Acciones de pagos |
 | `services/itinerary.service.ts` | F4 | `server-only` | CRM de hitos y avisos |
@@ -338,11 +359,14 @@ export async function getBookingById(id: string): Promise<CrmBooking | null>;  /
 export async function createBooking(input: BookingInput, actorUserId: string): Promise<{ id: string } | "invalid_trip" | "duplicate">;
 //   INSERT … SELECT FROM trips WHERE id = $trip AND status <> 'archived' ON CONFLICT DO NOTHING RETURNING id;
 //   status 'pending' por defecto; runner_user_id nunca viene del input. Distingue invalid_trip/duplicate en el mismo batch.
-export async function updateBooking(input: UpdateBookingInput): Promise<"updated" | "not_found" | "cancelled" | "email_locked" | "duplicate">;
-//   UPDATE … WHERE id AND status <> 'cancelled' AND (runner_user_id IS NULL OR participant_email = $email)
+export async function updateBooking(input: UpdateBookingInput): Promise<"updated" | "not_found" | "cancelled" | "trip_archived" | "email_locked" | "duplicate">;
+//   UPDATE … WHERE id AND status <> 'cancelled' AND viaje no archivado AND (runner_user_id IS NULL OR participant_email = $email)
 //   AND NOT EXISTS (otra reserva activa del mismo viaje con ese email); + SELECT de diagnóstico en el mismo batch.
-export async function setBookingStatus(bookingId: string, status: "confirmed" | "cancelled"): Promise<"changed" | "invalid_transition">;
-//   confirmed ← pending; cancelled ← pending | confirmed.
+//   Si un alta concurrente gana la carrera, la violación 23505 de bookings_trip_email_active_uq (directa o en `cause`)
+//   → "duplicate"; cualquier otro error se relanza.
+export async function setBookingStatus(bookingId: string, status: "confirmed" | "cancelled"): Promise<"changed" | "invalid_transition" | "trip_archived">;
+//   confirmed ← pending (viaje no archivado; si no, "trip_archived"); cancelled ← pending | confirmed (también con viaje archivado).
+//   getBookingById incluye trip.archived (boolean) para la ficha.
 
 // services/payments.service.ts (F3, server-only)
 export async function listBookingPayments(bookingId: string): Promise<CrmPayment[]>;
@@ -361,14 +385,16 @@ export async function createItineraryItem(input: ItineraryItemInput): Promise<{ 
 //   De viaje: INSERT … SELECT FROM trips WHERE id = $trip.
 export async function updateItineraryItem(input: UpdateItineraryItemInput): Promise<{ tripId: string; bookingId: string | null } | "not_found">;
 export async function deleteItineraryItem(itemId: string): Promise<{ tripId: string; bookingId: string | null } | "not_found">;
+//   update/delete: WHERE id AND (booking_id IS NULL OR EXISTS (reserva booking_id con status <> 'cancelled')).
+//   Un hito de una reserva cancelada → "not_found" (Decisión 14: la ficha cancelada es de solo lectura).
 export async function createTripUpdate(input: TripUpdateInput, actorUserId: string): Promise<"created" | "not_found">;
 export async function deleteTripUpdate(updateId: string): Promise<{ tripId: string } | "not_found">;
 ```
 
 ### Server Actions (`"use server"`)
-Mismo patrón que `trips.actions.ts`: `requirePermission("bookings.manage")` → zod → service → `revalidatePath` si hay éxito. Firma `(prev: BookingActionState, formData: FormData) => Promise<BookingActionState>`; `BookingActionState` encaja en `ConfirmActionState` de `components/shared/ConfirmActionButton`. Lo usan los tres archivos de acciones.
+Mismo patrón que `trips.actions.ts`: `requirePermission("bookings.manage")` → zod → service → `revalidatePath` si hay éxito. Firma `(prev: BookingActionState, formData: FormData) => Promise<BookingActionState>`; `BookingActionState` encaja en `ConfirmActionState` de `components/shared/ConfirmActionButton`. Lo usan los tres archivos de acciones a través de `runBookingAction` (`actions/runBookingAction.ts`, `server-only`, sin `"use server"`), que acepta mensajes propios por código (p. ej. el `not_found` de F3 y F4).
 - `unauthorized`: "Tu sesión no es válida. Vuelve a iniciar sesión."; `forbidden`: "No tienes permiso para gestionar reservas."; `invalid_input`: "Revisa los campos marcados." con `fieldErrors` y `values`; error del service → `throw new Error("booking action failed")` sin causa ni `console.*`.
-- (F2, `bookings.actions.ts`) `createBookingAction` (éxito → `redirect("/crm/reservas/<id>")`; `duplicate` → `fieldErrors.participantEmail` "Ese correo ya tiene una reserva activa en este viaje."; `invalid_trip` → `fieldErrors.tripId` "Ese viaje ya no está disponible."), `updateBookingAction` (`email_locked` → `fieldErrors.participantEmail` "La cuenta ya está vinculada; el correo no se puede cambiar."; `cancelled`/`not_found` → "La reserva ya no existe o está cancelada. Recarga la página."), `changeBookingStatusAction` ("Reserva confirmada." / "Reserva cancelada."). Revalidan `/crm/reservas` y `/crm/reservas/<id>`.
+- (F2, `bookings.actions.ts`) `createBookingAction` (éxito → `redirect("/crm/reservas/<id>")`; `duplicate` → `fieldErrors.participantEmail` "Ese correo ya tiene una reserva activa en este viaje."; `invalid_trip` → `fieldErrors.tripId` "Ese viaje ya no está disponible."), `updateBookingAction` (`email_locked` → `fieldErrors.participantEmail` "La cuenta ya está vinculada; el correo no se puede cambiar."; `cancelled`/`not_found` → "La reserva ya no existe o está cancelada. Recarga la página."; `trip_archived` → "El viaje está archivado: la reserva solo se puede cancelar. Recarga la página."), `changeBookingStatusAction` (`trip_archived` con el mismo texto) ("Reserva confirmada." / "Reserva cancelada."). Revalidan `/crm/reservas` y `/crm/reservas/<id>`.
 - (F3, `payments.actions.ts`) `addPaymentAction` ("Pago registrado."), `voidPaymentAction` ("Pago anulado."); `not_found` → "La reserva o el pago ya no admiten cambios. Recarga la página.". Revalidan `/crm/reservas` y `/crm/reservas/<id>`.
 - (F4, `itinerary.actions.ts`) `createItineraryItemAction`, `updateItineraryItemAction` (éxito → `redirect` a la página de origen), `deleteItineraryItemAction`, `createTripUpdateAction`, `deleteTripUpdateAction`. Revalidan la página de origen. `not_found` → "El elemento ya no existe. Recarga la página.". `/mis-carreras` no se revalida: es dinámica por petición.
 
@@ -477,7 +503,7 @@ Móvil, 360 px (varias carreras; reserva confirmada; viaje parcialmente configur
 │   VIAJERAS                          │
 ├────────────────────────────────────┤
 │ MIS CARRERAS                        │  eyebrow
-│ Hola, Ana.                    (h1)  │  font-heading
+│ Hola, Ana.                    (h1)  │  display-title
 ├────────────────────────────────────┤
 │ 01 Santiago 2027  │ 02 Lima 2026  ▸ │  RaceSelector: fila con scroll propio
 │ dom, 16 may 2027  │ Terminado       │
@@ -642,8 +668,8 @@ CRM, ficha de reserva (F2–F4, escritorio, orientativo):
 - `getCurrentUser` (+ `name` opcional), `requirePermission`, `UnauthorizedError`/`ForbiddenError`, `can()` (ampliada) de `lib/auth/`; `getCrmAccess`, `CrmShell`, `NoCrmAccess`, `SignOutButton` (exportado en F5), `AccessPanel`, `RunnerAccount` de `@/modules/accounts`.
 - `getDb()`/`db.batch`, `lib/db-schema.ts` (`trips`, `profiles`), `npm run db:generate` y el procedimiento manual del README.
 - `getTripById`, `listTrips`, `formatTripDate`, `formatTripDateRange`, `formatTripPrice` de `@/modules/trips` (sin tocar el módulo).
-- `SiteBrand` y `SiteFooter`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` de `@/modules/landing` (se exportan en F5); tokens `primary`/`highlight`, `font-heading`.
-- `ConfirmActionButton` compartido; patrones de `trips.actions.ts`, `staff.service.ts` (CTE + `db.batch`), `InviteStaffForm` (`onSubmit` + `startTransition`), `LeadFilters` (`<form method="get">`), `blankToNull` de `trips.schema.ts` (se copia el patrón; se sube a `lib/` en el tercer uso real).
+- `SiteBrand` y `SiteFooter`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` de `@/modules/landing` (se exportan en F5); tokens `primary`/`highlight`, utilidad `display-title`; `WhatsAppLink` del portal (uno solo, también en la reserva cancelada).
+- `ConfirmActionButton` compartido; patrones de `trips.actions.ts`, `staff.service.ts` (CTE + `db.batch`), `InviteStaffForm` (`onSubmit` + `startTransition`), `LeadFilters` (`<form method="get">`), `blankToNull` (subido a `lib/blankToNull.ts` en el tercer uso; lo usan trips, leads y bookings) y `formValues` (`lib/formValues.ts`, compartido con `trips.actions.ts`).
 - Fake del cliente Neon HTTP de `staff.service.test.ts` para los tests de services (se copia el patrón).
 - shadcn instalados: `button`, `badge`, `card`, `table`, `input`, `label`, `native-select`, `textarea`, `alert-dialog`. A instalar: `empty`, `alert`.
 - Nativo: `<details>`, `<datalist>`, `<input type="checkbox">`, `<input type="date|time|number">`, `Intl.DateTimeFormat`.
@@ -655,11 +681,11 @@ Los de servidor con `// @vitest-environment node` y `vi.mock("server-only", () =
 - `modules/bookings/utils/runnerBookings.test.ts` (F1): los casos del criterio de F1, más: documentos sin fecha al final de su tipo; un hito `cancelled` se mantiene en su grupo; `itineraryConfirmed` falso con solo la carrera derivada; los importes del texto de pagos con `formatTripPrice`.
 - `modules/bookings/services/runnerPortal.service.test.ts` (F1; `@/lib/db` con el fake de Neon HTTP): los casos del criterio de F1, inspeccionando el SQL y los parámetros.
 - `modules/bookings/schemas/bookings.schema.test.ts` (F2, ampliado en F3 y F4): enums = `enumValues`; normalización del correo; `totalUsd` `"1499.50"`, `"12.5"`, `"-1"`, `"abc"` y `""` → error y `"0"` → 0, `"1499"` → 1499; claves extra descartadas (`runnerUserId`, `status`, `createdBy`); (F3) `amountUsd` `"0"`, `"300.50"` → error y `"300"` → 300; (F4) cada refinamiento del hito, zona inválida, `runnerVisible` ausente → `false`, exactamente uno de `tripId`/`bookingId`; aviso de 2001 caracteres → error.
-- `modules/bookings/services/bookings.service.test.ts` (F2): `createBooking` sin `status` ni `runner_user_id` en el `INSERT`, viaje no archivado, `duplicate`/`invalid_trip`; `updateBooking` con sus cinco resultados en un batch; `setBookingStatus` con los orígenes permitidos; `listBookings` excluye anulados del pagado y filtra por viaje; `getBookingById` con id no UUID → `null` sin consulta.
+- `modules/bookings/services/bookings.service.test.ts` (F2): `createBooking` sin `status` ni `runner_user_id` en el `INSERT`, viaje no archivado, `duplicate`/`invalid_trip`; `updateBooking` con sus seis resultados en un batch (incluido `trip_archived`) y la violación 23505 concurrente → `duplicate` (otra constraint se relanza); `setBookingStatus` con los orígenes permitidos, confirmar con viaje archivado → `trip_archived` y cancelar con viaje archivado → `changed`; `listBookings` excluye anulados del pagado y filtra por viaje; `getBookingById` con id no UUID → `null` sin consulta.
 - `modules/bookings/actions/bookings.actions.test.ts` (F2): para cada acción, `unauthorized` sin sesión y `forbidden` con cuenta sin rol, sin llamar al service; `commercial` y `admin` → éxito; `invalid_input` con `fieldErrors` y `values`; mapeo de cada resultado; actor de la sesión; error del service → `"booking action failed"` sin `console.*`; `revalidatePath`/`redirect` solo si hay éxito.
 - `modules/bookings/services/payments.service.test.ts` y `actions/payments.actions.test.ts` (F3): `addPayment` rechaza reservas canceladas e inserta `recorded_by` = actor; `voidPayment` exige `voided_at IS NULL` y reserva no cancelada; `listBookingPayments` incluye anulados con el email de quien registró; acciones con las mismas garantías que F2 e ignorando `recordedBy`/`voidedBy`.
-- `modules/bookings/services/itinerary.service.test.ts` y `actions/itinerary.actions.test.ts` (F4): mismas garantías; el hito de reserva toma `trip_id` de `bookings` (un `tripId` del form se ignora); crear un hito en una reserva cancelada → `not_found`; borrar devuelve el origen para redirigir.
-- `lib/auth/guards.test.ts` (F5, ampliar): sesión con `name: "  Ana Pérez "` → `name: "Ana Pérez"`; sin nombre o vacío → sin propiedad; el resto de casos no cambia.
+- `modules/bookings/services/itinerary.service.test.ts` y `actions/itinerary.actions.test.ts` (F4): mismas garantías; el hito de reserva toma `trip_id` de `bookings` (un `tripId` del form se ignora); crear, editar o eliminar un hito de una reserva cancelada → `not_found`; borrar devuelve el origen para redirigir.
+- `lib/auth/guards.test.ts` (F5, ampliar): usuario de Clerk con `firstName: " Ana "` y `lastName: "Pérez "` → `name: "Ana Pérez"`; solo uno de los dos → ese; ambos ausentes, `null`, vacíos, en blanco o con otro tipo → sin propiedad y la sesión sigue válida; el resto de casos no cambia.
 - `modules/bookings/utils/runnerPortal.test.ts` (F5; `@/lib/auth/guards`, el service y `next/server` mockeados): los casos de la Decisión 11 y de los criterios de acceso y error de F5 (`connection()` antes de todo; `today` de `limaDate`).
 - `modules/accounts/components/AccessPanel.test.tsx` y `RunnerAccount.test.tsx` (F6): los casos runner pasan a esperar `/mis-carreras`; nuevo caso del enlace "Ver mis carreras"; los casos de staff no cambian.
 - Sin unit tests (SETUP §3): `lib/db-schema.ts` (migración + prueba manual), tipos, componentes de `modules/bookings/components/` (presentacionales o de un solo dominio; su lógica está en utils, schemas y acciones), `CrmShell`, páginas async de `app/` y `components/ui/`.
@@ -681,25 +707,28 @@ Requisitos previos: F1 cerrada y migración aplicada en la rama de Neon de prueb
 - [x] T3 — Server Actions de reservas con tests de llamada directa · archivos: `modules/bookings/actions/bookings.actions.ts`, `modules/bookings/actions/bookings.actions.test.ts` · depende de: T2 · secuencial
 - [x] T4 — Componentes: `BookingFilters`, `BookingTable`, `BookingForm` · archivos: `modules/bookings/components/BookingFilters.tsx`, `modules/bookings/components/BookingTable.tsx`, `modules/bookings/components/BookingForm.tsx` · depende de: T3 · secuencial
 - [x] T5 — Enlace "Reservas" en `CrmShell`, exports y páginas; medir el Worker · archivos: `modules/accounts/components/CrmShell.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T4 · secuencial
+- [x] T6 — Enmienda: viaje archivado congela sus reservas (Decisión 22): `trip_archived` en `updateBooking` y `setBookingStatus`, `trip.archived` en `getBookingById`, mensaje en las acciones y ficha en solo lectura con "Cancelar reserva"; tests · archivos: `modules/bookings/types/bookings.types.ts`, `modules/bookings/services/bookings.service.ts`, `modules/bookings/services/bookings.service.test.ts`, `modules/bookings/actions/runBookingAction.ts`, `modules/bookings/actions/bookings.actions.test.ts`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T5 · secuencial
 
 ### Fase 3 — CRM: pagos (4 tareas, 11 archivos)
-- [ ] T1 — Schemas de pago con tests; tipos de pagos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 2 · secuencial
-- [ ] T2 — Service de pagos con tests · archivos: `modules/bookings/services/payments.service.ts`, `modules/bookings/services/payments.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions de pagos con tests · archivos: `modules/bookings/actions/payments.actions.ts`, `modules/bookings/actions/payments.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — `PaymentTable` y `PaymentForm`, exports y sección "Pagos" en la ficha; medir el Worker · archivos: `modules/bookings/components/PaymentTable.tsx`, `modules/bookings/components/PaymentForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T3 · secuencial
+- [x] T1 — Schemas de pago con tests; tipos de pagos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 2 · secuencial
+- [x] T2 — Service de pagos con tests · archivos: `modules/bookings/services/payments.service.ts`, `modules/bookings/services/payments.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions de pagos con tests · archivos: `modules/bookings/actions/payments.actions.ts`, `modules/bookings/actions/payments.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — `PaymentTable` y `PaymentForm`, exports y sección "Pagos" en la ficha; medir el Worker · archivos: `modules/bookings/components/PaymentTable.tsx`, `modules/bookings/components/PaymentForm.tsx`, `modules/bookings/index.ts`, `app/crm/(protected)/reservas/[id]/page.tsx` · depende de: T3 · secuencial
 
 ### Fase 4 — CRM: itinerario y avisos (5 tareas, 16 archivos)
-- [ ] T1 — Schemas de hito y aviso con tests; tipos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 3 · secuencial
-- [ ] T2 — Service de itinerario y avisos con tests · archivos: `modules/bookings/services/itinerary.service.ts`, `modules/bookings/services/itinerary.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Server Actions de itinerario y avisos con tests · archivos: `modules/bookings/actions/itinerary.actions.ts`, `modules/bookings/actions/itinerary.actions.test.ts` · depende de: T2 · secuencial
-- [ ] T4 — Componentes: `ItineraryTable`, `ItineraryItemForm`, `TripUpdateForm`, `TripUpdateList` · archivos: `modules/bookings/components/ItineraryTable.tsx`, `modules/bookings/components/ItineraryItemForm.tsx`, `modules/bookings/components/TripUpdateForm.tsx`, `modules/bookings/components/TripUpdateList.tsx` · depende de: T3 · secuencial
-- [ ] T5 — Exports, páginas nuevas, sección de servicios en la ficha y enlace desde la lista; medir el Worker · archivos: `modules/bookings/index.ts`, `app/crm/(protected)/viajes/[id]/itinerario/page.tsx`, `app/crm/(protected)/itinerario/[id]/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx`, `app/crm/(protected)/reservas/page.tsx` · depende de: T4 · secuencial
+- [x] T1 — Schemas de hito y aviso con tests; tipos · archivos: `modules/bookings/schemas/bookings.schema.ts`, `modules/bookings/schemas/bookings.schema.test.ts`, `modules/bookings/types/bookings.types.ts` · depende de: Fase 3 · secuencial
+- [x] T2 — Service de itinerario y avisos con tests · archivos: `modules/bookings/services/itinerary.service.ts`, `modules/bookings/services/itinerary.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Server Actions de itinerario y avisos con tests · archivos: `modules/bookings/actions/itinerary.actions.ts`, `modules/bookings/actions/itinerary.actions.test.ts` · depende de: T2 · secuencial
+- [x] T4 — Componentes: `ItineraryTable`, `ItineraryItemForm`, `TripUpdateForm`, `TripUpdateList` · archivos: `modules/bookings/components/ItineraryTable.tsx`, `modules/bookings/components/ItineraryItemForm.tsx`, `modules/bookings/components/TripUpdateForm.tsx`, `modules/bookings/components/TripUpdateList.tsx` · depende de: T3 · secuencial
+- [x] T5 — Exports, páginas nuevas, sección de servicios en la ficha y enlace desde la lista; medir el Worker · archivos: `modules/bookings/index.ts`, `app/crm/(protected)/viajes/[id]/itinerario/page.tsx`, `app/crm/(protected)/itinerario/[id]/page.tsx`, `app/crm/(protected)/reservas/[id]/page.tsx`, `app/crm/(protected)/reservas/page.tsx` · depende de: T4 · secuencial
 
-### Fase 5 — `/mis-carreras` (4 tareas, 16 archivos: 2 generados por el CLI de shadcn)
-- [ ] T1 — Base compartida: `npx shadcn@latest add empty alert` (sin sobrescribir archivos existentes); `name` opcional en `getCurrentUser` con su test; exportar `SignOutButton` de `@/modules/accounts`; exportar `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` de `@/modules/landing` · archivos: `components/ui/empty.tsx`, `components/ui/alert.tsx`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `modules/accounts/index.ts`, `modules/landing/index.ts` · depende de: Fase 4 (en código solo necesita F1; los datos de F2–F4 hacen falta para la prueba manual) · secuencial (base)
-- [ ] T2 — `getRunnerPortal` (guarda y estados) con tests · archivos: `modules/bookings/utils/runnerPortal.ts`, `modules/bookings/utils/runnerPortal.test.ts` · depende de: T1 · paralelo (con T3)
-- [ ] T3 — Componentes presentacionales del portal · archivos: `modules/bookings/components/PortalHeader.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/TripTimeline.tsx`, `modules/bookings/components/TripUpdates.tsx` · depende de: T1 · paralelo (con T2)
-- [ ] T4 — Composición `RunnerPortal`, exports y ruta `/mis-carreras`; comprobar `ƒ /mis-carreras` y `○ /cuenta` en el build; medir el Worker · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/index.ts`, `app/mis-carreras/page.tsx` · depende de: T2, T3 · secuencial
+### Fase 5 — `/mis-carreras` (6 tareas, 17 archivos: 2 generados por el CLI de shadcn)
+- [x] T1 — Base compartida: `npx shadcn@latest add empty alert` (sin sobrescribir archivos existentes); `name` opcional en `getCurrentUser` con su test; exportar `SignOutButton` de `@/modules/accounts`; exportar `SiteBrand`, `buildWhatsAppUrl` y `WHATSAPP_NUMBER` de `@/modules/landing` · archivos: `components/ui/empty.tsx`, `components/ui/alert.tsx`, `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `modules/accounts/index.ts`, `modules/landing/index.ts` · depende de: Fase 4 (en código solo necesita F1; los datos de F2–F4 hacen falta para la prueba manual) · secuencial (base)
+- [x] T2 — `getRunnerPortal` (guarda y estados) con tests · archivos: `modules/bookings/utils/runnerPortal.ts`, `modules/bookings/utils/runnerPortal.test.ts` · depende de: T1 · paralelo (con T3)
+- [x] T3 — Componentes presentacionales del portal · archivos: `modules/bookings/components/PortalHeader.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/TripTimeline.tsx`, `modules/bookings/components/TripUpdates.tsx` · depende de: T1 · paralelo (con T2)
+- [x] T4 — Composición `RunnerPortal`, exports y ruta `/mis-carreras`; comprobar `ƒ /mis-carreras` y `○ /cuenta` en el build; medir el Worker · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/index.ts`, `app/mis-carreras/page.tsx` · depende de: T2, T3 · secuencial
+- [x] T5 — Enmienda (Decisión 23): `h1` y `h2` del viaje con `display-title`; títulos de grupo de `TripTimeline` y número de `RaceSelector` en `primary` con el acento en borde, punto o subrayado (contraste AA); `break-words` en el correo del estado vacío; un único `WhatsAppLink` reutilizado en `BookingOverview` (reserva cancelada) y `RunnerPortal` · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/TripTimeline.tsx` · depende de: T4 · secuencial
+- [x] T6 — Enmienda (Decisión 24): integrar `main` con Clerk; `name` desde `firstName`/`lastName` en `getCurrentUser` con sus tests; `/mis-carreras` en el `matcher` de `middleware.ts`; lint, vitest y build (`ƒ /mis-carreras`, `○ /cuenta`) · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `middleware.ts` · depende de: T5 · secuencial
 
 ### Fase 6 — Redirección del runner tras ingresar (3 tareas, 6 archivos)
 Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` aprobadas por el usuario, y F5 cerrada (si no, el runner llegaría a una ruta inexistente).
