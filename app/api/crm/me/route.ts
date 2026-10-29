@@ -1,4 +1,4 @@
-import { authErrorResponse } from "@/lib/auth/errors";
+import { authErrorResponse, ForbiddenError } from "@/lib/auth/errors";
 import { requireCrmUser } from "@/lib/auth/guards";
 
 // Identity comes from Clerk; roles only from the database.
@@ -10,6 +10,13 @@ export async function GET() {
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    // Self-check for a signed-in account: a fixed reason code, never the underlying error.
+    if (error instanceof ForbiddenError && error.reason) {
+      return Response.json(
+        { error: "forbidden", reason: error.reason },
+        { status: 403, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     return authErrorResponse(error);
   }
 }
