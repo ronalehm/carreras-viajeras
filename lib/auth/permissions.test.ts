@@ -25,6 +25,9 @@ const ALL_PERMISSIONS = [
   "offers.view",
   "sponsors.manage",
   "sponsor.portal",
+  "content.manage",
+  "rewards.manage",
+  "rewards.apply",
 ] as const satisfies readonly Permission[];
 
 // Expected matrix from docs/specs/accounts-clerk-rbac.md ("Diseño técnico").
@@ -39,6 +42,9 @@ const EXPECTED_MATRIX: Record<Permission, Record<StaffRole, boolean>> = {
   "offers.view": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
   "sponsors.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
   "sponsor.portal": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: true },
+  "content.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "rewards.manage": { commercial: false, organizer: false, admin: true, super_admin: true, sponsor: false },
+  "rewards.apply": { commercial: true, organizer: false, admin: true, super_admin: true, sponsor: false },
 };
 
 const MATRIX_CELLS = ALL_PERMISSIONS.flatMap((permission) =>

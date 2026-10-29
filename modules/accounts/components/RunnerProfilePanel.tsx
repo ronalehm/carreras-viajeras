@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { CircleAlert, CircleCheck, Info, MailWarning } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
@@ -10,14 +11,16 @@ import { SignOutButton } from "./SignOutButton";
 type RunnerProfilePanelProps = {
   // The page redirects the unauthenticated state before rendering the panel.
   state: Exclude<RunnerProfilePageState, { status: "unauthenticated" }>;
+  careers?: ReactNode;
+  children?: ReactNode;
 };
 
 /** /cuenta/perfil by state. Same width and tokens as AccountSection; the only h1 of the page. */
-export function RunnerProfilePanel({ state }: RunnerProfilePanelProps) {
+export function RunnerProfilePanel({ state, careers, children }: RunnerProfilePanelProps) {
   return (
-    <div className="mx-auto w-full max-w-170 px-[7%] pt-9 pb-14 text-primary md:px-0 md:py-14">
+    <div className="mx-auto w-full max-w-5xl px-[6%] pt-9 pb-14 text-primary md:py-14">
       <p className="mb-6 text-xs font-bold tracking-[0.2em]">MI CUENTA</p>
-      <h1 className="mb-6 text-2xl font-semibold">Mi perfil</h1>
+      <h1 className="mb-6 text-3xl font-semibold">Mi cuenta</h1>
 
       {state.status === "unverified" && (
         <div className="flex flex-col items-start gap-4">
@@ -42,7 +45,30 @@ export function RunnerProfilePanel({ state }: RunnerProfilePanelProps) {
         </div>
       )}
 
-      {state.status === "ok" && <ProfileEditor {...state} />}
+      {state.status === "ok" && (
+        <>
+          <nav aria-label="Mi cuenta" className="mb-8 border-b border-border pb-4">
+            <ul className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold">
+              {careers && <li><a href="#mis-carreras" className="underline underline-offset-4">Mis carreras</a></li>}
+              {children && (
+                <>
+                  <li><a href="#beneficios" className="underline underline-offset-4">Beneficios</a></li>
+                  <li><a href="#referidos" className="underline underline-offset-4">Referidos</a></li>
+                </>
+              )}
+              <li><a href="#mi-perfil" className="underline underline-offset-4">Mi perfil</a></li>
+            </ul>
+          </nav>
+          <div className="space-y-12">
+            {careers}
+            {children}
+            <section id="mi-perfil" aria-labelledby="my-profile-title" className="scroll-mt-6 space-y-5 border-t border-border pt-8">
+              <h2 id="my-profile-title" className="text-2xl font-semibold">Mi perfil</h2>
+              <ProfileEditor {...state} />
+            </section>
+          </div>
+        </>
+      )}
     </div>
   );
 }

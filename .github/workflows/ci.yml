@@ -53,3 +53,34 @@ jobs:
             throw new Error('Non-public runtime variables found in the Worker environment module');
           }
           NODE
+
+  database:
+    name: PostgreSQL migrations and concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - name: Start isolated PostgreSQL fixture
+        run: |
+          docker run -d --name carreras-rewards-tests --network none \
+            --label codex.task=carreras-runner-news \
+            --tmpfs /var/lib/postgresql \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+          for attempt in $(seq 1 30); do
+            if docker exec carreras-rewards-tests pg_isready -U postgres; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Run disposable database checks
+        run: node scripts/check-feature-database.mjs
+      - name: Remove test service
+        if: always()
+        run: docker rm -f carreras-rewards-tests

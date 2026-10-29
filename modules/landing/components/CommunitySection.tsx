@@ -17,7 +17,7 @@ const STEPS = [
     number: "03",
     label: "Suma",
     title: "Estrellas para tu próximo viaje.",
-    text: "Por participar en eventos y compartir experiencias.",
+    text: "Por referidos con reserva confirmada y su primer pago válido.",
   },
 ];
 
@@ -76,15 +76,16 @@ export function CommunitySection() {
 
       <div className="mt-6 border-t border-primary-foreground/20 pt-8 md:grid md:grid-cols-[1fr_1.4fr] md:gap-[6%]">
         <h3 className="mb-3 display-title text-3xl leading-none lg:text-4xl">
-          Participar + compartir = sumar.
+          Invita a tu próximo compañero de carrera.
         </h3>
         <div>
           <p className="mb-5 max-w-[60ch] text-sm leading-relaxed text-primary-foreground/75 sm:text-base">
-            Las estrellas reconocerán ambas acciones, una vez validadas. Los descuentos,
-            equivalencias, vigencia y condiciones de canje aún están por definir.
+            Comparte tu enlace desde Mi cuenta. Consulta allí las reglas vigentes, las estrellas
+            por referido y los premios disponibles antes de participar. Las recompensas
+            dependen de las condiciones publicadas por administración.
           </p>
           <span className="inline-block rounded-full border border-primary-foreground/35 px-3.5 py-1.5 text-sm font-medium">
-            Sin descuentos activos todavía
+            Consulta las condiciones en Mi cuenta
           </span>
         </div>
       </div>

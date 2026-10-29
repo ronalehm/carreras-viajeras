@@ -1,0 +1,22 @@
+{
+  "postgres": "18.6",
+  "migrations": 13,
+  "sequentialAssertions": 45,
+  "checks": 14,
+  "passed": [
+    "all migrations apply on native PostgreSQL",
+    "sequential eligibility, ownership, reversals and expiry checks",
+    "concurrent retry returns the same redemption",
+    "concurrent retry debits only once",
+    "one ledger debit for one request",
+    "concurrent separate requests cannot double spend",
+    "double spend leaves balance consistent",
+    "different runners serialize the last inventory unit",
+    "losing inventory request keeps its stars",
+    "concurrent cancellation refunds exactly once",
+    "discount waits for a payment and rejects a paid booking",
+    "rejected discount never changes the booking total",
+    "concurrent reconciliation credits a referral once",
+    "referral account receives exactly the configured stars"
+  ]
+}

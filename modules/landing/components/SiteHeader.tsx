@@ -8,6 +8,7 @@ import { MobileMenu } from "./MobileMenu";
 const NAV_LINKS = [
   { href: "/#paquete", label: "Próxima maratón" },
   { href: "/#comunidad", label: "Comunidad" },
+  { href: "/#noticias", label: "Noticias" },
   { href: "/#blog", label: "Blog" },
   { href: "/contacto", label: "Contacto" },
 ];

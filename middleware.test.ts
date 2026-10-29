@@ -13,6 +13,8 @@ describe("Clerk middleware coverage", () => {
     "/api/crm/me",
     "/cuenta/perfil",
     "/cuenta/perfil/editar",
+    "/mis-carreras",
+    "/mis-carreras?reserva=booking-1",
   ])("makes the Clerk session available on %s", (path) => {
     expect(unstable_doesMiddlewareMatch({ config, url: `https://example.test${path}` })).toBe(true);
   });

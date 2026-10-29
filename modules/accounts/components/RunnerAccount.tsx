@@ -25,8 +25,11 @@ export function RunnerAccount() {
       <h1 className="text-2xl font-semibold">Qué bueno verte de nuevo.</h1>
       <p className="text-muted-foreground">{user.primaryEmailAddress?.emailAddress}</p>
       <div className="flex flex-wrap items-start gap-3">
+        <Link href="/mis-carreras" className={buttonVariants()}>
+          Ver mis carreras
+        </Link>
         <Link href="/cuenta/perfil" className={buttonVariants({ variant: "outline" })}>
-          Mi perfil
+          Mi cuenta
         </Link>
         <SignOutButton redirectTo="/cuenta" />
       </div>

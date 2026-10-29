@@ -7,7 +7,7 @@ const AUDIENCE_CONFIG: Record<AccessAudience, { destination: AuthDestination; no
     notice: "Solo para personas invitadas por un administrador.",
   },
   runner: {
-    destination: "/cuenta",
+    destination: "/cuenta/perfil",
     notice:
       "Este paso identifica tu acceso al sitio. Después podrás completar tu perfil; no te inscribe en un evento.",
   },

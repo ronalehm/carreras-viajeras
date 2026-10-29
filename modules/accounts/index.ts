@@ -16,3 +16,8 @@ export { getCrmAccess } from "./utils/crmAccess";
 export { getRunnerProfilePage } from "./utils/runnerProfilePage";
 export { formatAssignmentLabel, USER_ROLE_FILTER_LABELS } from "./utils/staffDisplay";
 export type { AccessAudience } from "./types/auth.types";
+
+export { SignOutButton } from "./components/SignOutButton";
+export { RunnerHubSummary } from "./components/RunnerHubSummary";
+export { getRunnerHub } from "./utils/runnerHub";
+export type { RunnerHubState } from "./utils/runnerHub";

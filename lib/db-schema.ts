@@ -1,4 +1,6 @@
 // Application schema (public only). Never model or manage the neon_auth schema here.
+export * from "./content-schema";
+export * from "./rewards-schema";
 import { sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -846,6 +848,7 @@ export const bookingPayments = pgTable(
     bookingId: uuid("booking_id")
       .notNull()
       .references(() => bookings.id, { onDelete: "restrict" }),
+    requestKey: uuid("request_key"),
     amountUsd: integer("amount_usd").notNull(),
     paidOn: date("paid_on", { mode: "string" }).notNull(),
     concept: text("concept").notNull(),
@@ -859,6 +862,7 @@ export const bookingPayments = pgTable(
     voidedBy: text("voided_by").references(() => profiles.userId, { onDelete: "restrict" }),
   },
   (table) => [
+    uniqueIndex("booking_payments_request_uq").on(table.bookingId, table.requestKey),
     index("booking_payments_booking_idx").on(table.bookingId),
     check("booking_payments_amount_usd_chk", sql`${table.amountUsd} > 0`),
     check("booking_payments_concept_chk", sql`char_length(${table.concept}) BETWEEN 1 AND 80`),

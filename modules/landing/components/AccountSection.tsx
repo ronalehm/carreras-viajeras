@@ -26,7 +26,7 @@ export function AccountSection() {
           </p>
           <p className="text-sm">Participa. Comparte. Conecta.</p>
           <span className="mt-4 hidden text-xs tracking-widest md:block">
-            ★ ESTRELLAS POR CORRER Y COMPARTIR
+            ★ TU COMUNIDAD, TUS CARRERAS, TUS BENEFICIOS
           </span>
         </div>
       </div>
@@ -35,8 +35,8 @@ export function AccountSection() {
         <p className="mb-6 text-xs font-bold tracking-[0.2em]">COMUNIDAD CARRERAS VIAJERAS</p>
         <RunnerAccount />
         <p className="mt-6 text-xs leading-relaxed">
-          La comunidad, las publicaciones y las recompensas siguen en demostración; no hay
-          descuentos activos.
+          Consulta tus carreras y beneficios desde Mi cuenta. Las estrellas por referidos y
+          los canjes dependen de las reglas y los premios vigentes del programa.
         </p>
       </div>
     </div>

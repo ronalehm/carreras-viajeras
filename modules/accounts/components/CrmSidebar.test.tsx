@@ -86,6 +86,8 @@ describe("CRM navigation", () => {
     ["/crm/leads", "responsable=mios&seguimiento=vencidos", "Leads"],
     ["/crm/viajes/un-viaje", "", "Viajes"],
     ["/crm/ofertas/nueva", "", "Ofertas"],
+    ["/crm/contenidos/nuevo", "", "Contenidos"],
+    ["/crm/recompensas", "", "Recompensas"],
     ["/crm/admin/usuarios", "", "Usuarios"],
     ["/crm/admin/patrocinadores/una-marca", "", "Patrocinadores"],
     ["/crm/configuraciones", "", "Configuraciones"],
@@ -107,6 +109,8 @@ describe("CRM navigation", () => {
 
   it("exposes management links for admins and preserves the account and logout", () => {
     shell();
+    expect(screen.getByRole("link", { name: "Contenidos" }).getAttribute("href")).toBe("/crm/contenidos");
+    expect(screen.getByRole("link", { name: "Recompensas" }).getAttribute("href")).toBe("/crm/recompensas");
     expect(
       screen.getByRole("link", { name: "Usuarios" }).getAttribute("href"),
     ).toBe("/crm/admin/usuarios");
@@ -125,6 +129,8 @@ describe("CRM navigation", () => {
 
   it("keeps commercial destinations and excludes admin-only navigation", () => {
     shell(["commercial"]);
+    expect(screen.queryByRole("link", { name: "Contenidos" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Recompensas" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Configuraciones" })).toBeNull();

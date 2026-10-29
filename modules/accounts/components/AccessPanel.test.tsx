@@ -46,10 +46,10 @@ describe("AccessPanel", () => {
     expect(screen.getByText(STAFF_NOTICE)).toBeTruthy();
   });
 
-  it("renders Clerk SignIn to /cuenta with the runner notice for runners", () => {
+  it("renders Clerk SignIn to /cuenta/perfil with the runner notice for runners", () => {
     render(<AccessPanel audience="runner" />);
 
-    expectSignInTo("/cuenta");
+    expectSignInTo("/cuenta/perfil");
     expect(screen.getByText(RUNNER_NOTICE)).toBeTruthy();
     expect(screen.queryByText(STAFF_NOTICE)).toBeNull();
   });

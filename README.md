@@ -1587,3 +1587,25 @@ La aplicación de esta migración en Neon no se ha realizado durante la integrac
 ## Reglas de colaboración
 
 Leer [`docs/SETUP.md`](docs/SETUP.md) antes de modificar código. El negocio vive en `modules/<domain>/` y `app/` compone rutas. Reutilizar componentes y validar fronteras con Zod. El flujo SDD requiere spec aprobada, implementación y revisión; solo el usuario puede aprobar y ningún agente modifica el registro de aprobaciones.
+
+## Mi cuenta, recompensas y noticias
+
+La cuenta `/cuenta/perfil` reúne el editor del perfil, las carreras propias y sus
+beneficios, referidos, estrellas y canjes. `/mis-carreras` muestra el detalle de
+reserva, pagos, itinerario y avisos con Clerk. Administración configura las reglas
+y los premios en `/crm/recompensas`; el equipo comercial aplica descuentos desde
+la reserva. Una reserva confirmada y su primer pago positivo no anulado permiten
+acreditar el referido. Los reintentos no duplican movimientos.
+
+El contenido público se administra en `/crm/contenidos`. Crear o editar guarda
+un borrador; publicar lo hace visible en la portada y `/noticias`. La edición de
+una noticia publicada conserva su versión pública hasta publicarla de nuevo.
+
+Estas funciones requieren las migraciones incrementales **0011 y 0012**, después
+de 0010. No se ejecutan al instalar, arrancar ni compilar; no se ha migrado Neon
+con esta entrega. No se sembraron reglas, premios ni noticias reales.
+
+Consulta [operación y pruebas](docs/OPERACION-RUNNER-NOTICIAS.md) y la
+[auditoría de la ampliación](docs/audits/2026-10-29-runner-news.md) para configurar
+el programa, ejecutar los controles PostgreSQL desechables y conocer los bloqueos
+pendientes de autenticación, red y build del Worker.

@@ -12,7 +12,10 @@ export type Permission =
   | "offers.manage"
   | "offers.view"
   | "sponsors.manage"
-  | "sponsor.portal";
+  | "sponsor.portal"
+  | "content.manage"
+  | "rewards.manage"
+  | "rewards.apply";
 
 // Roles that hold every known permission.
 const FULL_ACCESS_ROLES: readonly StaffRole[] = ["admin", "super_admin"];
@@ -32,6 +35,9 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   "sponsors.manage": [],
   // Access also requires an active brand assignment in requireSponsor().
   "sponsor.portal": ["sponsor"],
+  "content.manage": [],
+  "rewards.manage": [],
+  "rewards.apply": ["commercial"],
 };
 
 // Roles each actor role may invite, grant or revoke from the CRM.

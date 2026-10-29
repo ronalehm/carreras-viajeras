@@ -38,15 +38,15 @@ describe("RunnerAccount", () => {
     expect(signInProps).not.toHaveBeenCalled();
   });
 
-  it("shows Clerk SignIn to /cuenta without a session", () => {
+  it("shows Clerk SignIn to /cuenta/perfil without a session", () => {
     userState({ isLoaded: true, isSignedIn: false, user: null });
     render(<RunnerAccount />);
 
     expect(screen.getByTestId("clerk-sign-in")).toBeTruthy();
     expect(signInProps).toHaveBeenCalledWith(
       expect.objectContaining({
-        forceRedirectUrl: "/cuenta",
-        signUpForceRedirectUrl: "/cuenta",
+        forceRedirectUrl: "/cuenta/perfil",
+        signUpForceRedirectUrl: "/cuenta/perfil",
       }),
     );
     expect(screen.queryByRole("heading")).toBeNull();
@@ -62,7 +62,8 @@ describe("RunnerAccount", () => {
 
     expect(screen.getByRole("heading", { level: 1, name: "Qué bueno verte de nuevo." })).toBeTruthy();
     expect(screen.getByText("runner@example.com")).toBeTruthy();
-    const profileLink = screen.getByRole("link", { name: "Mi perfil" });
+    expect(screen.getByRole("link", { name: "Ver mis carreras" }).getAttribute("href")).toBe("/mis-carreras");
+    const profileLink = screen.getByRole("link", { name: "Mi cuenta" });
     const signOut = screen.getByRole("button", { name: "Cerrar sesión" });
     expect(profileLink.getAttribute("href")).toBe("/cuenta/perfil");
     expect(profileLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

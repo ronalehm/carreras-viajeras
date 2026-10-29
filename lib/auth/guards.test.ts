@@ -66,6 +66,25 @@ beforeEach(() => {
   loadSponsor.mockReset();
 });
 
+describe("Clerk display name", () => {
+  it("uses the trusted display fields without treating them as authorization", async () => {
+    signedInAs(clerkUser({ firstName: "Ana", lastName: "Pérez", publicMetadata: { role: "admin" } }));
+    accept.mockResolvedValue([]);
+
+    await expect(getCurrentUser()).resolves.toMatchObject({ name: "Ana Pérez", staffRoles: [] });
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("keeps a valid identity usable when the optional display fields are malformed", async () => {
+    signedInAs(clerkUser({ firstName: { role: "admin" }, lastName: 123 }));
+    accept.mockResolvedValue([]);
+
+    const user = await getCurrentUser();
+    expect(user?.id).toBe(USER_ID);
+    expect(user).not.toHaveProperty("name");
+  });
+});
+
 describe("session (auth)", () => {
   it("without a session → UnauthorizedError without calling currentUser or the service", async () => {
     const logError = vi.spyOn(console, "error").mockImplementation(() => {});

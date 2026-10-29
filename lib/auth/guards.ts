@@ -15,6 +15,7 @@ export type CurrentUser = {
   email: string;
   emailVerified: boolean;
   staffRoles: StaffRole[];
+  name?: string;
 };
 
 export type SponsorUser = CurrentUser & { sponsorId: string };
@@ -24,6 +25,8 @@ export type SponsorUser = CurrentUser & { sponsorId: string };
 const clerkUserSchema = z.object({
   id: z.string().min(1).max(255),
   primaryEmailAddressId: z.string().nullable(),
+  firstName: z.string().nullable().optional().catch(undefined),
+  lastName: z.string().nullable().optional().catch(undefined),
   emailAddresses: z.array(
     z.object({
       id: z.string(),
@@ -63,10 +66,12 @@ async function readSessionUser() {
   if (!parsed.success || parsed.data.id !== userId) return null;
   const { primaryEmailAddressId, emailAddresses } = parsed.data;
   const primary = emailAddresses.find((address) => address.id === primaryEmailAddressId);
+  const name = [parsed.data.firstName, parsed.data.lastName].filter(Boolean).join(" ").trim();
   return {
     id: userId,
     email: primary?.emailAddress.trim().toLowerCase() ?? "",
     emailVerified: primary?.verification?.status === "verified",
+    ...(name ? { name } : {}),
   };
 }
 

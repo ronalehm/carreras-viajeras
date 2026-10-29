@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getHomeNews, NewsSection } from "@/modules/content";
 import {
   BlogSection,
   CommunitySection,
@@ -20,7 +21,8 @@ export const metadata: Metadata = {
   title: { absolute: "Tu próxima meta es la maratón de Santiago. | Carreras Viajeras" },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const news = await getHomeNews();
   return (
     <>
       <SiteHeader />
@@ -32,6 +34,7 @@ export default function HomePage() {
         <PackageSection />
         <CommunitySection />
         <WhyUsSection />
+        <NewsSection news={news} />
         <BlogSection />
         <DestinationsSection />
         <FaqSection />
