@@ -1,10 +1,15 @@
 import "server-only";
-import { and, count, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, sql, sum } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { getDb } from "@/lib/db";
-import { campaigns, leads, profiles, trips } from "@/lib/db-schema";
+import { campaignVisitDays, campaigns, leads, profiles, trips } from "@/lib/db-schema";
 import { campaignIdSchema } from "../schemas/campaigns.schema";
-import type { CampaignDetail, CampaignInput, CampaignListItem } from "../types/campaigns.types";
+import type {
+  CampaignDetail,
+  CampaignInput,
+  CampaignListItem,
+  CampaignVisitInput,
+} from "../types/campaigns.types";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -23,7 +28,19 @@ function leadCountsSubquery(db: Db) {
     .as("lead_counts");
 }
 
-function listColumns(leadCounts: ReturnType<typeof leadCountsSubquery>) {
+// Visits per campaign: the sum of its daily rows (campaign_visit_days). Same aliasing as above.
+function visitCountsSubquery(db: Db) {
+  return db
+    .select({ campaignId: campaignVisitDays.campaignId, total: sum(campaignVisitDays.visits).as("visit_count") })
+    .from(campaignVisitDays)
+    .groupBy(campaignVisitDays.campaignId)
+    .as("visit_counts");
+}
+
+function listColumns(
+  leadCounts: ReturnType<typeof leadCountsSubquery>,
+  visitCounts: ReturnType<typeof visitCountsSubquery>,
+) {
   return {
     id: campaigns.id,
     code: campaigns.code,
@@ -34,19 +51,22 @@ function listColumns(leadCounts: ReturnType<typeof leadCountsSubquery>) {
     trip: { slug: trips.slug, title: trips.title },
     createdAt: campaigns.createdAt,
     leadCount: sql<number>`coalesce(${leadCounts.total}, 0)`.mapWith(Number),
+    visitCount: sql<number>`coalesce(${visitCounts.total}, 0)`.mapWith(Number),
   } satisfies Record<keyof CampaignListItem, unknown>;
 }
 
-// One query (one round-trip): campaigns with their trip and lead count, active ones first,
+// One query (one round-trip): campaigns with their trip, lead and visit counts, active ones first,
 // newest first. The trip is never missing (trip_id is NOT NULL with ON DELETE RESTRICT).
 export async function listCampaigns(): Promise<CampaignListItem[]> {
   const db = getDb();
   const leadCounts = leadCountsSubquery(db);
+  const visitCounts = visitCountsSubquery(db);
   return db
-    .select(listColumns(leadCounts))
+    .select(listColumns(leadCounts, visitCounts))
     .from(campaigns)
     .innerJoin(trips, eq(trips.id, campaigns.tripId))
     .leftJoin(leadCounts, eq(leadCounts.campaignId, campaigns.id))
+    .leftJoin(visitCounts, eq(visitCounts.campaignId, campaigns.id))
     .orderBy(sql`${campaigns.status} = 'closed'`, desc(campaigns.createdAt));
 }
 
@@ -56,9 +76,10 @@ export async function getCampaignById(id: string): Promise<CampaignDetail | null
   if (!campaignIdSchema.safeParse(id).success) return null;
   const db = getDb();
   const leadCounts = leadCountsSubquery(db);
+  const visitCounts = visitCountsSubquery(db);
   const [campaign] = await db
     .select({
-      ...listColumns(leadCounts),
+      ...listColumns(leadCounts, visitCounts),
       createdBy: { email: creator.email },
       closedAt: campaigns.closedAt,
       closedBy: { email: closer.email },
@@ -68,6 +89,7 @@ export async function getCampaignById(id: string): Promise<CampaignDetail | null
     .innerJoin(creator, eq(creator.userId, campaigns.createdBy))
     .leftJoin(closer, eq(closer.userId, campaigns.closedBy))
     .leftJoin(leadCounts, eq(leadCounts.campaignId, campaigns.id))
+    .leftJoin(visitCounts, eq(visitCounts.campaignId, campaigns.id))
     .where(eq(campaigns.id, id))
     .limit(1);
   return campaign ?? null;
@@ -109,4 +131,18 @@ export async function closeCampaign(id: string, actorUserId: string): Promise<"c
     .where(and(eq(campaigns.id, id), eq(campaigns.status, "active")))
     .returning({ id: campaigns.id });
   return rows.length > 0 ? "closed" : "not_found";
+}
+
+// One statement: counts one visit for today (Lima calendar day) only if the code is an active
+// campaign of the published trip with that slug; otherwise it inserts nothing. The first visit of
+// the day inserts visits = 1 and the next ones add 1 (campaign_visit_days PK). Nothing about the
+// visitor is stored.
+export async function recordCampaignVisit(input: CampaignVisitInput): Promise<void> {
+  await getDb().execute(sql`
+    INSERT INTO campaign_visit_days (campaign_id, day, visits)
+    SELECT c.id, (now() AT TIME ZONE 'America/Lima')::date, 1
+    FROM campaigns c JOIN trips t ON t.id = c.trip_id
+    WHERE c.code = ${input.c} AND c.status = 'active' AND t.slug = ${input.slug} AND t.status = 'published'
+    ON CONFLICT (campaign_id, day) DO UPDATE SET visits = campaign_visit_days.visits + 1
+  `);
 }

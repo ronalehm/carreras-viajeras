@@ -22,7 +22,8 @@ export {
   updateLeadAction,
 } from "./actions/leads.actions";
 // Campaigns (QR and links): same reason, the CRM routes import both actions from this API.
-export { listCampaigns, getCampaignById } from "./services/campaigns.service";
+export { listCampaigns, getCampaignById, recordCampaignVisit } from "./services/campaigns.service";
+export { campaignVisitSchema } from "./schemas/campaigns.schema";
 export {
   closeCampaignAction,
   createCampaignAction,
