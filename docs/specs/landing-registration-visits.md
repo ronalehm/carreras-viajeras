@@ -1,13 +1,17 @@
 # Entrada al registro desde la ficha de la carrera y visitas por campaña
 
 - Módulo: landing (también `crm`)
-- Estado: aprobado
+- Estado: borrador
 - Base: rama `claude/peaceful-lovelace-tvyqt8` sobre `main` (`4b4650f`). Migraciones hasta `drizzle/0012_reward_operations.sql`.
 - Enmienda a specs aprobadas, que **no se editan**: `landing-omnichannel-capture.md` (Requisito 8, sus tres preguntas abiertas y dos criterios de F4) y `landing-race-pages.md` (Requisito 9: el CTA de `/viajes/[slug]` ya no es solo WhatsApp). Si esta spec se aprueba, sus reglas prevalecen sobre esas partes.
 - Decisiones del usuario (2026-10-29), respuestas a las preguntas abiertas de `landing-omnichannel-capture.md`:
   1. **Base de tratamiento:** "basta con la confirmación por el usuario". Se mantiene la casilla obligatoria de aceptación tal como está implementada (`consent: "on"`). No hay cambio de código; el texto definitivo sigue pendiente de la puerta P-L.
   2. **Entradas al registro:** "sí, añadir" un botón «Registrarme» en la ficha de la carrera.
   3. **Visitas por campaña:** "sumar visitas". Se miden en la app.
+- Enmienda 1 (2026-10-29, tras ver la Fase 2 en el navegador): decisiones del usuario que se implementan en la **Fase 3**. Las Fases 1 y 2 están implementadas y revisadas; esta enmienda no cambia nada de ellas salvo lo que indica el Requisito 8.
+  4. **Un solo «Registrarme»:** "borrar el primero, dejar el que está junto a WhatsApp". Sustituye la parte del Requisito 1 que pedía dos botones.
+  5. **Ficha para PC y móvil:** la ficha "no está optimizada para PC"; debe servir para los dos. Cambia el maquetado de una columna de `landing-race-pages.md` en `/viajes/[slug]` (esa spec no se edita).
+  6. **Respuestas a las preguntas abiertas de esta spec:** solo el total de visitas, sin desglose diario; regla WAF de 30 peticiones por 10 s, y en el plan Free (una sola regla) no se crea la regla de visitas.
 - Depende de: `landing-omnichannel-capture.md` (aprobada, F1–F4 implementadas: `campaigns`, `/viajes/[slug]/registro`, `/crm/campanas`), `landing-race-pages.md` (aprobada: `TripDetail`), `platform-neon-foundation.md` (aprobada: Drizzle `neon-http`, una sentencia por escritura, migraciones manuales).
 
 ## Objetivo
@@ -33,7 +37,7 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
 
 ## Requisitos
 
-1. **«Registrarme» en la ficha (F2).** `TripDetail` muestra un enlace con aspecto de botón «Registrarme» (`buttonVariants({ size: "lg" })`, ancho completo, mismos tokens que el botón actual) en dos lugares: justo después del bloque de precio y en el bloque final, encima de «Consultar por WhatsApp», que pasa a la variante `outline`.
+1. **«Registrarme» en la ficha (F2).** `TripDetail` muestra un enlace con aspecto de botón «Registrarme» (`buttonVariants({ size: "lg" })`, ancho completo, mismos tokens que el botón actual) en dos lugares: justo después del bloque de precio y en el bloque final, encima de «Consultar por WhatsApp», que pasa a la variante `outline`. **Desde la Fase 3 (Enmienda 1), un solo botón: ver el Requisito 8.**
    - Destino: `/viajes/<slug>/registro`, con los parámetros que devuelve `attributionParams` de la URL actual (`c`, `utm_source`, `utm_medium`, `utm_campaign`, `ref`) codificados con `URLSearchParams`. Sin parámetros, sin `?`.
    - Solo aparece si `isRegistrationOpen()` es `true`. Con el texto legal provisional en producción (puerta P-L) no se muestra y la ficha queda como hoy, con WhatsApp en su variante actual.
    - Es un enlace `<a>` normal, no `next/link`: no se precarga.
@@ -53,6 +57,13 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
    - Conversión: `formatConversion(leadCount, visitCount)` → `"—"` con 0 visitas; si no, el porcentaje redondeado a entero con `Intl.NumberFormat("es-PE", { style: "percent" })`. Puede superar el 100 % (registros desde el modo stand o anteriores a esta spec); se muestra tal cual.
    - Las visitas se cuentan desde que se despliega esta spec: no hay histórico anterior.
 7. **Privacidad y seguridad.** El endpoint no lee cookies ni sesión, no usa `auth()` y no escribe en logs nada de la petición. El modo stand sigue sin `localStorage`, `sessionStorage` ni cookies propias, y esta spec tampoco los usa fuera de él. El contador puede inflarse con peticiones manuales: se acepta como dato indicativo, con el control de `Origin` y la regla WAF del README como mitigación.
+8. **Ficha de la carrera en PC y móvil (F3, Enmienda 1).** `TripDetail`:
+   - **Un solo «Registrarme»**, en el bloque de acción, inmediatamente encima de «Consultar por WhatsApp» (que sigue en `outline` cuando hay botón). Se elimina el que estaba justo después del precio. Destino, condición de P-L y `<a>` sin precarga, como en el Requisito 1.
+   - **Bloque de acción:** el precio (`OfferSummary` o el aviso sin precio), «Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…" forman un único bloque, en ese orden.
+   - **Móvil (< 1024 px, `lg`):** una columna, en este orden: encabezado (lugar, título y resumen), imagen, datos clave, bloque de acción, «Qué incluye», «No incluye» y «Detalles por confirmar». Así «Registrarme» queda junto al precio y a WhatsApp sin recorrer toda la página. Sin scroll horizontal a 360 px.
+   - **PC (≥ 1024 px):** ancho máximo `max-w-6xl` (antes `max-w-2xl`). El encabezado ocupa todo el ancho; debajo, dos columnas: a la izquierda (flexible) la imagen, los datos clave, «Qué incluye», «No incluye» y «Detalles por confirmar»; a la derecha (fija, ~24 rem) el bloque de acción, **fijo al hacer scroll** (`sticky`, por debajo de la cabecera del sitio) y presentado como tarjeta con borde y fondo de los tokens existentes.
+   - Solo tokens y componentes existentes (`app/globals.css`, `buttonVariants`); sin colores nuevos. Sin JavaScript nuevo: es maquetado con CSS grid de Tailwind.
+   - No cambian los datos, los textos, las rutas ni `/viajes/[slug]/registro`.
 
 ## Criterios de aceptación
 
@@ -76,6 +87,15 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
 - [ ] (F2) Dado `/crm/campanas` y `/crm/campanas/<id>`, entonces veo "Registros", "Visitas" y "Conversión" con los valores de la base y el nuevo pie de tabla; `listCampaigns` y `getCampaignById` siguen siendo una sola consulta y devuelven `visitCount` (unit test).
 - [ ] (F2) Dado el README, entonces la guía de campañas explica qué cuenta como visita, que es indicativa y que empieza a contar con el despliegue; menciona «Registrarme» en la ficha y su dependencia de P-L; y la regla WAF documenta también `POST /api/campaign-visits` con su umbral.
 - [ ] (F2) Lint, tests, typegen + `tsc` y `build:worker` sin errores. Worker medido.
+
+### Fase 3: un solo «Registrarme» y ficha para PC (Enmienda 1)
+- [ ] (F3) Dado `/viajes/maraton-santiago-2027?c=mml26` con el registro abierto, entonces hay **un único** «Registrarme», inmediatamente encima de «Consultar por WhatsApp» (en `outline`), con el `href` del Requisito 1. Sustituye el primer criterio de la Fase 2 en lo que se refiere a "dos «Registrarme»".
+- [ ] (F3) Dada la ficha a 360 px, entonces el orden es encabezado, imagen, datos clave, bloque de acción (precio, «Registrarme», WhatsApp, aviso), «Qué incluye», «No incluye» y «Detalles por confirmar»; no hay scroll horizontal (`scrollWidth === clientWidth`).
+- [ ] (F3) Dada la ficha a 1280 px, entonces el encabezado ocupa el ancho del contenido (máx. `max-w-6xl`), el contenido queda en dos columnas y el bloque de acción está a la derecha, como tarjeta, y permanece visible al hacer scroll por la columna izquierda sin tapar la cabecera del sitio.
+- [ ] (F3) Dado el registro cerrado por P-L (producción local), entonces el bloque de acción muestra el precio, WhatsApp en su variante actual y el aviso, sin «Registrarme», en las dos anchuras.
+- [ ] (F3) Dado un viaje sin imagen, sin «Qué incluye», «No incluye» ni notas, entonces la ficha sigue bien en las dos anchuras (sin huecos vacíos ni columna izquierda rota).
+- [ ] (F3) Dado el README, entonces la descripción de «Registrarme» en la guía de campañas dice "un solo botón, junto a WhatsApp" y la de la ficha menciona las dos columnas en PC.
+- [ ] (F3) Lint, tests, typegen + `tsc` y `build:worker` sin errores. Worker medido.
 
 ## Diseño técnico
 
@@ -144,6 +164,10 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - `index.ts`: exporta `registrationHref`.
 - `app/crm/(protected)/campanas/[id]/page.tsx`: filas "Registros", "Visitas" y "Conversión".
 
+### Ficha en PC y móvil (F3)
+
+`modules/landing/components/TripDetail.tsx` solo. El `<article>` pasa a `max-w-6xl` y a un grid de una columna que en `lg` es `lg:grid-cols-[minmax(0,1fr)_24rem]`. El orden del DOM es el de móvil (Requisito 8). En `lg`: el encabezado lleva `lg:col-span-2`; la imagen, los datos clave e incluye/no incluye/notas llevan `lg:col-start-1`; el bloque de acción lleva `lg:col-start-2 lg:row-start-2 lg:row-span-6 lg:self-start lg:sticky` con un `top` que deje libre la cabecera del sitio, y estilo de tarjeta (`lg:rounded-xl lg:border lg:p-6`, sin el `border-t` de sección). La imagen deja el `<header>` y pasa a ser su propio elemento de la columna izquierda; su `sizes` se ajusta a la columna. Sin componentes nuevos.
+
 ## Reutilización
 
 - `attributionParams`, `firstParam` (`modules/landing/utils/inquiry.ts`), `isRegistrationOpen` (`lib/registrationConsent.ts`), `buttonVariants` (`components/ui/button`).
@@ -175,6 +199,11 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [x] T4 — README: guía de campañas (visitas, «Registrarme», P-L) y regla WAF para `POST /api/campaign-visits` · archivos: `README.md` · depende de: T2, T3 · secuencial
 - [ ] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
 
+### Fase 3: un solo «Registrarme» y ficha para PC (3 tareas, 2 archivos)
+- [ ] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
+- [ ] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [ ] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
+
 ## Preguntas abiertas
-1. **Desglose diario.** Los datos se guardan por día. ¿Quieres ya en `/crm/campanas/<id>` una lista de visitas por día (útil para comparar los días de una feria), o basta el total por ahora?
-2. **Umbral WAF de `POST /api/campaign-visits`.** Propuesta: 30 peticiones por 10 segundos por IP, bloqueo de 10 segundos. Un bloqueo solo pierde visitas, nunca registros. ¿Te parece?
+1. **Desglose diario.** *(Resuelta: solo el total.)* Los datos se guardan por día. ¿Quieres ya en `/crm/campanas/<id>` una lista de visitas por día (útil para comparar los días de una feria), o basta el total por ahora?
+2. **Umbral WAF de `POST /api/campaign-visits`.** *(Resuelta: 30 por 10 s; en el plan Free no se crea.)* Propuesta: 30 peticiones por 10 segundos por IP, bloqueo de 10 segundos. Un bloqueo solo pierde visitas, nunca registros. ¿Te parece?
