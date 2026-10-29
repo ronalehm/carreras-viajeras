@@ -1,7 +1,7 @@
 # Embudo comercial completo y correos automáticos del ciclo de vida
 
 - Módulos: integrations, crm y accounts; datos compartidos en lib.
-- Estado: borrador
+- Estado: aprobado
 - Solicitud: que todo registro de un runner entre al embudo comercial y que cada paso envíe un correo automático: bienvenida con confirmación del registro, confirmación de contacto, seguimiento, confirmación de la separación y alerta para el comercial.
 - Referencias: `crm-funnel-email-automation.md` (motor de correos ya implementado), `crm-journey-automation.md` (se enmienda aquí), `crm-leads-capture.md`, `landing-omnichannel-capture.md`, `accounts-runner-profiles.md` y `docs/SETUP.md`.
 
