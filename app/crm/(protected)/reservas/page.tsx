@@ -26,6 +26,7 @@ export default async function BookingsPage({ searchParams }: PageProps<"/crm/res
     );
   }
   const tripId = tripFilterSchema.parse((await searchParams).viaje);
+  // bookings.manage implies trips.manage_all, so this scope is always "all".
   const [bookings, trips] = await Promise.all([listBookings(tripId), listTrips(tripScopeFor(access.user))]);
   return (
     <section className="flex flex-col gap-6">

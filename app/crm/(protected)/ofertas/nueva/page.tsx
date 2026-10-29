@@ -20,6 +20,7 @@ export default async function NewOfferPage() {
     );
   }
   const [trips, campaigns] = await Promise.all([
+    // offers.manage is admin-only, which implies trips.manage_all: this scope is always "all".
     listTrips(tripScopeFor(access.user)),
     listCampaigns(),
   ]);

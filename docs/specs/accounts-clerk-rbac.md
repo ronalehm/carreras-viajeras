@@ -558,11 +558,11 @@ Precondición: el usuario facilita la clave `pk_live_…` (Pregunta abierta 9).
 - [x] T5 — `remap-user-id.sql` y README (modelo de acceso con Clerk, ajustes, variables, runbook, vuelta atrás, remapeo y checklist) · archivos: `scripts/sql/remap-user-id.sql`, `README.md` · depende de: T1 · paralelo (con T2–T4; archivos disjuntos)
 
 ### Fase 5: el organizador gestiona sus viajes y seed (5 tareas, 14 archivos)
-- [ ] T1 — `TripScope`, `tripScopeFor` con test y exports · archivos: `modules/trips/types/trips.types.ts`, `modules/trips/utils/tripScope.ts`, `modules/trips/utils/tripScope.test.ts`, `modules/trips/index.ts` · depende de: Fase 4 · secuencial (base)
-- [ ] T2 — Alcance obligatorio en el service de viajes, con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — Acciones de viajes con el alcance del actor, con tests · archivos: `modules/trips/actions/trips.actions.ts`, `modules/trips/actions/trips.actions.test.ts` · depende de: T2 · paralelo (con T4)
-- [ ] T4 — Páginas de viajes y reservas con `tripScopeFor` · archivos: `app/crm/(protected)/viajes/page.tsx`, `app/crm/(protected)/viajes/[id]/page.tsx`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx` · depende de: T2 · paralelo (con T3; archivos disjuntos)
-- [ ] T5 — `seed-trips.sql` (sin ejecutar) y README (rol organizador y seed); medir el Worker al cerrar la fase · archivos: `scripts/sql/seed-trips.sql`, `README.md` · depende de: Fase 4 (schema de F3) · paralelo (con T1–T4)
+- [x] T1 — `TripScope`, `tripScopeFor` con test y exports · archivos: `modules/trips/types/trips.types.ts`, `modules/trips/utils/tripScope.ts`, `modules/trips/utils/tripScope.test.ts`, `modules/trips/index.ts` · depende de: Fase 4 · secuencial (base)
+- [x] T2 — Alcance obligatorio en el service de viajes, con tests · archivos: `modules/trips/services/trips.service.ts`, `modules/trips/services/trips.service.test.ts` · depende de: T1 · secuencial
+- [x] T3 — Acciones de viajes con el alcance del actor, con tests · archivos: `modules/trips/actions/trips.actions.ts`, `modules/trips/actions/trips.actions.test.ts` · depende de: T2 · paralelo (con T4)
+- [x] T4 — Páginas de viajes y reservas con `tripScopeFor` · archivos: `app/crm/(protected)/viajes/page.tsx`, `app/crm/(protected)/viajes/[id]/page.tsx`, `app/crm/(protected)/reservas/page.tsx`, `app/crm/(protected)/reservas/nueva/page.tsx` · depende de: T2 · paralelo (con T3; archivos disjuntos)
+- [x] T5 — `seed-trips.sql` (sin ejecutar) y README (rol organizador y seed); medir el Worker al cerrar la fase · archivos: `scripts/sql/seed-trips.sql`, `README.md` · depende de: Fase 4 (schema de F3) · paralelo (con T1–T4)
 
 ## Preguntas abiertas
 1. **Datos de las demás carreras para el seed.** En el repo solo hay datos completos de Santiago 2027. Río y Roma aparecen como "Sin carrera, fecha ni precio confirmados", y de Medellín, Buenos Aires, España y EE. UU. solo hay imágenes. `trips` exige fecha de carrera, al menos una distancia y un resumen. **Recomendación:** el seed sale con Santiago. Cuando nos pases, por carrera, nombre oficial, ciudad, fecha, distancias y un resumen (precios opcionales), se añaden como filas `draft` (enmienda de esta spec) con las imágenes de la tabla de scripts.
