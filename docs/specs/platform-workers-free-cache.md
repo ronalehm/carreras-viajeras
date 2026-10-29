@@ -1,7 +1,7 @@
 # Páginas públicas servidas desde caché estática en Workers Free
 
 - Módulo: platform, content, landing
-- Estado: aprobado
+- Estado: borrador
 - Origen: Error 1102 ("Worker exceeded resource limits") en `https://carreras-viajeras.mentec.dev/`
   el 29 de octubre de 2026; el usuario pide corregirlo sin pasar a Workers Paid.
 - Referencias: `AGENTS.md`, `docs/SETUP.md`, `landing-news-updates.md`, `landing-public-site.md`,
@@ -45,6 +45,10 @@ Esta spec, cuando sea aprobada, sustituye solo los puntos siguientes:
   para los datos. El HTML estático de la portada no contiene noticias, y el endpoint de
   novedades responde `no-store`, así que publicar o despublicar se refleja en la siguiente
   carga de la portada.
+- `landing-race-pages.md`, requisito 7, y el estado real de `/contacto` en `landing-public-site.md`
+  (Fase 2): `/contacto` deja de leer `searchParams` y `listPublishedTrips()` en el servidor y
+  vuelve a ser estática (`○`); `destino`, la atribución y los viajes se resuelven en el navegador
+  con las mismas reglas (`resolveDestination`, `attributionParams`).
 
 Las demás reglas de lectura pública (solo `published`, sin datos internos, error distinto de
 vacío, aviso fijo) se mantienen y se aplican al endpoint.
@@ -56,8 +60,9 @@ vacío, aviso fijo) se mantienen y se aplican al endpoint.
   - copia de la caché a los assets dentro de `npm run build:worker`;
   - portada estática;
   - endpoint público de novedades y su carga en el navegador.
-- Incluye (fases posteriores, detalladas antes de implementarse): `/contacto` (Fase 2), y
-  `/viajes/[slug]` y `/viajes/[slug]/registro` (Fase 3, con la pregunta abierta 1).
+- Incluye (Fase 2): `/contacto` estática con la lista de viajes desde `GET /api/viajes`.
+- Incluye (Fase 3, por detallar en otra enmienda): `/viajes/[slug]` y `/viajes/[slug]/registro`
+  cargadas en el navegador (decisión 1).
 - No incluye:
   - pasar a Workers Paid;
   - R2, KV, D1 o Durable Objects;
@@ -100,7 +105,8 @@ vacío, aviso fijo) se mantienen y se aplican al endpoint.
 
 - [ ] Dado `npm run build`, entonces la tabla de rutas muestra `○ /`.
 - [ ] Dado `npm run build:worker`, entonces existen
-      `.open-next/assets/cdn-cgi/_next_cache/<buildId>/index.cache` y la caché de `/cuenta`.
+      en `.open-next/assets/cdn-cgi/_next_cache/<buildId>/` las entradas de caché de `/`
+      (`…/$/index.cache`) y de `/cuenta` (la ruta intermedia la decide OpenNext).
 - [ ] Dado `npm run preview`, cuando se pide `/`, entonces responde `200` con
       `x-opennext-cache: HIT`, también como primera petición de un isolate nuevo.
 - [ ] Dado que hay publicaciones publicadas, cuando el navegador carga `/`, entonces la sección
@@ -172,22 +178,60 @@ la caché `staticAssetsIncrementalCache` de `@opennextjs/cloudflare`. No añade 
 - [x] T5 — README (ejecución en Free, caché estática, límites conocidos) y validación build,
   `build:worker` y preview · archivos: `README.md` · depende de: T3, T4 · secuencial
 
-### Fase 2 — `/contacto` (por detallar)
+### Fase 2 — `/contacto` estática
 
-Página estática; lista de viajes (`slug`, `title`) desde un endpoint público; `destino` y
-parámetros de atribución leídos en el navegador. La Server Action del formulario se mantiene.
+Requisitos de la fase:
 
-### Fase 3 — páginas de viaje (por detallar)
+F2.1. `/contacto` no lee `searchParams` en el servidor ni consulta Neon; el build la marca `○`.
+      `app/contacto/page.tsx` sigue importando `submitWebLeadAction` de `@/modules/crm` y lo pasa
+      como prop (no se importa la acción desde un componente cliente).
+F2.2. `GET /api/viajes` público y sin sesión (no se añade al matcher): devuelve
+      `{ "trips": [{ "slug", "title" }] }` de `listPublishedTrips()`, solo esos dos campos y en el
+      mismo orden; `Cache-Control: no-store`; un error de lectura responde `503`
+      `{ "error": "trips_unavailable" }` sin detalles internos y registra un mensaje fijo; la query
+      se ignora.
+F2.3. En el navegador, `ContactPageContent` (`"use client"`, módulo `landing`) lee `destino` y los
+      parámetros de atribución con `useSearchParams()` (dentro de `<Suspense>` en la página) y
+      reutiliza `attributionParams`/`resolveDestination` sin cambiar sus reglas. Pide los viajes con
+      el cliente compartido, TanStack Query (un reintento como máximo) y Zod.
+F2.4. Mientras carga, muestra un estado breve accesible sin formulario (para no remontarlo y perder
+      lo escrito al llegar los viajes). Con datos, `ContactSection` recibe los viajes; si el
+      endpoint falla, recibe `[]` y el formulario sigue disponible con los destinos sin catálogo.
+      `isRegistrationOpen()` y el aviso de registro cerrado se mantienen.
+F2.5. El envío del formulario sigue siendo la Server Action actual (por petición). Límite conocido:
+      en Workers Free puede dar 1102 en frío; no se modifica en esta fase.
 
-Depende de la pregunta abierta 1.
+Criterios de aceptación de la fase:
 
-## Preguntas abiertas
+- [ ] `npm run build` muestra `○ /contacto` y `ƒ /api/viajes`.
+- [ ] Preview: `/contacto?destino=rio&utm_source=x` responde `x-opennext-cache: HIT` y, en el
+      navegador, preselecciona Río y conserva `utm_source` en los campos ocultos.
+- [ ] Con el endpoint en `503`, el formulario aparece con los destinos sin catálogo.
+- [ ] `GET /api/viajes` no devuelve más campos que `slug` y `title`.
 
-1. `/viajes/[slug]` y `/registro` no pueden prerenderizarse sin conocer los slugs al compilar, y
-   el proyecto prohíbe consultar Neon en el build. Si se cargan en el navegador, se pierden el
-   título y la imagen de vista previa (Open Graph) al compartir el enlace por WhatsApp. ¿Se
-   acepta, o se prefiere una lista fija de slugs publicados en el repositorio, que habría que
-   actualizar al publicar un viaje?
-2. El CRM, `/cuenta/perfil` y `/mis-carreras` siguen renderizándose por petición. En Workers Free
-   pueden seguir dando 1102 (sobre todo en frío). ¿Se acepta ese riesgo, o se reconsidera
-   Workers Paid solo si el CRM sigue fallando tras la Fase 1?
+Plan:
+
+- [ ] T6 — Endpoint `GET /api/viajes` · archivos: `app/api/viajes/route.ts`,
+  `app/api/viajes/route.test.ts` · depende de: Fase 1 · paralelo con T7
+- [ ] T7 — Lectura de viajes en el navegador · archivos:
+  `modules/landing/schemas/catalogTrips.schema.ts`, `modules/landing/services/catalogTrips.api.ts`
+  (+ test), `modules/landing/hooks/useCatalogTripOptions.ts` · depende de: Fase 1 · paralelo con T6
+- [ ] T8 — `ContactPageContent` y página estática · archivos:
+  `modules/landing/components/ContactPageContent.tsx` (+ test), `modules/landing/index.ts`,
+  `app/contacto/page.tsx` · depende de: T7 · secuencial
+- [ ] T9 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
+  T6, T8 · secuencial
+
+### Fase 3 — páginas de viaje (decisión tomada; por detallar)
+
+Decisión del usuario (29/10/2026): se acepta perder el título y la imagen de vista previa al
+compartir `/viajes/<slug>` por WhatsApp. Las páginas de viaje y de registro se cargan en el
+navegador desde endpoints públicos de lectura; los detalles se especifican en una enmienda
+posterior antes de implementarse.
+
+## Decisiones (antes preguntas abiertas)
+
+1. Páginas de viaje (29/10/2026): el usuario acepta perder el título y la imagen de vista previa
+   (Open Graph) al compartir `/viajes/<slug>` por WhatsApp; se cargarán en el navegador (Fase 3).
+2. CRM, `/cuenta/perfil` y `/mis-carreras` (29/10/2026): el usuario acepta el riesgo de 1102 en
+   Workers Free; no se cambian en esta spec.
