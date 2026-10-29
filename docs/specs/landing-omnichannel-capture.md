@@ -447,11 +447,11 @@ Cada fase cierra con `npm run lint`, `npx vitest run` y `npm run build` (los eje
 
 ### Fase 2: captura en servidor (5 tareas, 15 archivos)
 Requisito previo: Fase 1 cerrada y la migración aplicada en la rama de pruebas de Neon.
-- [ ] T1 — Base compartida: texto legal versionado con marcador P-L e `isRegistrationOpen`, y destinos sin catálogo (sin Santiago), con tests · archivos: `lib/registrationConsent.ts`, `lib/registrationConsent.test.ts`, `lib/inquiryDestinations.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
-- [ ] T2 — Schema y tipos de campañas, con tests · archivos: `modules/crm/schemas/campaigns.schema.ts`, `modules/crm/schemas/campaigns.schema.test.ts`, `modules/crm/types/campaigns.types.ts` · depende de: T1 · secuencial
-- [ ] T3 — Normalización de la atribución y `webLeadFormSchema`/tipos ampliados, con tests · archivos: `modules/crm/utils/leadAttribution.ts`, `modules/crm/utils/leadAttribution.test.ts`, `modules/crm/schemas/webLeads.schema.ts`, `modules/crm/schemas/webLeads.schema.test.ts`, `modules/crm/types/webLeads.types.ts` · depende de: T2 · secuencial
-- [ ] T4 — `createWebLead` con campaña, UTM, `ref`, promociones, regla de correo + carrera y `re_registered`, sin ventana por teléfono, con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T3 · paralelo (con T5)
-- [ ] T5 — `submitWebLeadAction`: registro cerrado, `existing` y `trip_unavailable`, con tests; medir el Worker cuando T4 y T5 estén terminadas · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts` · depende de: T3 (firma de `createWebLead` fijada en esta spec) · paralelo (con T4)
+- [x] T1 — Base compartida: texto legal versionado con marcador P-L e `isRegistrationOpen`, y destinos sin catálogo (sin Santiago), con tests · archivos: `lib/registrationConsent.ts`, `lib/registrationConsent.test.ts`, `lib/inquiryDestinations.ts` · depende de: Fase 1 · secuencial (base, `lib/`)
+- [x] T2 — Schema y tipos de campañas, con tests · archivos: `modules/crm/schemas/campaigns.schema.ts`, `modules/crm/schemas/campaigns.schema.test.ts`, `modules/crm/types/campaigns.types.ts` · depende de: T1 · secuencial
+- [x] T3 — Normalización de la atribución y `webLeadFormSchema`/tipos ampliados, con tests · archivos: `modules/crm/utils/leadAttribution.ts`, `modules/crm/utils/leadAttribution.test.ts`, `modules/crm/schemas/webLeads.schema.ts`, `modules/crm/schemas/webLeads.schema.test.ts`, `modules/crm/types/webLeads.types.ts` · depende de: T2 · secuencial
+- [x] T4 — `createWebLead` con campaña, UTM, `ref`, promociones, regla de correo + carrera y `re_registered`, sin ventana por teléfono, con tests · archivos: `modules/crm/services/webLeads.service.ts`, `modules/crm/services/webLeads.service.test.ts` · depende de: T3 · paralelo (con T5)
+- [x] T5 — `submitWebLeadAction`: registro cerrado, `existing` y `trip_unavailable`, con tests; medir el Worker cuando T4 y T5 estén terminadas · archivos: `modules/crm/actions/webLeads.actions.ts`, `modules/crm/actions/webLeads.actions.test.ts` · depende de: T3 (firma de `createWebLead` fijada en esta spec) · paralelo (con T4)
 
 ### Fase 3: campañas en el CRM (5 tareas, 15 archivos)
 Requisito previo: Fase 2 cerrada (schema y tipos de campañas).

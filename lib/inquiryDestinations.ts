@@ -1,14 +1,12 @@
-// Closed list of inquiry destinations, shared by the landing (selector and WhatsApp message) and
-// the CRM (server-side validation of the web form). The id is the form value and the ?destino=
-// value; name is the WhatsApp text and leads.destination_text; tripSlug links a catalog trip.
-export const INQUIRY_DESTINATION_IDS = ["maraton-santiago-2027", "rio", "roma"] as const; // for z.enum
+// Inquiry destinations without a catalog trip, shared by the landing (/contacto selector, after
+// the published trips) and the CRM (web capture). The id is the form value and the ?destino=
+// value; name is the visible label and leads.destination_text. Catalog trips (Santiago included)
+// come from the published catalog, never from this list.
+export const INQUIRY_DESTINATION_IDS = ["rio", "roma"] as const;
 
 export type InquiryDestinationId = (typeof INQUIRY_DESTINATION_IDS)[number];
 
-export const DEFAULT_INQUIRY_DESTINATION: InquiryDestinationId = "maraton-santiago-2027";
-
-export const INQUIRY_DESTINATIONS: Record<InquiryDestinationId, { name: string; tripSlug: string | null }> = {
-  "maraton-santiago-2027": { name: "Maratón de Santiago 42K 2027", tripSlug: "maraton-santiago-2027" },
-  rio: { name: "Río de Janeiro", tripSlug: null },
-  roma: { name: "Roma", tripSlug: null },
+export const INQUIRY_DESTINATIONS: Record<InquiryDestinationId, { name: string }> = {
+  rio: { name: "Río de Janeiro" },
+  roma: { name: "Roma" },
 };

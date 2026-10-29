@@ -5,8 +5,10 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/headers", () => ({ headers: vi.fn() }));
 vi.mock("../services/turnstile.service", () => ({ verifyTurnstileToken: vi.fn() }));
 vi.mock("../services/webLeads.service", () => ({ createWebLead: vi.fn() }));
+vi.mock("@/lib/registrationConsent", () => ({ isRegistrationOpen: vi.fn() }));
 
 import { headers } from "next/headers";
+import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { verifyTurnstileToken } from "../services/turnstile.service";
 import { createWebLead } from "../services/webLeads.service";
 import type { WebLeadFormState } from "../types/webLeads.types";
@@ -26,11 +28,25 @@ const VALID = {
   website: "",
 };
 
-const SUCCESS = { status: "success", message: "¡Listo! Recibimos tu consulta. Te escribiremos por WhatsApp." };
+const SUCCESS = { status: "success", message: "¡Listo! Recibimos tus datos. Te escribiremos por WhatsApp." };
 const UNAVAILABLE = {
   status: "error",
   code: "unavailable",
-  message: "No pudimos enviar tu consulta en este momento. Puedes escribirnos por WhatsApp.",
+  message: "No pudimos enviar tus datos en este momento. Puedes escribirnos por WhatsApp.",
+};
+const TRIP_UNAVAILABLE = {
+  status: "error",
+  code: "trip_unavailable",
+  message: "Esta carrera ya no está disponible para registrarse.",
+};
+// Without marketing or attribution parameters, the schema hands these defaults to createWebLead.
+const NO_EXTRAS = {
+  marketingOptIn: false,
+  campaignCode: null,
+  utmSource: null,
+  utmMedium: null,
+  utmCampaign: null,
+  referredBy: null,
 };
 
 function form(values: Record<string, string>) {
@@ -47,6 +63,7 @@ beforeEach(() => {
   vi.mocked(headers).mockResolvedValue(new Headers({ "cf-connecting-ip": IP, "x-forwarded-for": "198.51.100.1" }));
   vi.mocked(verifyTurnstileToken).mockResolvedValue("valid");
   vi.mocked(createWebLead).mockResolvedValue("created");
+  vi.mocked(isRegistrationOpen).mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -68,6 +85,7 @@ describe("submitWebLeadAction", () => {
       phone: "+51938127170",
       destination: "rio",
       submissionId: SUBMISSION_ID,
+      ...NO_EXTRAS,
     });
     expect(vi.mocked(verifyTurnstileToken).mock.invocationCallOrder[0]).toBeLessThan(
       vi.mocked(createWebLead).mock.invocationCallOrder[0],
@@ -89,7 +107,7 @@ describe("submitWebLeadAction", () => {
   it("invalid data → invalid_input with the field errors, without calling Turnstile", async () => {
     const result = await submitWebLeadAction(
       IDLE,
-      form({ ...VALID, name: "A", email: "ana@", destination: "santiago-2027", consent: "" }),
+      form({ ...VALID, name: "A", email: "ana@", destination: "Santiago 2027", consent: "" }),
     );
 
     expect(result).toEqual({
@@ -99,7 +117,7 @@ describe("submitWebLeadAction", () => {
       fieldErrors: {
         name: ["Escribe tu nombre (2 a 80 caracteres)."],
         email: ["Escribe un correo válido."],
-        destination: ["Elige un destino."],
+        destination: ["Elige la carrera."],
         consent: ["Necesitamos tu autorización para guardar tus datos."],
       },
     });
@@ -159,17 +177,83 @@ describe("submitWebLeadAction", () => {
     expect(createWebLead).not.toHaveBeenCalled();
   });
 
-  it.each(["created", "duplicate"] as const)("%s → success", async (outcome) => {
-    vi.mocked(createWebLead).mockResolvedValue(outcome);
-    expect(await submitWebLeadAction(IDLE, form(VALID))).toEqual(SUCCESS);
-  });
+  it.each(["created", "existing", "duplicate"] as const)(
+    "%s → the same success (never reveals whether the email already existed)",
+    async (outcome) => {
+      vi.mocked(createWebLead).mockResolvedValue(outcome);
+      expect(await submitWebLeadAction(IDLE, form(VALID))).toEqual(SUCCESS);
+    },
+  );
 
   it("conflict → conflict", async () => {
     vi.mocked(createWebLead).mockResolvedValue("conflict");
     expect(await submitWebLeadAction(IDLE, form(VALID))).toEqual({
       status: "error",
       code: "conflict",
-      message: "Ya recibimos una consulta desde este formulario. Recarga la página para enviar otra.",
+      message: "Ya recibimos un registro desde este formulario. Recarga la página para enviar otro.",
+    });
+  });
+
+  it("unknown_trip → trip_unavailable", async () => {
+    vi.mocked(createWebLead).mockResolvedValue("unknown_trip");
+    expect(await submitWebLeadAction(IDLE, form({ ...VALID, destination: "maraton-x-2020" }))).toEqual(TRIP_UNAVAILABLE);
+  });
+
+  it("registration closed (placeholder legal text in production) → unavailable without calling Turnstile or the database", async () => {
+    vi.mocked(isRegistrationOpen).mockReturnValue(false);
+
+    expect(await submitWebLeadAction(IDLE, form(VALID))).toEqual(UNAVAILABLE);
+    expect(headers).not.toHaveBeenCalled();
+    expect(verifyTurnstileToken).not.toHaveBeenCalled();
+    expect(createWebLead).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
+  });
+
+  it("registration closed is checked after the limits and the honeypot, and before the schema", async () => {
+    vi.mocked(isRegistrationOpen).mockReturnValue(false);
+
+    expect(await submitWebLeadAction(IDLE, form({ ...VALID, extra: "x".repeat(16 * 1024) }))).toMatchObject({
+      code: "invalid_input",
+    });
+    expect(await submitWebLeadAction(IDLE, form({ ...VALID, website: "https://spam.example" }))).toEqual(SUCCESS);
+    expect(isRegistrationOpen).not.toHaveBeenCalled();
+
+    expect(await submitWebLeadAction(IDLE, form({ ...VALID, email: "ana@" }))).toEqual(UNAVAILABLE);
+    expect(isRegistrationOpen).toHaveBeenCalledOnce();
+  });
+
+  it("passes promotions and the normalized attribution, and drops any other key of the form", async () => {
+    const manipulated = {
+      ...VALID,
+      marketing: "on",
+      c: " MML26 ",
+      utm_source: "Instagram",
+      utm_medium: "social",
+      utm_campaign: "<script>",
+      ref: "Club-Lima",
+      source: "whatsapp",
+      stage: "paid",
+      channel: "event",
+      campaignId: "0b8f0f5e-9d7a-4c1b-8e2f-1a2b3c4d5e6f",
+      ownerUserId: "user_1",
+      consentVersion: "otra",
+      price: "0",
+      modo: "stand",
+    };
+
+    expect(await submitWebLeadAction(IDLE, form(manipulated))).toEqual(SUCCESS);
+    expect(createWebLead).toHaveBeenCalledExactlyOnceWith({
+      fullName: "Ana María Pérez",
+      email: "ana@example.com",
+      phone: "+51938127170",
+      destination: "rio",
+      submissionId: SUBMISSION_ID,
+      marketingOptIn: true,
+      campaignCode: "mml26",
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: null,
+      referredBy: "club-lima",
     });
   });
 
@@ -194,6 +278,10 @@ describe("submitWebLeadAction", () => {
     vi.mocked(verifyTurnstileToken).mockResolvedValueOnce("invalid");
     outcomes.push(await submitWebLeadAction(IDLE, form(VALID)));
     vi.mocked(createWebLead).mockResolvedValueOnce("conflict");
+    outcomes.push(await submitWebLeadAction(IDLE, form(VALID)));
+    vi.mocked(createWebLead).mockResolvedValueOnce("unknown_trip");
+    outcomes.push(await submitWebLeadAction(IDLE, form(VALID)));
+    vi.mocked(createWebLead).mockResolvedValueOnce("existing");
     outcomes.push(await submitWebLeadAction(IDLE, form(VALID)));
     vi.mocked(createWebLead).mockRejectedValueOnce(new Error("Ana María Pérez"));
     outcomes.push(await submitWebLeadAction(IDLE, form(VALID)));
