@@ -4,6 +4,7 @@ import { esMX } from "@clerk/localizations";
 import "./globals.css";
 import { Archivo, Plus_Jakarta_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { Providers } from "./providers";
 
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -34,7 +35,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={cn("font-sans", jakarta.variable, archivo.variable)}
     >
       <body>
-        <ClerkProvider localization={esMX}>{children}</ClerkProvider>
+        <ClerkProvider localization={esMX}>
+          <Providers>{children}</Providers>
+        </ClerkProvider>
       </body>
     </html>
   );

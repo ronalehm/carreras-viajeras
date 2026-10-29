@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { campaignStatusEnum } from "@/lib/db-schema";
-import { CAMPAIGN_STATUS_LABELS, campaignLinks } from "./campaignDisplay";
+import { CAMPAIGN_STATUS_LABELS, campaignLinks, formatConversion } from "./campaignDisplay";
 
 const ORIGIN = "https://carreras-viajeras.mentec.dev";
 
@@ -35,5 +35,21 @@ describe("CAMPAIGN_STATUS_LABELS", () => {
   it("labels every campaign status", () => {
     expect(CAMPAIGN_STATUS_LABELS).toEqual({ active: "Activa", closed: "Cerrada" });
     expect(Object.keys(CAMPAIGN_STATUS_LABELS)).toEqual([...campaignStatusEnum.enumValues]);
+  });
+});
+
+describe("formatConversion", () => {
+  it("shows a dash without visits", () => {
+    expect(formatConversion(0, 0)).toBe("—");
+    expect(formatConversion(3, 0)).toBe("—");
+  });
+
+  // es-PE in Node's ICU writes the percent sign right after the number, without a space.
+  it("rounds to a whole percentage with the es-PE format", () => {
+    expect(formatConversion(1, 3)).toBe("33%");
+  });
+
+  it("shows conversions above 100 % as they are", () => {
+    expect(formatConversion(5, 4)).toBe("125%");
   });
 });

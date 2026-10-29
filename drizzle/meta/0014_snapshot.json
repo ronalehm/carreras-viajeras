@@ -1,5 +1,5 @@
 {
-  "id": "59e74ca4-46cb-415c-88c5-fe8d516eda26",
+  "id": "b685e721-9270-439e-90fe-7cc3c982d9b2",
   "prevId": "9597cdb7-683f-4fc7-bee0-d2a93cc7ea1d",
   "version": "7",
   "dialect": "postgresql",
@@ -421,6 +421,64 @@
       },
       "isRLSEnabled": false
     },
+    "public.campaign_visit_days": {
+      "name": "campaign_visit_days",
+      "schema": "",
+      "columns": {
+        "campaign_id": {
+          "name": "campaign_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "day": {
+          "name": "day",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "visits": {
+          "name": "visits",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "campaign_visit_days_campaign_id_campaigns_id_fk": {
+          "name": "campaign_visit_days_campaign_id_campaigns_id_fk",
+          "tableFrom": "campaign_visit_days",
+          "tableTo": "campaigns",
+          "columnsFrom": [
+            "campaign_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "campaign_visit_days_campaign_id_day_pk": {
+          "name": "campaign_visit_days_campaign_id_day_pk",
+          "columns": [
+            "campaign_id",
+            "day"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "campaign_visit_days_visits_chk": {
+          "name": "campaign_visit_days_visits_chk",
+          "value": "\"campaign_visit_days\".\"visits\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.campaigns": {
       "name": "campaigns",
       "schema": "",
@@ -629,14 +687,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "kind": {
-          "name": "kind",
-          "type": "client_email_kind",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'stage'"
-        },
         "stage": {
           "name": "stage",
           "type": "lead_stage",
@@ -754,17 +804,11 @@
         }
       },
       "indexes": {
-        "client_emails_event_kind_uq": {
-          "name": "client_emails_event_kind_uq",
+        "client_emails_event_uq": {
+          "name": "client_emails_event_uq",
           "columns": [
             {
               "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "kind",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1786,7 +1830,7 @@
         },
         "leads_created_by_chk": {
           "name": "leads_created_by_chk",
-          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import', 'runner_account')"
+          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import')"
         },
         "leads_origin_detail_chk": {
           "name": "leads_origin_detail_chk",
@@ -5109,20 +5153,6 @@
         "closed"
       ]
     },
-    "public.client_email_kind": {
-      "name": "client_email_kind",
-      "schema": "public",
-      "values": [
-        "stage",
-        "welcome_registration",
-        "welcome_contact",
-        "welcome_account",
-        "follow_up",
-        "booking_confirmed",
-        "team_alert",
-        "owner_alert"
-      ]
-    },
     "public.client_email_status": {
       "name": "client_email_status",
       "schema": "public",
@@ -5215,8 +5245,7 @@
         "web_form",
         "other",
         "google_form",
-        "import",
-        "runner_account"
+        "import"
       ]
     },
     "public.lead_stage": {
@@ -5238,8 +5267,7 @@
         "lead.created",
         "lead.stage_changed",
         "lead.follow_up_due",
-        "lead.opted_out",
-        "lead.owner_assigned"
+        "lead.opted_out"
       ]
     },
     "public.outbox_status": {

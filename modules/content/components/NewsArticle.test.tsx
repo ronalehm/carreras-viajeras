@@ -13,8 +13,12 @@ it("renders script markup only as text and keeps paragraph boundaries", () => {
   expect(container.querySelector("script")).toBeNull();
   expect(screen.getByText("Segundo párrafo seguro.")).toBeTruthy();
 });
-it("shows different empty and error states with no fabricated news", () => {
-  const { rerender } = render(<NewsSection news={{ status: "empty" }} />);
+it("shows different loading, empty and error states with no fabricated news", () => {
+  const { rerender } = render(<NewsSection news={{ status: "loading" }} />);
+  expect(screen.getByRole("status").getAttribute("aria-busy")).toBe("true");
+  expect(screen.queryAllByRole("article")).toHaveLength(0);
+  rerender(<NewsSection news={{ status: "empty" }} />);
+  expect(screen.queryByRole("status")).toBeNull();
   expect(screen.getByText("Todavía no hay publicaciones.")).toBeTruthy();
   rerender(<NewsSection news={{ status: "error" }} />);
   expect(screen.queryByText("Todavía no hay publicaciones.")).toBeNull();

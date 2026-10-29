@@ -1,3 +1,5 @@
+-- Número definitivo 0015: se redactó como 0014 y main ocupó ese número con 0014_cute_nebula (visitas).
+-- Mismas sentencias que la versión 0014 revisada; si ya se aplicó con ese número, no se repite.
 -- Tipos de correo del ciclo de vida (docs/specs/crm-lifecycle-emails.md). Se aplica a mano, en dos bloques,
 -- primero en la rama Neon dev-test y después en production, ANTES de mergear y desplegar el código de la Fase 1.
 -- Bloque 1: los dos ALTER TYPE ... ADD VALUE, solos (sin BEGIN/COMMIT) o en su propia transacción ya confirmada;

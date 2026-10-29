@@ -18,6 +18,20 @@ export function firstParam(value: string | string[] | undefined): string | undef
 }
 
 /**
+ * Parámetros de la URL leídos en el navegador (`useSearchParams()`) con la misma forma que los
+ * `searchParams` de una página: un valor → string, clave repetida → array. Así `firstParam`,
+ * `attributionParams` y `resolveDestination` conservan su regla del primer valor.
+ */
+export function searchParamsToRecord(params: URLSearchParams): Record<string, string | string[]> {
+  const record: Record<string, string | string[]> = {};
+  for (const key of new Set(params.keys())) {
+    const values = params.getAll(key);
+    record[key] = values.length === 1 ? values[0] : values;
+  }
+  return record;
+}
+
+/**
  * `?c=`, UTM y `ref` para los campos ocultos del formulario: solo esas cinco claves, su primer
  * valor, no vacío y de 200 caracteres como máximo. No son de confianza: el servidor los normaliza
  * y decide la atribución.
@@ -31,6 +45,17 @@ export function attributionParams(
     if (value?.trim() && value.length <= MAX_ATTRIBUTION_LENGTH) params[key] = value;
   }
   return params;
+}
+
+/** `/viajes/<slug>/registro` con los parámetros de atribución presentes; sin parámetros, sin `?`. */
+export function registrationHref(slug: string, params: LeadAttributionParams): string {
+  const query = new URLSearchParams();
+  for (const key of ATTRIBUTION_KEYS) {
+    const value = params[key];
+    if (value !== undefined) query.append(key, value);
+  }
+  const search = query.toString();
+  return `/viajes/${slug}/registro${search ? `?${search}` : ""}`;
 }
 
 /** `?destino=` → un valor permitido, su alias si está permitido, o "" (sin preselección). */
