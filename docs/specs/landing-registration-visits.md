@@ -1,7 +1,7 @@
 # Entrada al registro desde la ficha de la carrera y visitas por campaña
 
 - Módulo: landing (también `crm`)
-- Estado: aprobado
+- Estado: borrador
 - Base: rama `claude/peaceful-lovelace-tvyqt8` sobre `main` (`4b4650f`). Migraciones hasta `drizzle/0012_reward_operations.sql`.
 - Enmienda a specs aprobadas, que **no se editan**: `landing-omnichannel-capture.md` (Requisito 8, sus tres preguntas abiertas y dos criterios de F4) y `landing-race-pages.md` (Requisito 9: el CTA de `/viajes/[slug]` ya no es solo WhatsApp). Si esta spec se aprueba, sus reglas prevalecen sobre esas partes.
 - Decisiones del usuario (2026-10-29), respuestas a las preguntas abiertas de `landing-omnichannel-capture.md`:
@@ -13,6 +13,7 @@
   5. **Ficha para PC y móvil:** la ficha "no está optimizada para PC"; debe servir para los dos. Cambia el maquetado de una columna de `landing-race-pages.md` en `/viajes/[slug]` (esa spec no se edita).
   6. **Respuestas a las preguntas abiertas de esta spec:** solo el total de visitas, sin desglose diario; regla WAF de 30 peticiones por 10 s, y en el plan Free (una sola regla) no se crea la regla de visitas.
   7. **Botones arriba en PC (2026-10-29, tras ver las capturas de la Fase 3):** con una oferta completa la tarjeta es más alta que la pantalla y «Registrarme» no se veía al cargar. El usuario eligió que, **solo en PC**, «Registrarme», WhatsApp y el aviso vayan al inicio de la tarjeta y el precio debajo, con scroll interno. En móvil no cambia.
+  8. **Ancho completo y sin scroll interno en PC (2026-10-29, tras probar la Fase 3 en su navegador):** "sale el scroll y no se está usando todo el espacio de la pantalla". El usuario eligió: la ficha usa todo el ancho, con los mismos márgenes laterales que la cabecera del sitio; la tarjeta muestra todo el precio **sin scroll interno** y **no queda fija**: baja con la página. Los botones siguen arriba de la tarjeta (decisión 7). Sustituye lo que el Requisito 8 decía del `max-w-6xl`, del `sticky` y del scroll interno.
 - Depende de: `landing-omnichannel-capture.md` (aprobada, F1–F4 implementadas: `campaigns`, `/viajes/[slug]/registro`, `/crm/campanas`), `landing-race-pages.md` (aprobada: `TripDetail`), `platform-neon-foundation.md` (aprobada: Drizzle `neon-http`, una sentencia por escritura, migraciones manuales).
 
 ## Objetivo
@@ -63,6 +64,7 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
    - **Bloque de acción:** el precio (`OfferSummary` o el aviso sin precio), «Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…" forman un único bloque, en ese orden.
    - **Móvil (< 1024 px, `lg`):** una columna, en este orden: encabezado (lugar, título y resumen), imagen, datos clave, bloque de acción, «Qué incluye», «No incluye» y «Detalles por confirmar». Así «Registrarme» queda junto al precio y a WhatsApp sin recorrer toda la página. Sin scroll horizontal a 360 px.
    - **PC (≥ 1024 px):** ancho máximo `max-w-6xl` (antes `max-w-2xl`). El encabezado ocupa todo el ancho; debajo, dos columnas: a la izquierda (flexible) la imagen, los datos clave, «Qué incluye», «No incluye» y «Detalles por confirmar»; a la derecha (fija, ~24 rem) el bloque de acción, **fijo al hacer scroll** (`sticky`, por debajo de la cabecera del sitio) y presentado como tarjeta con borde y fondo de los tokens existentes.
+   - **Ancho y tarjeta en PC (decisión 8, prevalece sobre las dos viñetas anteriores y la siguiente):** sin ancho máximo; en `lg` el padding lateral es el de la cabecera del sitio (`px-[6%]`). La columna derecha mide `26rem`. La tarjeta tiene su altura natural: **sin `sticky`, sin `max-h` y sin scroll interno**. Los botones van arriba de la tarjeta y el precio debajo (decisión 7, con `order` solo en `lg`).
    - **Orden dentro de la tarjeta en PC (decisión 7):** primero las acciones («Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…"), separadas del precio por una línea de los tokens existentes, y debajo el precio. La tarjeta no supera el alto visible bajo la cabecera (`max-h` relativo a `100dvh`); si el precio no cabe, **solo el precio** hace scroll dentro de la tarjeta y las acciones quedan siempre visibles. Se hace solo con CSS (`order` en `lg`); el orden del DOM sigue siendo el de móvil (precio y después acciones), para que en móvil y para lectores de pantalla el precio se lea antes que los botones.
    - Solo tokens y componentes existentes (`app/globals.css`, `buttonVariants`); sin colores nuevos. Sin JavaScript nuevo: es maquetado con CSS grid de Tailwind.
    - No cambian los datos, los textos, las rutas ni `/viajes/[slug]/registro`.
@@ -94,6 +96,7 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
 - [ ] (F3) Dado `/viajes/maraton-santiago-2027?c=mml26` con el registro abierto, entonces hay **un único** «Registrarme», inmediatamente encima de «Consultar por WhatsApp» (en `outline`), con el `href` del Requisito 1. Sustituye el primer criterio de la Fase 2 en lo que se refiere a "dos «Registrarme»".
 - [ ] (F3) Dada la ficha a 360 px, entonces el orden es encabezado, imagen, datos clave, bloque de acción (precio, «Registrarme», WhatsApp, aviso), «Qué incluye», «No incluye» y «Detalles por confirmar»; no hay scroll horizontal (`scrollWidth === clientWidth`).
 - [ ] (F3) Dada la ficha a 1280 px, entonces el encabezado ocupa el ancho del contenido (máx. `max-w-6xl`), el contenido queda en dos columnas y el bloque de acción está a la derecha, como tarjeta, y permanece visible al hacer scroll por la columna izquierda sin tapar la cabecera del sitio.
+- [ ] (F3, decisión 8) Dada la ficha a 1280, 1440 y 1920 px de ancho, entonces el contenido llega hasta los mismos márgenes laterales que la cabecera del sitio (sin el tope de `max-w-6xl`), la tarjeta muestra todo el precio sin barra de scroll interna y baja con la página, y «Registrarme» y WhatsApp se ven al cargar arriba de la tarjeta. Este criterio prevalece sobre los dos anteriores en lo que digan de `max-w-6xl`, de quedar fija y del scroll interno.
 - [ ] (F3) Dada la ficha a 1280×800 y a 1440×900 con una oferta completa (dos anticipos, beneficio, condiciones y tipo de cambio), entonces «Registrarme» y WhatsApp se ven **al cargar la página** en la parte superior de la tarjeta, siguen visibles al hacer scroll mientras dura la columna izquierda, y el precio, debajo, hace scroll dentro de la tarjeta. A 360 px el orden sigue siendo precio y después los botones.
 - [ ] (F3) Dado el registro cerrado por P-L (producción local), entonces el bloque de acción muestra el precio, WhatsApp en su variante actual y el aviso, sin «Registrarme», en las dos anchuras.
 - [ ] (F3) Dado un viaje sin imagen, sin «Qué incluye», «No incluye» ni notas, entonces la ficha sigue bien en las dos anchuras (sin huecos vacíos ni columna izquierda rota).
@@ -202,9 +205,10 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [x] T4 — README: guía de campañas (visitas, «Registrarme», P-L) y regla WAF para `POST /api/campaign-visits` · archivos: `README.md` · depende de: T2, T3 · secuencial
 - [ ] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
 
-### Fase 3: un solo «Registrarme» y ficha para PC (3 tareas, 2 archivos)
+### Fase 3: un solo «Registrarme» y ficha para PC (4 tareas, 2 archivos)
 - [x] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
 - [x] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [ ] T4 — Decisión 8: ancho completo con el padding de la cabecera, columna derecha de `26rem`, tarjeta sin `sticky`, `max-h` ni scroll interno (botones arriba en `lg`); README alineado · archivos: `modules/landing/components/TripDetail.tsx`, `README.md` · depende de: T1, T2 · secuencial
 - [ ] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ## Preguntas abiertas
