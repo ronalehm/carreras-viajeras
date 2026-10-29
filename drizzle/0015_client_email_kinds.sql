@@ -14,7 +14,7 @@
 -- apagada antes de migrar y seguir apagada hasta que la Fase 1 esté desplegada.
 ALTER TYPE "public"."lead_source" ADD VALUE 'runner_account';--> statement-breakpoint
 ALTER TYPE "public"."outbox_event_type" ADD VALUE 'lead.owner_assigned';--> statement-breakpoint
--- Bloque 2: después de confirmar el bloque 1, entre BEGIN; y COMMIT;.
+-- Bloque 2 (migration:split-transaction): después de confirmar el bloque 1, entre BEGIN; y COMMIT;.
 CREATE TYPE "public"."client_email_kind" AS ENUM('stage', 'welcome_registration', 'welcome_contact', 'welcome_account', 'follow_up', 'booking_confirmed', 'team_alert', 'owner_alert');--> statement-breakpoint
 ALTER TABLE "client_emails" ADD COLUMN "kind" "client_email_kind" DEFAULT 'stage' NOT NULL;--> statement-breakpoint
 DROP INDEX "client_emails_event_uq";--> statement-breakpoint
