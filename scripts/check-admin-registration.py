@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import re
+import ssl
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -38,14 +39,18 @@ def fixtures(tag, today):
 
 def preflight(require_credentials=True):
     missing = [key for key in ["QA_ADMIN_EMAIL", "QA_ADMIN_PASSWORD"] if require_credentials and not os.environ.get(key)]
-    network = "ready"
+    result = {"network": "ready", "missingEnvironment": missing}
     try:
         with urlopen(ORIGIN + "/api/health", timeout=15) as response:
             if response.status != 200 or json.load(response).get("status") != "ok":
-                network = "health_failed"
-    except (HTTPError, URLError, OSError, ValueError):
-        network = "production_unreachable"
-    return {"network": network, "missingEnvironment": missing}
+                result.update(network="health_failed", reason="unexpected_health_response")
+    except HTTPError as error:
+        result.update(network="production_unreachable", reason="http_error", httpStatus=error.code)
+    except URLError as error:
+        result.update(network="production_unreachable", reason="tls_certificate" if isinstance(error.reason, ssl.SSLCertVerificationError) else "network_error")
+    except (OSError, ValueError):
+        result.update(network="production_unreachable", reason="network_or_health_response_error")
+    return result
 
 
 def proxy_settings():
@@ -92,13 +97,23 @@ def perform(report, data, interactive_login=False):
         try:
             page.goto(ORIGIN + "/crm/acceso", wait_until="domcontentloaded")
             sign_in(page, interactive_login)
-            identity = context.request.get(ORIGIN + "/api/crm/me")
-            if identity.status != 200:
+            # Use Chromium's network and cookies for the proof too. Playwright's
+            # separate HTTP client can have different TLS/proxy behaviour on Windows.
+            identity = page.evaluate("""async () => {
+                const response = await fetch('/api/crm/me', {credentials: 'same-origin', cache: 'no-store'});
+                const data = response.ok ? await response.json() : {};
+                return {status: response.status, staffRoles: Array.isArray(data.staffRoles) ? data.staffRoles : []};
+            }""")
+            report["preflight"]["network"] = "browser_reached"
+            if identity["status"] != 200:
                 report["blocker"] = "admin_identity_unverified"
+                report["adminIdentityHttpStatus"] = identity["status"]
+                browser.close()
                 return
-            roles = identity.json().get("staffRoles", [])
+            roles = identity["staffRoles"]
             if not any(role in roles for role in ["admin", "super_admin"]):
                 report["blocker"] = "account_has_no_admin_role"
+                browser.close()
                 return
             report["authenticatedAsAdmin"] = True
         except Exception:
@@ -202,8 +217,15 @@ def main():
         return 0
     report = {"origin": ORIGIN, "timestamp": now.isoformat(), "tag": tag, "authenticatedAsAdmin": False, "writesAttempted": 0, "results": {name: {"status": "not_run", "submitted": False} for name in MODULES}}
     report["authenticationMode"] = "interactive_browser" if args.interactive_login else "environment"
-    report["preflight"] = preflight(require_credentials=not args.interactive_login)
-    ready = report["preflight"]["network"] == "ready" and not report["preflight"]["missingEnvironment"]
+    if args.interactive_login and not args.preflight:
+        # The browser has its own TLS trust, proxy and cookies. A failed Python
+        # health request does not establish that this browser cannot reach Clerk.
+        # No forms are submitted until the real browser session proves admin access.
+        report["preflight"] = {"network": "checked_in_browser", "missingEnvironment": []}
+        ready = True
+    else:
+        report["preflight"] = preflight(require_credentials=not args.interactive_login)
+        ready = report["preflight"]["network"] == "ready" and not report["preflight"]["missingEnvironment"]
     if ready and not args.preflight:
         try:
             perform(report, data, args.interactive_login)

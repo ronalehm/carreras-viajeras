@@ -4,6 +4,8 @@ import importlib.util
 import io
 import json
 import os
+import sys
+from urllib.error import HTTPError
 from pathlib import Path
 import tempfile
 import unittest
@@ -31,7 +33,7 @@ class AdminRegistrationTests(unittest.TestCase):
         with patch.dict(os.environ, {}, clear=True), patch.object(qa, "urlopen", return_value=self.healthy_response()):
             self.assertEqual(qa.preflight()["missingEnvironment"], ["QA_ADMIN_EMAIL", "QA_ADMIN_PASSWORD"])
 
-    def test_network_failure_is_a_blocker_even_for_interactive_login(self):
+    def test_explicit_network_probe_reports_failure(self):
         with patch.object(qa, "urlopen", side_effect=OSError("synthetic network failure")):
             self.assertEqual(qa.preflight(require_credentials=False)["network"], "production_unreachable")
 
@@ -60,10 +62,53 @@ class AdminRegistrationTests(unittest.TestCase):
     def test_failed_preflight_never_starts_browser(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "result.json"
-            with patch("sys.argv", ["qa", "--interactive-login", "--report", str(output)]), patch.object(qa, "preflight", return_value={"network": "production_unreachable", "missingEnvironment": []}), patch.object(qa, "perform") as browser, contextlib.redirect_stdout(io.StringIO()):
+            with patch("sys.argv", ["qa", "--report", str(output)]), patch.object(qa, "preflight", return_value={"network": "production_unreachable", "missingEnvironment": []}), patch.object(qa, "perform") as browser, contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(qa.main(), 2)
                 browser.assert_not_called()
             self.assertEqual(json.loads(output.read_text(encoding="utf-8"))["passedModules"], 0)
+
+    def test_interactive_run_uses_browser_transport_instead_of_python_health(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            with patch("sys.argv", ["qa", "--interactive-login", "--report", str(output)]), patch.object(qa, "preflight") as probe, patch.object(qa, "perform") as browser, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(qa.main(), 2)
+                probe.assert_not_called()
+                browser.assert_called_once()
+                self.assertTrue(browser.call_args.args[2])
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["preflight"]["network"], "checked_in_browser")
+            self.assertEqual(report["writesAttempted"], 0)
+            self.assertFalse(report["productionRegistrationComplete"])
+
+    def test_http_probe_does_not_echo_error_content(self):
+        failure = HTTPError(qa.ORIGIN, 403, "private synthetic contents", {}, None)
+        with patch.object(qa, "urlopen", side_effect=failure):
+            result = qa.preflight(require_credentials=False)
+        self.assertEqual(result, {"network": "production_unreachable", "reason": "http_error", "httpStatus": 403, "missingEnvironment": []})
+        self.assertNotIn("private", json.dumps(result))
+
+    def test_browser_denied_admin_proof_never_submits_forms(self):
+        for status, roles, blocker in [(403, ["admin"], "admin_identity_unverified"), (401, [], "admin_identity_unverified"), (200, ["organizer"], "account_has_no_admin_role"), (200, [], "account_has_no_admin_role")]:
+            with self.subTest(status=status, roles=roles):
+                api = Mock()
+                browser = api.chromium.launch.return_value
+                context = browser.new_context.return_value
+                page = context.new_page.return_value
+                page.evaluate.return_value = {"status": status, "staffRoles": roles}
+                module = Mock()
+                module.sync_playwright.return_value.__enter__ = Mock(return_value=api)
+                module.sync_playwright.return_value.__exit__ = Mock(return_value=False)
+                report = {"authenticatedAsAdmin": False, "writesAttempted": 0, "preflight": {"network": "checked_in_browser"}}
+                with patch.dict(sys.modules, {"playwright.sync_api": module}), patch.object(qa, "sign_in"):
+                    qa.perform(report, {}, interactive_login=True)
+                page.locator.assert_not_called()
+                context.request.get.assert_not_called()
+                self.assertIn("/api/crm/me", page.evaluate.call_args.args[0])
+                self.assertEqual(report["preflight"]["network"], "browser_reached")
+                self.assertEqual(report["blocker"], blocker)
+                self.assertEqual(report["writesAttempted"], 0)
+                self.assertFalse(report["authenticatedAsAdmin"])
+                browser.close.assert_called_once()
 
 
 if __name__ == "__main__":

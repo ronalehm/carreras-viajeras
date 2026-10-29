@@ -13,8 +13,8 @@ patrocinadores, ofertas, reservas, campañas y viajes mediante la interfaz de
 - La precomprobación desde Codex Cloud se ejecutó y quedó bloqueada. El proxy rechaza
   el dominio con CONNECT 403; faltan QA_ADMIN_EMAIL y QA_ADMIN_PASSWORD.
 - No se inició sesión, no se enviaron formularios y no se crearon registros remotos.
-- Pasaron seis regresiones del ejecutor: modo interactivo sin lectura de credenciales,
-  precomprobaciones y bloqueo del navegador cuando faltan requisitos. La ejecución
+- Pasaron nueve regresiones del ejecutor: modo interactivo sin lectura de credenciales,
+  precomprobaciones, bloqueo de altas sin prueba admin y diagnóstico HTTP seguro. La ejecución
   real en Windows sigue pendiente; las instrucciones no se anuncian como E2E aprobado.
 - No se modificaron guardas, roles, datos existentes, claves Clerk ni configuración
   de producción. El acceso y las variables se declararon en el borrador del entorno;
@@ -57,15 +57,21 @@ la aplicación: este test utiliza el sitio remoto. Si Git pide autenticación, u
 tu acceso habitual de GitHub. Usa otra carpeta de destino si carreras-viajeras-qa
 ya existe; no sobrescribas una copia con cambios.
 
+El modo interactivo abre Chromium directamente: no depende de que Python pueda
+leer /api/health, pues su almacén TLS y proxy pueden diferir de los del navegador.
+La comprobación explícita --preflight conserva el diagnóstico de Python; no es
+prueba de la conexión de Chromium. TLS sigue habilitado en ambos transportes.
+
 Se abrirá una ventana de Chromium con el login de Clerk. Inicia sesión como admin
 y completa la verificación durante los cinco minutos disponibles. El ejecutor
-comprueba los roles en el servidor antes de enviar el primer formulario; después
+consulta /api/crm/me mediante fetch dentro de Chromium, con sus cookies y su
+conexión, y exige respuesta 200 y rol admin antes de enviar el primer formulario; después
 registra las filas QA y recarga las fichas o historiales para verificar persistencia.
 
 Lee el resultado con:
 
 ```powershell
-Get-Content test-results\admin-registration.json
+Get-Content test-results\admin-registration.json -Raw -Encoding UTF8
 ```
 
 Éxito completo: passedModules igual a 7 y productionRegistrationComplete igual a
@@ -121,3 +127,17 @@ La precomprobación devuelve código 0 si sus requisitos están disponibles, y 2
 faltan; no marca módulos como registrados. En una ejecución completa, solo ocho
 altas verificadas en los siete módulos terminan con código 0. No se ejecuta este
 script automáticamente en CI, al instalar, arrancar o desplegar.
+
+
+Si una versión anterior terminó con prerequisites_missing, network igual a
+production_unreachable y missingEnvironment vacío en Windows, actualiza la rama:
+
+```powershell
+git pull --ff-only
+.\.venv\Scripts\python.exe scripts\check-admin-registration.py --interactive-login --report test-results\admin-registration.json
+```
+
+La corrección usa el navegador para la conexión y la prueba de administrador;
+no desactiva TLS ni omite autenticación o permisos. Los mensajes de error del
+sondeo Python incluyen solo un motivo fijo y el estado HTTP, sin cuerpo ni datos
+privados. Usa -Encoding UTF8 al leer el informe en Windows PowerShell.
