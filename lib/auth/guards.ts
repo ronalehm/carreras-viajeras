@@ -9,6 +9,7 @@ import {
 } from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
+import { InvalidEnvironmentError } from "@/lib/env";
 
 export type CurrentUser = {
   id: string;
@@ -80,8 +81,14 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
     return emailVerified
       ? await acceptInvitationAndLoadStaffRoles(id, email)
       : await loadStaffRoles(id);
-  } catch {
-    // Fail closed without exposing the original database message.
+  } catch (error) {
+    // Fail closed without exposing the original database message, but leave a trace. A
+    // misconfigured secret (e.g. pasted with spaces) names the field, never its value.
+    console.error(
+      error instanceof InvalidEnvironmentError
+        ? `auth: role lookup failed (${error.message})`
+        : "auth: role lookup failed",
+    );
     throw new ForbiddenError();
   }
 }

@@ -18,6 +18,7 @@ import {
 } from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import type { StaffRole } from "@/lib/auth/permissions";
+import { InvalidEnvironmentError } from "@/lib/env";
 import {
   getCurrentUser,
   requireCrmUser,
@@ -250,6 +251,7 @@ describe("roles from the database", () => {
   });
 
   it("maps database errors to ForbiddenError without cause or original message", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
     signedInAs(clerkUser());
     accept.mockRejectedValue(new Error("password authentication failed for user app"));
 
@@ -258,13 +260,33 @@ describe("roles from the database", () => {
     expect((error as ForbiddenError).cause).toBeUndefined();
     expect((error as ForbiddenError).message).toBe("forbidden");
     expect(String((error as ForbiddenError).stack)).not.toContain("password");
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    expect(JSON.stringify(logError.mock.calls)).not.toContain("password");
+    logError.mockRestore();
+  });
+
+  it("names the misconfigured environment field, never its value", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    accept.mockRejectedValue(new InvalidEnvironmentError("Invalid environment fields: CLERK_SECRET_KEY"));
+
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "auth: role lookup failed (Invalid environment fields: CLERK_SECRET_KEY)",
+    );
+    logError.mockRestore();
   });
 
   it("maps database errors to ForbiddenError for unverified accounts too", async () => {
     signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
     load.mockRejectedValue(new Error("connection refused"));
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(requireUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    logError.mockRestore();
   });
 
   it("ignores publicMetadata, unsafeMetadata and other extra Clerk user fields", async () => {
