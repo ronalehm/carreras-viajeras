@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local de liveness; la autenticación queda pendiente de validación con el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay siete migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts` y `0006`, en ese orden y cada una en dos bloques**. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay nueve migraciones y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltan `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -164,7 +164,14 @@ Especificado en [`trips-catalog.md`](docs/specs/trips-catalog.md). Cada viaje ti
 - Lo pueden hacer `commercial` y `admin` (permiso `trips.manage`). Una cuenta sin rol de staff, incluidas las cuentas de runner de la landing (`/cuenta`), no tiene acceso.
 - Un viaje nace en borrador y no aparece en la web hasta que se publica. El `slug` solo se puede cambiar mientras está en borrador.
 - No hay seeds ni `INSERT` manuales: "Maratón de Santiago 2027" se creará desde el CRM con el slug exacto `maraton-santiago-2027` y 100 cupos, copiando los datos que hoy tiene la landing.
-- **Precio:** un único precio "desde", siempre en dólares estadounidenses, entero y sin decimales (`priceUsd`). No hay campo de moneda. Se muestra como `US$ 1,990` (`US$ 12,500`, `US$ 0`); sin precio, "Precio a consultar".
+- **El precio vive en las ofertas, no en el viaje.** El viaje es solo el catálogo descriptivo (título, fechas, distancias, qué incluye, cupos informativos…). El precio, los anticipos y las condiciones de pago se cargan, aprueban y activan como ofertas versionadas en **`/crm/ofertas`** ([`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md); ver [Ofertas comerciales](#migración-de-ofertas-comerciales-0008)). El formulario de `/crm/viajes` ya no tiene "Precio desde", "Precio total en cuotas", "Reserva", "Precio de acompañante" ni "Condiciones de pago", y la lista ya no tiene la columna "Precio".
+- **Columnas antiguas de precio, solo como referencia.** Las cinco columnas `price_usd`, `deposit_usd`, `installments_price_usd`, `companion_price_usd` y `payment_terms` **siguen en la tabla `trips`, sin uso**: el código no las muestra, no las publica ni las escribe (al guardar un viaje conservan su valor) y no se publican en la web. No se migraron a ofertas porque sus importes eran contradictorios. Para consultarlas, en el SQL Editor de Neon:
+
+  ```sql
+  SELECT slug, price_usd, deposit_usd, installments_price_usd, companion_price_usd, payment_terms FROM trips;
+  ```
+
+  Borrarlas (`DROP COLUMN`) será una operación aparte, con su propia migración y autorización expresa; no forma parte de esta spec.
 
 ### Migración de la tabla de viajes
 
@@ -182,9 +189,9 @@ Prueba manual opcional de las restricciones, **solo en una rama de desarrollo de
 
 ### Migración de los campos de carrera
 
-Especificada en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 1). Añade a `trips` siete campos opcionales que el CRM muestra y guarda: web oficial, precio total en cuotas, reserva, precio de acompañante, condiciones de pago, qué no incluye y detalles por confirmar.
+Especificada en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 1). Añade a `trips` siete campos opcionales: web oficial, precio total en cuotas, reserva, precio de acompañante, condiciones de pago, qué no incluye y detalles por confirmar. Desde la Fase 4 de [`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md), el CRM solo muestra y guarda la web oficial, qué no incluye y los detalles por confirmar; las cuatro columnas de precio y condiciones quedan sin uso (ver [Cómo se cargan los datos](#cómo-se-cargan-los-datos)).
 
-Pendiente de aplicar por el usuario en `production` (y en la rama de Neon de pruebas que se use). **Orden: después de `0001` (viajes) y antes de desplegar el código de la Fase 1.** En el orden del journal de Drizzle va después de `0003` (reservas) y antes de `0005` (captura y outbox); no depende de ellas. El código lee y escribe estas columnas en todas las consultas de `trips`: si se despliega sin la migración, `/viajes/*` y `/crm/viajes` fallan por columnas inexistentes. Es aditiva: los viajes existentes quedan con `NULL` y `excludes = '{}'`; no cambia ninguna otra tabla (leads y reservas, que referencian `trips.id`, no se tocan). **No volver a aplicar `drizzle/0000_tough_thor.sql`** ni ninguna migración ya aplicada.
+Pendiente de aplicar por el usuario en `production` (y en la rama de Neon de pruebas que se use). **Orden: después de `0001` (viajes) y antes de desplegar el código de la Fase 1.** En el orden del journal de Drizzle va después de `0003` (reservas) y antes de `0005` (captura y outbox); no depende de ellas. El código lee y escribe `official_url`, `excludes` y `notes` en las consultas de `trips` (las columnas de precio y condiciones ya no se usan; ver arriba): si se despliega sin la migración, `/viajes/*` y `/crm/viajes` fallan por columnas inexistentes. Es aditiva: los viajes existentes quedan con `NULL` y `excludes = '{}'`; no cambia ninguna otra tabla (leads y reservas, que referencian `trips.id`, no se tocan). **No volver a aplicar `drizzle/0000_tough_thor.sql`** ni ninguna migración ya aplicada.
 
 1. Revisar `drizzle/0004_sloppy_bushwacker.sql`: solo contiene `ALTER TABLE "trips" ADD COLUMN` para `official_url` (`text`), `installments_price_usd`, `deposit_usd` y `companion_price_usd` (`integer`), `payment_terms` y `notes` (`text`) y `excludes` (`text[] DEFAULT '{}' NOT NULL`), y `ADD CONSTRAINT … CHECK` para `trips_official_url_chk` (`https://`), `trips_installments_price_usd_chk`, `trips_deposit_usd_chk`, `trips_companion_price_usd_chk` (nulo o `>= 0`) y `trips_excludes_chk` (hasta 20 elementos). No hay cambios en otras tablas: `grep -inE 'neon_auth|drop|create' drizzle/0004_sloppy_bushwacker.sql` no devuelve nada y `grep -vc '^ALTER TABLE "trips" ' drizzle/0004_sloppy_bushwacker.sql` devuelve `0` (las doce sentencias empiezan por `ALTER TABLE "trips"`).
 2. Comprobar que `0001` está aplicada en esa rama: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, aplicarla antes siguiendo [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes).
@@ -197,6 +204,136 @@ Pendiente de aplicar por el usuario en `production` (y en la rama de Neon de pru
 No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
 
 Prueba manual opcional de las restricciones, **solo en una rama de desarrollo de Neon** y dentro de `BEGIN;` … `ROLLBACK;`: la base debe rechazar un `official_url` que no empieza por `https://`, un `installments_price_usd`, `deposit_usd` o `companion_price_usd` negativo y un `excludes` con 21 elementos.
+
+### Migración de ofertas comerciales (`0008`)
+
+`drizzle/0008_moaning_roulette.sql` prepara las ofertas comerciales versionadas por carrera y el tipo de cambio USD→PEN ([`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md)). Es una sola migración para todas las fases de esa spec. Está pendiente de aplicar por el usuario: **primero en una rama de pruebas de Neon** y, cuando las pruebas de abajo salgan bien, en `production`. **Tiene que estar aplicada antes de desplegar el código de la Fase 2** (el CRM de ofertas lee y escribe estas tablas; la Fase 1 no añade rutas ni consultas que se ejecuten en la web).
+
+**El número `0008` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0008`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
+
+**Orden: `0000` → … → `0007` → esta.** Necesita `0007` (la tabla `campaigns`) y, a través de ella, `0001` (`trips`) y `0000` (`profiles`). En `production` siguen pendientes `0005`, `0006` y `0007`: se aplican antes, en ese orden y **cada una en sus dos bloques**, siguiendo [Migración de captura y outbox](#migración-de-captura-y-outbox), [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006) y [Migración de campañas y registro](#migración-de-campañas-y-registro). No volver a aplicar `0000` ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- crea el enum `trip_offer_status` (`draft`, `approved`, `active`, `closed`);
+- crea la tabla `trip_offers`: una fila por **versión** de la oferta de un viaje (sin campaña = oferta general; con campaña = oferta de esa campaña). Precio total y descuento en USD enteros, `final_price_usd` calculado por la base (columna generada `total_price_usd - discount_usd`), de 0 a 3 anticipos (`deposit_options_usd`), fecha límite del saldo, bono sin importes, vigencia en fechas de Lima, cupos opcionales, `terms_version`, condiciones, estado y auditoría (quién y cuándo creó, aprobó, activó y cerró, y qué versión la sustituyó). Tiene:
+  - trece CHECK: `trip_offers_version_chk`, `trip_offers_name_chk` (2–80), `trip_offers_price_chk` (total entre 1 y 1,000,000 y descuento menor que el total), `trip_offers_deposits_chk` (hasta 3, sin nulos, mayores que 0 y menores que el precio final), `trip_offers_balance_chk` (fecha de saldo si y solo si hay anticipos), `trip_offers_bonus_chk` (2–200), `trip_offers_validity_chk` (`valid_until ≥ valid_from`), `trip_offers_capacity_chk` (1–10,000), `trip_offers_terms_version_chk` (minúsculas, números y guiones, 3–60), `trip_offers_conditions_chk` (10–2000) y los tres de auditoría: `trip_offers_approved_chk`, `trip_offers_activated_chk` y `trip_offers_closed_chk` (**una versión aprobada o activa siempre tiene quién y cuándo la aprobó, una activa quién y cuándo la activó, y solo una cerrada que estuvo activa puede tener `superseded_by`**);
+  - siete claves foráneas `ON DELETE restrict`: el viaje, cuatro hacia `profiles` (autor, aprobación, activación y cierre), la autorreferencia `superseded_by` y la compuesta `trip_offers_campaign_trip_fk (campaign_id, trip_id) → campaigns (id, trip_id)`, que garantiza que la campaña es del mismo viaje;
+  - el índice `trip_offers_trip_idx` y seis índices únicos parciales, en pares (general por viaje, campaña por campaña): `trip_offers_general_version_uq` y `trip_offers_campaign_version_uq` (números de versión únicos en su ámbito), `trip_offers_general_active_uq` y `trip_offers_campaign_active_uq` (**una sola versión activa por ámbito**) y `trip_offers_general_pending_uq` y `trip_offers_campaign_pending_uq` (una sola versión pendiente, borrador o aprobada, por ámbito);
+- crea la tabla `exchange_rates` (solo inserciones: soles por 1 USD en `numeric(10,4)`, quién lo fijó y desde cuándo rige), con el CHECK `exchange_rates_usd_pen_chk` (mayor que 0 y menor que 100), la clave foránea hacia `profiles` y el índice `exchange_rates_created_idx`;
+- añade a `campaigns` la restricción única `campaigns_id_trip_uq (id, trip_id)`, destino de la clave foránea compuesta. Es aditiva: `id` ya es único, así que no cambia nada de las campañas existentes.
+
+No migra los precios antiguos de `trips` (`price_usd`, `deposit_usd`, etc.): las dos tablas nuevas quedan vacías y el admin carga las ofertas desde el CRM.
+
+Revisión previa:
+
+- `grep -inE 'neon_auth|create schema|drop |add value' drizzle/0008_moaning_roulette.sql` no devuelve nada: no hay `DROP`, ni `ALTER TYPE … ADD VALUE`, ni nada en `neon_auth`;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0008_moaning_roulette.sql | grep -vE '"(trip_offers|exchange_rates|trip_offer_status)"'` devuelve solo la línea de `campaigns_id_trip_uq`: no toca `trips`, `leads`, `bookings`, `profiles`, `staff_*` ni `outbox_events`.
+
+**Un solo bloque, con el archivo tal cual.** No hay `ADD VALUE` (solo se crea un enum nuevo), así que todo va en una transacción. drizzle-kit escribía la restricción de `campaigns` al final, después de la clave foránea compuesta que la necesita; en el archivo ya está movida a mano a la primera sentencia, con un comentario que lo explica: como en `0006` y `0007`, el archivo lleva una edición manual comentada. El snapshot y el journal no cambian.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0007` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regclass('public.campaigns'), to_regclass('public.trip_offers');` devuelve `campaigns` y `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. Escribir `BEGIN;`, debajo el archivo `drizzle/0008_moaning_roulette.sql` completo y, al final, `COMMIT;`, y ejecutarlo todo junto. Las líneas `--> statement-breakpoint` y los comentarios `--` son comentarios de SQL y se pueden dejar.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0008_moaning_roulette.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f "$F"
+   ```
+
+   `-1` lo ejecuta todo en una sola transacción. Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+
+   Si falla, la transacción se deshace entera y no se guarda nada. Errores que se pueden ver:
+   - `relation "campaigns" does not exist`: falta `0007` en esa rama; aplicarla antes.
+   - `relation "campaigns_id_trip_uq" already exists`: ya existe la restricción de `campaigns`. Repetir la consulta del paso 1: si `trip_offers` ya no es `NULL`, la migración ya estaba aplicada y no hay que repetir nada; si sigue en `NULL`, alguien creó la restricción por otra vía y hay que revisarlo antes de seguir.
+   - cualquier otro `already exists` (por ejemplo, `type "trip_offer_status" already exists`) o cualquier otro error: la rama no está en el estado esperado. No es la migración ya aplicada; parar y revisar.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+5. Comprobar:
+   - el enum: `SELECT enum_range(NULL::trip_offer_status);` devuelve `{draft,approved,active,closed}`;
+   - las restricciones de `trip_offers`: `SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.trip_offers'::regclass AND contype IN ('p','c','f');` devuelve 21 (un `*_pkey`, trece `*_chk` y siete claves foráneas);
+   - las de `exchange_rates`: la misma consulta con `'public.exchange_rates'::regclass` devuelve 3 (un `*_pkey`, un `*_chk` y un `*_fk`);
+   - las de `campaigns`: la misma consulta con `'public.campaigns'::regclass` y `contype IN ('p','c','f','u')` devuelve 10 (las 9 de `0007` más `campaigns_id_trip_uq`);
+   - la columna generada: `SELECT attname FROM pg_attribute WHERE attrelid = 'public.trip_offers'::regclass AND attgenerated = 's';` devuelve `final_price_usd`;
+   - los índices: `SELECT indexname FROM pg_indexes WHERE tablename IN ('trip_offers', 'exchange_rates') ORDER BY 1;` devuelve los diez: `exchange_rates_created_idx`, `exchange_rates_pkey`, `trip_offers_campaign_active_uq`, `trip_offers_campaign_pending_uq`, `trip_offers_campaign_version_uq`, `trip_offers_general_active_uq`, `trip_offers_general_pending_uq`, `trip_offers_general_version_uq`, `trip_offers_pkey` y `trip_offers_trip_idx`;
+   - los datos: `SELECT count(*) FROM trip_offers;` y `SELECT count(*) FROM exchange_rates;` devuelven 0.
+6. Solo después, desplegar el código de la Fase 2.
+
+Prueba manual de las restricciones, **solo en la rama de pruebas de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil, dos viajes de prueba con una campaña cada uno, la oferta general activa del viaje A con dos anticipos, su borrador v2, una oferta de campaña activa del mismo viaje y un tipo de cambio). La consulta final devuelve tres filas: general v1 `active` con precio final 1800, general v2 `draft` con 1900 y campaña v1 `active` con 1700:
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-ofertas', 'ofertas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-ofertas-a', 'Maratón de prueba A', 'Santiago', 'Chile', '2027-04-25', ARRAY['42K'], 'Viaje de prueba A'),
+  ('00000000-0000-4000-8000-000000000002', 'prueba-ofertas-b', 'Maratón de prueba B', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba B');
+INSERT INTO campaigns (id, code, trip_id, channel, name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000011', 'prueba-oferta-a', '00000000-0000-4000-8000-000000000001', 'event', 'Campaña A', 'test-ofertas'),
+  ('00000000-0000-4000-8000-000000000012', 'prueba-oferta-b', '00000000-0000-4000-8000-000000000002', 'event', 'Campaña B', 'test-ofertas');
+-- Oferta general del viaje A, activa (v1), con dos anticipos.
+INSERT INTO trip_offers (id, trip_id, version, status, name, total_price_usd, discount_usd, deposit_options_usd, balance_due_on, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES
+  ('00000000-0000-4000-8000-000000000101', '00000000-0000-4000-8000-000000000001', 1, 'active', 'General A', 2000, 200, '{100,200}', '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- Borrador v2 de esa oferta general (la versión pendiente de su ámbito).
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000001', 2, 'General A v2', 1900, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- Oferta de campaña del mismo viaje, activa (v1).
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES
+  ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 1, 'active', 'Campaña A', 1700, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+INSERT INTO exchange_rates (usd_pen, created_by) VALUES (3.7512, 'test-ofertas');
+SELECT campaign_id IS NOT NULL AS campana, version, status, final_price_usd FROM trip_offers ORDER BY 1, 2;
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- trip_offers_approved_chk: aprobada sin approved_at
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'approved', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_activated_chk: activa sin approved_at (con activated_at)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_activated_chk: activa sin activated_at (aprobada)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_activated_chk: pasar el borrador v2 a activa sin auditoría
+UPDATE trip_offers SET status = 'active' WHERE version = 2 AND campaign_id IS NULL;
+-- trip_offers_price_chk: repetir cambiando el descuento 2000 por 2500 (descuento > total), y con total 0 y descuento 0
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, discount_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_deposits_chk: repetir cambiando '{0}' por '{2000}' (≥ precio final), '{100,NULL}' y '{100,200,300,400}'
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, deposit_options_usd, balance_due_on, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '{0}', '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_balance_chk: anticipos sin fecha de saldo
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, deposit_options_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '{100}', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_balance_chk: fecha de saldo sin anticipos
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, balance_due_on, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2027-03-15', '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_validity_chk: valid_until anterior a valid_from
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, valid_until, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', '2026-10-31', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_terms_version_chk: terms_version con mayúsculas
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', 'Prueba-V1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_campaign_trip_fk: oferta del viaje A con la campaña del viaje B
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000012', 1, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_general_active_uq: otra general activa del viaje A
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000001', 3, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- trip_offers_campaign_active_uq: otra activa de la misma campaña
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, approved_by, approved_at, activated_by, activated_at) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 2, 'active', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now(), 'test-ofertas', now());
+-- trip_offers_general_pending_uq: otro borrador general del viaje A
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', 3, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_campaign_pending_uq: dos borradores de la misma campaña (ejecutar las dos líneas juntas)
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 2, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+INSERT INTO trip_offers (trip_id, campaign_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 3, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas');
+-- trip_offers_general_version_uq: otra v1 general del viaje A (cerrada, para no chocar con las otras reglas)
+INSERT INTO trip_offers (trip_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, closed_by, closed_at) VALUES ('00000000-0000-4000-8000-000000000001', 1, 'closed', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_campaign_version_uq: otra v1 de la misma campaña (cerrada)
+INSERT INTO trip_offers (trip_id, campaign_id, version, status, name, total_price_usd, valid_from, terms_version, conditions, created_by, closed_by, closed_at) VALUES ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000011', 1, 'closed', 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', 'test-ofertas', now());
+-- trip_offers_closed_chk: superseded_by en una versión no cerrada
+INSERT INTO trip_offers (trip_id, version, name, total_price_usd, valid_from, terms_version, conditions, created_by, superseded_by) VALUES ('00000000-0000-4000-8000-000000000002', 1, 'Prueba', 2000, '2026-11-01', 'prueba-v1', 'Condiciones de prueba.', 'test-ofertas', '00000000-0000-4000-8000-000000000101');
+-- exchange_rates_usd_pen_chk: repetir cambiando 0 por 100
+INSERT INTO exchange_rates (usd_pen, created_by) VALUES (0, 'test-ofertas');
+ROLLBACK;
+```
+
+Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
 
 ### Lectura pública para la landing
 
@@ -217,23 +354,36 @@ import {
 - `listPublishedTrips()` devuelve los viajes publicados (`PublicTrip[]`), ordenados por fecha de carrera y slug.
 - `getPublishedTripBySlug(slug)` devuelve el viaje publicado o `null` si el slug no existe, no es válido, o el viaje está en borrador o archivado. **`null` → `notFound()` (404).**
 - Ambas consultan Neon en cada petición (`connection()`): la página nunca se prerenderiza con datos de la base. No usar `generateStaticParams` sobre el catálogo ni `revalidatePath`; un viaje publicado aparece en la siguiente carga.
-- `PublicTrip` solo tiene campos públicos: `slug`, `title`, `city`, `country`, `raceDate`, `startDate`, `endDate`, `distances`, `summary`, `includes`, `priceUsd`, `capacity` e `imageUrl`, más los de la migración `0004`: `officialUrl`, `installmentsPriceUsd`, `depositUsd`, `companionPriceUsd`, `paymentTerms`, `excludes` y `notes` (sin `id`, `status` ni fechas de auditoría). Las fechas son `YYYY-MM-DD`; `startDate` y `endDate` vienen las dos o ninguna.
-- Campos de la migración `0004`, todos opcionales: `officialUrl` es la web oficial de la carrera (URL `https://` externa o `null`); `installmentsPriceUsd` (precio total en cuotas), `depositUsd` (reserva) y `companionPriceUsd` (precio de acompañante) son enteros en dólares o `null`, y se formatean con `formatTripPrice`; `paymentTerms` (condiciones de pago) y `notes` (detalles por confirmar) son texto de hasta 1000 caracteres con saltos de línea, o `null`; `excludes` (qué no incluye) es una lista de hasta 20 elementos, `[]` si está vacía, como `includes`.
-- Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" y `formatTripPrice(null)` → "Precio a consultar". Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
+- `PublicTrip` solo tiene campos públicos: `slug`, `title`, `city`, `country`, `raceDate`, `startDate`, `endDate`, `distances`, `summary`, `includes`, `capacity` e `imageUrl`, más `officialUrl`, `excludes` y `notes` (sin `id`, `status`, fechas de auditoría ni precios: el precio público es la oferta vigente, que se lee con `getPublicOffer`). Las fechas son `YYYY-MM-DD`; `startDate` y `endDate` vienen las dos o ninguna.
+- Campos opcionales de la migración `0004`: `officialUrl` es la web oficial de la carrera (URL `https://` externa o `null`); `notes` (detalles por confirmar) es texto de hasta 1000 caracteres con saltos de línea, o `null`; `excludes` (qué no incluye) es una lista de hasta 20 elementos, `[]` si está vacía, como `includes`.
+- Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" (formatea los importes de las ofertas; su rama `null`, "Precio a consultar", ya no se usa en la web). Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
 #### Qué usa hoy la landing
 
-Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 2), que sustituye en `/viajes/[slug]` lo descrito en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4).
+Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 2), que sustituye en `/viajes/[slug]` lo descrito en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4). El bloque de precio lo enmienda [`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md) (Fase 3).
 
 - **Una landing por carrera publicada:** cada viaje publicado en `/crm/viajes` tiene su página en `/viajes/<slug>`, sin tocar código ni redesplegar. Para difundir una carrera nueva se comparte esa URL (no hay listado `/viajes` ni enlaces desde `/` a carreras distintas de Santiago).
-- **Todo sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas, precios y cupos formateados; `paymentTerms` y `notes` divididos en un párrafo por línea no vacía). No lee `TRIPS`.
-- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, Server Component): una columna centrada con cabecera ("Ciudad, País · distancias", título, resumen e imagen si hay `imageUrl`), datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), precio "Desde" (`formatTripPrice`, "Precio a consultar" si falta) con las líneas de cuotas, reserva y acompañante solo si tienen valor, y las condiciones de pago; después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos. Ningún bloque aparece vacío.
-- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`, cuyos destinos siguen fijos (`DESTINATION_IDS`).
+- **El contenido sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas y cupos formateados; `notes` dividido en un párrafo por línea no vacía). No lee `TRIPS`.
+- **El precio sale de las ofertas, no de `trips`:** los campos de precio de `trips` (`price_usd`, `deposit_usd`, `installments_price_usd`, `companion_price_usd` y `payment_terms`) **ya no se publican**, aunque tengan valor: `TripLanding` ya no los tiene. El precio de la página es la oferta comercial vigente que el admin aprobó y activó en `/crm/ofertas` (ver [Ofertas comerciales](#migración-de-ofertas-comerciales-0008)).
+- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, Server Component): una columna centrada con cabecera ("Ciudad, País · distancias", título, resumen e imagen si hay `imageUrl`), datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), la sección de precio (bloque financiero o aviso sin oferta, ver abajo) y después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos (con o sin oferta). Ningún bloque aparece vacío.
+- **Bloque financiero** (`OfferSummary`, Server Component presentacional): `getCatalogOffer(slug, código)` (`modules/landing/utils/catalogOffer.ts`, con `cache` de React) llama a `getPublicOffer` de `@/modules/trips` (una sola consulta: oferta vigente y último tipo de cambio) y la convierte con la función pura `toOfferView`. Muestra «Precio y condiciones»:
+  - precio total, descuento (solo si es mayor que 0) y precio final, en USD con su importe en soles entre paréntesis;
+  - cada anticipo permitido con su saldo (precio final − anticipo) y la fecha límite del saldo, y «El anticipo se descuenta del precio final.»; sin anticipos, «Pago único del precio final.»;
+  - el beneficio, si hay: «Beneficio incluido: <texto>. No es un descuento ni se canjea por dinero.»;
+  - la vigencia («Precio válido: <rango> (hora de Lima).» o «Precio vigente desde el <fecha>.»);
+  - las condiciones de pago y cancelación (un párrafo por línea) y «Versión de las condiciones: <terms_version>»;
+  - la regla del tipo de cambio con el tipo vigente y su fecha (día de Lima). Sin ningún tipo de cambio, solo dólares y «El importe en soles se mostrará antes de pagar.». **Ese texto es provisional** hasta las puertas P-L/P-T (pregunta abierta 1 de la spec); se sustituye en `OfferSummary.tsx` en modo build.
+
+  Cada importe en soles se calcula por separado con `usdToPenCents` (`lib/currency.ts`, aritmética entera, redondeo half-up), así que la suma de dos importes convertidos puede diferir en 1 céntimo de la conversión de su suma. El bloque no tiene botón de pago ni de reserva, ni cupos de la oferta, ni el nombre interno ni la campaña.
+- **Qué oferta se muestra (la decide el servidor):** con `?c=<código>` y una oferta de esa campaña activa, vigente (hoy en hora de Lima entre `valid_from` y `valid_until`), de una campaña activa y de la misma carrera, se muestra esa; si no, la oferta general vigente; si tampoco hay, ninguna. Nunca se suman dos ofertas. `?c=` solo **elige** entre ofertas aprobadas y activadas: una campaña cerrada, inexistente o de otra carrera se trata como sin campaña. Cualquier otro parámetro (`price`, `discount`, `deposit`, `offer`, `offerId`, `modo`…) se ignora, y ningún importe sale de la URL ni del navegador.
+- **Sin oferta aplicable** (sin ofertas, solo borradores o aprobadas, todas cerradas o la activa vencida): la sección de precio muestra solo «Todavía no publicamos el precio de este viaje.», sin importes, «Desde», «Reserva con», anticipos ni beneficios.
+- **Registro de la carrera** (`/viajes/<slug>/registro`): el mismo bloque aparece entre el encabezado y el formulario, con la misma oferta (también según `?c=`); sin oferta no hay bloque, y con `?modo=stand` nunca. «Ver el paquete completo» conserva `?c=`, así que lleva a la misma oferta.
+- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto` ni al registro de la carrera (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
 - **Metadatos:** `<title>` es el título del viaje, la meta description es el resumen y `og:image` es `imageUrl` solo si existe.
 - **404:** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `notFound()` responde con estado `404`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. No hay `loading.tsx`, para que el estado no quede en `200`.
-- **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado.
+- **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado. La página lee además la oferta (`getCatalogOffer`) en paralelo.
 - **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
-- **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de `/contacto`. **Si el equipo cambia la fecha, el precio o los cupos de Santiago en el CRM, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
-- `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` aparece como dinámica (`ƒ`).
+- **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta` y `HeroCarousel`. **Si el equipo cambia la fecha o los cupos de Santiago en `/crm/viajes`, o su precio en `/crm/ofertas`, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
+- `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` y `/viajes/[slug]/registro` aparecen como dinámicas (`ƒ`).
 
 #### Precondición operativa (antes de mergear)
 
@@ -246,13 +396,14 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
    - título "Maratón de Santiago 42K 2027";
    - ciudad "Santiago" y país "Chile";
    - fecha de la carrera 2027-05-16 y distancias "42K";
-   - resumen: "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción en preventa: US$1,499 al contado o US$1,799 en cuotas.";
-   - precio desde 1499 y cupos 100;
-   - para no perder información respecto a la página anterior (precondición F2 de `landing-race-pages.md`): web oficial `https://maratondesantiago.cl/`, precio total en cuotas 1799, reserva 300, acompañante 1300, imagen con una URL `https://` (p. ej. `https://carreras-viajeras.mentec.dev/images/cover-santiago.webp`), y los textos de qué incluye, qué no incluye, condiciones de pago y detalles por confirmar que antes estaban fijos en el código (`included`, `excluded`, `prices.paymentNote` y `pendingDetails`; se recuperan con `git show dfa5d8a:modules/landing/utils/trips.ts`).
+   - resumen **sin importes** (se pinta en la página y en la meta description, aunque no haya oferta): por ejemplo, "Corre la Maratón de Santiago 42K 2027 con Carreras Viajeras. Propuesta de viaje para runners peruanos: vuelos, alojamiento e inscripción."; si el resumen actual de Santiago ya trae precios, quitarlos en `/crm/viajes`;
+   - cupos 100 (el precio desde, el precio en cuotas, la reserva, el acompañante y las condiciones de pago ya no se publican: el precio es la oferta activa de `/crm/ofertas`);
+   - para no perder información respecto a la página anterior (precondición F2 de `landing-race-pages.md`): web oficial `https://maratondesantiago.cl/`, imagen con una URL `https://` (p. ej. `https://carreras-viajeras.mentec.dev/images/cover-santiago.webp`), y los textos de qué incluye, qué no incluye y detalles por confirmar que antes estaban fijos en el código (`included`, `excluded`, `prices.paymentNote` y `pendingDetails`; se recuperan con `git show dfa5d8a:modules/landing/utils/trips.ts`).
 
    Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página responde **404** y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a un 404.
-4. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
-4. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
+4. **Migración `0008` aplicada** (ver [Migración de ofertas comerciales](#migración-de-ofertas-comerciales-0008)). Comprobación: `SELECT to_regclass('public.trip_offers'), to_regclass('public.exchange_rates');` no devuelve `NULL`. Si falta, `/viajes/<slug>` y su registro responden **500** (leen la oferta en cada petición). Sin ninguna oferta activa, la página muestra «Todavía no publicamos el precio de este viaje.».
+5. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
+6. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
 
 ## Leads (CRM comercial)
 
@@ -421,9 +572,175 @@ Prueba manual de las restricciones, **solo en una rama de desarrollo de Neon** y
 - la base **rechaza** en `lead_activities`: un `channel_changed` sin `channel_to`, o con el mismo origen y destino (`event` → `event`); un `channel_from` en una actividad `note`; un `opted_out` o un `channel_changed` sin autor (`lead_activities_actor_chk`) o con texto (`lead_activities_body_chk`);
 - la base **rechaza** en `outbox_events` y `bookings`: un `lead.follow_up_due` sin `dedupe_key`; un segundo evento con el mismo `dedupe_key` (`outbox_events_dedupe_key_uq`); una segunda reserva no cancelada con el mismo `lead_id` (`bookings_lead_active_uq`); una reserva con un `lead_id` inexistente (`bookings_lead_id_leads_id_fk`).
 
+### Migración de campañas y registro
+
+`drizzle/0007_awesome_dust.sql` prepara la captación omnicanal ([`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md)): las campañas (cada QR o enlace del CRM, con su carrera y su canal), qué campaña trajo a cada lead, la casilla de promociones y el registro repetido de una misma persona en la misma carrera ("Volvió a registrarse"). Es una sola migración para todas las fases de esa spec. Está pendiente de aplicar por el usuario: **primero en una rama de pruebas de Neon** y, cuando las pruebas de abajo salgan bien, **en `production`, antes del merge**. La ficha del lead de esta rama ya lee las columnas nuevas, así que una versión con este código solo funciona contra una rama de Neon que ya tenga la migración.
+
+**El número `0007` es provisional.** El definitivo se fija solo en el turno de merge: si `main` ya tiene otra `0007`, esta se renumera (cambian el nombre del archivo, su snapshot y el journal, no el SQL). Si ya la aplicaste con el número provisional, es la misma migración: no la vuelvas a aplicar con el número nuevo.
+
+**Orden: `0000` → … → `0006` → esta.** Necesita `0006` (usa el enum `lead_channel`) y, a través de ella, `0001`, `0002`, `0003` y `0005`. Si alguna falta en esa rama, aplicarla antes siguiendo su sección; [Migración de captura y outbox](#migración-de-captura-y-outbox) lista el orden completo. No volver a aplicar `0000` (ya está en `production`) ni ninguna migración que ya esté aplicada. No hace falta GRANT: `DATABASE_URL` usa el rol owner. No hay script `migrate` ni migración automática.
+
+**Qué hace** (todo en `public`):
+
+- añade el tipo de actividad `re_registered` al final de `lead_activity_type` (un `ALTER TYPE … ADD VALUE`);
+- crea el enum `campaign_status` (`active`, `closed`) y la tabla `campaigns`: código único (`campaigns_code_uq`), carrera (`trip_id`, con el índice `campaigns_trip_idx`), canal, nombre, evento opcional, estado, autor y cierre. Tiene cinco CHECK: `campaigns_code_chk` (3–32 caracteres, minúsculas, números y guiones simples), `campaigns_channel_chk` (nunca `unknown`), `campaigns_name_chk` (2–80), `campaigns_event_name_chk` (2–120) y `campaigns_closed_chk` (una campaña cerrada tiene `closed_at` y `closed_by`; una activa, ninguno). Sus tres claves foráneas, hacia `trips` y `profiles`, son `ON DELETE restrict`: las campañas nunca se borran, se cierran;
+- en `leads`: `campaign_id` (clave foránea hacia `campaigns`, índice parcial `leads_campaign_idx` y CHECK `leads_campaign_chk`: solo un lead `web_form` puede tener campaña) y `marketing_opt_in_at` (promociones aceptadas);
+- en `lead_activities`: `submission_id` (índice único `lead_activities_submission_uq` y CHECK `lead_activities_submission_chk`: obligatorio en `re_registered` y prohibido en cualquier otro tipo), y sustituye `lead_activities_actor_chk` (una `re_registered` puede no tener autor) y `lead_activities_body_chk` (una `re_registered` exige texto de hasta 500 caracteres, como `automation`).
+
+Los leads y actividades que ya existen no cambian: las columnas nuevas quedan vacías y los dos CHECK sustituidos solo amplían la regla para `re_registered`, así que las filas actuales los cumplen.
+
+Revisión previa: `grep -inE 'neon_auth|create schema|drop (table|type|column|schema)' drizzle/0007_awesome_dust.sql` no devuelve nada. Los únicos `DROP` del archivo son los dos `DROP CONSTRAINT` de `lead_activities_body_chk` y `lead_activities_actor_chk`, que se vuelven a crear al final con la regla nueva. No toca `neon_auth`, `profiles`, `staff_*`, `trips`, `bookings` ni `outbox_events`.
+
+**Por qué en dos bloques:** PostgreSQL no deja usar en la misma transacción un valor de enum recién añadido, y los CHECK nuevos usan `'re_registered'`. Si se pega el archivo entero en una sola transacción, falla con `unsafe use of new value "re_registered"` y no se guarda nada (se puede repetir bien después). El bloque 1 es solo la línea `ALTER TYPE … ADD VALUE` (la segunda del archivo); el `CREATE TYPE "campaign_status"` va en el bloque 2, porque un tipo nuevo sí se puede usar en la misma transacción que lo crea. Los comentarios `-- Block 1` y `-- Block 2` del archivo marcan el corte.
+
+Pasos en el SQL Editor de Neon, con la rama correcta seleccionada:
+
+1. Comprobar que `0006` ya está aplicada en esa rama y que esta **no** lo está: `SELECT to_regtype('public.lead_channel'), to_regclass('public.campaigns');` devuelve `lead_channel` y `NULL`.
+2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;` (o `pg_dump "$DATABASE_MIGRATION_URL" --schema-only --schema=neon_auth`).
+3. **Bloque 1.** Ejecutar solo esta línea, sin `BEGIN;` ni `COMMIT;` (o en su propia transacción, confirmada con `COMMIT;`), y esperar a que termine:
+
+   ```sql
+   ALTER TYPE "public"."lead_activity_type" ADD VALUE 're_registered';
+   ```
+
+   Comprobar: `SELECT enum_range(NULL::lead_activity_type);` termina en `re_registered`. Si repites el procedimiento y el bloque 1 responde `enum label "re_registered" already exists`, no pasa nada: ya estaba aplicado; sigue con el bloque 2.
+4. **Bloque 2.** Copiar el contenido de `drizzle/0007_awesome_dust.sql` y **borrar la línea del paso 3** (`ALTER TYPE "public"."lead_activity_type" ADD VALUE 're_registered';--> statement-breakpoint`, la segunda del archivo y la única que contiene `ADD VALUE`). Pegar el resto entre `BEGIN;` y `COMMIT;` y ejecutarlo. Las líneas `--> statement-breakpoint` y los comentarios `--` son comentarios de SQL y se pueden dejar. Si por error queda la línea `ADD VALUE`, la transacción falla con `enum label "re_registered" already exists` y no cambia nada: quitarla y repetir. Si el bloque 2 responde `type "campaign_status" already exists`, la migración ya estaba aplicada en esa rama: no repetir nada.
+
+   Alternativa con terminal (Linux/WSL):
+
+   ```sh
+   F=drizzle/0007_awesome_dust.sql
+   grep -F 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1 -f -
+   grep -vF 'ADD VALUE' "$F" | psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f -
+   ```
+
+   La primera orden ejecuta el bloque 1 sin transacción (se confirma sola) y la segunda, el bloque 2 en una sola transacción (`-1`). Si el número cambia en el turno de merge, usar el nombre nuevo del archivo en `F`.
+5. Repetir el paso 2 y comparar: la salida debe ser idéntica (`diff` vacío).
+6. Comprobar:
+   - las restricciones de las tablas existentes: `SELECT count(*) FROM pg_constraint WHERE conrelid IN ('public.leads'::regclass, 'public.lead_activities'::regclass, 'public.outbox_events'::regclass) AND contype IN ('p','c','f');` devuelve 45 (tres `*_pkey`, treinta y un `*_chk` y once `*_fk`);
+   - las de `campaigns`: `SELECT count(*) FROM pg_constraint WHERE conrelid = 'public.campaigns'::regclass AND contype IN ('p','c','f');` devuelve 9 (un `*_pkey`, cinco `*_chk` y tres `*_fk`);
+   - las nuevas o sustituidas: `SELECT conname FROM pg_constraint WHERE conname IN ('leads_campaign_chk', 'leads_campaign_id_campaigns_id_fk', 'lead_activities_submission_chk', 'lead_activities_actor_chk', 'lead_activities_body_chk');` devuelve esas cinco;
+   - los índices: `SELECT indexname FROM pg_indexes WHERE indexname IN ('campaigns_code_uq', 'campaigns_trip_idx', 'leads_campaign_idx', 'lead_activities_submission_uq');` devuelve los cuatro;
+   - los datos: `SELECT count(*) FROM campaigns;` devuelve 0, y `SELECT count(*) FROM leads WHERE campaign_id IS NOT NULL OR marketing_opt_in_at IS NOT NULL;` devuelve 0.
+
+Prueba manual de las restricciones, **solo en la rama de pruebas de Neon** y dentro de `BEGIN;` … `ROLLBACK;` (nada queda guardado). Cada rechazo aborta la transacción: en psql, `\set ON_ERROR_ROLLBACK on` permite ejecutar todo seguido; en el SQL Editor, pegar la preparación, **un solo caso** y `ROLLBACK;`, ejecutar, y repetir con el siguiente caso.
+
+Preparación (todo esto se **acepta**: un perfil y un viaje de prueba, una campaña activa válida, un lead `web_form` con esa campaña, un lead `whatsapp` creado a mano, una actividad `re_registered` sin autor en ese lead de WhatsApp y una campaña cerrada válida):
+
+```sql
+BEGIN;
+INSERT INTO profiles (user_id, email) VALUES ('test-campanas', 'campanas@example.com');
+INSERT INTO trips (id, slug, title, city, country, race_date, distances, summary) VALUES
+  ('00000000-0000-4000-8000-000000000001', 'prueba-campanas', 'Maratón de prueba', 'Lima', 'Perú', '2027-05-16', ARRAY['42K'], 'Viaje de prueba');
+INSERT INTO campaigns (id, code, trip_id, channel, name, event_name, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000002', 'expo-lima-26', '00000000-0000-4000-8000-000000000001', 'event', 'Stand Expo Lima', 'Expo de prueba 2026', 'test-campanas');
+INSERT INTO leads (id, full_name, phone, email, trip_id, source, channel, campaign_id, consent_version) VALUES
+  ('00000000-0000-4000-8000-000000000003', 'Ana Prueba', '+51900000001', 'ana@example.com', '00000000-0000-4000-8000-000000000001', 'web_form', 'event', '00000000-0000-4000-8000-000000000002', 'web-form-v1');
+INSERT INTO leads (id, full_name, phone, trip_id, source, channel, consent_version, created_by) VALUES
+  ('00000000-0000-4000-8000-000000000004', 'Beto Prueba', '+51900000002', '00000000-0000-4000-8000-000000000001', 'whatsapp', 'whatsapp', 'crm-manual-v1', 'test-campanas');
+INSERT INTO lead_activities (lead_id, type, body, submission_id) VALUES
+  ('00000000-0000-4000-8000-000000000004', 're_registered', 'Volvió a registrarse desde la web · prueba', '00000000-0000-4000-8000-000000000005');
+INSERT INTO campaigns (code, trip_id, channel, name, status, created_by, closed_at, closed_by) VALUES
+  ('ig-cerrada', '00000000-0000-4000-8000-000000000001', 'instagram', 'Publicación cerrada', 'closed', 'test-campanas', now(), 'test-campanas');
+```
+
+Casos que la base debe **rechazar**, uno por ejecución; el error debe nombrar la restricción indicada en el comentario:
+
+```sql
+-- campaigns_code_chk: repetir cambiando 'AB' por 'Mml26' y por '-mml'
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('AB', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'test-campanas');
+-- campaigns_channel_chk
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('prueba-canal', '00000000-0000-4000-8000-000000000001', 'unknown', 'Prueba', 'test-campanas');
+-- campaigns_name_chk: repetir cambiando 'A' por repeat('a', 81)
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('prueba-nombre', '00000000-0000-4000-8000-000000000001', 'event', 'A', 'test-campanas');
+-- campaigns_closed_chk: cerrada sin closed_at
+INSERT INTO campaigns (code, trip_id, channel, name, status, created_by) VALUES ('prueba-cerrada', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'closed', 'test-campanas');
+-- campaigns_closed_chk: activa con closed_by
+INSERT INTO campaigns (code, trip_id, channel, name, created_by, closed_by) VALUES ('prueba-activa', '00000000-0000-4000-8000-000000000001', 'event', 'Prueba', 'test-campanas', 'test-campanas');
+-- campaigns_code_uq: mismo código que la campaña de la preparación
+INSERT INTO campaigns (code, trip_id, channel, name, created_by) VALUES ('expo-lima-26', '00000000-0000-4000-8000-000000000001', 'tiktok', 'Prueba', 'test-campanas');
+-- leads_campaign_chk: un lead whatsapp con campaña
+INSERT INTO leads (full_name, phone, source, channel, campaign_id, consent_version, created_by) VALUES ('Caro Prueba', '+51900000003', 'whatsapp', 'whatsapp', '00000000-0000-4000-8000-000000000002', 'crm-manual-v1', 'test-campanas');
+-- lead_activities_submission_chk: re_registered sin submission_id
+INSERT INTO lead_activities (lead_id, type, body) VALUES ('00000000-0000-4000-8000-000000000004', 're_registered', 'Prueba');
+-- lead_activities_body_chk: re_registered sin texto
+INSERT INTO lead_activities (lead_id, type, submission_id) VALUES ('00000000-0000-4000-8000-000000000004', 're_registered', gen_random_uuid());
+-- lead_activities_submission_chk: una note con submission_id
+INSERT INTO lead_activities (lead_id, type, body, actor_user_id, submission_id) VALUES ('00000000-0000-4000-8000-000000000003', 'note', 'Prueba', 'test-campanas', gen_random_uuid());
+-- lead_activities_submission_uq: mismo submission_id que la actividad de la preparación
+INSERT INTO lead_activities (lead_id, type, body, submission_id) VALUES ('00000000-0000-4000-8000-000000000003', 're_registered', 'Prueba', '00000000-0000-4000-8000-000000000005');
+ROLLBACK;
+```
+
+Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
+
+### Campañas, QR y modo stand
+
+Especificado en [`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md). Cada carrera publicada tiene su página de registro en `/viajes/<slug>/registro`: nombre, ciudad y país, fecha, distancias e imagen del catálogo (el encabezado no tiene precios ni cupos), el botón «Quiero correr esta maratón», que baja al formulario, y «Ver el paquete completo», que abre `/viajes/<slug>` (conservando `?c=`). Entre el encabezado y el formulario aparece el bloque financiero de la oferta vigente, si la hay (nunca en el modo stand; ver [Qué usa hoy la landing](#qué-usa-hoy-la-landing)). El formulario pide solo nombre y apellido, WhatsApp con código de país y correo, más la aceptación del texto legal y una casilla opcional de promociones (siempre desmarcada). `/contacto` usa el mismo formulario con un selector de carrera: los viajes publicados y, después, "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades". Cada envío válido crea un lead "Nuevo" en el CRM, vía "Formulario web", sin responsable.
+
+Hoy el registro solo se alcanza con un QR o un enlace de campaña: ni la portada ni `/viajes/<slug>` enlazan a él.
+
+**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) aplicada en `production`, las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
+
+#### Crear una campaña
+
+Una campaña es un QR o un enlace con su carrera y su canal. Sirve para saber qué stand, publicación o aliado trajo a cada persona.
+
+1. En el CRM, **Campañas** → **Nueva campaña** (cuentas `commercial` y `admin`).
+2. Rellena:
+   - **código:** de 3 a 32 caracteres, en minúsculas, con números y guiones (por ejemplo `mml26` o `ig-preventa-santiago`). Aparece en el enlace y no se puede repetir;
+   - **nombre**, para reconocerla en el CRM (por ejemplo "QR stand MML");
+   - **viaje** (la carrera a la que lleva el QR);
+   - **canal:** "Feria, carrera o activación", "Instagram", "TikTok", "Facebook", "Club, gimnasio o aliado"… (todos los del CRM salvo "Desconocido");
+   - **evento o stand**, si lo hay (por ejemplo "Media Maratón de Lima 2026").
+3. Al guardar se abre su ficha, con el **enlace público** (`https://carreras-viajeras.mentec.dev/viajes/<slug>/registro?c=<código>`), el **enlace del modo stand** y el **QR** del enlace público.
+
+Cómo se atribuye cada lead:
+
+- Un lead registrado desde el enlace o el QR de una campaña **activa y de la misma carrera** queda con el canal de la campaña, la campaña y, como detalle del origen, su evento (o su nombre si no tiene). Se ve en la ficha del lead, tarjeta "Registro" → "Campaña".
+- Sin campaña válida (enlace sin `?c=`, campaña cerrada, inexistente o de otra carrera), el registro funciona igual y el lead queda con el canal "Web". El comercial puede corregir el origen en la ficha; el cambio queda en el historial.
+- Puedes añadir UTM al enlace (`&utm_source=instagram&utm_medium=social&utm_campaign=preventa`) o un aliado (`&ref=club-lima`). Se guardan en la ficha ("UTM", referente), pero **no cambian el canal**: lo decide solo la campaña. Ningún parámetro cambia importes, etapa, responsable ni consentimiento: `?c=` solo elige la oferta de una campaña activa de esa carrera, si tiene una vigente.
+- En la lista de campañas, la columna de registros **cuenta leads nuevos, no visitas**: abrir la página o escanear el QR no guarda nada. El informe origen × etapa de `/crm` sigue contando por canal.
+- **Sin duplicados:** si la misma persona (el mismo correo, sin importar mayúsculas) vuelve a registrarse en la misma carrera, no se crea otro lead: su ficha recibe una actividad "Volvió a registrarse" con la campaña, los UTM, la versión del texto legal y su elección de promociones. El lead existente no cambia (ni origen, ni campaña, ni promociones), y la persona ve el mismo mensaje de éxito. Dos personas con el mismo teléfono y correos distintos son dos leads.
+
+#### Imprimir el QR
+
+1. En la ficha de la campaña, pulsa **Descargar QR (SVG)**: descarga `campana-<código>.svg`. El SVG es vectorial: se puede ampliar sin perder calidad.
+2. Descárgalo siempre **desde el CRM de producción** (`carreras-viajeras.mentec.dev`): el enlace del QR usa la dirección del sitio donde lo generas, así que uno descargado con `npm run dev` apuntaría a tu computadora.
+3. Antes de imprimir en cantidad, imprime una prueba, escanéala con un par de móviles y comprueba que abre el registro de la carrera correcta. Deja un margen blanco alrededor del código y no lo imprimas demasiado pequeño (como orientación, no menos de 3 × 3 cm).
+
+El QR lleva siempre al registro de su carrera. **Cerrar la campaña no rompe el QR:** sigue abriendo la página y el registro funciona, pero los nuevos leads ya no se atribuyen a esa campaña (quedan como "Web"). Los leads que ya trajo conservan su campaña. Una campaña cerrada no se reabre ni se borra; para una tirada nueva, crea otra campaña con otro código.
+
+Si la carrera se despublica o se archiva, el QR lleva a una página 404 hasta que se vuelva a publicar.
+
+#### Modo stand (tableta del equipo)
+
+Para registrar corredores en una feria desde una tableta:
+
+1. Abre en la tableta el **enlace del modo stand** de la ficha de la campaña (es el enlace público con `&modo=stand`). No lo publiques ni lo conviertas en QR: está pensado para la tableta del equipo (no da ningún permiso especial, solo cambia la presentación).
+2. La página muestra solo el nombre de la carrera y el formulario, con campos y botones grandes, sin la cabecera ni el pie del sitio.
+3. Cada corredor escribe sus datos y pulsa "Enviar mis datos". Tras un envío correcto se ve "Registro guardado. ¡Gracias!", sin ningún dato del corredor, y el botón **Registrar a otra persona**, que abre un formulario vacío para el siguiente.
+4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
+5. La verificación de Cloudflare (Turnstile) se repite en cada registro; si pide una comprobación, el corredor la resuelve antes de enviar.
+
+Si el servidor rechaza el envío (datos incompletos, verificación fallida o servicio no disponible), el formulario conserva lo escrito para reintentar y, salvo en los errores de datos, ofrece "Escríbenos por WhatsApp" como alternativa.
+
+#### Texto legal y apertura del registro (puerta P-L)
+
+El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
+
+**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso.
+
+Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
+
+1. En `lib/registrationConsent.ts`, sustituir `privacyText` y `marketingText` por los textos aprobados, cambiar `version` a `registro-web-v1` y poner `isPlaceholder: false`.
+2. El texto definitivo debe cubrir también a quienes ya tratan los datos: n8n en tu computadora, tu proveedor de correo y Gemini (que solo recibe el nombre de pila y el viaje).
+3. Una vez publicado, **cualquier cambio del texto exige una versión nueva** (`registro-web-v2`…): cada lead guarda la versión que aceptó.
+4. Pendiente de confirmar con el área legal: si basta un aviso informativo en lugar de la casilla obligatoria "Acepto…" (pregunta abierta 1 de la spec).
+
 ### Activar la protección antispam (Turnstile)
 
-Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en el formulario de `/contacto` y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
+Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en los formularios de `/contacto` y del registro de cada carrera (`/viajes/<slug>/registro`) y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
 
 1. Entra en el panel de Cloudflare (dash.cloudflare.com) con la cuenta del dominio `mentec.dev` y abre el menú **Turnstile** → **Add widget**.
 2. Rellena: nombre "Carreras Viajeras – formulario de contacto"; hostname `carreras-viajeras.mentec.dev`; modo **Managed**; sin *pre-clearance*. Guarda.
@@ -435,7 +752,7 @@ Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de 
    Para probar en local sin el widget real, usa las **claves de prueba** que publica Cloudflare: Site Key `1x00000000000000000000AA` y Secret Key `1x0000000000000000000000000000000AA` (siempre aprueban). Solo funcionan con `npm run dev`: fuera de desarrollo el servidor las rechaza. Al revés, tu widget real solo funciona en `carreras-viajeras.mentec.dev`, así que con `npm run dev` usa siempre las de prueba. En `.dev.vars` (que usa `npm run preview`, en modo producción) no pongas claves de prueba.
 5. **En Cloudflare (producción):** Workers & Pages → `carreras-viajeras` → **Settings** → **Variables and Secrets** → **Add** → tipo **Secret**, nombre `TURNSTILE_SECRET_KEY`, valor tu Secret Key → guardar. Si prefieres la terminal: `npx wrangler secret put TURNSTILE_SECRET_KEY` y pega el valor cuando lo pida.
 6. **Variable de build:** en el mismo Worker, **Settings** → **Build** → *Variables and secrets* → añade `NEXT_PUBLIC_TURNSTILE_SITE_KEY` con tu Site Key. Es pública y se incrusta al compilar. Si despliegas desde tu computadora con `npm run deploy`, se toma de `.env.local`: **antes de desplegar, comprueba que ahí está tu Site Key real y no la de prueba**; si no, el formulario rechazará todos los envíos.
-7. **Comprobar:** tras el siguiente despliegue (solo cuando lo autorices), abre `/contacto`. Debe verse la casilla de verificación de Cloudflare y, al enviar una consulta de prueba, el mensaje "¡Listo! Recibimos tu consulta…". Si aparece "No pudimos verificar el envío", revisa que el hostname del widget sea `carreras-viajeras.mentec.dev` y que las dos claves sean las correctas. (El formulario conectado llega en la Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md); hasta entonces solo se cargan las claves.)
+7. **Comprobar:** tras el siguiente despliegue (solo cuando lo autorices), abre `/contacto`. Debe verse la casilla de verificación de Cloudflare y, al enviar un registro de prueba, el mensaje "¡Listo! Recibimos tus datos. Te escribiremos por WhatsApp.". Si aparece "No pudimos verificar el envío", revisa que el hostname del widget sea `carreras-viajeras.mentec.dev` y que las dos claves sean las correctas. Mientras el texto legal siga siendo el marcador P-L, en producción no se ve el formulario sino el aviso "El registro en línea abrirá pronto…" (ver [Texto legal y apertura del registro](#texto-legal-y-apertura-del-registro-puerta-p-l)); hasta entonces, prueba con `npm run dev` y las claves de prueba.
 8. **Si una clave se filtra:** en Turnstile → tu widget → **Rotate secret key**, y actualiza el Secret `TURNSTILE_SECRET_KEY` del Worker (paso 5) y tus archivos locales (paso 4).
 
 ### Secretos de integraciones
@@ -670,7 +987,7 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
   ```
 
   La primera vez responde `201 { "status": "recorded" }` y el historial del lead muestra la actividad de "n8n"; repetida, `200 { "status": "duplicate" }`; con el `leadId` de otro lead, `404`; con un `body` vacío o de más de 500 caracteres, `400`.
-- Alta por Google Forms (necesita `0006` aplicada en esa rama). Usa un teléfono de prueba que no esté en el CRM:
+- Alta por Google Forms (necesita `0007` aplicada en esa rama). Usa un teléfono de prueba que no esté en el CRM:
 
   ```sh
   curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \
@@ -682,7 +999,19 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 
 #### 9. Regla WAF opcional contra abusos
 
-En el plan Free de Cloudflare, sin tocar código: panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → crear una regla para las peticiones `POST` a la ruta `/contacto` que bloquee una IP cuando supere unas pocas peticiones cada 10 segundos. Es una defensa adicional a Turnstile, que protegerá el formulario cuando se conecte (Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)).
+Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. Se configura sin tocar código, en el plan Free de Cloudflare (una regla, periodo de 10 segundos, contada por IP):
+
+1. Panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → **Create rule** (si ya existía la regla antigua solo para `POST /contacto`, edítala en lugar de crear otra).
+2. Nombre: "Formularios de captación". En **Edit expression**, pega:
+
+   ```txt
+   (http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and (http.request.uri.path eq "/contacto" or (starts_with(http.request.uri.path, "/viajes/") and ends_with(http.request.uri.path, "/registro"))))
+   ```
+
+3. **Characteristics:** IP. **When rate exceeds:** 10 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
+4. Guarda y despliega la regla.
+
+Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las visitas. Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
 
 #### 10. Workflow "Alta desde Google Forms"
 
@@ -785,9 +1114,9 @@ Carga **una sola vez** los 180 registros del módulo de la Media Maratón de Lim
 
    `created` son leads nuevos; `duplicate`, filas ya importadas en una ejecución anterior; `existing`, personas que ya estaban en el CRM con ese teléfono (no se tocan). Las filas con `conflict` (la fila cambió desde la importación anterior), `invalid_request` (algún dato no cumple el formato) o `unknown_trip` se revisan a mano; las de `sin_respuesta` basta con volver a ejecutar el workflow.
 
-**Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0006` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
+**Prueba previa (obligatoria):** con `npm run dev`, `.env.local` apuntando a una **rama de desarrollo** de Neon con `0007` aplicada y un CSV de **3 filas**, cambia en los dos nodos HTTP la dirección por `http://localhost:3000/api/integrations/n8n/leads`. Comprueba en el CRM que aparecen los 3 leads "Sin asignar" con vía "Importación" y que no recibes ningún correo de "nuevo lead". Vuelve a ejecutar el workflow: el resumen debe decir `duplicate: 3` (o `existing`) y no se crea nada.
 
-**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0006` aplicada en producción. Repetirla por error no duplica personas, siempre que las filas se envíen una a una y en secuencia, como hace el paso 4: dos peticiones simultáneas con el mismo teléfono y distinto `externalId` pueden crear dos leads.
+**La importación real la lanzas tú** contra la web desplegada (`https://carreras-viajeras.mentec.dev`), cuando autorices el despliegue y con la `0007` aplicada en producción. Repetirla por error no duplica personas, siempre que las filas se envíen una a una y en secuencia, como hace el paso 4: dos peticiones simultáneas con el mismo teléfono y distinto `externalId` pueden crear dos leads.
 
 #### 12. Workflow "Recordatorios diarios"
 
@@ -805,7 +1134,7 @@ La web decide quién recibe recordatorio; n8n no filtra nada aquí:
 
 Llamar a la petición dos veces el mismo día (o reintentarla) no duplica nada. Cada recordatorio llega al workflow principal como un evento `lead.follow_up_due` en el siguiente minuto, y ahí se prepara el borrador y te llega el correo (apartado 13).
 
-**Prueba manual (rama de desarrollo de Neon, `0006` aplicada, `npm run dev`):** en el CRM deja cuatro leads de prueba: uno en "Contactado" con la próxima acción de **ayer**; otro con "Pidió no seguir"; otro en "Reservado" con la próxima acción vencida; y otro con la próxima acción para **mañana**. Luego:
+**Prueba manual (rama de desarrollo de Neon, `0007` aplicada, `npm run dev`):** en el CRM deja cuatro leads de prueba: uno en "Contactado" con la próxima acción de **ayer**; otro con "Pidió no seguir"; otro en "Reservado" con la próxima acción vencida; y otro con la próxima acción para **mañana**. Luego:
 
 ```sh
 curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" -H "Content-Type: application/json" \

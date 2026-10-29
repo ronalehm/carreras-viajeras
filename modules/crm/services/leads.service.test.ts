@@ -474,7 +474,8 @@ describe("createLead", () => {
 // lost_reason, source, trip id/title/status, destination_text, owner user_id/email/active,
 // consent_version, consented_at, creator email, created_at, next_action_date/note,
 // archived_at, archiver email, channel, origin_detail, utm_source/medium/campaign, referred_by,
-// referral_permission, contact_preference, contact_opt_out_at.
+// referral_permission, contact_preference, contact_opt_out_at, campaign id/code/name,
+// marketing_opt_in_at.
 function detailRow(overrides: Record<number, unknown> = {}) {
   const row: unknown[] = [
     LEAD_ID,
@@ -509,6 +510,10 @@ function detailRow(overrides: Record<number, unknown> = {}) {
     false,
     null,
     null,
+    null,
+    null,
+    null,
+    null,
   ];
   for (const [position, value] of Object.entries(overrides)) row[Number(position)] = value;
   return row;
@@ -526,7 +531,7 @@ describe("getLeadById", () => {
     await expect(getLeadById(LEAD_ID)).resolves.toBeNull();
   });
 
-  it("reads the lead with LEFT JOINs for the owner, the author, the archiver and the trip", async () => {
+  it("reads the lead with LEFT JOINs for the owner, the author, the archiver, the trip and the campaign", async () => {
     const fake = useFakeDb({ responses: [[detailRow()]] });
 
     await expect(getLeadById(LEAD_ID)).resolves.toEqual({
@@ -558,15 +563,17 @@ describe("getLeadById", () => {
       referralPermission: false,
       contactPreference: null,
       contactOptOutAt: null,
+      campaign: null,
+      marketingOptInAt: null,
     });
 
     expect(fake.queries).toHaveLength(1);
     const statement = normalize(fake.queries[0].sql);
     expect(statement).toContain(
-      'from "leads" left join "profiles" "owner" on "owner"."user_id" = "leads"."owner_user_id" left join "profiles" "creator" on "creator"."user_id" = "leads"."created_by" left join "profiles" "archiver" on "archiver"."user_id" = "leads"."archived_by" left join "trips" on "trips"."id" = "leads"."trip_id"',
+      'from "leads" left join "profiles" "owner" on "owner"."user_id" = "leads"."owner_user_id" left join "profiles" "creator" on "creator"."user_id" = "leads"."created_by" left join "profiles" "archiver" on "archiver"."user_id" = "leads"."archived_by" left join "trips" on "trips"."id" = "leads"."trip_id" left join "campaigns" on "campaigns"."id" = "leads"."campaign_id" where',
     );
     expect(statement).toContain(
-      '"leads"."channel", "leads"."origin_detail", "leads"."utm_source", "leads"."utm_medium", "leads"."utm_campaign", "leads"."referred_by", "leads"."referral_permission", "leads"."contact_preference", "leads"."contact_opt_out_at" from "leads"',
+      '"leads"."channel", "leads"."origin_detail", "leads"."utm_source", "leads"."utm_medium", "leads"."utm_campaign", "leads"."referred_by", "leads"."referral_permission", "leads"."contact_preference", "leads"."contact_opt_out_at", "campaigns"."id", "campaigns"."code", "campaigns"."name", "leads"."marketing_opt_in_at" from "leads"',
     );
     expect(statement).toMatch(/where "leads"\."id" = \$\d+ limit \$\d+$/);
     // Archived leads are read too: the detail shows them read-only.
@@ -591,7 +598,7 @@ describe("getLeadById", () => {
     });
   });
 
-  it("returns the origin, the campaign, the referral, the preference and the opt-out date", async () => {
+  it("returns the origin, the UTM, the referral, the preference and the opt-out date", async () => {
     useFakeDb({
       responses: [
         [
@@ -621,6 +628,36 @@ describe("getLeadById", () => {
       contactPreference: "call",
       contactOptOutAt: new Date("2026-10-20T15:30:00Z"),
     });
+  });
+
+  it("returns the campaign of a web form lead and the promotions opt-in date", async () => {
+    const campaignId = "5b2d7c1e-4a3f-4e8b-9c6d-1f0e2a3b4c5d";
+    useFakeDb({
+      responses: [
+        [
+          detailRow({
+            7: "web_form",
+            23: "event",
+            32: campaignId,
+            33: "mml26",
+            34: "QR stand MML",
+            35: "2026-10-21 16:45:00+00",
+          }),
+        ],
+      ],
+    });
+
+    await expect(getLeadById(LEAD_ID)).resolves.toMatchObject({
+      source: "web_form",
+      campaign: { id: campaignId, code: "mml26", name: "QR stand MML" },
+      marketingOptInAt: new Date("2026-10-21T16:45:00Z"),
+    });
+  });
+
+  it("returns campaign: null and marketingOptInAt: null without campaign or promotions", async () => {
+    useFakeDb({ responses: [[detailRow({ 7: "web_form" })]] });
+
+    await expect(getLeadById(LEAD_ID)).resolves.toMatchObject({ campaign: null, marketingOptInAt: null });
   });
 });
 

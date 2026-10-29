@@ -65,8 +65,12 @@ describe("lead labels", () => {
     expect(LEAD_ACTIVITY_LABELS.opted_out).toBe("Pidió no seguir");
   });
 
-  it("label only n8n as a system author: the entry path labels the other activities without one", () => {
-    expect(SYSTEM_ACTOR_LABELS).toEqual({ automation: "n8n" });
+  it("label the re-registration in the history", () => {
+    expect(LEAD_ACTIVITY_LABELS.re_registered).toBe("Volvió a registrarse");
+  });
+
+  it("label n8n and the web form as system authors: the entry path labels the created activity", () => {
+    expect(SYSTEM_ACTOR_LABELS).toEqual({ automation: "n8n", re_registered: "Formulario web" });
   });
 
   it("fix the opt-out lost reason", () => {

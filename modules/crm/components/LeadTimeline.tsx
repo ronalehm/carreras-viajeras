@@ -33,11 +33,15 @@ function activityTitle(activity: LeadActivity): string {
   return label;
 }
 
-// Only system activities have no author: n8n (automation) and the creation of a system lead,
-// shown as its entry path ("Formulario web", "Google Forms", "Importación").
+// Only system activities have no author: n8n (automation), the web form (re_registered, whatever
+// the lead's entry path) and the creation of a system lead, shown as its entry path
+// ("Formulario web", "Google Forms", "Importación").
 function activityAuthor(activity: LeadActivity, leadSource: LeadSource): string {
   if (activity.actor) return activity.actor.email;
-  return activity.type === "automation" ? SYSTEM_ACTOR_LABELS.automation : LEAD_SOURCE_LABELS[leadSource];
+  if (activity.type === "automation" || activity.type === "re_registered") {
+    return SYSTEM_ACTOR_LABELS[activity.type];
+  }
+  return LEAD_SOURCE_LABELS[leadSource];
 }
 
 // Presentation only: the history arrives newest first and is never edited.

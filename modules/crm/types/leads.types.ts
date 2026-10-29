@@ -71,8 +71,9 @@ export type LeadList = {
 };
 
 // Lead detail page. createdBy is null for system leads (web form, Google Forms, import: no
-// author); archivedBy is null while the lead is not archived. The UTM fields are only written by
-// the web capture; contactOptOutAt is set when the contact asked not to be followed up.
+// author); archivedBy is null while the lead is not archived. The campaign (CRM QR or link), the
+// UTM fields and marketingOptInAt (independent promotions checkbox) are only written by the web
+// capture; contactOptOutAt is set when the contact asked not to be followed up.
 export type LeadDetail = Omit<LeadListItem, "trip"> & {
   email: string | null;
   location: string | null;
@@ -92,6 +93,8 @@ export type LeadDetail = Omit<LeadListItem, "trip"> & {
   referralPermission: boolean;
   contactPreference: ContactPreference | null;
   contactOptOutAt: Date | null;
+  campaign: { id: string; code: string; name: string } | null;
+  marketingOptInAt: Date | null;
 };
 
 // Origin × stage report of /crm. cohort: signup month (YYYY-MM, America/Lima). Imported leads are

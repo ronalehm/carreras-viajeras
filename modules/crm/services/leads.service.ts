@@ -20,7 +20,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
-import { leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
+import { campaigns, leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
 import { leadStageSchema } from "../schemas/leads.schema";
 import type {
   CreateLeadInput,
@@ -230,7 +230,8 @@ const creator = alias(profiles, "creator");
 const archiver = alias(profiles, "archiver");
 
 // Archived leads are returned too (read-only detail). A non-UUID id never reaches the database.
-// LEFT JOINs: web form leads have no owner and no author (owner and createdBy are null).
+// LEFT JOINs: web form leads have no owner and no author (owner and createdBy are null); only
+// web form leads may have a campaign (campaign is null otherwise).
 export async function getLeadById(id: string): Promise<LeadDetail | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const db = getDb();
@@ -268,12 +269,15 @@ export async function getLeadById(id: string): Promise<LeadDetail | null> {
       referralPermission: leads.referralPermission,
       contactPreference: leads.contactPreference,
       contactOptOutAt: leads.contactOptOutAt,
+      campaign: { id: campaigns.id, code: campaigns.code, name: campaigns.name },
+      marketingOptInAt: leads.marketingOptInAt,
     })
     .from(leads)
     .leftJoin(owner, eq(owner.userId, leads.ownerUserId))
     .leftJoin(creator, eq(creator.userId, leads.createdBy))
     .leftJoin(archiver, eq(archiver.userId, leads.archivedBy))
     .leftJoin(trips, eq(trips.id, leads.tripId))
+    .leftJoin(campaigns, eq(campaigns.id, leads.campaignId))
     .where(eq(leads.id, id))
     .limit(1);
   return lead ?? null;

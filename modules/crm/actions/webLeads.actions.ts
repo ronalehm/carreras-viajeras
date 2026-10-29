@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import type { z } from "zod";
+import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { webLeadFormSchema } from "../schemas/webLeads.schema";
 import { verifyTurnstileToken } from "../services/turnstile.service";
 import { createWebLead } from "../services/webLeads.service";
@@ -13,19 +14,20 @@ const MAX_INPUT_BYTES = 16 * 1024;
 const HONEYPOT_FIELD = "website";
 const SUCCESS: WebLeadFormState = {
   status: "success",
-  message: "¡Listo! Recibimos tu consulta. Te escribiremos por WhatsApp.",
+  message: "¡Listo! Recibimos tus datos. Te escribiremos por WhatsApp.",
 };
 
 const ERROR_MESSAGES: Record<WebLeadErrorCode, string> = {
   invalid_input: "Revisa los datos del formulario.",
   verification_failed: "No pudimos verificar el envío. Inténtalo de nuevo.",
-  conflict: "Ya recibimos una consulta desde este formulario. Recarga la página para enviar otra.",
-  unavailable: "No pudimos enviar tu consulta en este momento. Puedes escribirnos por WhatsApp.",
+  conflict: "Ya recibimos un registro desde este formulario. Recarga la página para enviar otro.",
+  trip_unavailable: "Esta carrera ya no está disponible para registrarse.",
+  unavailable: "No pudimos enviar tus datos en este momento. Puedes escribirnos por WhatsApp.",
 };
 
 type FieldErrors = Partial<Record<WebLeadField, string[]>>;
 
-const VISIBLE_FIELDS = new Set<string>(["name", "email", "phone", "destination", "consent"] satisfies WebLeadField[]);
+const VISIBLE_FIELDS = new Set<string>(["name", "email", "phone", "destination", "consent", "marketing"] satisfies WebLeadField[]);
 
 function failure(code: WebLeadErrorCode, fieldErrors?: FieldErrors): WebLeadFormState {
   return { status: "error", code, message: ERROR_MESSAGES[code], ...(fieldErrors && { fieldErrors }) };
@@ -53,9 +55,10 @@ function toFieldErrors(error: z.ZodError): FieldErrors {
   return result;
 }
 
-// Public action of the landing contact form (no session). Order: size and types → honeypot →
-// schema → Turnstile → createWebLead. Responses never echo the input. No revalidatePath: the CRM
-// pages are dynamic.
+// Public action of the web form (race registration and /contacto; no session). Order: size and
+// types → honeypot → registration open → schema → Turnstile → createWebLead. Responses never echo
+// the input and never reveal whether the email was already registered ("existing" is the same
+// success). No revalidatePath: the CRM pages are dynamic.
 export async function submitWebLeadAction(
   _prev: WebLeadFormState,
   formData: FormData,
@@ -65,6 +68,10 @@ export async function submitWebLeadAction(
   // Bots fill the hidden field: they get the success message and nothing is verified or saved.
   const honeypot = formData.get(HONEYPOT_FIELD);
   if (typeof honeypot === "string" && honeypot !== "") return SUCCESS;
+
+  // Defense in depth for gate P-L: in production with the placeholder legal text nothing is
+  // verified or saved (the page does not show the form either).
+  if (!isRegistrationOpen()) return failure("unavailable");
 
   const parsed = webLeadFormSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure("invalid_input", toFieldErrors(parsed.error));
@@ -80,7 +87,9 @@ export async function submitWebLeadAction(
     if (verification === "unavailable") return failure("unavailable");
 
     const result = await createWebLead(submission);
-    return result === "conflict" ? failure("conflict") : SUCCESS;
+    if (result === "conflict") return failure("conflict");
+    if (result === "unknown_trip") return failure("trip_unavailable");
+    return SUCCESS; // created, existing or duplicate
   } catch {
     // Fixed text only: Drizzle/Neon errors carry the statement and its parameters (personal data).
     console.error("web lead: capture failed");

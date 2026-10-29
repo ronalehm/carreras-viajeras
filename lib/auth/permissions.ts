@@ -7,7 +7,9 @@ export type Permission =
   | "staff.manage"
   | "trips.manage"
   | "leads.manage"
-  | "bookings.manage";
+  | "bookings.manage"
+  | "offers.manage"
+  | "offers.view";
 
 // Roles granted each permission besides admin, which has every known permission.
 const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
@@ -16,6 +18,9 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   "trips.manage": ["commercial"],
   "leads.manage": ["commercial"],
   "bookings.manage": ["commercial"],
+  // Offers and exchange rate: commercial reads them (CRM pages without forms); only admin manages.
+  "offers.manage": [],
+  "offers.view": ["commercial"],
 };
 
 export function can(roles: readonly StaffRole[], permission: Permission): boolean {

@@ -40,6 +40,7 @@ export const leadActivityTypeSchema = z.enum([
   "automation",
   "channel_changed",
   "opted_out",
+  "re_registered",
 ]);
 
 // web_form, google_form and import are system entry paths (web capture and n8n): the manual form
@@ -54,8 +55,9 @@ const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
 // Optional form inputs arrive as "" when left blank and are missing when the field is not sent:
-// both become null (a missing key never yields a zod message in English).
-const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
+// both become null (a missing key never yields a zod message in English). Exported for the web
+// capture schemas.
+export const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
   z
     .string()
     .optional()
