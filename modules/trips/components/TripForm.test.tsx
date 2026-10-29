@@ -48,7 +48,6 @@ it("edita un publicado con identificador de solo lectura y envía su id", async 
   expect(screen.getByLabelText<HTMLInputElement>("Identificador *").readOnly).toBe(true);
   expect(screen.getByText("Solo se puede cambiar en borrador.")).toBeTruthy();
   expect(screen.getByLabelText<HTMLInputElement>("Distancias *").value).toBe("42K, 21K");
-  expect(screen.getByLabelText<HTMLInputElement>("Precio desde (USD)").value).toBe("0");
   fireEvent.click(screen.getByRole("button", { name: "Guardar cambios" }));
   await screen.findByText("Archivado por otra persona.");
   expect(vi.mocked(updateTripAction).mock.calls[0][1].get("id")).toBe(trip.id);
@@ -56,7 +55,13 @@ it("edita un publicado con identificador de solo lectura y envía su id", async 
   expect(createTripAction).not.toHaveBeenCalled();
 });
 
-it("pinta los campos nuevos con los valores del viaje, excludes uno por línea", () => {
+// Prices live in the trip offers: the old columns of trips may still hold values, but the form never shows them.
+const PRICE_LABELS = [
+  "Precio desde (USD)", "Precio total en cuotas (USD)", "Reserva (USD)", "Precio de acompañante (USD)", "Condiciones de pago",
+];
+const PRICE_FIELDS = ["priceUsd", "installmentsPriceUsd", "depositUsd", "companionPriceUsd", "paymentTerms"];
+
+it("pinta los campos nuevos con los valores del viaje, excludes uno por línea, sin los campos de precio", () => {
   const trip: Trip = {
     id: "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91", title: "Santiago 2027", slug: "santiago-2027",
     city: "Santiago", country: "Chile", raceDate: "2027-04-25", startDate: null, endDate: null,
@@ -69,13 +74,22 @@ it("pinta los campos nuevos con los valores del viaje, excludes uno por línea",
   render(<TripForm trip={trip} />);
   const value = (label: string) => screen.getByLabelText<HTMLInputElement | HTMLTextAreaElement>(label).value;
   expect(value("Web oficial de la carrera")).toBe("https://maratondesantiago.cl/");
-  expect(value("Precio total en cuotas (USD)")).toBe("1799");
-  expect(value("Reserva (USD)")).toBe("300");
-  expect(value("Precio de acompañante (USD)")).toBe("1300");
-  expect(value("Condiciones de pago")).toBe("Reserva con US$ 300.\nSaldo en cuotas.");
   expect(value("Qué no incluye")).toBe("Vuelos internos\nGastos personales");
   expect(value("Detalles por confirmar")).toBe("Horario por confirmar.");
   expect(screen.getByText("Lo que aún falta confirmar del viaje.")).toBeTruthy();
+  for (const label of PRICE_LABELS) expect(screen.queryByLabelText(label)).toBeNull();
+  for (const name of PRICE_FIELDS) expect(document.querySelector(`[name="${name}"]`)).toBeNull();
+  expect(screen.queryByText(/1799|1300|Reserva con US\$/)).toBeNull();
+});
+
+it("no envía campos de precio al guardar un viaje", async () => {
+  vi.mocked(createTripAction).mockResolvedValue({ status: "error", code: "invalid_input", message: "Revisa los campos marcados." });
+  render(<TripForm />);
+  for (const label of PRICE_LABELS) expect(screen.queryByLabelText(label)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Crear viaje" }));
+  await waitFor(() => expect(createTripAction).toHaveBeenCalledOnce());
+  const sent = vi.mocked(createTripAction).mock.calls[0][1];
+  for (const name of PRICE_FIELDS) expect(sent.has(name)).toBe(false);
 });
 
 it("muestra el error de un campo nuevo y conserva lo escrito", async () => {

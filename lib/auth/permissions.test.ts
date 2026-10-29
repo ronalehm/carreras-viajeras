@@ -21,6 +21,8 @@ const ALL_PERMISSIONS = [
   "trips.manage_all",
   "leads.manage",
   "bookings.manage",
+  "offers.manage",
+  "offers.view",
 ] as const satisfies readonly Permission[];
 
 // Expected matrix from docs/specs/accounts-clerk-rbac.md ("Diseño técnico").
@@ -31,6 +33,8 @@ const EXPECTED_MATRIX: Record<Permission, Record<StaffRole, boolean>> = {
   "trips.manage_all": { commercial: true, organizer: false, admin: true, super_admin: true },
   "leads.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
   "bookings.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
+  "offers.manage": { commercial: false, organizer: false, admin: true, super_admin: true },
+  "offers.view": { commercial: true, organizer: false, admin: true, super_admin: true },
 };
 
 const MATRIX_CELLS = ALL_PERMISSIONS.flatMap((permission) =>
@@ -91,6 +95,11 @@ describe("can", () => {
       expect(can([], unknown)).toBe(false);
     },
   );
+
+  it("gives commercial offers.view but not offers.manage", () => {
+    expect(can(["commercial"], "offers.view")).toBe(true);
+    expect(can(["commercial"], "offers.manage")).toBe(false);
+  });
 
   it("denies an unknown role", () => {
     const unknown = ["owner"] as unknown as StaffRole[];

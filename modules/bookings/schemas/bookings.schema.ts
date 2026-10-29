@@ -53,13 +53,15 @@ const bookingFields = {
 };
 
 // Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as
-// runnerUserId, status or createdBy: they never come from the form.
+// runnerUserId, status or createdBy: they never come from the form. leadId comes from the hidden
+// field of "Crear reserva" in the lead's page; blank means a booking without lead.
 export const bookingFormSchema = z.object({
   tripId: z.uuid({ error: "Elige un viaje." }),
+  leadId: blankToNull(z.uuid({ error: "El lead indicado no es válido." })),
   ...bookingFields,
 });
 
-// The trip cannot change after creation.
+// The trip and the lead link cannot change after creation.
 export const updateBookingSchema = z.object({
   bookingId: z.uuid({ error: BOOKING_ID_MESSAGE }),
   ...bookingFields,

@@ -1,268 +1,9 @@
 {
-  "id": "16ae0f54-fd4f-4179-aad9-5bd21fe92193",
-  "prevId": "0450a35d-d667-40d4-b918-4d19a007d009",
+  "id": "cb284840-72f0-4aa9-8917-8ecc2ec78273",
+  "prevId": "6a6ccc2f-fb58-4645-8d62-7f96677b1cf3",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
-    "public.automation_event_redrives": {
-      "name": "automation_event_redrives",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "event_id": {
-          "name": "event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "performed_by": {
-          "name": "performed_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "reason": {
-          "name": "reason",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "automation_event_redrives_event_id_automation_events_id_fk": {
-          "name": "automation_event_redrives_event_id_automation_events_id_fk",
-          "tableFrom": "automation_event_redrives",
-          "tableTo": "automation_events",
-          "columnsFrom": [
-            "event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "automation_event_redrives_performed_by_profiles_user_id_fk": {
-          "name": "automation_event_redrives_performed_by_profiles_user_id_fk",
-          "tableFrom": "automation_event_redrives",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "performed_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "automation_event_redrives_reason_chk": {
-          "name": "automation_event_redrives_reason_chk",
-          "value": "char_length(\"automation_event_redrives\".\"reason\") BETWEEN 1 AND 500"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.automation_events": {
-      "name": "automation_events",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lead_id": {
-          "name": "lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload_version": {
-          "name": "payload_version",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "payload": {
-          "name": "payload",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "automation_event_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "available_at": {
-          "name": "available_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_token": {
-          "name": "lease_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_code": {
-          "name": "last_error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "processed_at": {
-          "name": "processed_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "automation_events_type_lead_uq": {
-          "name": "automation_events_type_lead_uq",
-          "columns": [
-            {
-              "expression": "type",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "lead_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "automation_events_pending_idx": {
-          "name": "automation_events_pending_idx",
-          "columns": [
-            {
-              "expression": "available_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "automation_events_lease_idx": {
-          "name": "automation_events_lease_idx",
-          "columns": [
-            {
-              "expression": "lease_until",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "where": "\"automation_events\".\"status\" = 'processing'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {},
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "automation_events_type_chk": {
-          "name": "automation_events_type_chk",
-          "value": "\"automation_events\".\"type\" IN ('lead.created')"
-        },
-        "automation_events_payload_version_chk": {
-          "name": "automation_events_payload_version_chk",
-          "value": "\"automation_events\".\"payload_version\" > 0"
-        },
-        "automation_events_attempts_chk": {
-          "name": "automation_events_attempts_chk",
-          "value": "\"automation_events\".\"attempts\" BETWEEN 0 AND 8"
-        },
-        "automation_events_last_error_code_chk": {
-          "name": "automation_events_last_error_code_chk",
-          "value": "\"automation_events\".\"last_error_code\" IS NULL OR \"automation_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,64}$'"
-        },
-        "automation_events_processing_lease_chk": {
-          "name": "automation_events_processing_lease_chk",
-          "value": "\"automation_events\".\"status\" <> 'processing' OR (\"automation_events\".\"lease_token\" IS NOT NULL AND \"automation_events\".\"lease_until\" IS NOT NULL)"
-        },
-        "automation_events_processed_at_chk": {
-          "name": "automation_events_processed_at_chk",
-          "value": "(\"automation_events\".\"status\" = 'succeeded') = (\"automation_events\".\"processed_at\" IS NOT NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
     "public.booking_payments": {
       "name": "booking_payments",
       "schema": "",
@@ -436,6 +177,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "status": {
           "name": "status",
           "type": "booking_status",
@@ -518,6 +265,22 @@
           "method": "btree",
           "with": {}
         },
+        "bookings_lead_active_uq": {
+          "name": "bookings_lead_active_uq",
+          "columns": [
+            {
+              "expression": "lead_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"bookings\".\"status\" <> 'cancelled'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
         "bookings_runner_user_idx": {
           "name": "bookings_runner_user_idx",
           "columns": [
@@ -557,6 +320,19 @@
           "tableTo": "trips",
           "columnsFrom": [
             "trip_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "bookings_lead_id_leads_id_fk": {
+          "name": "bookings_lead_id_leads_id_fk",
+          "tableFrom": "bookings",
+          "tableTo": "leads",
+          "columnsFrom": [
+            "lead_id"
           ],
           "columnsTo": [
             "id"
@@ -881,11 +657,31 @@
           "primaryKey": false,
           "notNull": false
         },
+        "channel_from": {
+          "name": "channel_from",
+          "type": "lead_channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "channel_to": {
+          "name": "channel_to",
+          "type": "lead_channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
         "actor_user_id": {
           "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "source_event_id": {
+          "name": "source_event_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -913,6 +709,21 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "lead_activities_source_event_uq": {
+          "name": "lead_activities_source_event_uq",
+          "columns": [
+            {
+              "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -970,6 +781,19 @@
           ],
           "onDelete": "restrict",
           "onUpdate": "no action"
+        },
+        "lead_activities_source_event_id_outbox_events_id_fk": {
+          "name": "lead_activities_source_event_id_outbox_events_id_fk",
+          "tableFrom": "lead_activities",
+          "tableTo": "outbox_events",
+          "columnsFrom": [
+            "source_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {},
@@ -978,7 +802,7 @@
       "checkConstraints": {
         "lead_activities_body_chk": {
           "name": "lead_activities_body_chk",
-          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
+          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" = 'automation' THEN \"lead_activities\".\"body\" IS NOT NULL AND char_length(\"lead_activities\".\"body\") <= 500 WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
         },
         "lead_activities_stage_chk": {
           "name": "lead_activities_stage_chk",
@@ -986,7 +810,19 @@
         },
         "lead_activities_owner_chk": {
           "name": "lead_activities_owner_chk",
-          "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_from\" IS NOT NULL AND \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" <> \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
+          "value": "CASE WHEN \"lead_activities\".\"type\" = 'owner_changed' THEN \"lead_activities\".\"owner_to\" IS NOT NULL AND \"lead_activities\".\"owner_from\" IS DISTINCT FROM \"lead_activities\".\"owner_to\" ELSE \"lead_activities\".\"owner_from\" IS NULL AND \"lead_activities\".\"owner_to\" IS NULL END"
+        },
+        "lead_activities_channel_chk": {
+          "name": "lead_activities_channel_chk",
+          "value": "CASE WHEN \"lead_activities\".\"type\" = 'channel_changed' THEN \"lead_activities\".\"channel_from\" IS NOT NULL AND \"lead_activities\".\"channel_to\" IS NOT NULL AND \"lead_activities\".\"channel_from\" <> \"lead_activities\".\"channel_to\" ELSE \"lead_activities\".\"channel_from\" IS NULL AND \"lead_activities\".\"channel_to\" IS NULL END"
+        },
+        "lead_activities_actor_chk": {
+          "name": "lead_activities_actor_chk",
+          "value": "\"lead_activities\".\"actor_user_id\" IS NOT NULL OR \"lead_activities\".\"type\" IN ('created', 'automation')"
+        },
+        "lead_activities_event_chk": {
+          "name": "lead_activities_event_chk",
+          "value": "(\"lead_activities\".\"type\" = 'automation') = (\"lead_activities\".\"source_event_id\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -1045,6 +881,64 @@
           "primaryKey": false,
           "notNull": true
         },
+        "channel": {
+          "name": "channel",
+          "type": "lead_channel",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'unknown'"
+        },
+        "origin_detail": {
+          "name": "origin_detail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utm_source": {
+          "name": "utm_source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utm_medium": {
+          "name": "utm_medium",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "utm_campaign": {
+          "name": "utm_campaign",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referred_by": {
+          "name": "referred_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referral_permission": {
+          "name": "referral_permission",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "contact_preference": {
+          "name": "contact_preference",
+          "type": "contact_preference",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "contact_opt_out_at": {
+          "name": "contact_opt_out_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "stage": {
           "name": "stage",
           "type": "lead_stage",
@@ -1063,7 +957,7 @@
           "name": "owner_user_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "next_action_date": {
           "name": "next_action_date",
@@ -1094,7 +988,7 @@
           "name": "created_by",
           "type": "text",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -1121,9 +1015,37 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "submission_hash": {
+          "name": "submission_hash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "leads_idempotency_key_uq": {
+          "name": "leads_idempotency_key_uq",
+          "columns": [
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "leads_trip_id_trips_id_fk": {
           "name": "leads_trip_id_trips_id_fk",
@@ -1217,6 +1139,215 @@
         "leads_archived_chk": {
           "name": "leads_archived_chk",
           "value": "(\"leads\".\"archived_at\" IS NULL) = (\"leads\".\"archived_by\" IS NULL)"
+        },
+        "leads_created_by_chk": {
+          "name": "leads_created_by_chk",
+          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import')"
+        },
+        "leads_origin_detail_chk": {
+          "name": "leads_origin_detail_chk",
+          "value": "\"leads\".\"origin_detail\" IS NULL OR char_length(\"leads\".\"origin_detail\") BETWEEN 2 AND 120"
+        },
+        "leads_utm_chk": {
+          "name": "leads_utm_chk",
+          "value": "(\"leads\".\"utm_source\" IS NULL OR char_length(\"leads\".\"utm_source\") BETWEEN 1 AND 100) AND (\"leads\".\"utm_medium\" IS NULL OR char_length(\"leads\".\"utm_medium\") BETWEEN 1 AND 100) AND (\"leads\".\"utm_campaign\" IS NULL OR char_length(\"leads\".\"utm_campaign\") BETWEEN 1 AND 100)"
+        },
+        "leads_referred_by_chk": {
+          "name": "leads_referred_by_chk",
+          "value": "\"leads\".\"referred_by\" IS NULL OR char_length(\"leads\".\"referred_by\") BETWEEN 2 AND 120"
+        },
+        "leads_referral_permission_chk": {
+          "name": "leads_referral_permission_chk",
+          "value": "NOT \"leads\".\"referral_permission\" OR \"leads\".\"referred_by\" IS NOT NULL"
+        },
+        "leads_opt_out_chk": {
+          "name": "leads_opt_out_chk",
+          "value": "\"leads\".\"contact_opt_out_at\" IS NULL OR \"leads\".\"next_action_date\" IS NULL"
+        },
+        "leads_submission_chk": {
+          "name": "leads_submission_chk",
+          "value": "(\"leads\".\"idempotency_key\" IS NULL) = (\"leads\".\"submission_hash\" IS NULL) AND (\"leads\".\"submission_hash\" IS NULL OR \"leads\".\"submission_hash\" ~ '^[0-9a-f]{64}$')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.outbox_events": {
+      "name": "outbox_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "type": {
+          "name": "type",
+          "type": "outbox_event_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "lead_id": {
+          "name": "lead_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload_version": {
+          "name": "payload_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "outbox_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "available_at": {
+          "name": "available_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "lease_until": {
+          "name": "lease_until",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_token": {
+          "name": "lease_token",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "last_error_code": {
+          "name": "last_error_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dedupe_key": {
+          "name": "dedupe_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "outbox_events_dedupe_key_uq": {
+          "name": "outbox_events_dedupe_key_uq",
+          "columns": [
+            {
+              "expression": "dedupe_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"outbox_events\".\"dedupe_key\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "outbox_events_ready_idx": {
+          "name": "outbox_events_ready_idx",
+          "columns": [
+            {
+              "expression": "available_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"outbox_events\".\"status\" IN ('pending', 'processing')",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "outbox_events_lead_id_leads_id_fk": {
+          "name": "outbox_events_lead_id_leads_id_fk",
+          "tableFrom": "outbox_events",
+          "tableTo": "leads",
+          "columnsFrom": [
+            "lead_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "outbox_events_payload_version_chk": {
+          "name": "outbox_events_payload_version_chk",
+          "value": "\"outbox_events\".\"payload_version\" >= 1"
+        },
+        "outbox_events_payload_chk": {
+          "name": "outbox_events_payload_chk",
+          "value": "jsonb_typeof(\"outbox_events\".\"payload\") = 'object' AND octet_length(\"outbox_events\".\"payload\"::text) <= 1024"
+        },
+        "outbox_events_attempts_chk": {
+          "name": "outbox_events_attempts_chk",
+          "value": "\"outbox_events\".\"attempts\" BETWEEN 0 AND 8"
+        },
+        "outbox_events_lease_chk": {
+          "name": "outbox_events_lease_chk",
+          "value": "(\"outbox_events\".\"status\" = 'processing') = (\"outbox_events\".\"lease_token\" IS NOT NULL) AND (\"outbox_events\".\"lease_token\" IS NULL) = (\"outbox_events\".\"lease_until\" IS NULL)"
+        },
+        "outbox_events_processed_chk": {
+          "name": "outbox_events_processed_chk",
+          "value": "(\"outbox_events\".\"status\" IN ('succeeded', 'dead')) = (\"outbox_events\".\"processed_at\" IS NOT NULL)"
+        },
+        "outbox_events_last_error_code_chk": {
+          "name": "outbox_events_last_error_code_chk",
+          "value": "\"outbox_events\".\"last_error_code\" IS NULL OR \"outbox_events\".\"last_error_code\" ~ '^[a-z0-9_]{1,40}$'"
+        },
+        "outbox_events_dedupe_key_chk": {
+          "name": "outbox_events_dedupe_key_chk",
+          "value": "(\"outbox_events\".\"dedupe_key\" IS NULL OR char_length(\"outbox_events\".\"dedupe_key\") BETWEEN 1 AND 120) AND (\"outbox_events\".\"type\" <> 'lead.follow_up_due' OR \"outbox_events\".\"dedupe_key\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -1774,12 +1905,6 @@
           "notNull": true,
           "default": "'draft'"
         },
-        "organizer_id": {
-          "name": "organizer_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1810,38 +1935,9 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
-        },
-        "trips_organizer_idx": {
-          "name": "trips_organizer_idx",
-          "columns": [
-            {
-              "expression": "organizer_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
         }
       },
-      "foreignKeys": {
-        "trips_organizer_id_profiles_user_id_fk": {
-          "name": "trips_organizer_id_profiles_user_id_fk",
-          "tableFrom": "trips",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "organizer_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -1899,16 +1995,6 @@
     }
   },
   "enums": {
-    "public.automation_event_status": {
-      "name": "automation_event_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "processing",
-        "succeeded",
-        "dead"
-      ]
-    },
     "public.booking_status": {
       "name": "booking_status",
       "schema": "public",
@@ -1916,6 +2002,15 @@
         "pending",
         "confirmed",
         "cancelled"
+      ]
+    },
+    "public.contact_preference": {
+      "name": "contact_preference",
+      "schema": "public",
+      "values": [
+        "whatsapp",
+        "email",
+        "call"
       ]
     },
     "public.itinerary_kind": {
@@ -1953,7 +2048,30 @@
         "archived",
         "note",
         "call",
-        "message"
+        "message",
+        "automation",
+        "channel_changed",
+        "opted_out"
+      ]
+    },
+    "public.lead_channel": {
+      "name": "lead_channel",
+      "schema": "public",
+      "values": [
+        "event",
+        "partner",
+        "referral",
+        "whatsapp",
+        "whatsapp_status",
+        "instagram",
+        "facebook",
+        "tiktok",
+        "youtube",
+        "google_ads",
+        "luma",
+        "web",
+        "other",
+        "unknown"
       ]
     },
     "public.lead_source": {
@@ -1962,7 +2080,9 @@
       "values": [
         "whatsapp",
         "web_form",
-        "other"
+        "other",
+        "google_form",
+        "import"
       ]
     },
     "public.lead_stage": {
@@ -1977,14 +2097,32 @@
         "lost"
       ]
     },
+    "public.outbox_event_type": {
+      "name": "outbox_event_type",
+      "schema": "public",
+      "values": [
+        "lead.created",
+        "lead.stage_changed",
+        "lead.follow_up_due",
+        "lead.opted_out"
+      ]
+    },
+    "public.outbox_status": {
+      "name": "outbox_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "processing",
+        "succeeded",
+        "dead"
+      ]
+    },
     "public.staff_role": {
       "name": "staff_role",
       "schema": "public",
       "values": [
         "commercial",
-        "admin",
-        "super_admin",
-        "organizer"
+        "admin"
       ]
     },
     "public.trip_status": {

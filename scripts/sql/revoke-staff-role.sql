@@ -26,7 +26,7 @@
 --   - El user_id exacto se copia del panel de Clerk (Users -> la cuenta).
 --   - role es 'commercial', 'organizer', 'admin' o 'super_admin'; cualquier
 --     otro valor falla. 'organizer' y 'super_admin' requieren la migración
---     drizzle/0006_*.sql aplicada en esa rama.
+--     drizzle/0009_chilly_patriot.sql aplicada en esa rama.
 --   - Credencial: DATABASE_MIGRATION_URL (administrativa). Nunca la URL de
 --     runtime del Worker ni de n8n.
 --   - Ejecutar primero en una rama Neon de desarrollo. En production, solo con

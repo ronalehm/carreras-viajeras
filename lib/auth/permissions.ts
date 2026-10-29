@@ -8,7 +8,9 @@ export type Permission =
   | "trips.manage"
   | "trips.manage_all"
   | "leads.manage"
-  | "bookings.manage";
+  | "bookings.manage"
+  | "offers.manage"
+  | "offers.view";
 
 // Roles that hold every known permission.
 const FULL_ACCESS_ROLES: readonly StaffRole[] = ["admin", "super_admin"];
@@ -22,6 +24,9 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   "trips.manage_all": ["commercial"],
   "leads.manage": ["commercial"],
   "bookings.manage": ["commercial"],
+  // Offers and exchange rate: commercial reads them (CRM pages without forms); only admin manages.
+  "offers.manage": [],
+  "offers.view": ["commercial"],
 };
 
 // Roles each actor role may invite, grant or revoke from the CRM.

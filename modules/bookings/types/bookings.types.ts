@@ -102,6 +102,7 @@ export type CrmBooking = CrmBookingListItem & {
   balanceDueOn: string | null; // YYYY-MM-DD
   internalNote: string | null;
   createdAt: Date;
+  lead: { id: string; fullName: string } | null; // bookings.lead_id, set only on creation
 };
 
 // Fits ConfirmActionState of components/shared/ConfirmActionButton.
@@ -111,7 +112,7 @@ export type BookingActionState =
   | {
       status: "error";
       code: "unauthorized" | "forbidden" | "invalid_input" | "invalid_trip" | "duplicate"
-        | "email_locked" | "not_found" | "invalid_transition";
+        | "email_locked" | "not_found" | "invalid_transition" | "invalid_lead" | "lead_taken";
       message: string;
       fieldErrors?: Record<string, string[]>;
       values?: Record<string, string>;

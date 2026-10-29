@@ -32,7 +32,7 @@
 --   - role solo admite 'admin' o 'super_admin'; cualquier otro valor falla.
 --     Los demás roles se asignan desde el CRM.
 --   - Las migraciones drizzle/0000_*.sql y, para role=super_admin,
---     drizzle/0006_*.sql ya están aplicadas en esa rama.
+--     drizzle/0009_chilly_patriot.sql ya están aplicadas en esa rama.
 --   - Credencial: DATABASE_MIGRATION_URL (administrativa). Nunca la URL de
 --     runtime del Worker ni de n8n.
 --   - Ejecutar primero en una rama Neon de desarrollo. En production, solo con

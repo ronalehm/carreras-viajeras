@@ -25,7 +25,7 @@ const VALID = {
   title: " Maratón Santiago 2027 ", slug: "maraton-santiago-2027", city: "Santiago", country: "Chile",
   raceDate: "2027-04-25", startDate: "2027-04-23", endDate: "2027-04-27",
   distances: "42K, 21K", summary: "Un viaje para correr en Santiago.", includes: "Hotel\nTraslados",
-  priceUsd: "1990", capacity: "100", imageUrl: "",
+  capacity: "100", imageUrl: "",
 };
 function form(values: Record<string, string>) {
   const data = new FormData();
@@ -120,13 +120,13 @@ it("crea con datos parseados, sin estado ni fechas suministradas por el cliente"
 });
 
 it("preserva los strings escritos ante validación y omite archivos y claves ajenas", async () => {
-  const data = form({ ...VALID, title: "ab", priceUsd: "12.5", status: "published", createdAt: "fake" });
+  const data = form({ ...VALID, title: "ab", capacity: "12.5", status: "published", createdAt: "fake" });
   data.set("imageUrl", new File(["image"], "image.png"));
   const result = await createTripAction(IDLE, data);
-  expect(result).toMatchObject({ code: "invalid_input", values: { title: "ab", priceUsd: "12.5", includes: "Hotel\nTraslados" } });
+  expect(result).toMatchObject({ code: "invalid_input", values: { title: "ab", capacity: "12.5", includes: "Hotel\nTraslados" } });
   if (result.status === "error") {
     expect(result.fieldErrors).toHaveProperty("title");
-    expect(result.fieldErrors).toHaveProperty("priceUsd");
+    expect(result.fieldErrors).toHaveProperty("capacity");
     expect(result.values).not.toHaveProperty("status");
     expect(result.values).not.toHaveProperty("createdAt");
     expect(result.values).not.toHaveProperty("imageUrl");

@@ -39,8 +39,9 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
 const PUBLIC_COLUMNS =
-  '"slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", ' +
-  '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes"';
+  '"slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "capacity", "image_url", ' +
+  '"official_url", "excludes", "notes"';
+const PRICE_COLUMNS = /"price_usd"|"installments_price_usd"|"deposit_usd"|"companion_price_usd"|"payment_terms"/;
 const INTERNAL_COLUMNS = /"id"|"status"|"created_at"|"updated_at"/;
 
 // Rows in select order (array mode), as the Neon HTTP driver returns them.
@@ -55,14 +56,9 @@ const santiagoRow = [
   ["42K", "21K", "10K"],
   "Viaje para correr la Maratón de Santiago.",
   ["Hotel", "Traslados"],
-  1990,
   100,
   "https://example.com/santiago.jpg",
   "https://maratondesantiago.cl/",
-  1799,
-  300,
-  1300,
-  "Reserva con US$ 300.",
   ["Vuelos internos"],
   "Horario por confirmar.",
 ];
@@ -77,14 +73,9 @@ const santiago = {
   distances: ["42K", "21K", "10K"],
   summary: "Viaje para correr la Maratón de Santiago.",
   includes: ["Hotel", "Traslados"],
-  priceUsd: 1990,
   capacity: 100,
   imageUrl: "https://example.com/santiago.jpg",
   officialUrl: "https://maratondesantiago.cl/",
-  installmentsPriceUsd: 1799,
-  depositUsd: 300,
-  companionPriceUsd: 1300,
-  paymentTerms: "Reserva con US$ 300.",
   excludes: ["Vuelos internos"],
   notes: "Horario por confirmar.",
 };
@@ -99,11 +90,6 @@ const limaRow = [
   ["42K"],
   "Viaje para correr en Lima.",
   [],
-  null,
-  null,
-  null,
-  null,
-  null,
   null,
   null,
   null,
@@ -122,14 +108,9 @@ const input: TripInput = {
   distances: ["42K", "21K", "10K"],
   summary: "Viaje para correr la Maratón de Santiago.",
   includes: ["Hotel", "Traslados"],
-  priceUsd: 1990,
   capacity: 100,
   imageUrl: "https://example.com/santiago.jpg",
   officialUrl: "https://maratondesantiago.cl/",
-  installmentsPriceUsd: 1799,
-  depositUsd: 300,
-  companionPriceUsd: 1300,
-  paymentTerms: "Reserva con US$ 300.",
   excludes: ["Vuelos internos"],
   notes: "Horario por confirmar.",
 };
@@ -144,14 +125,9 @@ const inputParams = [
   '{"42K","21K","10K"}',
   "Viaje para correr la Maratón de Santiago.",
   '{"Hotel","Traslados"}',
-  1990,
   100,
   "https://example.com/santiago.jpg",
   "https://maratondesantiago.cl/",
-  1799,
-  300,
-  1300,
-  "Reserva con US$ 300.",
   '{"Vuelos internos"}',
   "Horario por confirmar.",
 ];
@@ -181,9 +157,10 @@ describe("listPublishedTrips", () => {
     );
     expect(select.params).toEqual(["published"]);
     expect(select.sql.split(" from ")[0]).not.toMatch(INTERNAL_COLUMNS);
+    expect(select.sql).not.toMatch(PRICE_COLUMNS);
   });
 
-  it("maps rows to PublicTrip, with priceUsd null when there is no price", async () => {
+  it("maps rows to PublicTrip, with null optional fields", async () => {
     useFakeDb({ responses: [[santiagoRow, limaRow]] });
 
     await expect(listPublishedTrips()).resolves.toEqual([
@@ -199,14 +176,9 @@ describe("listPublishedTrips", () => {
         distances: ["42K"],
         summary: "Viaje para correr en Lima.",
         includes: [],
-        priceUsd: null,
         capacity: null,
         imageUrl: null,
         officialUrl: null,
-        installmentsPriceUsd: null,
-        depositUsd: null,
-        companionPriceUsd: null,
-        paymentTerms: null,
         excludes: [],
         notes: null,
       },
@@ -283,15 +255,17 @@ describe("createTrip", () => {
   it("inserts the input as a draft, ignoring a status in the input, and returns the id", async () => {
     const fake = useFakeDb({ responses: [[[TRIP_ID]]] });
 
-    await expect(createTrip({ ...input, status: "published" } as TripInput)).resolves.toEqual({ id: TRIP_ID });
+    const withExtras = { ...input, status: "published", priceUsd: 1990, depositUsd: 300, paymentTerms: "Reserva" };
+    await expect(createTrip(withExtras as TripInput)).resolves.toEqual({ id: TRIP_ID });
 
     expect(fake.queries).toHaveLength(1);
     const [insert] = fake.queries;
-    // id, status, organizer_id, created_at and updated_at are left to the column defaults.
+    // id, status, organizer_id, created_at and updated_at are left to the column defaults, and so are the old price
+    // columns (price_usd, installments_price_usd, deposit_usd, companion_price_usd, payment_terms): never written.
     expect(normalize(insert.sql)).toBe(
       'insert into "trips" ("id", "slug", "title", "city", "country", "race_date", "start_date", "end_date", "distances", "summary", "includes", "price_usd", "capacity", "image_url", ' +
         '"official_url", "installments_price_usd", "deposit_usd", "companion_price_usd", "payment_terms", "excludes", "notes", "status", "organizer_id", "created_at", "updated_at") ' +
-        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, default, default, default, default) " +
+        "values (default, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, default, $11, $12, $13, default, default, default, default, $14, $15, default, default, default, default) " +
         'on conflict ("slug") do nothing returning "id"',
     );
     expect(insert.params).toEqual(inputParams);
@@ -315,12 +289,13 @@ describe("updateTrip", () => {
     const [update, select] = fake.queries;
     expect(normalize(update.sql)).toBe(
       'update "trips" set "slug" = $1, "title" = $2, "city" = $3, "country" = $4, "race_date" = $5, "start_date" = $6, "end_date" = $7, ' +
-        '"distances" = $8, "summary" = $9, "includes" = $10, "price_usd" = $11, "capacity" = $12, "image_url" = $13, ' +
-        '"official_url" = $14, "installments_price_usd" = $15, "deposit_usd" = $16, "companion_price_usd" = $17, "payment_terms" = $18, ' +
-        '"excludes" = $19, "notes" = $20, "updated_at" = now() ' +
-        'where ("trips"."id" = $21 and "trips"."status" <> $22 and ("trips"."status" = $23 or "trips"."slug" = $24) ' +
-        'and not exists (select 1 from "trips" "other" where ("other"."slug" = $25 and "other"."id" <> $26))) returning "id"',
+        '"distances" = $8, "summary" = $9, "includes" = $10, "capacity" = $11, "image_url" = $12, ' +
+        '"official_url" = $13, "excludes" = $14, "notes" = $15, "updated_at" = now() ' +
+        'where ("trips"."id" = $16 and "trips"."status" <> $17 and ("trips"."status" = $18 or "trips"."slug" = $19) ' +
+        'and not exists (select 1 from "trips" "other" where ("other"."slug" = $20 and "other"."id" <> $21))) returning "id"',
     );
+    // The old price columns are not in the SET: saving a trip keeps their stored values.
+    expect(update.sql).not.toMatch(PRICE_COLUMNS);
     expect(update.params).toEqual([...inputParams, TRIP_ID, "archived", "draft", input.slug, input.slug, TRIP_ID]);
     expect(normalize(select.sql)).toBe('select "status", "slug" from "trips" where "trips"."id" = $1');
     expect(select.params).toEqual([TRIP_ID]);
