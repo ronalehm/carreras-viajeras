@@ -19,3 +19,12 @@ export function campaignLinks(
   stand.searchParams.set("modo", "stand");
   return { registration: registration.toString(), stand: stand.toString() };
 }
+
+const percentFormat = new Intl.NumberFormat("es-PE", { style: "percent", maximumFractionDigits: 0 });
+
+// Registrations ÷ visits as a whole percentage, "—" without visits. It can exceed 100 %: stand-mode
+// registrations and those before visits were counted have no visit.
+export function formatConversion(leadCount: number, visitCount: number): string {
+  if (visitCount === 0) return "—";
+  return percentFormat.format(leadCount / visitCount);
+}

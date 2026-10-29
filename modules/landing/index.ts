@@ -18,7 +18,7 @@ export { getCatalogTrip } from "./utils/catalogTrip";
 // Offer in force of a published race (slug + ?c= only); null → no price block, no amounts.
 export { getCatalogOffer } from "./utils/catalogOffer";
 // Search params of the public lead pages (/viajes/[slug]/registro and /contacto).
-export { attributionParams, firstParam } from "./utils/inquiry";
+export { attributionParams, firstParam, registrationHref } from "./utils/inquiry";
 export { TRIPS } from "./utils/trips";
 
 export { buildWhatsAppUrl, WHATSAPP_NUMBER } from "./utils/inquiry";

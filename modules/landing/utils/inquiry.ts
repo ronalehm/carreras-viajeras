@@ -33,6 +33,17 @@ export function attributionParams(
   return params;
 }
 
+/** `/viajes/<slug>/registro` con los parámetros de atribución presentes; sin parámetros, sin `?`. */
+export function registrationHref(slug: string, params: LeadAttributionParams): string {
+  const query = new URLSearchParams();
+  for (const key of ATTRIBUTION_KEYS) {
+    const value = params[key];
+    if (value !== undefined) query.append(key, value);
+  }
+  const search = query.toString();
+  return `/viajes/${slug}/registro${search ? `?${search}` : ""}`;
+}
+
 /** `?destino=` → un valor permitido, su alias si está permitido, o "" (sin preselección). */
 export function resolveDestination(
   value: string | string[] | undefined,

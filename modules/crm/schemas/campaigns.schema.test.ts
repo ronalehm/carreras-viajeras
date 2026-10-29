@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { campaignStatusEnum, leadChannelEnum } from "@/lib/db-schema";
-import { campaignChannelSchema, campaignCodeSchema, campaignFormSchema, campaignIdSchema } from "./campaigns.schema";
+import {
+  campaignChannelSchema,
+  campaignCodeSchema,
+  campaignFormSchema,
+  campaignIdSchema,
+  campaignVisitSchema,
+} from "./campaigns.schema";
 
 const TRIP_ID = "6b0f8c1e-2a4d-4f3b-9c7e-1d2a3b4c5d6e";
 const VALID = {
@@ -111,6 +117,51 @@ describe("campaignIdSchema", () => {
   it("accepts a UUID and rejects anything else", () => {
     expect(campaignIdSchema.safeParse(TRIP_ID).success).toBe(true);
     expect(campaignIdSchema.safeParse("mml26").success).toBe(false);
+  });
+});
+
+describe("campaignVisitSchema", () => {
+  const VISIT = { slug: "maraton-santiago-2027", c: " MML26 " };
+
+  it("keeps the slug and normalizes the code like ?c=", () => {
+    expect(campaignVisitSchema.parse(VISIT)).toEqual({ slug: "maraton-santiago-2027", c: "mml26" });
+  });
+
+  it.each([
+    ["abc", "abc"],
+    ["80 characters", "a".repeat(80)],
+  ])("accepts a slug of %s", (_case, slug) => {
+    expect(campaignVisitSchema.safeParse({ ...VISIT, slug }).success).toBe(true);
+  });
+
+  it.each([
+    ["with uppercase letters", "Maraton-Santiago-2027"],
+    ["of 2 characters", "ab"],
+    ["of 81 characters", "a".repeat(81)],
+    ["with a double hyphen", "maraton--santiago"],
+    ["with a leading hyphen", "-maraton"],
+    ["with surrounding spaces", " maraton-santiago-2027 "],
+    ["that is not a string", 2027],
+  ])("rejects a slug %s", (_case, slug) => {
+    expect(campaignVisitSchema.safeParse({ ...VISIT, slug }).success).toBe(false);
+  });
+
+  it.each([
+    ["an invalid code", { c: "mml_26" }],
+    ["a 2-character code", { c: "ab" }],
+    ["a code that is not a string", { c: 26 }],
+  ])("rejects %s", (_case, override) => {
+    expect(campaignVisitSchema.safeParse({ ...VISIT, ...override }).success).toBe(false);
+  });
+
+  it("rejects a missing slug or code", () => {
+    expect(campaignVisitSchema.safeParse({ slug: VISIT.slug }).success).toBe(false);
+    expect(campaignVisitSchema.safeParse({ c: VISIT.c }).success).toBe(false);
+  });
+
+  it("rejects any extra key", () => {
+    expect(campaignVisitSchema.safeParse({ ...VISIT, utm_source: "instagram" }).success).toBe(false);
+    expect(campaignVisitSchema.safeParse({ ...VISIT, campaignId: "x" }).success).toBe(false);
   });
 });
 

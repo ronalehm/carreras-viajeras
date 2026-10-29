@@ -15,6 +15,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   smallint,
   text,
   time,
@@ -349,6 +350,23 @@ export const campaigns = pgTable(
     ),
     // Target of the trip_offers (campaign_id, trip_id) composite FK.
     unique("campaigns_id_trip_uq").on(table.id, table.tripId),
+  ],
+);
+
+// Campaign link/QR opens per Lima calendar day (no visitor data). One row per campaign and day,
+// upserted in a single statement (visits + 1). The PK starts with campaign_id, used to aggregate.
+export const campaignVisitDays = pgTable(
+  "campaign_visit_days",
+  {
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "restrict" }),
+    day: date("day", { mode: "string" }).notNull(),
+    visits: integer("visits").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.campaignId, table.day] }),
+    check("campaign_visit_days_visits_chk", sql`${table.visits} > 0`),
   ],
 );
 

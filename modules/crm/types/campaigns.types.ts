@@ -1,13 +1,16 @@
 import type { z } from "zod";
 import type { campaignStatusEnum } from "@/lib/db-schema";
-import type { campaignFormSchema } from "../schemas/campaigns.schema";
+import type { campaignFormSchema, campaignVisitSchema } from "../schemas/campaigns.schema";
 import type { LeadChannel } from "./leads.types";
 
 export type CampaignInput = z.output<typeof campaignFormSchema>;
 
+export type CampaignVisitInput = z.output<typeof campaignVisitSchema>;
+
 export type CampaignStatus = (typeof campaignStatusEnum.enumValues)[number];
 
-// leadCount: new leads attributed to the campaign (registrations, not visits).
+// leadCount: new leads attributed to the campaign (registrations). visitCount: opens of its link
+// or QR in a browser outside stand mode (campaign_visit_days), counted since this was deployed.
 export type CampaignListItem = {
   id: string;
   code: string;
@@ -18,6 +21,7 @@ export type CampaignListItem = {
   trip: { slug: string; title: string };
   createdAt: Date;
   leadCount: number;
+  visitCount: number;
 };
 
 export type CampaignDetail = CampaignListItem & {

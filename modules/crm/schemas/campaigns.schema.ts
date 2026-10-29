@@ -31,3 +31,15 @@ export const campaignFormSchema = z.object({
 });
 
 export const campaignIdSchema = z.uuid({ error: "La campaña no es válida." });
+
+// Body of the public visit beacon (POST /api/campaign-visits). slug is checked as stored, never
+// normalized: the regex and length of trips_slug_format_chk. c is normalized like ?c=. Never shown
+// to the visitor (the endpoint always answers 204), hence no messages; extra keys are rejected.
+export const campaignVisitSchema = z.strictObject({
+  slug: z
+    .string()
+    .min(3)
+    .max(80)
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/),
+  c: campaignCodeSchema,
+});

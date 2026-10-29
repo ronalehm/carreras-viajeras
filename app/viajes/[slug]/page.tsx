@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { isRegistrationOpen } from "@/lib/registrationConsent";
 import {
+  attributionParams,
   firstParam,
   getCatalogOffer,
   getCatalogTrip,
+  registrationHref,
   SiteFooter,
   SiteHeader,
   TripDetail,
@@ -22,15 +25,18 @@ export async function generateMetadata({ params }: PageProps<"/viajes/[slug]">):
 
 export default async function TripPage({ params, searchParams }: PageProps<"/viajes/[slug]">) {
   const { slug } = await params;
-  // ?c= only selects a valid campaign offer (decided by the server); every other parameter is ignored.
-  const campaignCode = firstParam((await searchParams).c) ?? null;
+  const query = await searchParams;
+  // ?c= selects a valid campaign offer (decided by the server); ?c=, UTM and ref are also carried
+  // to «Registrarme», which is hidden while the registration is closed (gate P-L).
+  const campaignCode = firstParam(query.c) ?? null;
   const [trip, offer] = await Promise.all([getCatalogTrip(slug), getCatalogOffer(slug, campaignCode)]);
   if (!trip) notFound();
+  const registration = isRegistrationOpen() ? registrationHref(slug, attributionParams(query)) : null;
   return (
     <>
       <SiteHeader />
       <main>
-        <TripDetail trip={trip} offer={offer} />
+        <TripDetail trip={trip} offer={offer} registrationHref={registration} />
       </main>
       <SiteFooter />
     </>

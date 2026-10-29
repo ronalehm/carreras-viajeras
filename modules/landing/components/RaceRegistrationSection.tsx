@@ -6,6 +6,7 @@ import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { cn } from "@/lib/utils";
 import type { OfferView } from "../utils/catalogOffer";
 import type { TripLanding } from "../utils/catalogTrip";
+import { CampaignVisitBeacon } from "./CampaignVisitBeacon";
 import {
   GENERAL_INQUIRY_MESSAGE,
   WHATSAPP_NUMBER,
@@ -70,6 +71,8 @@ export function RaceRegistrationSection({
 
   return (
     <>
+      {/* Counts the campaign visit from the browser, also while the registration is closed (P-L). */}
+      {attribution.c && <CampaignVisitBeacon slug={trip.slug} code={attribution.c} />}
       <section
         aria-labelledby="race-title"
         className="relative isolate overflow-hidden bg-night text-primary-foreground"
@@ -81,7 +84,7 @@ export function RaceRegistrationSection({
           </div>
         )}
         <div aria-hidden className="absolute inset-0 -z-10 bg-night/35" />
-        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-[8%] sm:py-20">
+        <div className="mx-auto max-w-5xl px-4 py-12 sm:px-[8%] sm:py-20 lg:max-w-none lg:px-[6%]">
           <p className="text-sm font-semibold wrap-break-word sm:text-base">
             {trip.location} · {trip.raceDate}
           </p>
@@ -111,25 +114,40 @@ export function RaceRegistrationSection({
         </div>
       </section>
 
-      {offer && (
-        <div className="bg-background px-4 py-12 text-night sm:py-16">
-          <OfferSummary offer={offer} className="mx-auto max-w-md" />
-        </div>
-      )}
-
-      <section id="registro" aria-labelledby="registro-title" className="bg-sky px-4 py-12 text-night sm:py-16">
-        <div className="mx-auto flex max-w-md flex-col gap-6">
-          <div>
-            <h2 id="registro-title" className="display-title text-display-section">
-              Regístrate
-            </h2>
-            <p className="mt-4 text-base leading-relaxed">
-              Te escribiremos por WhatsApp para contarte los detalles. Sin pagos.
-            </p>
+      {/*
+        Mobile: price block and then the sky registration block, one column (unchanged).
+        PC (lg): one sky band with two columns. The DOM keeps the mobile order and #registro keeps
+        its box (anchor of the hero button), so the section is a subgrid spanning the whole band:
+        its heading goes to the left above the price card and the form card to the right.
+      */}
+      <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(26rem,32rem)] lg:grid-rows-[auto_1fr] lg:gap-x-12 lg:gap-y-8 lg:bg-sky lg:px-[6%] lg:py-16">
+        {offer && (
+          // z-10: painted above the transparent #registro subgrid that also covers this cell.
+          <div className="bg-background px-4 py-12 text-night sm:py-16 lg:z-10 lg:col-start-1 lg:row-start-2 lg:min-w-0 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:p-6">
+            <OfferSummary offer={offer} className="mx-auto max-w-md lg:mx-0 lg:max-w-none" />
           </div>
-          {form}
-        </div>
-      </section>
+        )}
+
+        <section
+          id="registro"
+          aria-labelledby="registro-title"
+          className="bg-sky px-4 py-12 text-night sm:py-16 lg:col-span-2 lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:grid lg:grid-cols-subgrid lg:grid-rows-subgrid lg:scroll-mt-16 lg:bg-transparent lg:p-0"
+        >
+          <div className="mx-auto flex max-w-md flex-col gap-6 lg:contents">
+            <div className="lg:col-start-1 lg:row-start-1">
+              <h2 id="registro-title" className="display-title text-display-section">
+                Regístrate
+              </h2>
+              <p className="mt-4 text-base leading-relaxed">
+                Te escribiremos por WhatsApp para contarte los detalles. Sin pagos.
+              </p>
+            </div>
+            <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:bg-background lg:p-6">
+              {form}
+            </div>
+          </div>
+        </section>
+      </div>
     </>
   );
 }
