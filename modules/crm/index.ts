@@ -4,6 +4,7 @@ export {
   getLeadById,
   getLeadFormOptions,
   getLeadList,
+  getLeadPipeline,
 } from "./services/leads.service";
 export { getLeadReport } from "./services/leadReport.service";
 export { leadReportQuerySchema } from "./schemas/leads.schema";
@@ -20,6 +21,7 @@ export {
   optOutLeadAction,
   setNextActionAction,
   updateLeadAction,
+  retryLeadEmailAction,
 } from "./actions/leads.actions";
 // Campaigns (QR and links): same reason, the CRM routes import both actions from this API.
 export { listCampaigns, getCampaignById, recordCampaignVisit } from "./services/campaigns.service";
@@ -48,6 +50,10 @@ export { LeadReportTable } from "./components/LeadReportTable";
 export { LeadStageForm } from "./components/LeadStageForm";
 export { LeadStageSummary } from "./components/LeadStageSummary";
 export { LeadTable } from "./components/LeadTable";
+export { LeadPipeline } from "./components/LeadPipeline";
+export { LeadJourney } from "./components/LeadJourney";
+export { LeadMessages } from "./components/LeadMessages";
+export { getLeadMessages } from "./services/leadMessages.service";
 export { LeadTimeline } from "./components/LeadTimeline";
 export { NextActionForm } from "./components/NextActionForm";
 export {

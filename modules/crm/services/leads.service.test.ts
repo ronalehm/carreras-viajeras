@@ -15,6 +15,7 @@ import {
   getLeadById,
   getLeadFormOptions,
   getLeadList,
+  getLeadPipeline,
   optOutLead,
   setNextAction,
   updateLead,
@@ -71,6 +72,37 @@ function listRow(index: number, overrides: unknown[] = []) {
 }
 
 beforeEach(() => vi.mocked(getDb).mockReset());
+
+describe("getLeadPipeline", () => {
+  it("bounds each of the six stages separately and applies common filters to rows and totals", async () => {
+    const fake = useFakeDb();
+    await getLeadPipeline({ stage: "quoted", owner: "mine", channel: "event", followUp: "overdue", page: 99 }, "user-7", TODAY);
+    expect(fake.transaction).toHaveBeenCalledTimes(1);
+    expect(fake.queries).toHaveLength(3);
+    const [board, counts] = fake.queries;
+    expect(board.sql.match(/limit /g)).toHaveLength(6);
+    expect(board.sql.match(/union all/g)).toHaveLength(5);
+    expect(board.sql).not.toContain("offset");
+    for (const stage of ["new", "contacted", "quoted", "reserved", "paid", "lost"]) expect(board.params).toContain(stage);
+    expect(board.params.filter((value) => value === 10)).toHaveLength(6);
+    expect(board.params.filter((value) => value === "user-7")).toHaveLength(6);
+    expect(board.params.filter((value) => value === "event")).toHaveLength(6);
+    expect(board.params.filter((value) => value === TODAY)).toHaveLength(6);
+    expect(normalize(counts.sql)).toContain('"leads"."archived_at" is null');
+    expect(counts.params).toEqual(["user-7", "paid", "lost", TODAY, "event"]);
+  });
+
+  it("keeps full stage totals distinct from the bounded sample, and includes alert fields", async () => {
+    const contact = [...listRow(1), null, new Date("2026-10-28T12:00:00Z").toISOString(), "Pidió no seguir"];
+    const fake = useFakeDb({ responses: [[contact], [["new", "41"], ["paid", "20"]], []] });
+    const result = await getLeadPipeline({ page: 1 }, "user-1", TODAY);
+    expect(result.stageCounts.new).toBe(41);
+    expect(result.columns.find((col) => col.stage === "new")).toMatchObject({ total: 41, leads: [{ id: "lead-1", email: null, contactOptOutAt: expect.any(Date) }] });
+    expect(result.columns.find((col) => col.stage === "paid")).toEqual({ stage: "paid", total: 20, leads: [] });
+    expect(result.columns.find((col) => col.stage === "quoted")).toEqual({ stage: "quoted", total: 0, leads: [] });
+    expect(fake.queries[0].sql).toContain('"leads"."contact_opt_out_at"');
+  });
+});
 
 describe("getLeadList", () => {
   it("reads the page, the funnel counts and the owner options in one batch", async () => {

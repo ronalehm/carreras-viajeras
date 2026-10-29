@@ -29,6 +29,8 @@ import type {
   LeadListFilters,
   LeadOwnerChangeInput,
   LeadOwnerOption,
+  LeadPipelineData,
+  LeadEmailSummary,
   LeadStage,
   LeadStageChangeInput,
   LeadTripOption,
@@ -160,6 +162,63 @@ export async function getLeadList(
     hasNextPage: rows.length > LEAD_PAGE_SIZE,
     stageCounts,
     ownerOptions,
+  };
+}
+
+// Independent bounded queries per stage, in one transaction/round-trip. Counts cover all
+// matching contacts, never just the global list page. The selected stage only focuses the UI.
+export async function getLeadPipeline(
+  filters: LeadListFilters,
+  currentUserId: string,
+  today: string,
+): Promise<LeadPipelineData> {
+  const db = getDb();
+  const visible = and(
+    isNull(leads.archivedAt),
+    ownerCondition(filters.owner, currentUserId),
+    followUpCondition(filters.followUp, today),
+    filters.channel === undefined ? undefined : eq(leads.channel, filters.channel),
+  );
+  const selection = {
+    id: leads.id, fullName: leads.fullName, phone: leads.phone, stage: leads.stage,
+    source: leads.source, channel: leads.channel,
+    trip: { id: trips.id, title: trips.title }, destinationText: leads.destinationText,
+    owner: {
+      userId: profiles.userId, email: profiles.email,
+      active: sql<boolean>`${isActiveOwner(db, leads.ownerUserId)}`,
+    },
+    nextActionDate: leads.nextActionDate, nextActionNote: leads.nextActionNote,
+    email: leads.email, contactOptOutAt: leads.contactOptOutAt, lostReason: leads.lostReason,
+    // Match the current stage episode, not simply the last email with the same stage label.
+    emailStatus: sql<LeadEmailSummary | null>`(SELECT jsonb_build_object(
+      'id', m.id, 'stage', m.stage, 'status', m.status, 'lastErrorCode', m.last_error_code)
+      FROM client_emails m JOIN outbox_events e ON e.id = m.source_event_id
+      WHERE m.lead_id = ${leads.id} AND m.stage = ${leads.stage}
+        AND NOT EXISTS (SELECT 1 FROM outbox_events newer WHERE newer.lead_id = m.lead_id
+          AND newer.type IN ('lead.created', 'lead.stage_changed', 'lead.opted_out')
+          AND newer.sequence > e.sequence)
+      LIMIT 1)`,
+  };
+  const queries = leadStageSchema.options.map((stage) => db.select(selection).from(leads)
+    .leftJoin(profiles, eq(profiles.userId, leads.ownerUserId))
+    .leftJoin(trips, eq(trips.id, leads.tripId))
+    .where(and(visible, eq(leads.stage, stage)))
+    .orderBy(sql`${leads.nextActionDate} ASC NULLS LAST`, desc(leads.createdAt), desc(leads.id))
+    .limit(10));
+  const [rows, counts, ownerOptions] = await db.batch([
+    // Union retains a limit for each individual stage, rather than one limit for the board.
+    queries[0].unionAll(queries[1]).unionAll(queries[2]).unionAll(queries[3])
+      .unionAll(queries[4]).unionAll(queries[5]),
+    db.select({ stage: leads.stage, total: count() }).from(leads).where(visible).groupBy(leads.stage),
+    ownerOptionsQuery(db),
+  ]);
+  const stageCounts = Object.fromEntries(leadStageSchema.options.map((stage) => [stage, 0])) as Record<LeadStage, number>;
+  for (const { stage, total } of counts) stageCounts[stage] = total;
+  return {
+    columns: leadStageSchema.options.map((stage) => ({
+      stage, total: stageCounts[stage], leads: rows.filter((lead) => lead.stage === stage),
+    })),
+    stageCounts, ownerOptions,
   };
 }
 

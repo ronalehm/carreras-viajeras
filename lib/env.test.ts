@@ -15,6 +15,28 @@ function setEnv(values: Record<string, string | undefined>) {
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
 
+describe("client email environment", () => {
+  it.each([undefined, "", "false"])("defaults off with %j and does not require SMTP settings", async (enabled) => {
+    setEnv({ CRM_EMAIL_AUTOMATION_ENABLED: enabled, CRM_EMAIL_FROM: undefined, CRM_EMAIL_AUTOMATION_START_AT: undefined });
+    const { getClientEmailEnv } = await import("./env");
+    expect(getClientEmailEnv()).toBeNull();
+  });
+  it("requires an explicit sender and activation cutoff when enabled", async () => {
+    setEnv({ CRM_EMAIL_AUTOMATION_ENABLED: "true", CRM_EMAIL_FROM: "sender@example.test", CRM_EMAIL_AUTOMATION_START_AT: "2026-10-29T18:00:00Z" });
+    const { getClientEmailEnv } = await import("./env");
+    expect(getClientEmailEnv()).toEqual({ from: "sender@example.test", startAt: new Date("2026-10-29T18:00:00Z") });
+    vi.stubEnv("CRM_EMAIL_AUTOMATION_START_AT", undefined);
+    expect(() => getClientEmailEnv()).toThrow("Invalid environment fields: CRM_EMAIL_AUTOMATION_START_AT");
+    vi.stubEnv("CRM_EMAIL_AUTOMATION_ENABLED", "yes");
+    expect(() => getClientEmailEnv()).toThrow("Invalid environment fields: CRM_EMAIL_AUTOMATION_ENABLED");
+  });
+  it("rejects sender header injection and invalid cutoff without repeating the values", async () => {
+    setEnv({ CRM_EMAIL_AUTOMATION_ENABLED: "true", CRM_EMAIL_FROM: "a@example.test\r\nBcc: x@example.test", CRM_EMAIL_AUTOMATION_START_AT: "yesterday" });
+    const { getClientEmailEnv } = await import("./env");
+    expect(() => getClientEmailEnv()).toThrow("Invalid environment fields: CRM_EMAIL_FROM, CRM_EMAIL_AUTOMATION_START_AT");
+  });
+});
+
 describe("runtime environment", () => {
   it("imports without runtime secrets, then rejects incomplete configuration", async () => {
     setEnv(Object.fromEntries(Object.keys(valid).map((key) => [key, undefined])));

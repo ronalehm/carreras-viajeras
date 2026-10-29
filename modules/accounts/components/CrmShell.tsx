@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { can, type StaffRole } from "@/lib/auth/permissions";
+import { cn } from "@/lib/utils";
 import { STAFF_ROLE_LABELS } from "../utils/staffDisplay";
 import { CrmSidebar, type CrmNavItem } from "./CrmSidebar";
+import styles from "./CrmShell.module.css";
 
 type CrmShellProps = {
   email: string;
@@ -81,7 +86,7 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
   }
 
   return (
-    <div className="min-h-svh bg-muted/30">
+    <div className={cn(styles.workspace, "min-h-svh bg-muted/30")}>
       <a
         href="#crm-main-content"
         className="sr-only fixed top-3 left-3 z-60 rounded-lg bg-card p-3 text-sm focus:not-sr-only"
@@ -94,11 +99,23 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
         items={items}
       />
       <div className="min-w-0 lg:pl-64">
-        <div className="hidden h-20 items-center justify-between border-b border-border/60 bg-card px-10 text-xs text-muted-foreground lg:flex">
+        <div
+          className={cn(
+            styles.chrome,
+            "hidden h-16 items-center justify-between px-10 text-xs font-medium lg:flex",
+          )}
+        >
           <span>Panel de gestión</span>
-          <span className="rounded-full bg-muted/70 px-3 py-1 font-medium tracking-wide text-muted-foreground">
-            CRM
-          </span>
+          <Link
+            href="/"
+            className={buttonVariants({
+              variant: "ghost",
+              className: "gap-2 rounded-xl text-xs",
+            })}
+          >
+            Ver sitio público
+            <ArrowUpRight aria-hidden="true" />
+          </Link>
         </div>
         <main
           id="crm-main-content"
