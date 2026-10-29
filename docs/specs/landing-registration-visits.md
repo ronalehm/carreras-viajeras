@@ -224,7 +224,7 @@ Solo `modules/landing/components/RaceRegistrationSection.tsx`. En la rama normal
 - [x] T2 — Contador en el registro y «Registrarme» en la ficha · archivos: `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/TripDetail.tsx`, `app/viajes/[slug]/page.tsx` · depende de: T1 · paralelo (con T3)
 - [x] T3 — `formatConversion` y columnas/filas del CRM, con tests · archivos: `modules/crm/utils/campaignDisplay.ts`, `modules/crm/utils/campaignDisplay.test.ts`, `modules/crm/components/CampaignTable.tsx`, `app/crm/(protected)/campanas/[id]/page.tsx` · depende de: Fase 1 · paralelo (con T2)
 - [x] T4 — README: guía de campañas (visitas, «Registrarme», P-L) y regla WAF para `POST /api/campaign-visits` · archivos: `README.md` · depende de: T2, T3 · secuencial
-- [ ] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
+- [x] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
 
 ### Fase 3: un solo «Registrarme» y ficha para PC (4 tareas, 2 archivos)
 - [x] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
