@@ -635,7 +635,7 @@ Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fas
 - **Qué oferta se muestra (la decide el servidor):** con `?c=<código>` y una oferta de esa campaña activa, vigente (hoy en hora de Lima entre `valid_from` y `valid_until`), de una campaña activa y de la misma carrera, se muestra esa; si no, la oferta general vigente; si tampoco hay, ninguna. Nunca se suman dos ofertas. `?c=` solo **elige** entre ofertas aprobadas y activadas: una campaña cerrada, inexistente o de otra carrera se trata como sin campaña. Cualquier otro parámetro (`price`, `discount`, `deposit`, `offer`, `offerId`, `modo`…) se ignora, y ningún importe sale de la URL ni del navegador.
 - **Sin oferta aplicable** (sin ofertas, solo borradores o aprobadas, todas cerradas o la activa vencida): la sección de precio muestra solo «Todavía no publicamos el precio de este viaje.», sin importes, «Desde», «Reserva con», anticipos ni beneficios.
 - **Registro de la carrera** (`/viajes/<slug>/registro`): el mismo bloque aparece entre el encabezado y el formulario, con la misma oferta (también según `?c=`); sin oferta no hay bloque, y con `?modo=stand` nunca. «Ver el paquete completo» conserva `?c=`, así que lleva a la misma oferta.
-- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto` ni al registro de la carrera (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
+- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`. Con el registro abierto, «Registrarme» lleva al registro de la carrera (después del precio y al final, con WhatsApp como botón secundario); mientras siga el texto legal provisional no aparece (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
 - **Metadatos:** `<title>` es el título del viaje, la meta description es el resumen y `og:image` es `imageUrl` solo si existe.
 - **404:** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `notFound()` responde con estado `404`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. No hay `loading.tsx`, para que el estado no quede en `200`.
 - **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado. La página lee además la oferta (`getCatalogOffer`) en paralelo.
@@ -1019,9 +1019,9 @@ Después del `ROLLBACK;`, `SELECT count(*) FROM campaign_visit_days;` sigue devo
 
 Especificado en [`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md). Cada carrera publicada tiene su página de registro en `/viajes/<slug>/registro`: nombre, ciudad y país, fecha, distancias e imagen del catálogo (el encabezado no tiene precios ni cupos), el botón «Quiero correr esta maratón», que baja al formulario, y «Ver el paquete completo», que abre `/viajes/<slug>` (conservando `?c=`). Entre el encabezado y el formulario aparece el bloque financiero de la oferta vigente, si la hay (nunca en el modo stand; ver [Qué usa hoy la landing](#qué-usa-hoy-la-landing)). El formulario pide solo nombre y apellido, WhatsApp con código de país y correo, más la aceptación del texto legal y una casilla opcional de promociones (siempre desmarcada). `/contacto` usa el mismo formulario con un selector de carrera: los viajes publicados y, después, "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades". Cada envío válido crea un lead "Nuevo" en el CRM, vía "Formulario web", sin responsable.
 
-Hoy el registro solo se alcanza con un QR o un enlace de campaña: ni la portada ni `/viajes/<slug>` enlazan a él.
+Además del QR y del enlace de una campaña, la ficha de la carrera (`/viajes/<slug>`) lleva al registro con el botón **«Registrarme»** ([`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)). Aparece dos veces, justo después del precio y al final de la página, encima de «Consultar por WhatsApp», que pasa a ser el botón secundario (con borde). El enlace conserva los parámetros con los que se abrió la ficha (`c`, los UTM y `ref`), así que una persona que llega a la ficha desde una campaña sigue atribuida a ella al registrarse. **Solo aparece cuando el registro está abierto:** mientras siga el texto legal provisional (P-L, abajo), la ficha no muestra «Registrarme» y queda como antes, con WhatsApp como único botón. La portada no cambia: sus botones siguen llevando a `/contacto`, que tiene el mismo formulario con un selector de carrera.
 
-**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) aplicada en `production`, las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
+**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) y la [migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0013) aplicadas en `production` (la `0013`, antes de desplegar el contador), las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
 
 #### Crear una campaña
 
@@ -1041,8 +1041,25 @@ Cómo se atribuye cada lead:
 - Un lead registrado desde el enlace o el QR de una campaña **activa y de la misma carrera** queda con el canal de la campaña, la campaña y, como detalle del origen, su evento (o su nombre si no tiene). Se ve en la ficha del lead, tarjeta "Registro" → "Campaña".
 - Sin campaña válida (enlace sin `?c=`, campaña cerrada, inexistente o de otra carrera), el registro funciona igual y el lead queda con el canal "Web". El comercial puede corregir el origen en la ficha; el cambio queda en el historial.
 - Puedes añadir UTM al enlace (`&utm_source=instagram&utm_medium=social&utm_campaign=preventa`) o un aliado (`&ref=club-lima`). Se guardan en la ficha ("UTM", referente), pero **no cambian el canal**: lo decide solo la campaña. Ningún parámetro cambia importes, etapa, responsable ni consentimiento: `?c=` solo elige la oferta de una campaña activa de esa carrera, si tiene una vigente.
-- En la lista de campañas, la columna de registros **cuenta leads nuevos, no visitas**: abrir la página o escanear el QR no guarda nada. El informe origen × etapa de `/crm` sigue contando por canal.
+- En la lista de campañas, la columna "Registros" **cuenta leads nuevos** atribuidos a la campaña; las aperturas del enlace o del QR van aparte, en "Visitas" (ver [Visitas y conversión](#visitas-y-conversión)). El informe origen × etapa de `/crm` sigue contando por canal.
 - **Sin duplicados:** si la misma persona (el mismo correo, sin importar mayúsculas) vuelve a registrarse en la misma carrera, no se crea otro lead: su ficha recibe una actividad "Volvió a registrarse" con la campaña, los UTM, la versión del texto legal y su elección de promociones. El lead existente no cambia (ni origen, ni campaña, ni promociones), y la persona ve el mismo mensaje de éxito. Dos personas con el mismo teléfono y correos distintos son dos leads.
+
+#### Visitas y conversión
+
+En **Campañas** (`/crm/campanas`) y en la ficha de cada campaña, después de "Registros", aparecen "Visitas" y "Conversión". Sirven para comparar campañas (un stand con una publicación, por ejemplo) y para ver si un QR se escanea pero el formulario no convence.
+
+**Qué cuenta como visita:** cada vez que alguien abre el enlace público o escanea el QR de una campaña **activa** de **esa misma carrera** y la página de registro se carga en un navegador con JavaScript. Al cargarse, la página envía un aviso a `POST /api/campaign-visits` y el contador de ese día sube en 1. Cuenta también mientras el registro está cerrado por la puerta P-L: un QR impreso ya suma visitas aunque muestre el aviso de "El registro en línea abrirá pronto".
+
+**Qué no cuenta:**
+
+- el modo stand (`&modo=stand`): la tableta del equipo no envía el aviso, así que sus registros no tienen visitas detrás;
+- las previsualizaciones que generan WhatsApp o las redes al compartir el enlace, los robots sin JavaScript y la precarga de páginas;
+- las campañas cerradas, los códigos que no existen y los de una campaña de otra carrera (la página se abre igual, pero el contador no cambia);
+- `/contacto`, la ficha `/viajes/<slug>?c=…` y los enlaces sin `?c=`.
+
+**Es un dato indicativo, no un recuento de personas:** cada apertura cuenta una vez, aunque sea la misma persona (recargar la página suma otra visita), y alguien con conocimientos técnicos podría inflarlo enviando avisos a mano (lo limitan el control de origen del servidor y la [regla WAF](#9-regla-waf-opcional-contra-abusos)). Se guarda **sin ningún dato de la persona**: solo la campaña, el día (hora de Lima) y el número de visitas; ni IP, ni cookies, ni navegador, ni UTM. Las visitas **empiezan a contar desde el despliegue** de este cambio: no hay histórico, y las campañas creadas antes empiezan en 0. Requiere la [migración `0013`](#migración-de-visitas-por-campaña-0013) aplicada **antes de desplegar**: sin la tabla, las visitas se pierden y `/crm/campanas` falla al leerla.
+
+**Conversión** = registros ÷ visitas, redondeada a un porcentaje entero. Sin visitas se muestra "—". Puede pasar del 100 %: los registros hechos desde el modo stand (que no suma visitas) y los anteriores al contador cuentan como registros pero no tienen visita. Se muestra tal cual.
 
 #### Imprimir el QR
 
@@ -1061,7 +1078,7 @@ Para registrar corredores en una feria desde una tableta:
 1. Abre en la tableta el **enlace del modo stand** de la ficha de la campaña (es el enlace público con `&modo=stand`). No lo publiques ni lo conviertas en QR: está pensado para la tableta del equipo (no da ningún permiso especial, solo cambia la presentación).
 2. La página muestra solo el nombre de la carrera y el formulario, con campos y botones grandes, sin la cabecera ni el pie del sitio.
 3. Cada corredor escribe sus datos y pulsa "Enviar mis datos". Tras un envío correcto se ve "Registro guardado. ¡Gracias!", sin ningún dato del corredor, y el botón **Registrar a otra persona**, que abre un formulario vacío para el siguiente.
-4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
+4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Tampoco cuenta visitas: abrir o recargar el enlace del modo stand no suma nada en "Visitas" (los registros que se hagan desde la tableta sí suman en "Registros"). Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
 5. La verificación de Cloudflare (Turnstile) se repite en cada registro; si pide una comprobación, el corredor la resuelve antes de enviar.
 
 Si el servidor rechaza el envío (datos incompletos, verificación fallida o servicio no disponible), el formulario conserva lo escrito para reintentar y, salvo en los errores de datos, ofrece "Escríbenos por WhatsApp" como alternativa.
@@ -1070,7 +1087,7 @@ Si el servidor rechaza el envío (datos incompletos, verificación fallida o ser
 
 El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
 
-**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso.
+**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso (y su visita sí se cuenta). Mientras tanto, la ficha `/viajes/<slug>` tampoco muestra «Registrarme»: el botón aparece automáticamente al abrir el registro, sin tocar la ficha.
 
 Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
 
@@ -1340,7 +1357,9 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 
 #### 9. Regla WAF opcional contra abusos
 
-Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. Se configura sin tocar código, en el plan Free de Cloudflare (una regla, periodo de 10 segundos, contada por IP):
+Son defensas adicionales que se configuran sin tocar código, en el panel de Cloudflare (periodo de 10 segundos, contadas por IP). Hay dos reglas: una para los formularios y otra para el contador de visitas por campaña.
+
+**Regla "Formularios de captación".** Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. El aviso de visita que envía la página de registro al abrirse con `?c=` va a otra ruta (`POST /api/campaign-visits`), así que tampoco cuenta en esta regla: tiene la suya (abajo).
 
 1. Panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → **Create rule** (si ya existía la regla antigua solo para `POST /contacto`, edítala en lugar de crear otra).
 2. Nombre: "Formularios de captación". En **Edit expression**, pega:
@@ -1352,7 +1371,32 @@ Es una defensa adicional a Turnstile para los dos formularios públicos: `/conta
 3. **Characteristics:** IP. **When rate exceeds:** 10 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
 4. Guarda y despliega la regla.
 
-Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las visitas. Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
+Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las aperturas de esas páginas (sus `GET`). Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
+
+**Regla "Visitas de campaña".** Limita los avisos de visita de `POST /api/campaign-visits` (ver [Visitas y conversión](#visitas-y-conversión)), para que un script no infle el contador sin freno:
+
+1. En la misma pantalla (**Rate limiting rules**) → **Create rule**.
+2. Nombre: "Visitas de campaña". En **Edit expression**, pega:
+
+   ```txt
+   http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and http.request.uri.path eq "/api/campaign-visits"
+   ```
+
+3. **Characteristics:** IP. **When rate exceeds:** 30 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
+4. Guarda y despliega la regla.
+
+Por qué ese umbral: cada apertura del enlace o del QR envía un solo aviso, y en una feria muchos móviles pueden escanear el QR a la vez saliendo a Internet con la misma IP. Por eso el umbral es más alto que el de los formularios. Si aun así se supera, **un bloqueo solo pierde visitas, nunca registros**: la página y el formulario siguen funcionando, la persona no ve ningún error y el contador simplemente no suma esas aperturas durante 10 segundos. Por eso el contador es un endpoint aparte de los formularios: si las visitas fueran por la misma ruta que los envíos, gastarían su límite de 10 y un pico de escaneos en el stand podría bloquear también los registros. Si el editor no ofrece el método, basta con la ruta (`http.request.uri.path eq "/api/campaign-visits"`) y el mismo umbral: la página solo hace `POST` a esa ruta.
+
+**Si tu plan solo permite una regla de rate limiting.** Este README no ha comprobado cuántas admite el plan Free. Si el panel no te deja crear la segunda, tienes dos opciones:
+
+- **No crear la de visitas** (la más prudente para los registros): el contador sigue protegido por el control de origen del servidor y, si alguien lo infla, solo se distorsiona un dato indicativo.
+- **Ampliar la regla "Formularios de captación"** con un `or` que añada la ruta del contador:
+
+  ```txt
+  (http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and (http.request.uri.path eq "/contacto" or http.request.uri.path eq "/api/campaign-visits" or (starts_with(http.request.uri.path, "/viajes/") and ends_with(http.request.uri.path, "/registro"))))
+  ```
+
+  Efecto en el umbral: una sola regla tiene **un único contador por IP**, así que visitas y envíos se suman. Con el umbral de 10, once escaneos en 10 segundos desde el Wi-Fi de una feria bloquearían durante 10 segundos también los envíos de los formularios desde esa IP (el formulario conserva lo escrito para reintentar, pero el registro falla). Si eliges esta opción, sube el umbral a unas **40 peticiones por 10 segundos** (los 10 envíos más las 30 visitas) y acepta que un script contra los formularios tenga más margen antes del bloqueo (Turnstile sigue rechazando los envíos sin verificar) y que un bloqueo, aunque más raro, pare también los registros.
 
 #### 10. Workflow "Alta desde Google Forms"
 
