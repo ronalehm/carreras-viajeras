@@ -10,6 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { manageableRoles } from "@/lib/auth/permissions";
 import {
   getCrmAccess,
   InvitationsTable,
@@ -40,6 +41,8 @@ export default async function StaffAdminPage() {
   }
 
   const { staff, invitations } = await listStaffOverview();
+  // UI hint only: each Server Action re-checks canManageRole for the actor.
+  const roles = manageableRoles(access.user.staffRoles);
 
   return (
     <section className="space-y-7">
@@ -62,11 +65,13 @@ export default async function StaffAdminPage() {
           description="Pendientes de aceptar y sin caducar"
         />
       </div>
-      <Card className="shadow-none">
-        <CardContent>
-          <InviteStaffForm />
-        </CardContent>
-      </Card>
+      {roles.length > 0 && (
+        <Card className="shadow-none">
+          <CardContent>
+            <InviteStaffForm roles={roles} />
+          </CardContent>
+        </Card>
+      )}
       <Card className="gap-5 overflow-hidden shadow-none">
         <CardHeader className="border-b pb-5">
           <CardTitle>Equipo activo</CardTitle>
@@ -75,7 +80,7 @@ export default async function StaffAdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
-          <StaffTable staff={staff} />
+          <StaffTable staff={staff} manageableRoles={roles} />
         </CardContent>
       </Card>
       <Card className="gap-5 overflow-hidden shadow-none">
@@ -86,7 +91,10 @@ export default async function StaffAdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
-          <InvitationsTable invitations={invitations} />
+          <InvitationsTable
+            invitations={invitations}
+            manageableRoles={roles}
+          />
         </CardContent>
       </Card>
     </section>

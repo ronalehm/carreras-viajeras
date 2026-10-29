@@ -41,7 +41,9 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 const TRIP_ID = "8a6e0804-2bd0-4672-b79d-d97027f9071a";
 const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const TODAY = "2026-10-18";
-const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2)';
+// Roles with leads.manage in the permission matrix (organizer has no leads.manage).
+const LEAD_OWNER_ROLES = ["commercial", "admin", "super_admin"];
+const ACTIVE_OWNER_ROLES = '"staff_assignments"."revoked_at" is null and "staff_assignments"."role" in ($1, $2, $3)';
 
 // List row in select order (array mode): id, full_name, phone, stage, source, channel,
 // trip id/title, destination_text, owner user_id/email/active, next_action_date/note.
@@ -85,9 +87,11 @@ describe("getLeadList", () => {
     expect(list).toContain(
       `exists (select 1 from "staff_assignments" where ("staff_assignments"."user_id" = "leads"."owner_user_id" and (${ACTIVE_OWNER_ROLES})))`,
     );
-    expect(list).toContain('where "leads"."archived_at" is null order by "leads"."created_at" desc, "leads"."id" desc limit $3');
+    expect(list).toContain('where "leads"."archived_at" is null order by "leads"."created_at" desc, "leads"."id" desc limit $4');
     expect(list).not.toContain("offset");
-    expect(fake.queries[0].params).toEqual(["commercial", "admin", 26]);
+    expect(fake.queries[0].params).toEqual([...LEAD_OWNER_ROLES, 26]);
+    expect(fake.queries[2].params).toEqual(LEAD_OWNER_ROLES);
+    expect(fake.queries[2].params).not.toContain("organizer");
 
     expect(counts).toBe(
       'select "stage", count(*) from "leads" where "leads"."archived_at" is null group by "leads"."stage"',
@@ -103,9 +107,9 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $3) and "leads"."stage" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5 offset $6',
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $4) and "leads"."stage" = $5) order by "leads"."created_at" desc, "leads"."id" desc limit $6 offset $7',
     );
-    expect(list.params).toEqual(["commercial", "admin", "user-1", "quoted", 26, 50]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "user-1", "quoted", 26, 50]);
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" = $1) group by "leads"."stage"',
     );
@@ -116,7 +120,7 @@ describe("getLeadList", () => {
     const fake = useFakeDb();
     await getLeadList({ owner: "user-7", page: 1 }, "user-1", TODAY);
 
-    expect(fake.queries[0].params).toEqual(["commercial", "admin", "user-7", 26]);
+    expect(fake.queries[0].params).toEqual([...LEAD_OWNER_ROLES, "user-7", 26]);
     expect(fake.queries[1].params).toEqual(["user-7"]);
   });
 
@@ -126,9 +130,9 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null) and "leads"."stage" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4',
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null) and "leads"."stage" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5',
     );
-    expect(list.params).toEqual(["commercial", "admin", "new", 26]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "new", 26]);
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null) group by "leads"."stage"',
     );
@@ -149,9 +153,9 @@ describe("getLeadList", () => {
     expect(fake.queries).toHaveLength(3);
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null and "leads"."channel" = $3) and "leads"."stage" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5',
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" is null and "leads"."channel" = $4) and "leads"."stage" = $5) order by "leads"."created_at" desc, "leads"."id" desc limit $6',
     );
-    expect(list.params).toEqual(["commercial", "admin", "event", "new", 26]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "event", "new", 26]);
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" is null and "leads"."channel" = $1) group by "leads"."stage"',
     );
@@ -164,9 +168,9 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where ("leads"."archived_at" is not null and "leads"."channel" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4',
+      'where ("leads"."archived_at" is not null and "leads"."channel" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5',
     );
-    expect(list.params).toEqual(["commercial", "admin", "instagram", 26]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "instagram", 26]);
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."channel" = $1) group by "leads"."stage"',
     );
@@ -187,11 +191,11 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     const visible =
-      '"leads"."archived_at" is null and ("leads"."stage" not in ($3, $4) and "leads"."next_action_date" < $5)';
+      '"leads"."archived_at" is null and ("leads"."stage" not in ($4, $5) and "leads"."next_action_date" < $6)';
     expect(normalize(list.sql)).toContain(
-      `where (${visible}) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $6`,
+      `where (${visible}) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $7`,
     );
-    expect(list.params).toEqual(["commercial", "admin", "paid", "lost", TODAY, 26]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "paid", "lost", TODAY, 26]);
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and ("leads"."stage" not in ($1, $2) and "leads"."next_action_date" < $3)) group by "leads"."stage"',
     );
@@ -204,9 +208,9 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $3 and ("leads"."stage" not in ($4, $5) and "leads"."next_action_date" <= $6)) and "leads"."stage" = $7) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $8 offset $9',
+      'where (("leads"."archived_at" is null and "leads"."owner_user_id" = $4 and ("leads"."stage" not in ($5, $6) and "leads"."next_action_date" <= $7)) and "leads"."stage" = $8) order by "leads"."next_action_date" asc, "leads"."created_at" desc, "leads"."id" desc limit $9 offset $10',
     );
-    expect(list.params).toEqual(["commercial", "admin", "user-1", "paid", "lost", "2026-10-19", "quoted", 26, 25]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "user-1", "paid", "lost", "2026-10-19", "quoted", 26, 25]);
     expect(counts.params).toEqual(["user-1", "paid", "lost", "2026-10-19"]);
   });
 
@@ -224,10 +228,10 @@ describe("getLeadList", () => {
 
     const [list, counts] = fake.queries;
     expect(normalize(list.sql)).toContain(
-      'where ("leads"."archived_at" is not null and "leads"."owner_user_id" = $3) order by "leads"."created_at" desc, "leads"."id" desc limit $4 offset $5',
+      'where ("leads"."archived_at" is not null and "leads"."owner_user_id" = $4) order by "leads"."created_at" desc, "leads"."id" desc limit $5 offset $6',
     );
     expect(normalize(list.sql)).not.toContain('"leads"."stage" =');
-    expect(list.params).toEqual(["commercial", "admin", "user-1", 26, 25]);
+    expect(list.params).toEqual([...LEAD_OWNER_ROLES, "user-1", 26, 25]);
     expect(list.params).not.toContain("archived");
     expect(normalize(counts.sql)).toBe(
       'select "stage", count(*) from "leads" where ("leads"."archived_at" is null and "leads"."owner_user_id" = $1) group by "leads"."stage"',
@@ -240,7 +244,7 @@ describe("getLeadList", () => {
     await getLeadList({ stage: "archived", page: 1 }, "user-1", TODAY);
 
     expect(normalize(fake.queries[0].sql)).toContain(
-      'where "leads"."archived_at" is not null order by "leads"."created_at" desc, "leads"."id" desc limit $3',
+      'where "leads"."archived_at" is not null order by "leads"."created_at" desc, "leads"."id" desc limit $4',
     );
     expect(normalize(fake.queries[1].sql)).toBe(
       'select "stage", count(*) from "leads" where "leads"."archived_at" is null group by "leads"."stage"',
@@ -346,7 +350,8 @@ describe("getLeadFormOptions", () => {
     expect(fake.transaction).toHaveBeenCalledTimes(1);
     const [owners, tripsQuery] = fake.queries;
     expect(normalize(owners.sql)).toContain(`where (${ACTIVE_OWNER_ROLES})`);
-    expect(owners.params).toEqual(["commercial", "admin"]);
+    expect(owners.params).toEqual(LEAD_OWNER_ROLES);
+    expect(owners.params).not.toContain("organizer");
     expect(normalize(tripsQuery.sql)).toBe(
       'select "id", "title", "status" from "trips" where "trips"."status" <> $1 order by "trips"."race_date" asc, "trips"."title" asc',
     );
@@ -383,13 +388,13 @@ describe("createLead", () => {
     const statement = normalize(fake.queries[0].sql);
     expect(statement.match(/;/g)).toBeNull();
     expect(statement).toMatch(
-      /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok, \(\$4::uuid IS NULL OR EXISTS \( SELECT 1 FROM trips WHERE trips\.id = \$5::uuid AND trips\.status <> 'archived' \)\) AS trip_ok \)/,
+      /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3, \$4\)\)\)\) AS owner_ok, \(\$5::uuid IS NULL OR EXISTS \( SELECT 1 FROM trips WHERE trips\.id = \$6::uuid AND trips\.status <> 'archived' \)\) AS trip_ok \)/,
     );
     expect(statement).toContain(
-      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by, channel, origin_detail, referred_by, referral_permission, contact_preference ) SELECT $6, $7, $8, $9, $10::uuid, $11, $12::lead_source, $13, $14, $15, $16::lead_channel, $17, $18, $19::boolean, $20::contact_preference FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
+      "INSERT INTO leads ( full_name, phone, email, location, trip_id, destination_text, source, owner_user_id, consent_version, created_by, channel, origin_detail, referred_by, referral_permission, contact_preference ) SELECT $7, $8, $9, $10, $11::uuid, $12, $13::lead_source, $14, $15, $16, $17::lead_channel, $18, $19, $20::boolean, $21::contact_preference FROM checks WHERE owner_ok AND trip_ok RETURNING id, source",
     );
     expect(statement).toContain(
-      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $21, $22 FROM inserted",
+      "INSERT INTO lead_activities (lead_id, type, body, actor_user_id) SELECT id, 'created', $22, $23 FROM inserted",
     );
     // status, attempts and available_at take their defaults (pending, 0, now()); payload { source }
     // is built from the inserted lead (no personal data).
@@ -399,8 +404,7 @@ describe("createLead", () => {
     expect(statement).toMatch(/SELECT \(SELECT id FROM inserted\) AS id, owner_ok, trip_ok FROM checks$/);
     expect(fake.queries[0].params).toEqual([
       "user-2",
-      "commercial",
-      "admin",
+      ...LEAD_OWNER_ROLES,
       TRIP_ID,
       TRIP_ID,
       "Ana Pérez",
@@ -430,7 +434,7 @@ describe("createLead", () => {
       "user-1",
     );
 
-    expect(fake.queries[0].params.slice(15, 20)).toEqual(["unknown", null, null, false, null]);
+    expect(fake.queries[0].params.slice(16, 21)).toEqual(["unknown", null, null, false, null]);
   });
 
   it("never writes the UTM fields nor contact_opt_out_at, and the event payload stays { source }", async () => {
@@ -578,7 +582,7 @@ describe("getLeadById", () => {
     expect(statement).toMatch(/where "leads"\."id" = \$\d+ limit \$\d+$/);
     // Archived leads are read too: the detail shows them read-only.
     expect(statement).not.toContain("archived_at\" is null");
-    expect(fake.queries[0].params).toEqual(["commercial", "admin", LEAD_ID, 1]);
+    expect(fake.queries[0].params).toEqual([...LEAD_OWNER_ROLES, LEAD_ID, 1]);
   });
 
   it("returns owner: null and createdBy: null for a web form lead", async () => {
@@ -855,24 +859,24 @@ describe("changeLeadOwner", () => {
     expect(fake.queries).toHaveLength(1);
     const statement = normalize(fake.queries[0].sql);
     expect(statement).toMatch(
-      /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3\)\)\)\) AS owner_ok \)/,
+      /^WITH checks AS \( SELECT exists \(select 1 from "staff_assignments" where \("staff_assignments"\."user_id" = \$1 and \("staff_assignments"\."revoked_at" is null and "staff_assignments"\."role" in \(\$2, \$3, \$4\)\)\)\) AS owner_ok \)/,
     );
     expect(statement).toContain(
-      "target AS ( SELECT id, owner_user_id FROM leads WHERE id = $4::uuid AND archived_at IS NULL FOR UPDATE )",
+      "target AS ( SELECT id, owner_user_id FROM leads WHERE id = $5::uuid AND archived_at IS NULL FOR UPDATE )",
     );
     // A lead without owner (NULL) also gets the first one: IS DISTINCT FROM, never "<>".
     expect(statement).toContain(
-      "updated AS ( UPDATE leads SET owner_user_id = $5, updated_at = now() FROM target, checks WHERE leads.id = target.id AND checks.owner_ok AND target.owner_user_id IS DISTINCT FROM $6 RETURNING leads.id, target.owner_user_id AS owner_from )",
+      "updated AS ( UPDATE leads SET owner_user_id = $6, updated_at = now() FROM target, checks WHERE leads.id = target.id AND checks.owner_ok AND target.owner_user_id IS DISTINCT FROM $7 RETURNING leads.id, target.owner_user_id AS owner_from )",
     );
     // owner_from is the previous owner, NULL for an unassigned lead.
     expect(statement).toContain(
-      "activity AS ( INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id) SELECT id, 'owner_changed', owner_from, $7, $8 FROM updated )",
+      "activity AS ( INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id) SELECT id, 'owner_changed', owner_from, $8, $9 FROM updated )",
     );
     expect(statement).toMatch(
       /SELECT EXISTS \(SELECT 1 FROM target\) AS found, EXISTS \(SELECT 1 FROM updated\) AS changed, owner_ok FROM checks$/,
     );
     expect(fake.queries[0].params).toEqual([
-      "user-2", "commercial", "admin", LEAD_ID, "user-2", "user-2", "user-2", "user-1",
+      "user-2", ...LEAD_OWNER_ROLES, LEAD_ID, "user-2", "user-2", "user-2", "user-1",
     ]);
   });
 

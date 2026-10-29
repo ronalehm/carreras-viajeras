@@ -3,7 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
-import { listTrips, TripTable } from "@/modules/trips";
+import { listTrips, TripTable, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Viajes" };
 
@@ -20,7 +20,7 @@ export default async function TripsPage() {
       </section>
     );
   }
-  const trips = await listTrips();
+  const trips = await listTrips(tripScopeFor(access.user));
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">

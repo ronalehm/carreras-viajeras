@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { staffRoleSchema } from "../schemas/staff.schema";
+import { staffRoleEnum } from "@/lib/db-schema";
 import { formatStaffDateTime, STAFF_ROLE_LABELS } from "./staffDisplay";
 
 describe("formatStaffDateTime", () => {
@@ -14,14 +14,19 @@ describe("formatStaffDateTime", () => {
 });
 
 describe("STAFF_ROLE_LABELS", () => {
-  it("has a label for every staff role", () => {
-    expect(Object.keys(STAFF_ROLE_LABELS).sort()).toEqual([...staffRoleSchema.options].sort());
-    for (const role of staffRoleSchema.options) {
+  it("has a label for every staff_role database enum value", () => {
+    expect(Object.keys(STAFF_ROLE_LABELS).sort()).toEqual([...staffRoleEnum.enumValues].sort());
+    for (const role of staffRoleEnum.enumValues) {
       expect(STAFF_ROLE_LABELS[role]).toMatch(/\S/);
     }
   });
 
   it("uses the Spanish labels", () => {
-    expect(STAFF_ROLE_LABELS).toEqual({ commercial: "Comercial", admin: "Admin" });
+    expect(STAFF_ROLE_LABELS).toEqual({
+      commercial: "Comercial",
+      admin: "Admin",
+      super_admin: "Super admin",
+      organizer: "Organizador",
+    });
   });
 });

@@ -38,3 +38,6 @@ export type PublicTrip = {
   excludes: string[]; // 0..20 items
   notes: string | null; // details still to be confirmed, 1..1000 characters
 };
+
+// Which trips a CRM actor may read and write (D11). "own" limits it to the organizer's trips.
+export type TripScope = { kind: "all" } | { kind: "own"; organizerId: string };

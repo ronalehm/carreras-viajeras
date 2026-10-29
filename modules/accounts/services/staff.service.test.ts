@@ -136,21 +136,40 @@ describe("createInvitation", () => {
 });
 
 describe("revokeInvitation", () => {
-  it("only revokes a pending invitation and records who revoked it", async () => {
+  it("only revokes a pending invitation whose role is manageable and records who revoked it", async () => {
     const fake = useFakeDb({ responses: [[["inv-1"]]] });
 
-    await expect(revokeInvitation("inv-1", "admin-1")).resolves.toBe(true);
+    await expect(revokeInvitation("inv-1", "admin-1", ["commercial", "organizer", "admin"])).resolves.toBe(true);
 
     expect(fake.transaction).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
-      `update "staff_invitations" set "revoked_at" = now(), "revoked_by" = $1 where ("staff_invitations"."id" = $2 and ${PENDING}) returning "id"`,
+      `update "staff_invitations" set "revoked_at" = now(), "revoked_by" = $1 where ("staff_invitations"."id" = $2 and ${PENDING} and "staff_invitations"."role" in ($3, $4, $5)) returning "id"`,
     );
-    expect(fake.queries[0].params).toEqual(["admin-1", "inv-1"]);
+    expect(fake.queries[0].params).toEqual(["admin-1", "inv-1", "commercial", "organizer", "admin"]);
+  });
+
+  it("filters by the given roles only", async () => {
+    const fake = useFakeDb();
+
+    await expect(revokeInvitation("inv-1", "admin-1", ["commercial"])).resolves.toBe(false);
+
+    expect(normalize(fake.queries[0].sql)).toContain(`and "staff_invitations"."role" in ($3))`);
+    expect(fake.queries[0].params).toEqual(["admin-1", "inv-1", "commercial"]);
+  });
+
+  it("returns false without querying when the actor manages no roles", async () => {
+    const fake = useFakeDb();
+
+    await expect(revokeInvitation("inv-1", "admin-1", [])).resolves.toBe(false);
+
+    expect(getDb).not.toHaveBeenCalled();
+    expect(fake.queries).toHaveLength(0);
   });
 
   it("returns false when nothing pending matches", async () => {
     useFakeDb();
-    await expect(revokeInvitation("inv-1", "admin-1")).resolves.toBe(false);
+    await expect(revokeInvitation("inv-1", "admin-1", ["commercial"])).resolves.toBe(false);
   });
 });
 
