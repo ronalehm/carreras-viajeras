@@ -1,7 +1,7 @@
 # Páginas públicas servidas desde caché estática en Workers Free
 
 - Módulo: platform, content, landing
-- Estado: aprobado
+- Estado: borrador
 - Origen: Error 1102 ("Worker exceeded resource limits") en `https://carreras-viajeras.mentec.dev/`
   el 29 de octubre de 2026; el usuario pide corregirlo sin pasar a Workers Paid.
 - Referencias: `AGENTS.md`, `docs/SETUP.md`, `landing-news-updates.md`, `landing-public-site.md`,
@@ -49,6 +49,11 @@ Esta spec, cuando sea aprobada, sustituye solo los puntos siguientes:
   (Fase 2): `/contacto` deja de leer `searchParams` y `listPublishedTrips()` en el servidor y
   vuelve a ser estática (`○`); `destino`, la atribución y los viajes se resuelven en el navegador
   con las mismas reglas (`resolveDestination`, `attributionParams`).
+- `landing-race-pages.md`, requisito 7, y la ruta `/viajes/[slug]` (Fase 3): las páginas de viaje y
+  de registro dejan de ser dinámicas y de usar `generateMetadata`; un slug inexistente muestra
+  "Viaje no encontrado" con HTTP 200 (404 suave) y no hay título ni imagen Open Graph por viaje en
+  el HTML. El contenido (`TripDetail`, `RaceRegistrationSection`, oferta decidida por el servidor
+  con slug + `?c=`, modo stand) no cambia.
 
 Las demás reglas de lectura pública (solo `published`, sin datos internos, error distinto de
 vacío, aviso fijo) se mantienen y se aplican al endpoint.
@@ -61,8 +66,8 @@ vacío, aviso fijo) se mantienen y se aplican al endpoint.
   - portada estática;
   - endpoint público de novedades y su carga en el navegador.
 - Incluye (Fase 2): `/contacto` estática con la lista de viajes desde `GET /api/viajes`.
-- Incluye (Fase 3, por detallar en otra enmienda): `/viajes/[slug]` y `/viajes/[slug]/registro`
-  cargadas en el navegador (decisión 1).
+- Incluye (Fase 3): `/viajes/[slug]` y `/viajes/[slug]/registro` servidas como una ficha estática
+  común y cargadas en el navegador desde `GET /api/viajes/[slug]` (decisión 1).
 - No incluye:
   - pasar a Workers Paid;
   - R2, KV, D1 o Durable Objects;
@@ -222,12 +227,72 @@ Plan:
 - [ ] T9 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
   T6, T8 · secuencial
 
-### Fase 3 — páginas de viaje (decisión tomada; por detallar)
+### Fase 3 — páginas de viaje estáticas
 
-Decisión del usuario (29/10/2026): se acepta perder el título y la imagen de vista previa al
-compartir `/viajes/<slug>` por WhatsApp. Las páginas de viaje y de registro se cargan en el
-navegador desde endpoints públicos de lectura; los detalles se especifican en una enmienda
-posterior antes de implementarse.
+Decisión 1 aplicada: `/viajes/<slug>` y `/viajes/<slug>/registro` dejan de renderizarse en el
+servidor. Se sirve un HTML estático común (una "ficha" vacía) y el navegador pide el viaje y la
+oferta a un endpoint público. Las URL públicas no cambian (enlaces de campañas `?c=`, QR de
+stand `?modo=stand`, enlaces de la portada).
+
+Requisitos de la fase:
+
+F3.1. Spike bloqueante (T10): antes del resto, comprobar en `npm run preview` que una regla
+      `rewrites` de `next.config.ts` que lleva `/viajes/:slug` y `/viajes/:slug/registro` a una
+      ficha estática (`○`) responde `x-opennext-cache: HIT` sin cargar el servidor Next y
+      conserva la URL visible. Si no se cumple, la fase se detiene y se informa al usuario con
+      la evidencia; no se buscan alternativas sin una nueva enmienda.
+F3.2. La ficha estática es una ruta fija que no colisiona con slugs válidos del catálogo
+      (`tripSlugSchema` solo admite minúsculas, dígitos y guiones; la ficha usa un segmento que
+      ese formato rechaza). La regla de reescritura no se aplica a la propia ficha, a
+      `/api/*` ni a assets.
+F3.3. `GET /api/viajes/[slug]` es público (no se añade al matcher) y acepta solo `?c=`:
+      - `200 { "trip": TripLanding, "offer": OfferView | null }`, construidos en el servidor con
+        `getCatalogTrip` y `getCatalogOffer` (mismos campos y formatos que hoy; sin ids,
+        nombre interno, campaña, capacidad interna ni auditoría);
+      - `404 { "error": "trip_not_found" }` para un slug inexistente, no publicado o no canónico;
+      - `503 { "error": "trip_unavailable" }` ante un error de lectura, con mensaje fijo en el log;
+      - `Cache-Control: no-store` siempre. El servidor sigue decidiendo la oferta por slug + `?c=`;
+        ningún importe sale de la URL.
+F3.4. En el navegador, el slug se toma de la URL visible (`usePathname()`), y `c`, `modo` y la
+      atribución de `useSearchParams()` (dentro de `<Suspense>`), con las mismas reglas que hoy
+      (`firstParam`, `attributionParams`, `modo=stand`). Se pide el endpoint con el cliente
+      compartido, TanStack Query (un reintento como máximo) y Zod.
+F3.5. Estados: carga (texto breve accesible, sin formulario ni importes), `TripDetail` /
+      `RaceRegistrationSection` con los datos (sin cambiar su contenido), "Viaje no encontrado"
+      con enlace a la portada para el 404 (respuesta HTTP 200 de la ficha: 404 suave aceptado),
+      y aviso fijo con enlace a WhatsApp general para el error.
+F3.6. El título del documento se fija en el navegador (`Título del viaje | Carreras Viajeras`,
+      y `Registro · …` en registro). El HTML estático lleva un título y una descripción genéricos;
+      no hay imagen Open Graph por viaje (decisión 1). `robots` sigue en `noindex`.
+F3.7. El envío del registro sigue siendo la Server Action actual, pasada como prop desde el Server
+      Component de la ficha. Límite conocido: puede dar 1102 en frío.
+
+Criterios de aceptación de la fase:
+
+- [ ] Spike (T10) documentado con la salida de la preview antes de seguir.
+- [ ] `npm run build` no muestra `ƒ /viajes/[slug]` ni `ƒ /viajes/[slug]/registro`; la ficha sale
+      `○` y existe `ƒ /api/viajes/[slug]`.
+- [ ] Preview: `/viajes/maraton-santiago-2027?c=abc` y `/viajes/maraton-santiago-2027/registro?modo=stand`
+      responden `x-opennext-cache: HIT` en frío y conservan la URL.
+- [ ] Con el endpoint en `404`, la ficha muestra "Viaje no encontrado"; en `503`, el aviso fijo.
+- [ ] `GET /api/viajes/<slug>?c=<código>` solo usa `c`; otro parámetro no cambia la respuesta.
+- [ ] El stand (`?modo=stand`) se ve sin cabecera, pie ni bloque de precio, como hoy.
+
+Plan:
+
+- [ ] T10 — Spike de reescritura + caché · archivos: `next.config.ts`, ficha mínima en
+  `app/viajes/` · depende de: Fase 2 · secuencial (bloqueante)
+- [ ] T11 — Endpoint `GET /api/viajes/[slug]` · archivos: `app/api/viajes/[slug]/route.ts` (+ test)
+  · depende de: T10 · paralelo con T12
+- [ ] T12 — Lectura del viaje en el navegador · archivos:
+  `modules/landing/schemas/catalogTrips.schema.ts`, `modules/landing/services/catalogTrips.api.ts`
+  (+ test), `modules/landing/hooks/useCatalogTrip.ts` · depende de: T10 · paralelo con T11
+- [ ] T13 — Fichas cliente de viaje y registro · archivos:
+  `modules/landing/components/TripPageContent.tsx`, `RacePageContent.tsx` (+ tests),
+  `modules/landing/index.ts`, páginas de la ficha en `app/viajes/`, retirada de
+  `app/viajes/[slug]/page.tsx` y `app/viajes/[slug]/registro/page.tsx` · depende de: T11, T12
+- [ ] T14 — README y validación build/`build:worker`/preview · archivos: `README.md` · depende de:
+  T13 · secuencial
 
 ## Decisiones (antes preguntas abiertas)
 
