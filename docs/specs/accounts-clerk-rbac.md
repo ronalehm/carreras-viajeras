@@ -1,7 +1,7 @@
 # Clerk como proveedor de identidad y RBAC con super admin y organizadores
 
 - Módulo: accounts (también `lib/auth`, `trips` y `scripts/sql`)
-- Estado: borrador
+- Estado: aprobado
 - Depende de (aprobadas e implementadas en `main` 66ffae1): `platform-neon-foundation.md` (Fase 1), `accounts-roles-permissions.md` (F1–F3), `accounts-auth-ui.md` (F1–F4), `trips-catalog.md`, `landing-race-pages.md`, `runner-portal.md` (F1–F2).
 - **Sustituye, sin editarlas, las partes de Neon Auth** de `platform-neon-foundation.md`, `accounts-auth-ui.md` y `accounts-roles-permissions.md` (detalle en "Precedencia"). Esa sustitución solo vale si el usuario aprueba esta spec.
 - Base revisada: `main` en 66ffae1 (6 migraciones, `0000`–`0005`). Ramas abiertas que tocan los mismos archivos: ver Pregunta abierta 11.
