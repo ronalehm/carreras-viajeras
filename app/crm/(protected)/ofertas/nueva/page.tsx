@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getCrmAccess } from "@/modules/accounts";
 import { listCampaigns } from "@/modules/crm";
-import { listTrips, OfferForm } from "@/modules/trips";
+import { listTrips, OfferForm, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Nueva oferta" };
 
@@ -19,7 +19,10 @@ export default async function NewOfferPage() {
       </section>
     );
   }
-  const [trips, campaigns] = await Promise.all([listTrips(), listCampaigns()]);
+  const [trips, campaigns] = await Promise.all([
+    listTrips(tripScopeFor(access.user)),
+    listCampaigns(),
+  ]);
   const openTrips = trips.filter((trip) => trip.status !== "archived");
   // Campaigns carry their trip's slug (unique), not its id: compose the options with the trip list.
   const tripIdBySlug = new Map(openTrips.map((trip) => [trip.slug, trip.id]));

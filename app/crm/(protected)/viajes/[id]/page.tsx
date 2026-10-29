@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
-import { getTripById, TripForm } from "@/modules/trips";
+import { getTripById, TripForm, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Editar viaje" };
 
@@ -21,7 +21,8 @@ export default async function EditTripPage({ params }: { params: Promise<{ id: s
     );
   }
   const { id } = await params;
-  const trip = await getTripById(id);
+  // Another organizer's trip reads as missing (null), so it is a 404 too.
+  const trip = await getTripById(id, tripScopeFor(access.user));
   if (!trip) notFound();
   if (trip.status === "archived") {
     return (

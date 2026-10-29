@@ -5,7 +5,7 @@ import { z } from "zod";
 import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
 import { BookingFilters, BookingTable, listBookings } from "@/modules/bookings";
-import { listTrips } from "@/modules/trips";
+import { listTrips, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reservas" };
 
@@ -26,7 +26,7 @@ export default async function BookingsPage({ searchParams }: PageProps<"/crm/res
     );
   }
   const tripId = tripFilterSchema.parse((await searchParams).viaje);
-  const [bookings, trips] = await Promise.all([listBookings(tripId), listTrips()]);
+  const [bookings, trips] = await Promise.all([listBookings(tripId), listTrips(tripScopeFor(access.user))]);
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
