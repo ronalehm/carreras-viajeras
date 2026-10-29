@@ -23,3 +23,15 @@ export const contentQuerySchema = z.object({
   page: z.preprocess((value) => Array.isArray(value) ? undefined : value, z.coerce.number().int().min(1).max(10000).optional().catch(undefined)),
   category: contentCategorySchema.optional().catch(undefined),
 });
+// Browser boundary for GET /api/noticias/portada: publishedAt arrives as ISO 8601 and becomes a Date.
+const homeNewsPostSchema = z.object({
+  slug: z.string(),
+  category: contentCategorySchema,
+  title: z.string(),
+  summary: z.string(),
+  body: z.string(),
+  imageUrl: z.string().nullable(),
+  imageAlt: z.string().nullable(),
+  publishedAt: z.iso.datetime().pipe(z.coerce.date()),
+});
+export const homeNewsResponseSchema = z.object({ posts: z.array(homeNewsPostSchema).max(3) });
