@@ -4,7 +4,7 @@ import { can } from "@/lib/auth/permissions";
 import { getCrmAccess } from "@/modules/accounts";
 import { BookingForm } from "@/modules/bookings";
 import { getLeadById } from "@/modules/crm";
-import { listTrips } from "@/modules/trips";
+import { listTrips, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Nueva reserva" };
 
@@ -26,7 +26,8 @@ export default async function NewBookingPage({ searchParams }: PageProps<"/crm/r
   const { lead: leadParam } = await searchParams;
   const leadRequested = leadParam !== undefined && leadParam !== "";
   const [trips, lead] = await Promise.all([
-    listTrips(),
+    // bookings.manage implies trips.manage_all, so this scope is always "all".
+    listTrips(tripScopeFor(access.user)),
     typeof leadParam === "string" && leadRequested && can(access.user.staffRoles, "leads.manage")
       ? getLeadById(leadParam)
       : null,

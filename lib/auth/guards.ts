@@ -1,10 +1,10 @@
 import "server-only";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { cache } from "react";
 import { z } from "zod";
 import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
-import { getAuth } from "@/lib/auth/server";
 
 export type CurrentUser = {
   id: string;
@@ -15,29 +15,55 @@ export type CurrentUser = {
   name?: string;
 };
 
-// Minimal trusted shape; z.object drops any extra user field (role, staffRoles, …).
-const sessionSchema = z.object({
-  user: z.object({
-    id: z.string().min(1).max(255),
-    email: z.string(),
-    emailVerified: z.boolean(),
-    // A missing or malformed name must never invalidate the session.
-    name: z.string().optional().catch(undefined),
-  }),
+// Minimal trusted shape of the Clerk Backend User; z.object drops every other field
+// (publicMetadata, unsafeMetadata, …), so nothing in Clerk can grant roles.
+const clerkUserSchema = z.object({
+  id: z.string().min(1).max(255),
+  primaryEmailAddressId: z.string().nullable(),
+  emailAddresses: z.array(
+    z.object({
+      id: z.string(),
+      emailAddress: z.string(),
+      verification: z.object({ status: z.string() }).nullable(),
+    }),
+  ),
 });
 
-async function readSessionUser() {
+// Verifies the session token (no database). Pending sessions count as signed out (Clerk default).
+async function readSessionUserId(): Promise<string | null> {
   try {
-    const { data, error } = await getAuth().getSession();
-    if (error || !data) return null;
-    const parsed = sessionSchema.safeParse(data);
-    return parsed.success ? parsed.data.user : null;
+    const { userId } = await auth();
+    return userId;
   } catch {
-    // Fail closed (401) but leave a trace, e.g. a missing Worker secret in getEnv().
-    // Fixed text only: the original error may contain variable names or data.
+    // Fail closed (401) but leave a trace, e.g. a missing CLERK_SECRET_KEY or a route outside
+    // the middleware matcher. Fixed text only: the original error may contain secrets or data.
     console.error("auth: session lookup failed");
     return null;
   }
+}
+
+async function readClerkUser() {
+  try {
+    return await currentUser();
+  } catch {
+    // 403, not 401: a signed-in user must not bounce between /crm/acceso and /crm.
+    console.error("auth: user lookup failed");
+    throw new ForbiddenError();
+  }
+}
+
+async function readSessionUser() {
+  const userId = await readSessionUserId();
+  if (!userId) return null;
+  const parsed = clerkUserSchema.safeParse(await readClerkUser());
+  if (!parsed.success || parsed.data.id !== userId) return null;
+  const { primaryEmailAddressId, emailAddresses } = parsed.data;
+  const primary = emailAddresses.find((address) => address.id === primaryEmailAddressId);
+  return {
+    id: userId,
+    email: primary?.emailAddress.trim().toLowerCase() ?? "",
+    emailVerified: primary?.verification?.status === "verified",
+  };
 }
 
 async function loadRoles(id: string, email: string, emailVerified: boolean) {
@@ -55,16 +81,8 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const user = await readSessionUser();
   if (!user) return null;
-  const email = user.email.trim().toLowerCase();
-  const staffRoles = await loadRoles(user.id, email, user.emailVerified);
-  const name = user.name?.trim();
-  return {
-    id: user.id,
-    email,
-    emailVerified: user.emailVerified,
-    staffRoles,
-    ...(name ? { name } : {}),
-  };
+  const staffRoles = await loadRoles(user.id, user.email, user.emailVerified);
+  return { ...user, staffRoles };
 });
 
 export async function requireUser(): Promise<CurrentUser> {

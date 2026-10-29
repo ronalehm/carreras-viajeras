@@ -4,6 +4,8 @@ import type { StaffRole } from "@/lib/auth/permissions";
 export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   commercial: "Comercial",
   admin: "Admin",
+  super_admin: "Super admin",
+  organizer: "Organizador",
 };
 
 // The CRM time zone and its date formatting live in lib/dates.ts (shared with the crm module).

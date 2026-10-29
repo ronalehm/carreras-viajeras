@@ -1,5 +1,6 @@
 export { AccessPanel } from "./components/AccessPanel";
 export { CrmShell } from "./components/CrmShell";
+export { CrmSettings } from "./components/CrmSettings";
 export { InvitationsTable } from "./components/InvitationsTable";
 export { InviteStaffForm } from "./components/InviteStaffForm";
 export { NoCrmAccess } from "./components/NoCrmAccess";

@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
+import { esMX } from "@clerk/localizations";
 import "./globals.css";
 import { Archivo, Plus_Jakarta_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
@@ -31,7 +33,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className={cn("font-sans", jakarta.variable, archivo.variable)}
     >
-      <body>{children}</body>
+      <body>
+        <ClerkProvider localization={esMX}>{children}</ClerkProvider>
+      </body>
     </html>
   );
 }
