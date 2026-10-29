@@ -1,154 +1,156 @@
 import Image from "next/image";
-import Link from "next/link";
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, Check, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { Trip } from "../utils/trips";
-import { TripFacts } from "./TripFacts";
+import type { OfferView } from "../utils/catalogOffer";
+import type { TripLanding } from "../utils/catalogTrip";
+import { buildTripInquiryMessage, buildWhatsAppUrl, WHATSAPP_NUMBER } from "../utils/inquiry";
+import { OfferSummary } from "./OfferSummary";
 
-const eyebrow = "text-xs font-bold tracking-[0.15em]";
+const section = "border-t border-primary/15 pt-8";
+const sectionTitle = "mb-4 text-sm font-bold tracking-wide";
 
-export function TripDetail({ trip }: { trip: Trip }) {
-  const { prices } = trip;
-  const payments = [
-    { label: "AL CONTADO", value: prices.cash },
-    { label: "EN CUOTAS · PRECIO TOTAL", value: prices.installmentsTotal },
+// The price section is the offer in force (resolved by the server) or a notice without amounts.
+export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferView | null }) {
+  const facts = [
+    { label: "Carrera", value: trip.raceDate },
+    { label: "Viaje", value: trip.travelDates ?? "Fechas por confirmar" },
+    { label: "Distancias", value: trip.distances.join(" · ") },
+    { label: "Cupos", value: trip.capacity },
   ];
+  const whatsAppUrl = buildWhatsAppUrl(
+    WHATSAPP_NUMBER,
+    buildTripInquiryMessage({ title: trip.title, raceDate: trip.raceDate, location: trip.location }),
+  );
 
   return (
-    <article className="text-primary">
-      <header className="relative isolate flex min-h-[50svh] items-end overflow-hidden bg-primary text-primary-foreground">
-        <Image
-          src={trip.image}
-          alt={trip.imageAlt}
-          fill
-          preload
-          sizes="100vw"
-          className="-z-20 object-cover"
-        />
-        <div className="absolute inset-0 -z-10 bg-linear-to-b from-primary/5 from-30% to-primary/85" />
-        <div className="w-full px-[6%] pt-20 pb-10 sm:px-[8%] sm:pb-14">
-          <p className={cn(eyebrow, "mb-4 whitespace-pre-line")}>{trip.coverLabel}</p>
-          <h1 className="max-w-3xl font-heading text-5xl leading-none font-bold tracking-tight sm:text-6xl lg:text-7xl">
-            {trip.name}
-          </h1>
-        </div>
+    <article className="mx-auto grid max-w-2xl grid-cols-1 gap-10 px-4 py-12 text-primary sm:py-16">
+      <header>
+        <p className="text-sm wrap-break-word">{[trip.location, ...trip.distances].join(" · ")}</p>
+        <h1 className="mt-3 font-heading text-4xl leading-tight font-bold tracking-tight wrap-break-word sm:text-5xl">
+          {trip.title}
+        </h1>
+        <p className="mt-4 text-base leading-relaxed wrap-break-word">{trip.summary}</p>
+        {trip.imageUrl && (
+          <div className="relative mt-8 aspect-video overflow-hidden rounded-lg">
+            <Image
+              src={trip.imageUrl}
+              alt={`Imagen de ${trip.title}`}
+              fill
+              unoptimized
+              preload
+              sizes="(min-width: 672px) 672px, 100vw"
+              className="object-cover"
+            />
+          </div>
+        )}
       </header>
 
-      <TripFacts trip={trip} />
+      <section aria-labelledby="trip-facts-title" className={section}>
+        <h2 id="trip-facts-title" className="sr-only">
+          Datos clave
+        </h2>
+        <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+          {facts.map(({ label, value }) => (
+            <div key={label}>
+              <dt className="text-xs">{label}</dt>
+              <dd className="mt-1 font-bold">{value}</dd>
+            </div>
+          ))}
+          {trip.officialUrl && (
+            <div>
+              <dt className="text-xs">Web oficial</dt>
+              <dd className="mt-1 font-bold">
+                <a
+                  href={trip.officialUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-0.5 underline underline-offset-4"
+                >
+                  Ver web oficial <ArrowUpRight aria-hidden className="size-4" />
+                </a>
+              </dd>
+            </div>
+          )}
+        </dl>
+      </section>
 
-      <div className="grid gap-10 px-[6%] py-10 sm:px-[8%] sm:py-14 md:grid-cols-[0.8fr_1.4fr] md:gap-[7%]">
-        <div>
-          <ul aria-label="Beneficios principales" className="mb-10 grid gap-2.5 text-sm">
-            {trip.highlights.map((highlight) => (
-              <li key={highlight}>
-                <span aria-hidden>✓ </span>
-                {highlight}
+      {offer ? (
+        <OfferSummary offer={offer} className={section} />
+      ) : (
+        <section aria-labelledby="trip-price-title" className={section}>
+          <h2 id="trip-price-title" className="sr-only">
+            Precio
+          </h2>
+          <p className="text-base font-bold">Todavía no publicamos el precio de este viaje.</p>
+        </section>
+      )}
+
+      {trip.includes.length > 0 && (
+        <section aria-labelledby="trip-includes-title" className={section}>
+          <h2 id="trip-includes-title" className={sectionTitle}>
+            Qué incluye
+          </h2>
+          <ul className="grid gap-2.5 text-sm">
+            {trip.includes.map((item, index) => (
+              <li key={index} className="flex items-start gap-2.5">
+                <Check aria-hidden className="mt-0.5 size-4 shrink-0 text-highlight" />
+                <span className="min-w-0 wrap-break-word">{item}</span>
               </li>
             ))}
           </ul>
+        </section>
+      )}
 
-          <section aria-labelledby="trip-prices-title">
-            <h2 id="trip-prices-title" className={cn(eyebrow, "mb-2")}>
-              PRECIOS Y CONDICIONES
-            </h2>
-            <dl>
-              {payments.map(({ label, value }) => (
-                <div key={label} className="border-b border-primary/25 py-4">
-                  <dt className={eyebrow}>{label}</dt>
-                  <dd className="text-4xl leading-tight font-bold tracking-tight">{value}</dd>
-                </div>
-              ))}
-              <div className="mt-3.5 border-b border-l-4 border-b-primary/25 border-l-highlight py-4 pl-4">
-                <dt className={eyebrow}>RESERVA CON</dt>
-                <dd className="text-3xl leading-tight font-bold">{prices.reservation}</dd>
-              </div>
-              <div className="border-b border-primary/25 py-4">
-                <dt className={eyebrow}>ACOMPAÑANTE</dt>
-                <dd>
-                  <strong className="block text-3xl leading-tight font-bold">
-                    {prices.companion}
-                  </strong>
-                  <small className="block text-xs">{prices.companionNote}</small>
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-4 text-xs leading-relaxed">{prices.paymentNote}</p>
-          </section>
-        </div>
-
-        <div className="min-w-0">
-          <section aria-labelledby="trip-included-title">
-            <h2
-              id="trip-included-title"
-              className={cn(eyebrow, "border-b-3 border-highlight pb-4")}
-            >
-              <span aria-hidden>✓ </span>SÍ ESTÁ INCLUIDO
-            </h2>
-            <ul className="grid gap-x-6 sm:grid-cols-2">
-              {trip.included.map(({ title, text }) => (
-                <li
-                  key={title}
-                  className="flex items-start gap-2.5 border-b border-primary/20 py-4"
-                >
-                  <span
-                    aria-hidden
-                    className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground shadow-[0_2px_0_var(--highlight)]"
-                  >
-                    ✓
-                  </span>
-                  <div>
-                    <h3 className="mb-1 text-sm font-bold">{title}</h3>
-                    <p className="text-xs leading-relaxed">{text}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-
-          <section
-            aria-labelledby="trip-excluded-title"
-            className="mt-6 rounded-sm border border-l-4 border-primary/25 border-l-primary p-4.5"
-          >
-            <h2 id="trip-excluded-title" className="mb-2.5 text-base font-bold">
-              No está incluido
-            </h2>
-            {trip.excluded.map((item) => (
-              <p key={item} className="my-1.5 text-xs">
-                <span aria-hidden>× </span>
-                {item}
-              </p>
+      {trip.excludes.length > 0 && (
+        <section aria-labelledby="trip-excludes-title" className={section}>
+          <h2 id="trip-excludes-title" className={sectionTitle}>
+            No incluye
+          </h2>
+          <ul className="grid gap-2.5 text-sm">
+            {trip.excludes.map((item, index) => (
+              <li key={index} className="flex items-start gap-2.5">
+                <X aria-hidden className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0 wrap-break-word">{item}</span>
+              </li>
             ))}
-          </section>
+          </ul>
+        </section>
+      )}
 
-          <details open className="group mt-6 border-b border-primary/20 pb-2">
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-3 text-sm font-bold [&::-webkit-details-marker]:hidden">
-              Detalles que falta confirmar
-              <span aria-hidden className="text-lg group-open:hidden">
-                +
-              </span>
-              <span aria-hidden className="hidden text-lg group-open:inline">
-                −
-              </span>
+      {trip.notes.length > 0 && (
+        <section aria-labelledby="trip-notes-title" className={section}>
+          <details open>
+            <summary id="trip-notes-title" className={cn(sectionTitle, "cursor-pointer")}>
+              Detalles por confirmar
             </summary>
-            {trip.pendingDetails.map((paragraph) => (
-              <p key={paragraph} className="mb-3 text-xs leading-relaxed">
+            {trip.notes.map((paragraph, index) => (
+              <p key={index} className="mb-3 text-sm leading-relaxed wrap-break-word">
                 {paragraph}
               </p>
             ))}
           </details>
+        </section>
+      )}
 
-          <Link
-            href={`/contacto?destino=${trip.destinationId}`}
+      <div className={section}>
+        {whatsAppUrl && (
+          <a
+            href={whatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
             className={cn(
-              buttonVariants(),
-              "mt-8 h-auto w-full gap-1.5 rounded-sm px-6 py-4 text-sm font-bold shadow-[inset_0_-4px_0_var(--highlight)] sm:w-auto",
+              buttonVariants({ size: "lg" }),
+              "h-auto w-full py-3 text-base font-bold whitespace-normal",
             )}
           >
-            Quiero correr Santiago <ArrowUpRight aria-hidden />
-          </Link>
-          <p className="mt-4 max-w-88 text-xs leading-relaxed">{trip.disclaimer}</p>
-        </div>
+            Consultar por WhatsApp <ArrowUpRight aria-hidden />
+          </a>
+        )}
+        <p className="mt-4 text-xs leading-relaxed">
+          Consulta sin compromiso. Los cupos son informativos y no reflejan disponibilidad en
+          tiempo real. No se reciben pagos en la web.
+        </p>
       </div>
     </article>
   );

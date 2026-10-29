@@ -7,7 +7,8 @@ import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
 import { tripFormSchema, tripStatusChangeSchema, updateTripSchema } from "../schemas/trips.schema";
 import { createTrip, setTripStatus, updateTrip } from "../services/trips.service";
-import type { TripActionState, TripStatus } from "../types/trips.types";
+import type { TripActionState, TripScope, TripStatus } from "../types/trips.types";
+import { tripScopeFor } from "../utils/tripScope";
 
 const TRIPS_PATH = "/crm/viajes";
 type ErrorCode = Extract<TripActionState, { status: "error" }>["code"];
@@ -64,10 +65,12 @@ async function runTripAction<Input>(
   formData: FormData,
   schema: z.ZodType<Input>,
   fields: readonly string[],
-  mutate: (input: Input, values: Record<string, string>) => Promise<TripActionState>,
+  mutate: (input: Input, values: Record<string, string>, scope: TripScope) => Promise<TripActionState>,
 ): Promise<TripActionState> {
+  // The scope comes only from the server-side actor, never from the submitted form.
+  let scope: TripScope;
   try {
-    await requirePermission("trips.manage");
+    scope = tripScopeFor(await requirePermission("trips.manage"));
   } catch (error) {
     if (error instanceof UnauthorizedError) return failure("unauthorized");
     if (error instanceof ForbiddenError) return failure("forbidden");
@@ -80,7 +83,7 @@ async function runTripAction<Input>(
 
   let state: TripActionState;
   try {
-    state = await mutate(parsed.data, values);
+    state = await mutate(parsed.data, values, scope);
   } catch {
     // No original message or cause: database details must not leave this boundary.
     throw new Error("trip action failed");
@@ -94,8 +97,8 @@ export async function createTripAction(
   formData: FormData,
 ): Promise<TripActionState> {
   const state = await runTripAction(formData, tripFormSchema, Object.keys(tripFormSchema.shape),
-    async (input, values) => {
-      const result = await createTrip(input);
+    async (input, values, scope) => {
+      const result = await createTrip(input, scope);
       return result === "slug_taken"
         ? failure(result, values, { slug: [ERROR_MESSAGES[result]] })
         : { status: "success", message: "Viaje creado." };
@@ -110,8 +113,8 @@ export async function updateTripAction(
   formData: FormData,
 ): Promise<TripActionState> {
   const state = await runTripAction(formData, updateTripSchema, Object.keys(updateTripSchema.shape),
-    async ({ id, ...input }, values) => {
-      const result = await updateTrip(id, input);
+    async ({ id, ...input }, values, scope) => {
+      const result = await updateTrip(id, input, scope);
       if (result === "updated") return { status: "success", message: "Viaje actualizado." };
       return failure(result, values,
         result === "slug_taken" || result === "slug_locked"
@@ -126,8 +129,8 @@ export async function changeTripStatusAction(
   formData: FormData,
 ): Promise<TripActionState> {
   return runTripAction(formData, tripStatusChangeSchema, Object.keys(tripStatusChangeSchema.shape),
-    async ({ id, status }) => {
-      const result = await setTripStatus(id, status);
+    async ({ id, status }, _values, scope) => {
+      const result = await setTripStatus(id, status, scope);
       return result === "changed"
         ? { status: "success", message: STATUS_MESSAGES[status] }
         : failure(result);

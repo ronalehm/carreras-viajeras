@@ -20,6 +20,7 @@ import {
   changeLeadOwner,
   changeLeadStage,
   createLead,
+  optOutLead,
   setNextAction,
   updateLead,
 } from "../services/leads.service";
@@ -39,6 +40,7 @@ const ERROR_MESSAGES: Record<LeadActionErrorCode, string> = {
   not_found: "El lead ya no existe o está archivado. Recarga la página.",
   no_change: "No hay cambios.",
   closed: "El lead está cerrado o archivado.",
+  opted_out: "El contacto pidió no seguir: no se programan próximas acciones.",
 };
 
 const CREATE_LEAD_FIELDS = Object.keys(createLeadSchema.shape);
@@ -136,7 +138,9 @@ function revalidateLead(leadId: string) {
   revalidatePath(leadDetailPath(leadId));
 }
 
-// Contact data only: stage, owner, author or any other submitted key are dropped by the schema.
+// Contact and origin data: the session user is the author of the 'channel_changed' activity.
+// Source, stage, owner, author, the UTM fields, contactOptOutAt or any other submitted key are
+// dropped by the schema.
 export async function updateLeadAction(
   _prev: LeadActionState,
   formData: FormData,
@@ -148,7 +152,7 @@ export async function updateLeadAction(
   const parsed = updateLeadSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
 
-  const result = await runService(() => updateLead(parsed.data));
+  const result = await runService(() => updateLead(parsed.data, actor.id));
   if (result === "not_found") return failure(result, values);
   if (result === "invalid_trip") {
     return failure(result, values, { tripId: [ERROR_MESSAGES.invalid_trip] });
@@ -257,4 +261,33 @@ export async function archiveLeadAction(
 
   revalidateLead(parsed.data.leadId);
   return { status: "success", message: "Lead archivado." };
+}
+
+// Opt-out is final in the MVP: the lead becomes lost, loses its next action and n8n prepares no
+// more drafts. The author of its activities is the session user. Its state fits ConfirmActionState.
+export async function optOutLeadAction(
+  _prev: LeadActionState,
+  formData: FormData,
+): Promise<LeadActionState> {
+  const actor = await authorize();
+  if ("status" in actor) return actor;
+
+  const values = formValues(formData, LEAD_ID_FIELDS);
+  const parsed = leadIdSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return failure("invalid_input", values, toFieldErrors(parsed.error));
+
+  const result = await runService(() => optOutLead(parsed.data.leadId, actor.id));
+  if (result === "not_found") return failure(result, values);
+
+  // no_change: someone else registered it first; revalidate anyway so the detail page shows it.
+  revalidateLead(parsed.data.leadId);
+  if (result === "no_change") {
+    return {
+      status: "error",
+      code: result,
+      message: "Ya estaba registrado que pidió no seguir.",
+      values,
+    };
+  }
+  return { status: "success", message: "Registrado: pidió no seguir." };
 }

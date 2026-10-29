@@ -30,66 +30,66 @@ export function TipList({ tips }: { tips: Tip[] }) {
 
   return (
     <>
-      <div role="group" aria-label="Filtrar consejos" className="mb-6 flex flex-wrap gap-1.5">
+      <div role="group" aria-label="Filtrar consejos" className="mb-6 flex flex-wrap gap-2">
         {FILTERS.map(({ value, label }) => (
           <button
             key={value}
             type="button"
             aria-pressed={filter === value}
             onClick={() => setFilter(value)}
-            className="cursor-pointer rounded-full border border-primary/25 bg-background px-3 py-2 text-xs aria-pressed:border-b-3 aria-pressed:border-b-highlight aria-pressed:bg-primary aria-pressed:text-primary-foreground"
+            className="min-h-10 cursor-pointer rounded-full border border-primary/25 bg-background px-4 py-2 text-sm font-medium hover:border-primary aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground"
           >
             {label}
           </button>
         ))}
       </div>
-      <div className="grid gap-6">
+      <ul>
         {tips.map((tip) => (
-          <article
+          <li
             key={tip.title}
             hidden={filter !== "todos" && tip.category !== filter}
-            className="overflow-hidden rounded-md border border-primary/20"
+            className="grid grid-cols-[5.5rem_1fr] gap-x-4 border-t border-primary/15 py-6 sm:grid-cols-[8rem_1fr] sm:gap-x-6"
           >
-            <div className="relative h-56 sm:h-48">
+            <div className="relative aspect-square overflow-hidden rounded-2xl bg-night">
               <Image
                 src={tip.image}
                 alt="Imagen ilustrativa de running y viajes"
                 fill
-                sizes="(min-width: 768px) 45vw, 100vw"
+                sizes="(min-width: 640px) 8rem, 5.5rem"
                 loading="lazy"
                 className="object-cover"
               />
             </div>
-            <div className="p-5">
-              <p className="mb-4 text-xs font-bold tracking-widest">{tip.eyebrow}</p>
-              <h4 className="mb-4 font-heading text-3xl leading-tight font-bold whitespace-pre-line">
+            <article className="min-w-0">
+              <p className="mb-2 text-sm font-semibold text-asphalt">{tip.eyebrow}</p>
+              <h4 className="mb-3 display-title text-3xl leading-none whitespace-pre-line">
                 {tip.title}
               </h4>
-              <p className="text-xs">{tip.summary}</p>
+              <p className="text-sm leading-relaxed text-asphalt">{tip.summary}</p>
               <details className="group pt-3">
-                <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-semibold [&::-webkit-details-marker]:hidden">
+                <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold [&::-webkit-details-marker]:hidden">
                   Leer píldora
-                  <span aria-hidden className="text-xl leading-none">
+                  <span aria-hidden className="text-2xl leading-none font-normal">
                     <span className="group-open:hidden">+</span>
                     <span className="hidden group-open:inline">−</span>
                   </span>
                 </summary>
-                <p className="mt-3 text-xs leading-relaxed">{tip.body}</p>
+                <p className="mt-2 max-w-[60ch] text-sm leading-relaxed text-asphalt">{tip.body}</p>
                 {tip.source && (
                   <a
                     href={tip.source.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1 text-xs underline-offset-4"
+                    className="mt-3 inline-flex items-center gap-1 text-sm font-semibold underline decoration-highlight decoration-2 underline-offset-4"
                   >
                     {tip.source.label} <ArrowUpRight aria-hidden className="size-3.5" />
                   </a>
                 )}
               </details>
-            </div>
-          </article>
+            </article>
+          </li>
         ))}
-      </div>
+      </ul>
     </>
   );
 }

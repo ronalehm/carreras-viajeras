@@ -30,9 +30,11 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 const LEAD_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 
 // Activity row in select order (array mode): id, type, body, stage_from, stage_to,
-// previous owner email, new owner email, actor email, created_at.
+// previous owner email, new owner email, channel_from, channel_to, actor email, created_at.
 function activityRow(values: Partial<Record<number, unknown>>) {
-  const row: unknown[] = ["activity-1", "note", null, null, null, null, null, "agent@example.com", "2026-10-18 14:00:00+00"];
+  const row: unknown[] = [
+    "activity-1", "note", null, null, null, null, null, null, null, "agent@example.com", "2026-10-18 14:00:00+00",
+  ];
   for (const [position, value] of Object.entries(values)) row[Number(position)] = value;
   return row;
 }
@@ -52,7 +54,7 @@ describe("listLeadActivities", () => {
 
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
-      'select "lead_activities"."id", "lead_activities"."type", "lead_activities"."body", "lead_activities"."stage_from", "lead_activities"."stage_to", "previous_owner"."email", "new_owner"."email", "actor"."email", "lead_activities"."created_at" ' +
+      'select "lead_activities"."id", "lead_activities"."type", "lead_activities"."body", "lead_activities"."stage_from", "lead_activities"."stage_to", "previous_owner"."email", "new_owner"."email", "lead_activities"."channel_from", "lead_activities"."channel_to", "actor"."email", "lead_activities"."created_at" ' +
         'from "lead_activities" ' +
         'left join "profiles" "actor" on "actor"."user_id" = "lead_activities"."actor_user_id" ' +
         'left join "profiles" "previous_owner" on "previous_owner"."user_id" = "lead_activities"."owner_from" ' +
@@ -83,6 +85,8 @@ describe("listLeadActivities", () => {
         stageTo: null,
         ownerFrom: null,
         ownerTo: null,
+        channelFrom: null,
+        channelTo: null,
         actor: { email: "agent@example.com" },
         createdAt: new Date("2026-10-18T14:00:00Z"),
       },
@@ -94,6 +98,8 @@ describe("listLeadActivities", () => {
         stageTo: "lost",
         ownerFrom: null,
         ownerTo: null,
+        channelFrom: null,
+        channelTo: null,
         actor: { email: "agent@example.com" },
         createdAt: new Date("2026-10-18T14:00:00Z"),
       },
@@ -105,6 +111,8 @@ describe("listLeadActivities", () => {
         stageTo: null,
         ownerFrom: { email: "agent@example.com" },
         ownerTo: { email: "other@example.com" },
+        channelFrom: null,
+        channelTo: null,
         actor: { email: "agent@example.com" },
         createdAt: new Date("2026-10-18T14:00:00Z"),
       },
@@ -115,9 +123,9 @@ describe("listLeadActivities", () => {
     useFakeDb({
       responses: [
         [
-          activityRow({ 0: "a3", 1: "automation", 2: "Borrador para la etapa Cotizado enviado por correo al usuario.", 7: null }),
+          activityRow({ 0: "a3", 1: "automation", 2: "Borrador para la etapa Cotizado enviado por correo al usuario.", 9: null }),
           activityRow({ 0: "a2", 1: "owner_changed", 6: "agent@example.com" }),
-          activityRow({ 0: "a1", 1: "created", 7: null }),
+          activityRow({ 0: "a1", 1: "created", 9: null }),
         ],
       ],
     });
@@ -131,6 +139,46 @@ describe("listLeadActivities", () => {
       actor: { email: "agent@example.com" },
     });
     expect(created).toMatchObject({ type: "created", body: null, actor: null });
+  });
+
+  it("maps the origin change (channel_from → channel_to) and the opt-out with their author", async () => {
+    useFakeDb({
+      responses: [
+        [
+          activityRow({ 0: "a2", 1: "opted_out" }),
+          activityRow({ 0: "a1", 1: "channel_changed", 7: "unknown", 8: "instagram" }),
+        ],
+      ],
+    });
+
+    await expect(listLeadActivities(LEAD_ID)).resolves.toEqual([
+      {
+        id: "a2",
+        type: "opted_out",
+        body: null,
+        stageFrom: null,
+        stageTo: null,
+        ownerFrom: null,
+        ownerTo: null,
+        channelFrom: null,
+        channelTo: null,
+        actor: { email: "agent@example.com" },
+        createdAt: new Date("2026-10-18T14:00:00Z"),
+      },
+      {
+        id: "a1",
+        type: "channel_changed",
+        body: null,
+        stageFrom: null,
+        stageTo: null,
+        ownerFrom: null,
+        ownerTo: null,
+        channelFrom: "unknown",
+        channelTo: "instagram",
+        actor: { email: "agent@example.com" },
+        createdAt: new Date("2026-10-18T14:00:00Z"),
+      },
+    ]);
   });
 });
 

@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCalendarDate } from "@/lib/dates";
 import type { LeadListItem } from "../types/leads.types";
 import {
-  LEAD_SOURCE_LABELS,
+  LEAD_CHANNEL_LABELS,
   LEAD_STAGE_BADGE_VARIANTS,
   LEAD_STAGE_LABELS,
   leadOwnerLabel,
@@ -19,6 +19,7 @@ type LeadTableProps = {
   today: string;
 };
 
+// "Origen" is the channel (how the person found us), not the entry path.
 const COLUMNS = ["Nombre", "WhatsApp", "Interés", "Etapa", "Próxima acción", "Responsable", "Origen"];
 
 export function LeadTable({ leads, hasFilters, today }: LeadTableProps) {
@@ -73,7 +74,7 @@ export function LeadTable({ leads, hasFilters, today }: LeadTableProps) {
               )}
             </TableCell>
             <TableCell>{leadOwnerLabel(lead.owner)}</TableCell>
-            <TableCell>{LEAD_SOURCE_LABELS[lead.source]}</TableCell>
+            <TableCell>{LEAD_CHANNEL_LABELS[lead.channel]}</TableCell>
           </TableRow>
         ))}
       </TableBody>

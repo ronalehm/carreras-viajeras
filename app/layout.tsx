@@ -1,13 +1,21 @@
 import type { Metadata, Viewport } from "next";
+import { ClerkProvider } from "@clerk/nextjs";
+import { esMX } from "@clerk/localizations";
 import "./globals.css";
-import { Barlow_Condensed, DM_Sans } from "next/font/google";
+import { Archivo, Plus_Jakarta_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
 
-const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-sans" });
-const barlowCondensed = Barlow_Condensed({
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-display",
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
+
+// Variable display face for home headlines; the wdth axis enables the condensed bib style.
+const archivo = Archivo({
+  subsets: ["latin"],
+  axes: ["wdth"],
+  variable: "--font-archivo",
 });
 
 export const metadata: Metadata = {
@@ -17,15 +25,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export const viewport: Viewport = { themeColor: "#0144ae" };
+export const viewport: Viewport = { themeColor: "#0244a9" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="es"
-      className={cn("font-sans", dmSans.variable, barlowCondensed.variable)}
+      className={cn("font-sans", jakarta.variable, archivo.variable)}
     >
-      <body>{children}</body>
+      <body>
+        <ClerkProvider localization={esMX}>{children}</ClerkProvider>
+      </body>
     </html>
   );
 }

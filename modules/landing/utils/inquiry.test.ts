@@ -2,46 +2,147 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildInquiryMessage,
+  attributionParams,
+  buildTripInquiryMessage,
   buildWhatsAppUrl,
-  parseDestinationId,
+  firstParam,
+  GENERAL_INQUIRY_MESSAGE,
+  resolveDestination,
   WHATSAPP_NUMBER,
 } from "./inquiry";
 
-const contact = { name: "Ana", email: "ana@example.com", phone: "+51 999 888 777" };
-
-describe("buildInquiryMessage", () => {
-  it("devuelve la plantilla exacta con la cláusula de precios para Santiago", () => {
-    expect(buildInquiryMessage({ ...contact, destination: "santiago-2027" })).toBe(
-      "Hola, soy Ana. Me interesa Maratón de Santiago 42K 2027 y la preventa por corredor: US$1,499 al contado o US$1,799 en cuotas, con reserva anunciada de US$300. Quisiera conocer disponibilidad, inclusiones y condiciones finales.\n" +
-        "Correo: ana@example.com\n" +
-        "WhatsApp: +51 999 888 777\n" +
-        "Entiendo que esta consulta no constituye reserva ni pago.",
+describe("GENERAL_INQUIRY_MESSAGE", () => {
+  it("es el texto fijo, sin datos personales", () => {
+    expect(GENERAL_INQUIRY_MESSAGE).toBe(
+      "Hola, quiero información para correr con Carreras Viajeras.",
     );
+  });
+});
+
+describe("firstParam", () => {
+  it("devuelve el string tal cual", () => {
+    expect(firstParam("stand")).toBe("stand");
+  });
+
+  it("devuelve el primer valor de un array", () => {
+    expect(firstParam(["stand", "otro"])).toBe("stand");
+  });
+
+  it.each([undefined, []])("devuelve undefined con %j", (value) => {
+    expect(firstParam(value)).toBeUndefined();
+  });
+});
+
+describe("attributionParams", () => {
+  it("copia las cinco claves de atribución", () => {
+    expect(
+      attributionParams({
+        c: "mml26",
+        utm_source: "instagram",
+        utm_medium: "social",
+        utm_campaign: "preventa",
+        ref: "club-lima",
+      }),
+    ).toEqual({
+      c: "mml26",
+      utm_source: "instagram",
+      utm_medium: "social",
+      utm_campaign: "preventa",
+      ref: "club-lima",
+    });
+  });
+
+  it("descarta cualquier otra clave", () => {
+    expect(
+      attributionParams({
+        c: "mml26",
+        modo: "stand",
+        destino: "rio",
+        source: "whatsapp",
+        stage: "paid",
+        channel: "event",
+        campaignId: "00000000-0000-4000-8000-000000000000",
+        price: "1",
+        utm_term: "x",
+      }),
+    ).toEqual({ c: "mml26" });
+  });
+
+  it("usa el primer valor de un parámetro repetido", () => {
+    expect(attributionParams({ c: ["mml26", "otra"], ref: ["club-lima"] })).toEqual({
+      c: "mml26",
+      ref: "club-lima",
+    });
+  });
+
+  it("no normaliza: el servidor decide", () => {
+    expect(attributionParams({ utm_source: " Instagram " })).toEqual({
+      utm_source: " Instagram ",
+    });
   });
 
   it.each([
-    ["panama", "Panamá"],
-    ["medellin", "Medellín"],
-  ] as const)("%s usa su nombre y la cláusula sin precios", (destination, name) => {
-    const message = buildInquiryMessage({ ...contact, destination });
-    expect(message.split("\n")[0]).toBe(
-      `Hola, soy Ana. Me interesa ${name} cuando haya una propuesta confirmada. Quisiera conocer disponibilidad, inclusiones y condiciones finales.`,
+    ["ausente", undefined],
+    ["vacío", ""],
+    ["solo espacios", "   "],
+    ["array vacío", []],
+    ["más de 200 caracteres", "a".repeat(201)],
+  ])("descarta un valor %s", (_label, value) => {
+    expect(attributionParams({ c: value, utm_source: value })).toEqual({});
+  });
+
+  it("acepta un valor de 200 caracteres", () => {
+    const value = "a".repeat(200);
+    expect(attributionParams({ ref: value })).toEqual({ ref: value });
+  });
+
+  it("devuelve un objeto vacío sin parámetros", () => {
+    expect(attributionParams({})).toEqual({});
+  });
+});
+
+describe("resolveDestination", () => {
+  const allowed = ["maraton-santiago-2027", "maraton-lima-2027", "rio", "roma"];
+
+  it.each(["maraton-lima-2027", "rio", "roma"])("acepta el valor permitido %s", (value) => {
+    expect(resolveDestination(value, allowed)).toBe(value);
+  });
+
+  it("traduce el alias santiago-2027 al slug del catálogo", () => {
+    expect(resolveDestination("santiago-2027", allowed)).toBe("maraton-santiago-2027");
+  });
+
+  it("no aplica el alias si Santiago no está publicado", () => {
+    expect(resolveDestination("santiago-2027", ["rio", "roma"])).toBe("");
+  });
+
+  it.each([undefined, "", "xyz", "Rio", "maraton-santiago-2027 ", "constructor", "__proto__"])(
+    "deja sin preselección con %j",
+    (value) => {
+      expect(resolveDestination(value, allowed)).toBe("");
+    },
+  );
+
+  it("usa el primer valor de un array", () => {
+    expect(resolveDestination(["roma", "rio"], allowed)).toBe("roma");
+    expect(resolveDestination(["santiago-2027"], allowed)).toBe("maraton-santiago-2027");
+    expect(resolveDestination([], allowed)).toBe("");
+  });
+});
+
+describe("buildTripInquiryMessage", () => {
+  it("devuelve el texto exacto con título, fecha y lugar, sin precio", () => {
+    const message = buildTripInquiryMessage({
+      title: "Maratón de Lima 2027",
+      raceDate: "16 de mayo de 2027",
+      location: "Lima, Perú",
+    });
+    expect(message).toBe(
+      "Hola, me interesa el viaje Maratón de Lima 2027 (16 de mayo de 2027, Lima, Perú). Quisiera conocer disponibilidad, inclusiones y condiciones finales.\n" +
+        "Entiendo que esta consulta no constituye reserva ni pago.",
     );
     expect(message).not.toContain("US$");
   });
-
-  it.each(["santiago-2027", "panama", "medellin"] as const)(
-    "%s incluye correo, WhatsApp y el aviso final",
-    (destination) => {
-      const lines = buildInquiryMessage({ ...contact, destination }).split("\n");
-      expect(lines.slice(1)).toEqual([
-        "Correo: ana@example.com",
-        "WhatsApp: +51 999 888 777",
-        "Entiendo que esta consulta no constituye reserva ni pago.",
-      ]);
-    },
-  );
 });
 
 describe("buildWhatsAppUrl", () => {
@@ -58,23 +159,19 @@ describe("buildWhatsAppUrl", () => {
   });
 
   it("codifica acentos y saltos de línea", () => {
-    const text = "Me interesa Panamá\nCorreo: a@b.pe";
+    const text = "Me interesa Río de Janeiro\nCorreo: a@b.pe";
     const url = buildWhatsAppUrl(WHATSAPP_NUMBER, text);
     expect(url).toBe(`https://wa.me/51938127170?text=${encodeURIComponent(text)}`);
-    expect(url).toContain("Panam%C3%A1%0ACorreo");
+    expect(url).toContain("R%C3%ADo%20de%20Janeiro%0ACorreo");
+  });
+
+  it("codifica el mensaje general", () => {
+    expect(buildWhatsAppUrl(WHATSAPP_NUMBER, GENERAL_INQUIRY_MESSAGE)).toBe(
+      `https://wa.me/51938127170?text=${encodeURIComponent(GENERAL_INQUIRY_MESSAGE)}`,
+    );
   });
 
   it.each(["", "123456789", "1234567890123456"])("devuelve null con %j", (number) => {
     expect(buildWhatsAppUrl(number, "Hola")).toBeNull();
-  });
-});
-
-describe("parseDestinationId", () => {
-  it("acepta un id válido", () => {
-    expect(parseDestinationId("panama")).toBe("panama");
-  });
-
-  it.each([undefined, "xyz", ["panama"]])("cae a santiago-2027 con %j", (value) => {
-    expect(parseDestinationId(value)).toBe("santiago-2027");
   });
 });

@@ -6,7 +6,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/db";
 import { trips } from "@/lib/db-schema";
 import { tripSlugSchema } from "../schemas/trips.schema";
-import type { PublicTrip, Trip, TripInput, TripStatus } from "../types/trips.types";
+import type { PublicTrip, Trip, TripInput, TripScope, TripStatus } from "../types/trips.types";
 
 // Target status → allowed source statuses (Requirement 2). archived is final.
 const STATUS_SOURCES: Record<TripStatus, TripStatus[]> = {
@@ -15,7 +15,8 @@ const STATUS_SOURCES: Record<TripStatus, TripStatus[]> = {
   archived: ["draft", "published"],
 };
 
-// Only these columns leave the database for the landing: no id, status or audit dates.
+// Only these columns leave the database for the landing: no id, status, audit dates or the old price
+// columns (prices live in the trip offers).
 const publicColumns = {
   slug: trips.slug,
   title: trips.title,
@@ -27,14 +28,17 @@ const publicColumns = {
   distances: trips.distances,
   summary: trips.summary,
   includes: trips.includes,
-  priceUsd: trips.priceUsd,
   capacity: trips.capacity,
   imageUrl: trips.imageUrl,
+  officialUrl: trips.officialUrl,
+  excludes: trips.excludes,
+  notes: trips.notes,
 } satisfies Record<keyof PublicTrip, unknown>;
 
 const tripIdSchema = z.uuid();
 
-// Explicit editable columns: status, id and audit dates never come from the input.
+// Explicit editable columns: status, id and audit dates never come from the input. The old price columns
+// are never written, so an update keeps their stored values (reference only).
 function editableColumns(input: TripInput) {
   return {
     slug: input.slug,
@@ -47,10 +51,18 @@ function editableColumns(input: TripInput) {
     distances: input.distances,
     summary: input.summary,
     includes: input.includes,
-    priceUsd: input.priceUsd,
     capacity: input.capacity,
     imageUrl: input.imageUrl,
+    officialUrl: input.officialUrl,
+    excludes: input.excludes,
+    notes: input.notes,
   };
+}
+
+// CRM scope filter, in the same statement as the read or write (no check-then-act). Only an explicit
+// "all" lifts it; a trip outside an "own" scope behaves as missing, so its existence is not revealed.
+function scopeFilter(scope: TripScope) {
+  return scope.kind === "all" ? undefined : eq(trips.organizerId, scope.organizerId);
 }
 
 // Public reads run per request (connection()): never prerendered at build, where there is no DATABASE_URL.
@@ -78,34 +90,42 @@ export async function getPublishedTripBySlug(slug: string): Promise<PublicTrip |
 }
 
 // CRM list: archived trips last, then by race date and slug.
-export async function listTrips(): Promise<Trip[]> {
+export async function listTrips(scope: TripScope): Promise<Trip[]> {
   return getDb()
     .select()
     .from(trips)
+    .where(scopeFilter(scope))
     .orderBy(sql`${trips.status} = 'archived'`, asc(trips.raceDate), asc(trips.slug));
 }
 
-export async function getTripById(id: string): Promise<Trip | null> {
+export async function getTripById(id: string, scope: TripScope): Promise<Trip | null> {
   if (!tripIdSchema.safeParse(id).success) return null;
-  const [trip] = await getDb().select().from(trips).where(eq(trips.id, id)).limit(1);
+  const [trip] = await getDb()
+    .select()
+    .from(trips)
+    .where(and(eq(trips.id, id), scopeFilter(scope)))
+    .limit(1);
   return trip ?? null;
 }
 
-// New trips are always draft (column default). A used slug turns the insert into a no-op.
-export async function createTrip(input: TripInput): Promise<{ id: string } | "slug_taken"> {
+// New trips are always draft (column default). The organizer comes only from the scope, never from the
+// input. A used slug turns the insert into a no-op.
+export async function createTrip(input: TripInput, scope: TripScope): Promise<{ id: string } | "slug_taken"> {
   const [created] = await getDb()
     .insert(trips)
-    .values(editableColumns(input))
+    .values({ ...editableColumns(input), organizerId: scope.kind === "all" ? null : scope.organizerId })
     .onConflictDoNothing({ target: trips.slug })
     .returning({ id: trips.id });
   return created ?? "slug_taken";
 }
 
 // One batch (one transaction, one round-trip). The UPDATE decides with its WHERE (not archived,
-// slug unchanged unless draft, slug free); the SELECT explains why nothing was updated.
+// slug unchanged unless draft, slug free); the SELECT explains why nothing was updated. Both carry the
+// scope, so a trip outside it reads as not_found. Slug uniqueness is global, not scoped.
 export async function updateTrip(
   id: string,
   input: TripInput,
+  scope: TripScope,
 ): Promise<"updated" | "not_found" | "archived" | "slug_locked" | "slug_taken"> {
   const db = getDb();
   const other = alias(trips, "other");
@@ -116,6 +136,7 @@ export async function updateTrip(
       .where(
         and(
           eq(trips.id, id),
+          scopeFilter(scope),
           ne(trips.status, "archived"),
           or(eq(trips.status, "draft"), eq(trips.slug, input.slug)),
           notExists(
@@ -130,7 +151,7 @@ export async function updateTrip(
     db
       .select({ status: trips.status, slug: trips.slug })
       .from(trips)
-      .where(eq(trips.id, id)),
+      .where(and(eq(trips.id, id), scopeFilter(scope))),
   ]);
 
   if (updated.length > 0) return "updated";
@@ -141,15 +162,17 @@ export async function updateTrip(
   return "slug_taken";
 }
 
-// Missing trip or a source status that does not allow this transition → invalid_transition.
+// Missing trip, a trip outside the scope or a source status that does not allow this transition
+// → invalid_transition.
 export async function setTripStatus(
   id: string,
   status: TripStatus,
+  scope: TripScope,
 ): Promise<"changed" | "invalid_transition"> {
   const rows = await getDb()
     .update(trips)
     .set({ status, updatedAt: sql`now()` })
-    .where(and(eq(trips.id, id), inArray(trips.status, STATUS_SOURCES[status])))
+    .where(and(eq(trips.id, id), scopeFilter(scope), inArray(trips.status, STATUS_SOURCES[status])))
     .returning({ id: trips.id });
   return rows.length > 0 ? "changed" : "invalid_transition";
 }

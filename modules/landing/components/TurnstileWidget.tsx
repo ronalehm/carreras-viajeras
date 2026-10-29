@@ -1,18 +1,18 @@
 "use client";
 
-import Script from "next/script";
 import { useEffect, useRef, useState } from "react";
+import Script from "next/script";
 
 const TURNSTILE_SCRIPT_URL = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
-// Minimal local typing of the explicit-render API (no @types package).
+/** Minimal local typing of the part of Cloudflare's `window.turnstile` API used here. */
 type TurnstileApi = {
-  render(
+  render: (
     container: HTMLElement,
-    options: { sitekey: string; action: string; language: string; theme: "light" },
-  ): string | null | undefined;
-  reset(widgetId: string): void;
-  remove(widgetId: string): void;
+    options: { sitekey: string; action: string; language: string; size: "flexible" },
+  ) => string | undefined;
+  reset: (widgetId: string) => void;
+  remove: (widgetId: string) => void;
 };
 
 function getTurnstile(): TurnstileApi | undefined {
@@ -21,48 +21,52 @@ function getTurnstile(): TurnstileApi | undefined {
 
 type TurnstileWidgetProps = {
   siteKey: string;
-  action: string;
-  /** Change it after each server response: tokens are single-use, so the widget is reset. */
+  action: "lead_submit";
+  /** Tokens are single use: every change resets the widget for the next submission. */
   resetSignal: number;
 };
 
-// Rendered inside the <form>: Turnstile injects the hidden `cf-turnstile-response` field.
-// Expired tokens are refreshed by the widget itself (default `refresh-expired: "auto"`).
+/**
+ * Cloudflare Turnstile rendered explicitly inside the parent `<form>`. The widget adds its own
+ * hidden `cf-turnstile-response` field, so the token travels with the form's `FormData`.
+ */
 export function TurnstileWidget({ siteKey, action, resetSignal }: TurnstileWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
+  const lastResetSignalRef = useRef(resetSignal);
   const [scriptReady, setScriptReady] = useState(false);
 
   useEffect(() => {
-    const container = containerRef.current;
     const turnstile = scriptReady ? getTurnstile() : undefined;
-    if (!container || !turnstile) return;
+    const container = containerRef.current;
+    if (!turnstile || !container) return;
 
     const widgetId = turnstile.render(container, {
       sitekey: siteKey,
       action,
       language: "es",
-      theme: "light",
+      size: "flexible",
     });
-    if (!widgetId) return;
-    widgetIdRef.current = widgetId;
+    widgetIdRef.current = widgetId ?? null;
 
     return () => {
+      if (widgetId) turnstile.remove(widgetId);
       widgetIdRef.current = null;
-      turnstile.remove(widgetId);
     };
   }, [scriptReady, siteKey, action]);
 
   useEffect(() => {
-    // On mount there is no widget yet, so only later changes of resetSignal reset it.
+    if (resetSignal === lastResetSignalRef.current) return;
+    lastResetSignalRef.current = resetSignal;
     const widgetId = widgetIdRef.current;
     if (widgetId) getTurnstile()?.reset(widgetId);
   }, [resetSignal]);
 
   return (
     <>
+      {/* onReady runs after the first load and again on every remount (new form in stand mode). */}
       <Script src={TURNSTILE_SCRIPT_URL} onReady={() => setScriptReady(true)} />
-      <div ref={containerRef} className="min-h-[65px]" />
+      <div ref={containerRef} className="min-h-[65px] w-full" />
     </>
   );
 }

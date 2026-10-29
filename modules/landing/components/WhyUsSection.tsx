@@ -63,75 +63,75 @@ const CARDS: { icon: LucideIcon; title: string; summary: string; detail: string 
 
 /** Hides the native marker and draws "+" / "−" on the right. */
 const SUMMARY_CLASS =
-  "relative cursor-pointer list-none pr-8 after:absolute after:top-1/2 after:right-0 after:-translate-y-1/2 after:text-xl after:font-normal after:content-['+'] [&::-webkit-details-marker]:hidden";
+  "relative cursor-pointer list-none pr-8 after:absolute after:top-1/2 after:right-0 after:-translate-y-1/2 after:text-2xl after:leading-none after:font-normal after:content-['+'] [&::-webkit-details-marker]:hidden";
 
 export function WhyUsSection() {
   return (
     <section
       id="por-que-viajar"
       aria-labelledby="why-title"
-      className="border-t border-primary/15 px-[6%] py-8 text-primary sm:px-[8%] sm:py-10"
+      className="bg-background px-[6%] py-18 text-primary sm:px-[8%] lg:py-28"
     >
-      <div className="grid items-center gap-6 md:grid-cols-[1fr_1.5fr] md:gap-[7%]">
-        <h2
-          id="why-title"
-          className="font-heading text-4xl leading-none font-bold tracking-tight sm:text-5xl"
-        >
+      <div className="grid gap-10 md:grid-cols-[1fr_1.5fr] md:items-end md:gap-[7%]">
+        <h2 id="why-title" className="display-title text-display-section">
           ¿Por qué viajar
           <br />
           con nosotros?
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-3 sm:gap-6">
+        <ul className="grid sm:grid-cols-3 sm:gap-6">
           {KEY_POINTS.map(({ glyph, title, text }) => (
-            <li key={title} className="flex items-start gap-3.5 sm:block">
-              <span aria-hidden className="block w-6 shrink-0 text-xl sm:mb-3 sm:text-2xl">
+            <li
+              key={title}
+              className="flex items-baseline gap-4 border-t border-primary/15 py-4 sm:block sm:pt-5"
+            >
+              <span aria-hidden className="block w-6 shrink-0 text-2xl text-highlight sm:mb-3">
                 {glyph}
               </span>
               <div>
-                <strong className="mb-1 block text-sm">{title}</strong>
-                <p className="text-xs leading-relaxed">{text}</p>
+                <strong className="mb-1 block text-base font-semibold">{title}</strong>
+                <p className="text-sm leading-relaxed text-asphalt">{text}</p>
               </div>
             </li>
           ))}
         </ul>
       </div>
 
-      <details className="group/more mt-6 border-t border-primary/15">
+      <details className="group/more mt-10 border-t border-primary/15">
         <summary
-          className={`${SUMMARY_CLASS} pt-4 text-xs font-semibold group-open/more:after:content-['−']`}
+          className={`${SUMMARY_CLASS} py-5 text-base font-semibold group-open/more:after:content-['−']`}
         >
           <span className="group-open/more:hidden">Ver más</span>
           <span className="hidden group-open/more:inline">Ver menos</span>
         </summary>
-        <div className="pt-6">
-          <div className="grid grid-cols-2 gap-x-4.5 gap-y-6 md:grid-cols-3 md:gap-x-9">
-            {CARDS.map(({ icon: Icon, title, summary, detail }) => (
-              <article key={title} className="border-t border-primary/15 pt-4 sm:pt-5">
-                <Icon aria-hidden className="mb-3.5 size-6 stroke-[1.5] sm:mb-4 sm:size-7" />
-                <h3 className="mb-2 text-sm font-bold sm:text-base">{title}</h3>
-                <p className="mb-2 max-w-72 text-xs">{summary}</p>
-                <details className="group/card pt-2">
+        <ul className="grid gap-x-10 md:grid-cols-2 lg:grid-cols-3">
+          {CARDS.map(({ icon: Icon, title, summary, detail }) => (
+            <li key={title} className="border-t border-primary/15 py-6">
+              <article>
+                <Icon aria-hidden className="mb-4 size-7 stroke-[1.5] text-highlight" />
+                <h3 className="mb-2 display-title text-3xl leading-none">{title}</h3>
+                <p className="max-w-[45ch] text-sm leading-relaxed text-asphalt">{summary}</p>
+                <details className="group/card pt-3">
                   <summary
-                    className={`${SUMMARY_CLASS} max-w-72 text-xs font-medium group-open/card:after:content-['−']`}
+                    className={`${SUMMARY_CLASS} max-w-[45ch] py-1 text-sm font-semibold group-open/card:after:content-['−']`}
                   >
                     Ver detalle
                   </summary>
-                  <p className="mt-3 text-xs leading-loose">{detail}</p>
+                  <p className="mt-3 max-w-[60ch] text-sm leading-relaxed text-asphalt">{detail}</p>
                 </details>
               </article>
-            ))}
-          </div>
-          <div className="mt-6 border-t border-primary/15 pt-5 sm:flex sm:items-center sm:justify-between sm:gap-5">
-            <Link
-              href="/contacto"
-              className="inline-flex items-center gap-1 text-xs font-bold underline underline-offset-[5px]"
-            >
-              Hablemos de tu próxima carrera <ArrowUpRight aria-hidden className="size-4" />
-            </Link>
-            <span className="mt-3 block text-xs sm:mt-0 sm:max-w-88 sm:text-right">
-              Propuesta Santiago 2027 · Servicios sujetos a confirmación operativa.
-            </span>
-          </div>
+            </li>
+          ))}
+        </ul>
+        <div className="border-t border-primary/15 pt-6 pb-2 sm:flex sm:items-center sm:justify-between sm:gap-5">
+          <Link
+            href="/contacto"
+            className="inline-flex items-center gap-1 text-base font-semibold underline decoration-highlight decoration-2 underline-offset-[6px]"
+          >
+            Hablemos de tu próxima carrera <ArrowUpRight aria-hidden className="size-4" />
+          </Link>
+          <span className="mt-4 block text-sm text-asphalt sm:mt-0 sm:max-w-88 sm:text-right">
+            Propuesta Santiago 2027 · Servicios sujetos a confirmación operativa.
+          </span>
         </div>
       </details>
     </section>

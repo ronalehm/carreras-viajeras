@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import {
   BlogSection,
+  CommunitySection,
   DestinationsSection,
   FaqSection,
   HeroCarousel,
@@ -24,10 +25,12 @@ export default function HomePage() {
     <>
       <SiteHeader />
       <main>
-        <HeroCarousel />
-        <TripFacts trip={TRIPS[0]} />
+        <HeroCarousel>
+          <TripFacts trip={TRIPS[0]} />
+        </HeroCarousel>
         <StorySection />
         <PackageSection />
+        <CommunitySection />
         <WhyUsSection />
         <BlogSection />
         <DestinationsSection />

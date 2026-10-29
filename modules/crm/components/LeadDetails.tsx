@@ -1,8 +1,15 @@
 import type { ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import type { LeadDetail } from "../types/leads.types";
-import { LEAD_SOURCE_LABELS, leadOwnerLabel, leadTripLabel, SYSTEM_ACTOR_LABELS } from "../utils/leadDisplay";
+import {
+  CONTACT_PREFERENCE_LABELS,
+  LEAD_SOURCE_LABELS,
+  leadChannelLabel,
+  leadOwnerLabel,
+  leadTripLabel,
+} from "../utils/leadDisplay";
 
 type LeadDetailsProps = {
   lead: Pick<
@@ -17,6 +24,17 @@ type LeadDetailsProps = {
     | "createdBy"
     | "owner"
     | "lostReason"
+    | "channel"
+    | "originDetail"
+    | "utmSource"
+    | "utmMedium"
+    | "utmCampaign"
+    | "referredBy"
+    | "referralPermission"
+    | "contactPreference"
+    | "contactOptOutAt"
+    | "campaign"
+    | "marketingOptInAt"
   >;
 };
 
@@ -44,12 +62,23 @@ function DetailCard({ title, items }: { title: string; items: Item[] }) {
   );
 }
 
-// Presentation only. Dates are left out: the creation date (also the manual consent date)
-// belongs to the history. A web form lead has no author: "Registrado por" shows the source.
+// Presentation only. Dates are left out (the creation date, also the manual consent date,
+// belongs to the history) except the opt-out and the promotions opt-in. "Campaña" is the CRM
+// campaign (QR or link); "UTM" joins the UTM values. A system lead (web form, Google Forms, import) has
+// no author: "Registrado por" shows its entry path.
 export function LeadDetails({ lead }: LeadDetailsProps) {
   const link = "underline underline-offset-4 hover:text-primary";
   const management: Item[] = [{ label: "Responsable", value: leadOwnerLabel(lead.owner) }];
   if (lead.lostReason) management.push({ label: "Motivo de la pérdida", value: lead.lostReason });
+  if (lead.contactOptOutAt) {
+    management.push({ label: "Contacto", value: `Pidió no seguir el ${formatDateTime(lead.contactOptOutAt)}` });
+  }
+  const campaign = lead.campaign ? `${lead.campaign.name} (${lead.campaign.code})` : EMPTY;
+  const utm = [lead.utmSource, lead.utmMedium, lead.utmCampaign].filter(Boolean).join(" / ");
+  const marketing = lead.marketingOptInAt ? `Aceptó el ${formatDateTime(lead.marketingOptInAt)}` : "No aceptó";
+  const referral = lead.referredBy
+    ? `${lead.referredBy} (${lead.referralPermission ? "puede mencionarse" : "no mencionarlo"})`
+    : EMPTY;
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -77,9 +106,18 @@ export function LeadDetails({ lead }: LeadDetailsProps) {
       <DetailCard
         title="Registro"
         items={[
-          { label: "Origen", value: LEAD_SOURCE_LABELS[lead.source] },
+          { label: "Vía de entrada", value: LEAD_SOURCE_LABELS[lead.source] },
+          { label: "Origen", value: leadChannelLabel(lead.channel, lead.originDetail) },
+          { label: "Campaña", value: campaign },
+          { label: "UTM", value: utm || EMPTY },
+          { label: "Referido por", value: referral },
+          {
+            label: "Prefiere",
+            value: lead.contactPreference ? CONTACT_PREFERENCE_LABELS[lead.contactPreference] : EMPTY,
+          },
           { label: "Consentimiento", value: `Versión ${lead.consentVersion}` },
-          { label: "Registrado por", value: lead.createdBy?.email ?? SYSTEM_ACTOR_LABELS.created },
+          { label: "Promociones", value: marketing },
+          { label: "Registrado por", value: lead.createdBy?.email ?? LEAD_SOURCE_LABELS[lead.source] },
         ]}
       />
       <DetailCard title="Gestión" items={management} />

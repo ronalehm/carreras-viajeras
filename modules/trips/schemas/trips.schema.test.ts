@@ -23,9 +23,23 @@ const validForm = {
   distances: "42K, 21K , ,10K",
   summary: "Viaje grupal para correr la Maratón de Santiago.",
   includes: "Hotel 4 noches\n\n  Traslados  \r\nKit de carrera\n",
-  priceUsd: "1990",
   capacity: "100",
   imageUrl: "https://example.com/santiago.jpg",
+  officialUrl: " https://maratondesantiago.cl/ ",
+  excludes: "Vuelos internos\n\n  Gastos personales \r\n",
+  notes: " Horario de salida por confirmar. ",
+};
+
+const NEW_OPTIONAL_FIELDS = [
+  "officialUrl",
+  "excludes",
+  "notes",
+] as const;
+
+const EMPTY_NEW_FIELDS = {
+  officialUrl: null,
+  excludes: [],
+  notes: null,
 };
 
 const parse = (overrides: Record<string, string>) =>
@@ -62,9 +76,11 @@ describe("tripFormSchema", () => {
       distances: ["42K", "21K", "10K"],
       summary: "Viaje grupal para correr la Maratón de Santiago.",
       includes: ["Hotel 4 noches", "Traslados", "Kit de carrera"],
-      priceUsd: 1990,
       capacity: 100,
       imageUrl: "https://example.com/santiago.jpg",
+      officialUrl: "https://maratondesantiago.cl/",
+      excludes: ["Vuelos internos", "Gastos personales"],
+      notes: "Horario de salida por confirmar.",
     });
   });
 
@@ -73,9 +89,11 @@ describe("tripFormSchema", () => {
       startDate: "",
       endDate: "  ",
       includes: "\n \n",
-      priceUsd: "",
       capacity: "",
       imageUrl: "",
+      officialUrl: " ",
+      excludes: "\n \n",
+      notes: "",
     });
 
     expect(result.success).toBe(true);
@@ -83,15 +101,22 @@ describe("tripFormSchema", () => {
       startDate: null,
       endDate: null,
       includes: [],
-      priceUsd: null,
       capacity: null,
       imageUrl: null,
+      ...EMPTY_NEW_FIELDS,
     });
   });
 
   it("treats missing optional keys as blank, without English type errors", () => {
     const required: Partial<typeof validForm> = { ...validForm };
-    for (const key of ["startDate", "endDate", "includes", "priceUsd", "capacity", "imageUrl"] as const) {
+    for (const key of [
+      "startDate",
+      "endDate",
+      "includes",
+      "capacity",
+      "imageUrl",
+      ...NEW_OPTIONAL_FIELDS,
+    ] as const) {
       delete required[key];
     }
     const result = tripFormSchema.safeParse(required);
@@ -101,9 +126,9 @@ describe("tripFormSchema", () => {
       startDate: null,
       endDate: null,
       includes: [],
-      priceUsd: null,
       capacity: null,
       imageUrl: null,
+      ...EMPTY_NEW_FIELDS,
     });
   });
 
@@ -116,6 +141,22 @@ describe("tripFormSchema", () => {
     expect(result.error?.issues.map((issue) => issue.message)).not.toContainEqual(
       expect.stringMatching(/Invalid|expected/),
     );
+  });
+
+  it("drops the old price fields of trips, even with invalid values: prices live in the offers", () => {
+    const result = tripFormSchema.safeParse({
+      ...validForm,
+      priceUsd: "12.5",
+      installmentsPriceUsd: "-1",
+      depositUsd: "300",
+      companionPriceUsd: "abc",
+      paymentTerms: "Reserva con US$ 300.",
+    });
+
+    expect(result.success).toBe(true);
+    for (const key of ["priceUsd", "installmentsPriceUsd", "depositUsd", "companionPriceUsd", "paymentTerms"]) {
+      expect(result.data).not.toHaveProperty(key);
+    }
   });
 
   it("drops extra keys such as status and priceCurrency", () => {
@@ -199,31 +240,6 @@ describe("tripFormSchema", () => {
     });
   });
 
-  describe("priceUsd", () => {
-    it.each(["-1", "12.5", "12,5", "abc", "1e3", "1000001"])("rejects %j", (priceUsd) => {
-      expectErrorOn({ priceUsd }, "priceUsd");
-    });
-
-    it("writes the limit with the price number style", () => {
-      expect(parse({ priceUsd: "1000001" }).error?.issues[0]?.message).toBe(
-        "El precio no puede superar 1,000,000 USD.",
-      );
-    });
-
-    it("uses the price message for decimals", () => {
-      expect(parse({ priceUsd: "12.5" }).error?.issues[0]?.message).toBe(
-        "Indica un precio en dólares, sin decimales.",
-      );
-    });
-
-    it.each([
-      ["0", 0],
-      ["1000000", 1_000_000],
-    ])("parses %j as %d", (priceUsd, expected) => {
-      expect(parse({ priceUsd }).data?.priceUsd).toBe(expected);
-    });
-  });
-
   describe("capacity", () => {
     it.each(["0", "-5", "1.5", "10001", "cien"])("rejects %j", (capacity) => {
       expectErrorOn({ capacity }, "capacity");
@@ -252,6 +268,52 @@ describe("tripFormSchema", () => {
       expect(parse({ imageUrl: " https://cdn.example.com/a.jpg " }).data?.imageUrl).toBe(
         "https://cdn.example.com/a.jpg",
       );
+    });
+  });
+
+  describe("officialUrl", () => {
+    it.each(["http://maratondesantiago.cl/", "ftp://maratondesantiago.cl/", "no-es-url", `https://example.com/${"a".repeat(2040)}`])(
+      "rejects %j",
+      (officialUrl) => {
+        expectErrorOn({ officialUrl }, "officialUrl");
+      },
+    );
+
+    it("answers in Spanish for an http URL", () => {
+      expect(parse({ officialUrl: "http://maratondesantiago.cl/" }).error?.issues[0]?.message).toBe(
+        "Indica una URL que empiece por https://.",
+      );
+    });
+  });
+
+  describe("excludes", () => {
+    it("rejects 21 items in Spanish", () => {
+      const result = parse({ excludes: Array.from({ length: 21 }, (_, i) => `Item ${i}`).join("\n") });
+      expect(issueFields(result)).toEqual(["excludes"]);
+      expect(result.error?.issues[0]?.message).toBe("Indica como máximo 20 elementos.");
+    });
+
+    it("rejects an item longer than 160 characters in Spanish", () => {
+      const result = parse({ excludes: `Corto\n${"a".repeat(161)}` });
+      expect(issueFields(result)).toEqual(["excludes"]);
+      expect(result.error?.issues[0]?.message).toBe("Cada elemento puede tener hasta 160 caracteres.");
+    });
+
+    it("accepts 20 items", () => {
+      const excludes = Array.from({ length: 20 }, (_, i) => `Item ${i}`).join("\n");
+      expect(parse({ excludes }).data?.excludes).toHaveLength(20);
+    });
+  });
+
+  describe("notes", () => {
+    it("rejects more than 1000 characters in Spanish", () => {
+      const result = parse({ notes: "a".repeat(1001) });
+      expect(issueFields(result)).toEqual(["notes"]);
+      expect(result.error?.issues[0]?.message).toBe("Puede tener hasta 1000 caracteres.");
+    });
+
+    it("accepts 1000 characters after trimming", () => {
+      expect(parse({ notes: ` ${"a".repeat(1000)} ` }).data?.notes).toHaveLength(1000);
     });
   });
 
@@ -304,6 +366,27 @@ describe("updateTripSchema", () => {
     const result = updateTripSchema.safeParse({ ...validForm, id: "abc" });
     expect(issueFields(result)).toEqual(["id"]);
     expect(result.error?.issues[0]?.message).toBe("El viaje no es válido.");
+  });
+
+  it("accepts the new trip fields", () => {
+    const result = updateTripSchema.safeParse({ ...validForm, id: TRIP_ID });
+    expect(result.data).toMatchObject({
+      officialUrl: "https://maratondesantiago.cl/",
+      excludes: ["Vuelos internos", "Gastos personales"],
+      notes: "Horario de salida por confirmar.",
+    });
+  });
+
+  it("rejects an invalid new field on its own key", () => {
+    const result = updateTripSchema.safeParse({ ...validForm, id: TRIP_ID, officialUrl: "http://maratondesantiago.cl/" });
+    expect(issueFields(result)).toEqual(["officialUrl"]);
+  });
+
+  it("drops the old price fields of trips", () => {
+    const result = updateTripSchema.safeParse({ ...validForm, id: TRIP_ID, priceUsd: "1990", depositUsd: "12.5" });
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty("priceUsd");
+    expect(result.data).not.toHaveProperty("depositUsd");
   });
 
   it("keeps the travel date rules", () => {

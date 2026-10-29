@@ -3,81 +3,82 @@ import { z } from "zod";
 import { getEnv, getTurnstileEnv } from "@/lib/env";
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-const TURNSTILE_ACTION = "lead_submit";
+// Must match the action the widget renders with (landing TurnstileWidget / LeadCaptureForm).
+const LEAD_SUBMIT_ACTION = "lead_submit";
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_ATTEMPTS = 2;
 const TIMEOUT_MS = 3000;
 
 const siteverifyResponseSchema = z.object({
   success: z.boolean(),
-  hostname: z.string().optional(),
-  action: z.string().optional(),
+  // nullish: Siteverify may answer null; a null action or hostname is then invalid, not unavailable.
+  hostname: z.string().nullish(),
+  action: z.string().nullish(),
   "error-codes": z.array(z.string()).optional(),
 });
 
-type TurnstileVerification = "valid" | "invalid" | "unavailable";
+type SiteverifyResponse = z.infer<typeof siteverifyResponseSchema>;
+export type TurnstileResult = "valid" | "invalid" | "unavailable";
 
-// Fixed text only: never the token, the IP, the secret or the provider's message.
+// Fixed text only: never the token, the IP, the secret or Cloudflare's message.
 function unavailable(): "unavailable" {
   console.error("turnstile: verification unavailable");
   return "unavailable";
 }
 
-// Valid only with success, the form's action and the APP_ORIGIN hostname. The documented test
-// secrets (development only, see getTurnstileEnv) answer without the real hostname or action,
-// so with them only success is required.
-function isValid(data: z.infer<typeof siteverifyResponseSchema>, isTestSecret: boolean): boolean {
-  if (!data.success) return false;
-  if (isTestSecret) return true;
-  return data.action === TURNSTILE_ACTION && data.hostname === new URL(getEnv().APP_ORIGIN).hostname;
+// One Siteverify call. null = retryable failure (network error, timeout or 5xx); any other
+// unexpected answer (4xx, malformed body) is final and fails closed.
+async function siteverify(body: URLSearchParams): Promise<SiteverifyResponse | "failed" | null> {
+  let response: Response;
+  try {
+    response = await fetch(SITEVERIFY_URL, { method: "POST", body, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  } catch {
+    return null;
+  }
+  if (!response.ok) {
+    // Release the connection (Workers) before retrying or failing: the body is never read.
+    await response.body?.cancel().catch(() => {});
+    return response.status >= 500 ? null : "failed";
+  }
+  const parsed = siteverifyResponseSchema.safeParse(await response.json().catch(() => null));
+  return parsed.success ? parsed.data : "failed";
 }
 
-// Siteverify fails closed: missing or invalid secret, network errors, timeouts and 5xx after the
-// second attempt are "unavailable" (nothing is saved). Retries (network error, timeout or 5xx only)
-// reuse the same idempotency_key, so Cloudflare does not reject them as an already spent token.
-// Waiting on the network does not consume Worker CPU.
+// Server-side Turnstile check (fails closed). Valid only with success, the lead_submit action and
+// the APP_ORIGIN hostname. Cloudflare's test secret (development only, see getTurnstileEnv)
+// answers without the real hostname or action, so with it only success is required.
+// At most 2 attempts, with the same idempotency_key, and only on network error, timeout or 5xx.
 export async function verifyTurnstileToken(input: {
   token: string;
   remoteIp: string | null;
   idempotencyKey: string;
-}): Promise<TurnstileVerification> {
-  if (input.token.length === 0 || input.token.length > MAX_TOKEN_LENGTH) return "invalid";
+}): Promise<TurnstileResult> {
+  if (input.token === "" || input.token.length > MAX_TOKEN_LENGTH) return "invalid";
 
-  let env: ReturnType<typeof getTurnstileEnv>;
+  let secret: string;
+  let isTestSecret: boolean;
+  let expectedHostname: string;
   try {
-    env = getTurnstileEnv();
+    const env = getTurnstileEnv();
+    if (env === null) return unavailable();
+    secret = env.TURNSTILE_SECRET_KEY;
+    isTestSecret = env.isTestSecret;
+    expectedHostname = new URL(getEnv().APP_ORIGIN).hostname;
   } catch {
     return unavailable();
   }
-  if (!env) return unavailable();
 
-  const body = new URLSearchParams({
-    secret: env.TURNSTILE_SECRET_KEY,
-    response: input.token,
-    idempotency_key: input.idempotencyKey,
-  });
+  const body = new URLSearchParams({ secret, response: input.token });
   if (input.remoteIp) body.set("remoteip", input.remoteIp);
+  body.set("idempotency_key", input.idempotencyKey);
 
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    let response: Response;
-    try {
-      response = await fetch(SITEVERIFY_URL, {
-        method: "POST",
-        body,
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch {
-      continue;
-    }
-    if (response.status >= 500) continue;
-    if (!response.ok) return unavailable();
-
-    try {
-      const data = siteverifyResponseSchema.parse(await response.json());
-      return isValid(data, env.isTestSecret) ? "valid" : "invalid";
-    } catch {
-      return unavailable();
-    }
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const result = await siteverify(body);
+    if (result === null) continue;
+    if (result === "failed") return unavailable();
+    if (!result.success) return "invalid";
+    if (isTestSecret) return "valid";
+    return result.action === LEAD_SUBMIT_ACTION && result.hostname === expectedHostname ? "valid" : "invalid";
   }
   return unavailable();
 }

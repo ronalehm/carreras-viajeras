@@ -1,28 +1,36 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getTrip, SiteFooter, SiteHeader, TRIPS, TripDetail } from "@/modules/landing";
+import {
+  firstParam,
+  getCatalogOffer,
+  getCatalogTrip,
+  SiteFooter,
+  SiteHeader,
+  TripDetail,
+} from "@/modules/landing";
 
-// Slugs outside TRIPS return 404 without rendering in the Worker.
-export const dynamicParams = false;
-
-export function generateStaticParams() {
-  return TRIPS.map(({ slug }) => ({ slug }));
-}
-
+// Rendered per request: the catalog read calls connection(). No generateStaticParams.
 export async function generateMetadata({ params }: PageProps<"/viajes/[slug]">): Promise<Metadata> {
-  const trip = getTrip((await params).slug);
+  const trip = await getCatalogTrip((await params).slug);
   if (!trip) notFound();
-  return { title: trip.name, description: trip.description };
+  return {
+    title: trip.title,
+    description: trip.summary,
+    ...(trip.imageUrl ? { openGraph: { images: [trip.imageUrl] } } : {}),
+  };
 }
 
-export default async function TripPage({ params }: PageProps<"/viajes/[slug]">) {
-  const trip = getTrip((await params).slug);
+export default async function TripPage({ params, searchParams }: PageProps<"/viajes/[slug]">) {
+  const { slug } = await params;
+  // ?c= only selects a valid campaign offer (decided by the server); every other parameter is ignored.
+  const campaignCode = firstParam((await searchParams).c) ?? null;
+  const [trip, offer] = await Promise.all([getCatalogTrip(slug), getCatalogOffer(slug, campaignCode)]);
   if (!trip) notFound();
   return (
     <>
       <SiteHeader />
       <main>
-        <TripDetail trip={trip} />
+        <TripDetail trip={trip} offer={offer} />
       </main>
       <SiteFooter />
     </>

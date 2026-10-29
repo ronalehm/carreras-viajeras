@@ -9,6 +9,7 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("../services/leads.service", () => ({
   archiveLead: vi.fn(),
   createLead: vi.fn(),
+  optOutLead: vi.fn(),
   updateLead: vi.fn(),
   changeLeadStage: vi.fn(),
   changeLeadOwner: vi.fn(),
@@ -28,6 +29,7 @@ import {
   changeLeadOwner,
   changeLeadStage,
   createLead,
+  optOutLead,
   setNextAction,
   updateLead,
 } from "../services/leads.service";
@@ -38,6 +40,7 @@ import {
   changeLeadOwnerAction,
   changeLeadStageAction,
   createLeadAction,
+  optOutLeadAction,
   setNextActionAction,
   updateLeadAction,
 } from "./leads.actions";
@@ -56,6 +59,10 @@ const VALID = {
   ownerUserId: "staff-1",
   note: "",
   consent: "on",
+  channel: "referral",
+  originDetail: "",
+  referredBy: "",
+  contactPreference: "",
 };
 
 function form(values: Record<string, string>) {
@@ -150,6 +157,45 @@ describe("createLeadAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("sin origen devuelve «Elige el origen del lead.» y conserva los campos de origen escritos", async () => {
+    const values: Record<string, string> = {
+      ...VALID,
+      originDetail: "Media Maratón de Lima 2026",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "call",
+    };
+    delete values.channel;
+    const data = form({ ...values, utmSource: "instagram", contactOptOutAt: "2026-10-25" });
+
+    expect(await createLeadAction(IDLE, data)).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { channel: ["Elige el origen del lead."] },
+      values,
+    });
+    expect(createLead).not.toHaveBeenCalled();
+  });
+
+  it("con origen, detalle, referente, permiso y preferencia los envía al service", async () => {
+    const data = form({
+      ...VALID,
+      originDetail: " Media Maratón de Lima 2026 ",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "call",
+    });
+    await expect(createLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
+    expect(vi.mocked(createLead).mock.calls[0][0]).toMatchObject({
+      channel: "referral",
+      originDetail: "Media Maratón de Lima 2026",
+      referredBy: "Club Runners Lima",
+      referralPermission: true,
+      contactPreference: "call",
+    });
+  });
+
   it("omite archivos al devolver los valores", async () => {
     const data = form({ ...VALID, fullName: "A" });
     data.set("note", new File(["x"], "note.txt"));
@@ -237,12 +283,17 @@ const EDIT = {
   location: "",
   tripId: TRIP_ID,
   destinationText: "",
+  channel: "unknown",
+  originDetail: "",
+  referredBy: "",
+  contactPreference: "",
 };
 const STAGE = { leadId: LEAD_ID, stage: "quoted", lostReason: "" };
 const OWNER = { leadId: LEAD_ID, ownerUserId: "staff-2" };
 const ACTIVITY = { leadId: LEAD_ID, type: "call", body: "Llamó por la 21K." };
 const NEXT_ACTION = { leadId: LEAD_ID, nextActionDate: "2026-10-25", nextActionNote: "Enviar la cotización." };
 const ARCHIVE = { leadId: LEAD_ID };
+const OPT_OUT = { leadId: LEAD_ID };
 
 type Action = (prev: LeadActionState, formData: FormData) => Promise<LeadActionState>;
 
@@ -253,6 +304,7 @@ const DETAIL_ACTIONS = [
   ["addLeadActivityAction", addLeadActivityAction, ACTIVITY, addLeadActivity],
   ["setNextActionAction", setNextActionAction, NEXT_ACTION, setNextAction],
   ["archiveLeadAction", archiveLeadAction, ARCHIVE, archiveLead],
+  ["optOutLeadAction", optOutLeadAction, OPT_OUT, optOutLead],
 ] as const satisfies readonly (readonly [string, Action, Record<string, string>, unknown])[];
 
 describe("acciones de la ficha: permisos y errores del service", () => {
@@ -318,21 +370,45 @@ describe("acciones de la ficha: permisos y errores del service", () => {
 });
 
 describe("updateLeadAction", () => {
-  it("guarda solo los datos de contacto, revalida la lista y la ficha y redirige a la ficha", async () => {
+  it("guarda contacto y origen con el id de la sesión como autor, descarta campos extra, revalida y redirige", async () => {
+    signIn("session-user");
     vi.mocked(updateLead).mockResolvedValue("updated");
-    const data = form({ ...EDIT, stage: "paid", ownerUserId: "intruder", actorUserId: "intruder", source: "web_form" });
+    const data = form({
+      ...EDIT,
+      channel: "instagram",
+      originDetail: " Reel de la 42K ",
+      referredBy: "Club Runners Lima",
+      referralPermission: "on",
+      contactPreference: "whatsapp",
+      stage: "paid",
+      ownerUserId: "intruder",
+      actorUserId: "intruder",
+      source: "web_form",
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: "santiago-2027",
+      contactOptOutAt: "2026-10-25T10:00:00Z",
+    });
 
     await expect(updateLeadAction(IDLE, data)).rejects.toBeInstanceOf(RedirectSignal);
 
-    expect(updateLead).toHaveBeenCalledExactlyOnceWith({
-      leadId: LEAD_ID,
-      fullName: "Ana Pérez",
-      phone: "+51999888777",
-      email: null,
-      location: null,
-      tripId: TRIP_ID,
-      destinationText: null,
-    });
+    expect(updateLead).toHaveBeenCalledExactlyOnceWith(
+      {
+        leadId: LEAD_ID,
+        fullName: "Ana Pérez",
+        phone: "+51999888777",
+        email: null,
+        location: null,
+        tripId: TRIP_ID,
+        destinationText: null,
+        channel: "instagram",
+        originDetail: "Reel de la 42K",
+        referredBy: "Club Runners Lima",
+        referralPermission: true,
+        contactPreference: "whatsapp",
+      },
+      "session-user",
+    );
     expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
     expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
     expect(redirect).toHaveBeenCalledExactlyOnceWith(`/crm/leads/${LEAD_ID}`);
@@ -345,6 +421,33 @@ describe("updateLeadAction", () => {
       code: "invalid_input",
       message: "Revisa los campos marcados.",
       fieldErrors: { email: ["Introduce un correo válido."] },
+      values,
+    });
+    expect(updateLead).not.toHaveBeenCalled();
+  });
+
+  it("sin casilla de permiso envía referralPermission: false y las preferencias vacías como null", async () => {
+    vi.mocked(updateLead).mockResolvedValue("updated");
+    await expect(updateLeadAction(IDLE, form(EDIT))).rejects.toBeInstanceOf(RedirectSignal);
+    expect(updateLead).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        channel: "unknown",
+        originDetail: null,
+        referredBy: null,
+        referralPermission: false,
+        contactPreference: null,
+      }),
+      "staff-1",
+    );
+  });
+
+  it("con permiso y sin referente devuelve «Indica quién lo refirió.» y conserva los campos de origen", async () => {
+    const values = { ...EDIT, channel: "referral", originDetail: "Club", referralPermission: "on", contactPreference: "call" };
+    expect(await updateLeadAction(IDLE, form({ ...values, utmSource: "instagram" }))).toEqual({
+      status: "error",
+      code: "invalid_input",
+      message: "Revisa los campos marcados.",
+      fieldErrors: { referredBy: ["Indica quién lo refirió."] },
       values,
     });
     expect(updateLead).not.toHaveBeenCalled();
@@ -541,6 +644,17 @@ describe("setNextActionAction", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
+  it("con un lead que pidió no seguir devuelve opted_out con su mensaje y no revalida", async () => {
+    vi.mocked(setNextAction).mockResolvedValue("opted_out");
+    expect(await setNextActionAction(IDLE, form(NEXT_ACTION))).toEqual({
+      status: "error",
+      code: "opted_out",
+      message: "El contacto pidió no seguir: no se programan próximas acciones.",
+      values: NEXT_ACTION,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
   it("con un lead pagado o perdido devuelve closed y no revalida", async () => {
     vi.mocked(setNextAction).mockResolvedValue("closed");
     expect(await setNextActionAction(IDLE, form(NEXT_ACTION))).toEqual({
@@ -577,5 +691,56 @@ describe("archiveLeadAction", () => {
       status: "error",
       message: "El lead ya no existe o está archivado. Recarga la página.",
     });
+  });
+});
+
+describe("optOutLeadAction", () => {
+  const SMUGGLED = { actorUserId: "intruder", stage: "paid", lostReason: "Otro", contactOptOutAt: "2020-01-01" };
+
+  it("registra la baja con el usuario de la sesión, ignora campos extra y revalida la lista y la ficha", async () => {
+    signIn("session-user");
+    vi.mocked(optOutLead).mockResolvedValue("opted_out");
+
+    expect(await optOutLeadAction(IDLE, form({ ...OPT_OUT, ...SMUGGLED }))).toEqual({
+      status: "success", message: "Registrado: pidió no seguir.",
+    });
+    expect(requirePermission).toHaveBeenCalledExactlyOnceWith("leads.manage");
+    expect(optOutLead).toHaveBeenCalledExactlyOnceWith(LEAD_ID, "session-user");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("si ya tenía baja devuelve no_change con su mensaje, sin eco de campos extra, y revalida la lista y la ficha", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("no_change");
+    expect(await optOutLeadAction(IDLE, form({ ...OPT_OUT, ...SMUGGLED }))).toEqual({
+      status: "error",
+      code: "no_change",
+      message: "Ya estaba registrado que pidió no seguir.",
+      values: OPT_OUT,
+    });
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+  });
+
+  it("con un lead inexistente o archivado devuelve not_found y no revalida", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("not_found");
+    expect(await optOutLeadAction(IDLE, form(OPT_OUT))).toEqual({
+      status: "error",
+      code: "not_found",
+      message: "El lead ya no existe o está archivado. Recarga la página.",
+      values: OPT_OUT,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("su resultado encaja en ConfirmActionState (status y message)", async () => {
+    vi.mocked(optOutLead).mockResolvedValue("opted_out");
+    const success: ConfirmActionState = await optOutLeadAction(IDLE, form(OPT_OUT));
+    expect(success).toEqual({ status: "success", message: "Registrado: pidió no seguir." });
+
+    vi.mocked(optOutLead).mockResolvedValue("no_change");
+    const error: ConfirmActionState = await optOutLeadAction(IDLE, form(OPT_OUT));
+    expect(error).toMatchObject({ status: "error", message: "Ya estaba registrado que pidió no seguir." });
   });
 });

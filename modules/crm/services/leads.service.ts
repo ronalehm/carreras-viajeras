@@ -13,7 +13,6 @@ import {
   lte,
   ne,
   notInArray,
-  or,
   sql,
   type SQLWrapper,
 } from "drizzle-orm";
@@ -21,7 +20,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
-import { leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
+import { campaigns, leads, profiles, staffAssignments, staffRoleEnum, trips } from "@/lib/db-schema";
 import { leadStageSchema } from "../schemas/leads.schema";
 import type {
   CreateLeadInput,
@@ -36,7 +35,7 @@ import type {
   NextActionInput,
   UpdateLeadInput,
 } from "../types/leads.types";
-import { CLOSED_LEAD_STAGES } from "../utils/leadDisplay";
+import { CLOSED_LEAD_STAGES, OPT_OUT_LOST_REASON } from "../utils/leadDisplay";
 
 type Db = ReturnType<typeof getDb>;
 
@@ -70,6 +69,15 @@ function ownerOptionsQuery(db: Db) {
     .orderBy(asc(profiles.email), asc(profiles.userId));
 }
 
+// Every trip that is not archived (drafts included): lead form and report filter.
+export function tripOptionsQuery(db: Db) {
+  return db
+    .select({ id: trips.id, title: trips.title, status: trips.status })
+    .from(trips)
+    .where(ne(trips.status, "archived"))
+    .orderBy(asc(trips.raceDate), asc(trips.title));
+}
+
 // "mine" is the session user and "unassigned" the leads without owner (web form).
 function ownerCondition(owner: LeadListFilters["owner"], currentUserId: string) {
   if (owner === undefined) return undefined;
@@ -98,10 +106,11 @@ export async function getLeadList(
   const db = getDb();
   const byOwner = ownerCondition(filters.owner, currentUserId);
   const byFollowUp = followUpCondition(filters.followUp, today);
-  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp);
+  const byChannel = filters.channel === undefined ? undefined : eq(leads.channel, filters.channel);
+  const visible = and(isNull(leads.archivedAt), byOwner, byFollowUp, byChannel);
   const listed =
     filters.stage === "archived"
-      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp)
+      ? and(isNotNull(leads.archivedAt), byOwner, byFollowUp, byChannel)
       : and(visible, filters.stage === undefined ? undefined : eq(leads.stage, filters.stage));
   const newestFirst = [desc(leads.createdAt), desc(leads.id)];
   const order = filters.followUp ? [asc(leads.nextActionDate), ...newestFirst] : newestFirst;
@@ -114,6 +123,7 @@ export async function getLeadList(
         phone: leads.phone,
         stage: leads.stage,
         source: leads.source,
+        channel: leads.channel,
         trip: { id: trips.id, title: trips.title },
         destinationText: leads.destinationText,
         owner: {
@@ -161,11 +171,7 @@ export async function getLeadFormOptions(): Promise<{
   const db = getDb();
   const [ownerOptions, tripOptions] = await db.batch([
     ownerOptionsQuery(db),
-    db
-      .select({ id: trips.id, title: trips.title, status: trips.status })
-      .from(trips)
-      .where(ne(trips.status, "archived"))
-      .orderBy(asc(trips.raceDate), asc(trips.title)),
+    tripOptionsQuery(db),
   ]);
   return { ownerOptions, tripOptions };
 }
@@ -173,7 +179,8 @@ export async function getLeadFormOptions(): Promise<{
 // One statement: the lead is inserted only if the owner is active and the trip (if any) is not
 // archived; its 'created' activity and its 'lead.created' outbox event (payload { source }, for
 // n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
-// and the consent version never come from the input.
+// and the consent version never come from the input. The origin fields come from the form; the
+// UTM fields (web capture only) and contact_opt_out_at are never written here.
 export async function createLead(
   input: CreateLeadInput,
   actorUserId: string,
@@ -190,12 +197,15 @@ export async function createLead(
     inserted AS (
       INSERT INTO leads (
         full_name, phone, email, location, trip_id, destination_text,
-        source, owner_user_id, consent_version, created_by
+        source, owner_user_id, consent_version, created_by,
+        channel, origin_detail, referred_by, referral_permission, contact_preference
       )
       SELECT
         ${input.fullName}, ${input.phone}, ${input.email}, ${input.location}, ${input.tripId}::uuid,
         ${input.destinationText}, ${input.source}::lead_source, ${input.ownerUserId},
-        ${MANUAL_CONSENT_VERSION}, ${actorUserId}
+        ${MANUAL_CONSENT_VERSION}, ${actorUserId},
+        ${input.channel}::lead_channel, ${input.originDetail}, ${input.referredBy},
+        ${input.referralPermission}::boolean, ${input.contactPreference}::contact_preference
       FROM checks
       WHERE owner_ok AND trip_ok
       RETURNING id, source
@@ -220,7 +230,8 @@ const creator = alias(profiles, "creator");
 const archiver = alias(profiles, "archiver");
 
 // Archived leads are returned too (read-only detail). A non-UUID id never reaches the database.
-// LEFT JOINs: web form leads have no owner and no author (owner and createdBy are null).
+// LEFT JOINs: web form leads have no owner and no author (owner and createdBy are null); only
+// web form leads may have a campaign (campaign is null otherwise).
 export async function getLeadById(id: string): Promise<LeadDetail | null> {
   if (!z.uuid().safeParse(id).success) return null;
   const db = getDb();
@@ -249,63 +260,82 @@ export async function getLeadById(id: string): Promise<LeadDetail | null> {
       nextActionNote: leads.nextActionNote,
       archivedAt: leads.archivedAt,
       archivedBy: { email: archiver.email },
+      channel: leads.channel,
+      originDetail: leads.originDetail,
+      utmSource: leads.utmSource,
+      utmMedium: leads.utmMedium,
+      utmCampaign: leads.utmCampaign,
+      referredBy: leads.referredBy,
+      referralPermission: leads.referralPermission,
+      contactPreference: leads.contactPreference,
+      contactOptOutAt: leads.contactOptOutAt,
+      campaign: { id: campaigns.id, code: campaigns.code, name: campaigns.name },
+      marketingOptInAt: leads.marketingOptInAt,
     })
     .from(leads)
     .leftJoin(owner, eq(owner.userId, leads.ownerUserId))
     .leftJoin(creator, eq(creator.userId, leads.createdBy))
     .leftJoin(archiver, eq(archiver.userId, leads.archivedBy))
     .leftJoin(trips, eq(trips.id, leads.tripId))
+    .leftJoin(campaigns, eq(campaigns.id, leads.campaignId))
     .where(eq(leads.id, id))
     .limit(1);
   return lead ?? null;
 }
 
-// One batch (one transaction, one round-trip). The UPDATE decides with its WHERE: the lead exists,
-// is not archived and the trip is none, the one already linked (even if archived since) or a
-// trip that is not archived. The SELECT tells "not_found" from "invalid_trip".
-export async function updateLead(input: UpdateLeadInput): Promise<"updated" | "not_found" | "invalid_trip"> {
-  const db = getDb();
-  const editable = and(eq(leads.id, input.leadId), isNull(leads.archivedAt));
-  const [updated, found] = await db.batch([
-    db
-      .update(leads)
-      .set({
-        fullName: input.fullName,
-        phone: input.phone,
-        email: input.email,
-        location: input.location,
-        tripId: input.tripId,
-        destinationText: input.destinationText,
-        updatedAt: sql`now()`,
-      })
-      .where(
-        and(
-          editable,
-          input.tripId === null
-            ? undefined
-            : or(
-                eq(leads.tripId, input.tripId),
-                exists(
-                  db
-                    .select({ one: sql`1` })
-                    .from(trips)
-                    .where(and(eq(trips.id, input.tripId), ne(trips.status, "archived"))),
-                ),
-              ),
-        ),
-      )
-      .returning({ id: leads.id }),
-    db.select({ id: leads.id }).from(leads).where(editable),
-  ]);
-  if (updated.length > 0) return "updated";
-  return found.length > 0 ? "invalid_trip" : "not_found";
+// One statement. The target CTE locks the lead (FOR UPDATE) so the previous origin written in the
+// activity is the one the UPDATE replaced, even under concurrent changes. The UPDATE decides with
+// its WHERE: the lead exists, is not archived and the trip is none, the one already linked (even
+// if archived since) or a trip that is not archived. The 'channel_changed' activity (session user
+// as author) is inserted only when the origin really changes; contact data alone records nothing.
+// found tells "not_found" (missing or archived) from "invalid_trip".
+export async function updateLead(
+  input: UpdateLeadInput,
+  actorUserId: string,
+): Promise<"updated" | "not_found" | "invalid_trip"> {
+  const tripAllowed =
+    input.tripId === null
+      ? sql``
+      : sql` AND (target.trip_id = ${input.tripId}::uuid OR EXISTS (
+          SELECT 1 FROM trips WHERE trips.id = ${input.tripId}::uuid AND trips.status <> 'archived'
+        ))`;
+  const result = await getDb().execute<{ found: boolean; updated: boolean }>(sql`
+    WITH target AS (
+      SELECT id, channel, trip_id FROM leads
+      WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET full_name = ${input.fullName}, phone = ${input.phone}, email = ${input.email},
+        location = ${input.location}, trip_id = ${input.tripId}::uuid, destination_text = ${input.destinationText},
+        channel = ${input.channel}::lead_channel, origin_detail = ${input.originDetail},
+        referred_by = ${input.referredBy}, referral_permission = ${input.referralPermission}::boolean,
+        contact_preference = ${input.contactPreference}::contact_preference, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id${tripAllowed}
+      RETURNING leads.id, target.channel AS channel_from
+    ),
+    activity AS (
+      INSERT INTO lead_activities (lead_id, type, channel_from, channel_to, actor_user_id)
+      SELECT id, 'channel_changed', channel_from, ${input.channel}::lead_channel, ${actorUserId}
+      FROM updated
+      WHERE channel_from <> ${input.channel}::lead_channel
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS updated
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  return row.updated ? "updated" : "invalid_trip";
 }
 
 type ChangeResult = { found: boolean; changed: boolean };
 
 // One statement. The target CTE locks the lead (FOR UPDATE) so the previous stage written in the
 // activity is the one the UPDATE replaced, even under concurrent changes. A closed stage clears
-// the next action; lost_reason is set for "lost" and cleared otherwise (schema forces null).
+// the next action; lost_reason is set for "lost" and cleared otherwise (schema forces null). The
+// 'lead.stage_changed' outbox event ({ stageFrom, stageTo }, for n8n; no trigger: it comes from
+// the CRM) is inserted from the same RETURNING, so "no_change" and "not_found" emit nothing.
 export async function changeLeadStage(
   input: LeadStageChangeInput,
   actorUserId: string,
@@ -329,6 +359,11 @@ export async function changeLeadStage(
     activity AS (
       INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id)
       SELECT id, 'stage_changed', ${input.lostReason}, stage_from, ${input.stage}::lead_stage, ${actorUserId}
+      FROM updated
+    ),
+    event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.stage_changed', id, jsonb_build_object('stageFrom', stage_from, 'stageTo', ${input.stage}::lead_stage)
       FROM updated
     )
     SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS changed
@@ -378,12 +413,16 @@ export async function changeLeadOwner(
 }
 
 // One statement, same locking as changeLeadStage. The next action only exists in open,
-// non-archived leads: an archived or missing lead is "not_found" (like every other write) and a
-// paid or lost one is "closed". Null date and note clear it.
-export async function setNextAction(input: NextActionInput): Promise<"saved" | "not_found" | "closed"> {
-  const result = await getDb().execute<{ found: boolean; saved: boolean }>(sql`
+// non-archived leads whose contact did not opt out: an archived or missing lead is "not_found"
+// (like every other write), an opted-out one is "opted_out" (checked before the stage: a lead may
+// reopen after opting out, but never gets a next action again) and a paid or lost one is
+// "closed". Null date and note clear it.
+export async function setNextAction(
+  input: NextActionInput,
+): Promise<"saved" | "not_found" | "opted_out" | "closed"> {
+  const result = await getDb().execute<{ found: boolean; opted_out: boolean; saved: boolean }>(sql`
     WITH target AS (
-      SELECT id, stage FROM leads
+      SELECT id, stage, contact_opt_out_at FROM leads
       WHERE id = ${input.leadId}::uuid AND archived_at IS NULL
       FOR UPDATE
     ),
@@ -391,17 +430,68 @@ export async function setNextAction(input: NextActionInput): Promise<"saved" | "
       UPDATE leads
       SET next_action_date = ${input.nextActionDate}::date, next_action_note = ${input.nextActionNote}, updated_at = now()
       FROM target
-      WHERE leads.id = target.id AND target.stage NOT IN (${sql.join(
+      WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL AND target.stage NOT IN (${sql.join(
         CLOSED_LEAD_STAGES.map((stage) => sql`${stage}::lead_stage`),
         sql`, `,
       )})
       RETURNING leads.id
     )
-    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS saved
+    SELECT
+      EXISTS (SELECT 1 FROM target) AS found,
+      EXISTS (SELECT 1 FROM target WHERE contact_opt_out_at IS NOT NULL) AS opted_out,
+      EXISTS (SELECT 1 FROM updated) AS saved
   `);
   const row = result.rows[0];
   if (!row?.found) return "not_found";
+  if (row.opted_out) return "opted_out";
   return row.saved ? "saved" : "closed";
+}
+
+// "Pidió no seguir" (definitive in the MVP). One statement, same locking as changeLeadStage: the
+// UPDATE only applies to a non-archived lead without opt-out. It records the opt-out, clears the
+// next action (the database forbids both together) and moves the lead to lost with the fixed
+// reason; an already lost lead keeps its own reason. The stage_changed activity is inserted only
+// when the stage really changes; the opted_out activity always. Both carry the session user. The
+// 'lead.opted_out' event ({ stageFrom }) lets n8n discard pending drafts; no 'lead.stage_changed'
+// is emitted, so no farewell draft is prepared.
+export async function optOutLead(
+  leadId: string,
+  actorUserId: string,
+): Promise<"opted_out" | "no_change" | "not_found"> {
+  const result = await getDb().execute<{ found: boolean; opted_out: boolean }>(sql`
+    WITH target AS (
+      SELECT id, stage, contact_opt_out_at FROM leads
+      WHERE id = ${leadId}::uuid AND archived_at IS NULL
+      FOR UPDATE
+    ),
+    updated AS (
+      UPDATE leads
+      SET contact_opt_out_at = now(), stage = 'lost',
+        lost_reason = CASE target.stage WHEN 'lost' THEN leads.lost_reason ELSE ${OPT_OUT_LOST_REASON} END,
+        next_action_date = NULL, next_action_note = NULL, updated_at = now()
+      FROM target
+      WHERE leads.id = target.id AND target.contact_opt_out_at IS NULL
+      RETURNING leads.id, target.stage AS stage_from
+    ),
+    stage_activity AS (
+      INSERT INTO lead_activities (lead_id, type, body, stage_from, stage_to, actor_user_id)
+      SELECT id, 'stage_changed', ${OPT_OUT_LOST_REASON}, stage_from, 'lost', ${actorUserId}
+      FROM updated
+      WHERE stage_from <> 'lost'
+    ),
+    opt_out_activity AS (
+      INSERT INTO lead_activities (lead_id, type, actor_user_id)
+      SELECT id, 'opted_out', ${actorUserId} FROM updated
+    ),
+    event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.opted_out', id, jsonb_build_object('stageFrom', stage_from) FROM updated
+    )
+    SELECT EXISTS (SELECT 1 FROM target) AS found, EXISTS (SELECT 1 FROM updated) AS opted_out
+  `);
+  const row = result.rows[0];
+  if (!row?.found) return "not_found";
+  return row.opted_out ? "opted_out" : "no_change";
 }
 
 function changeOutcome(row: ChangeResult | undefined): "changed" | "not_found" | "no_change" {

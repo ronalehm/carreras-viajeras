@@ -3,12 +3,14 @@
 - Módulo: accounts
 - Estado: aprobado
 - Depende de: accounts-roles-permissions.md (Fase 1 aprobada y desplegada en `main` eb75dd6), platform-neon-foundation.md (Fase 1 aprobada)
+- Fases 1–3 implementadas en `main`. La Fase 4 (audiencia runner) es nueva y la consume `landing-public-site.md` F3 (`/cuenta`).
 
 ## Objetivo
 Permitir que el equipo entre al CRM. `accounts-roles-permissions.md` deja esta interfaz para esta spec.
 - **Admin y comerciales con cuenta:** inician sesión con correo y contraseña de Neon Auth.
 - **Personas invitadas:** crean su cuenta y verifican el correo con un **código** (OTP).
 - **Quien olvidó su contraseña:** la recupera con un código.
+- **(F4) Runners:** se registran, inician sesión y la cierran desde la landing (`/cuenta`) con los mismos componentes, sin obtener acceso al CRM.
 
 Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo muestra su correo y sus roles si tiene acceso, o un aviso de "sin acceso" si no lo tiene. Toda la autorización sigue en el servidor (`requireCrmUser()`): la UI no decide permisos.
 
@@ -21,16 +23,17 @@ Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo m
   - Componentes de shadcn necesarios, schemas zod de los formularios, mapeo de errores a mensajes en español y sus tests.
   - Registrar en `docs/SETUP.md` la excepción de rutas en español.
   - (F3) README: requisitos previos manuales de Neon Auth y checklist manual en producción.
+  - (F4) Audiencia runner: `AccessPanel` con `audience: "staff" | "runner"`, destino fijo por audiencia, `SignOutButton` con destino de salida cerrado y el componente `RunnerAccount`, que muestra el estado de sesión en la cuenta pública. La ruta `/cuenta` y su diseño son de `landing-public-site.md` F3.
 - No incluye:
   - `@neondatabase/auth-ui` (`AuthView`) (ver Decisiones). No se importa.
   - Login social, magic link, MFA o passkeys.
   - Cambio de correo o de contraseña con sesión iniciada, y perfil de usuario.
   - Página de administración de usuarios: es la Fase 3 de `accounts-roles-permissions.md`.
   - Pantallas reales del CRM (leads, viajes).
-  - Parámetro `?next=` o cualquier destino configurable tras el login. El destino siempre es `/crm`.
+  - Parámetro `?next=` o cualquier destino configurable tras el login. El destino siempre es `/crm` (F1–F3). Desde F4 depende solo de la audiencia fijada en el código (`/crm` o `/cuenta`), nunca de la URL.
   - Envío automático del correo de invitación. El admin comparte el enlace `/crm/acceso` a mano, como decide `accounts-roles-permissions.md`.
   - `proxy.ts`/middleware: la protección va en el layout, en cada página y en cada acción.
-  - Cuentas de runners: son visitantes anónimos.
+  - Cuentas de runners en F1–F3: eran visitantes anónimos. Desde F4, un runner tiene una cuenta de Neon Auth sin roles de staff. Siguen fuera el perfil de runner, sus datos en la base de datos, la comunidad y cualquier recurso protegido para runners.
   - Nuevas variables `NEXT_PUBLIC_*` o secretos en el cliente.
   - Cambios en `lib/auth/{server,guards,errors,permissions,access.service}.ts`, `lib/db*` y la API `/api/crm/me`.
 
@@ -62,6 +65,27 @@ Después de iniciar sesión, la persona llega a `/crm`. Ahí un layout mínimo m
 9. **Contraseña:** 8–128 caracteres, el valor por defecto en Better Auth (`minPasswordLength` 8). Al crear cuenta y al restablecer se pide confirmación.
 10. **Sin textos de error de terceros:** no se muestra el `error.message` de Neon o Better Auth (está en inglés y puede filtrar detalles); solo mensajes propios.
 11. **Tamaño del Worker:** el Worker comprimido debe seguir por debajo del límite de 3 MiB de Workers Free. Se mide en cada fase sin desplegar.
+12. **(F4) Audiencia runner.**
+    - **Audiencias y destinos.** `AccessPanel` recibe `audience?: "staff" | "runner"`, con `"staff"` por defecto. La audiencia es el único lugar del que sale el destino:
+      - `staff` → `/crm`, enlace al alta "¿Te invitaron? Crea tu cuenta" y aviso "Solo para personas invitadas por un administrador.". Es exactamente el comportamiento de F1–F3.
+      - `runner` → `/cuenta`, enlace al alta "Registrarse" y aviso "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento." (texto de `cuenta.html`).
+      - Los formularios reciben el destino como unión cerrada `"/crm" | "/cuenta"`; no hay ningún `string` libre ni lectura de la URL.
+    - **`/crm/acceso` no cambia.** Sigue usando `<AccessPanel />` sin prop, sigue redirigiendo a `/crm` si hay sesión, y todos los tests de F1–F3 pasan sin modificarse.
+    - **Mismo flujo para todos.** Las dos audiencias usan los mismos métodos de Neon Auth, schemas, mensajes sin enumeración de cuentas, verificación por código, `EMAIL_NOT_VERIFIED` y recuperación. Tampoco cambian `requireCrmUser()`, `getCrmAccess()`, `lib/auth/*`, la base de datos ni la matriz de permisos.
+    - **Cuenta de runner.**
+      - Es una cuenta de Neon Auth sin roles de staff. No crea filas en `profiles` ni `staff_*`; lo garantiza `accounts-roles-permissions.md` F1, cuyo criterio de "registro libre" sigue vigente.
+      - Si abre `/crm`, ve la pantalla "sin acceso". Si su correo verificado coincide con una invitación de staff pendiente, la invitación se acepta al abrir `/crm`, como con cualquier invitado; no es una vía nueva.
+    - **Alta de staff frente a registro público.**
+      - Neon Auth no distingue entre ambos: "Sign-up with Email" ya está ON (confirmado por el usuario), así que cualquier persona puede crear una cuenta, también hoy desde `/crm/acceso`.
+      - La invitación nunca controló la creación de cuentas. Controla los **roles**: se aceptan en el servidor por correo verificado y quedan ligados al `user_id` estable.
+      - Por eso no hay conflicto técnico. El aviso "Solo para personas invitadas" de `/crm/acceso` es orientativo y se mantiene.
+    - **`SignOutButton`.** Recibe `redirectTo?: "/crm/acceso" | "/cuenta"`, con `"/crm/acceso"` por defecto. `CrmShell` y `NoCrmAccess` no cambian.
+    - **`RunnerAccount` (cliente).** Lee la sesión con `authClient.useSession()`; es solo presentación y no protege nada. Muestra uno de estos estados:
+      - cargando → `role="status"` "Cargando…";
+      - sin sesión, o si `useSession` devuelve error → `<AccessPanel audience="runner" />`;
+      - con sesión → `h1` "Qué bueno verte de nuevo.", el correo y `<SignOutButton redirectTo="/cuenta" />`.
+
+      Better Auth actualiza `useSession` tras `/sign-in/email`, `/sign-up/email`, `/sign-out` y `/email-otp/verify-email`. Lo comprobé en `@neondatabase/auth/node_modules/better-auth/dist/client/config.mjs` y en `plugins/email-otp/client.mjs`.
 
 ## Criterios de aceptación
 Fase 1 (iniciar sesión y shell):
@@ -103,6 +127,16 @@ Fase 3 (recuperar contraseña y documentación):
   Incluye también el checklist manual en producción de esta spec.
 - [ ] (F3) Medición del Worker como en F1, y lint, vitest y build pasan.
 
+Fase 4 (audiencia runner):
+- [ ] (F4) Dado `<AccessPanel />` sin prop, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/crm")`. El alta muestra "¿Te invitaron? Crea tu cuenta" y "Solo para personas invitadas por un administrador.". Los tests existentes de `AccessPanel.test.tsx` pasan sin modificarse (unit test).
+- [ ] (F4) Dado `<AccessPanel audience="runner" />`, cuando el login o la verificación con sesión tienen éxito, entonces se llama a `router.replace("/cuenta")` y `router.refresh()`. El enlace al alta dice "Registrarse", el alta muestra el aviso de runner y no aparece "Solo para personas invitadas…" (unit test).
+- [ ] (F4) Dado `<AccessPanel audience="runner" />` y `EMAIL_NOT_VERIFIED` o la recuperación de contraseña, cuando se recorren, entonces el flujo y los mensajes son los mismos que para staff (unit test con un caso de cada).
+- [ ] (F4) Dado el código, entonces los destinos están tipados como `"/crm" | "/cuenta"` y `"/crm/acceso" | "/cuenta"`. Ningún componente lee `searchParams`, `location` ni `?next=`.
+- [ ] (F4) Dado `RunnerAccount` con `useSession` cargando, sin sesión o con sesión, entonces muestra "Cargando…", el panel de runner o "Qué bueno verte de nuevo." con el correo y "Cerrar sesión", respectivamente. Con sesión, "Cerrar sesión" llama a `signOut()` y luego a `router.replace("/cuenta")` (unit test).
+- [ ] (F4) Dado `/crm/acceso`, cuando lo uso con o sin sesión, entonces el comportamiento es idéntico al de F1–F3. `app/crm/*`, `lib/auth/*`, `lib/db*`, `app/api/*` y `drizzle/` no cambian.
+- [ ] (F4) Dado `README.md`, entonces el modelo de acceso dice que los runners pueden tener cuenta de Neon Auth sin roles de staff (sustituye "visitantes anónimos, sin cuenta ni perfil") e incluye los pasos manuales de la Fase 4.
+- [ ] (F4) Medición del Worker como en F1, y lint, vitest y build pasan.
+
 Manual en producción (el usuario, con su autorización; agentes sin acceso a Neon desde este entorno):
 - [ ] Login de admin (ronalehm@gmail.com, tras el bootstrap) → `/crm` muestra "Admin".
 - [ ] Una cuenta sin rol ve la pantalla sin acceso.
@@ -110,6 +144,8 @@ Manual en producción (el usuario, con su autorización; agentes sin acceso a Ne
 - [ ] El admin invita a un correo (o se crea la invitación por SQL hasta que exista la Fase 2 de `accounts-roles-permissions.md`) → la persona crea su cuenta → recibe el código → verifica → `/crm` muestra "Comercial".
 - [ ] Recuperar la contraseña con código y volver a iniciar sesión.
 - [ ] Comprobar que llega el código de 6 dígitos y que la sesión persiste al recargar.
+- [ ] (F4) Un correo nuevo se registra en `/cuenta`, verifica el código y queda en `/cuenta` con sesión. Al abrir `/crm` ve la pantalla "sin acceso", `GET /api/crm/me` responde 403 y no aparecen filas nuevas en `profiles` ni `staff_assignments`.
+- [ ] (F4) "Cerrar sesión" en `/cuenta` vuelve a `/cuenta` sin sesión, y el login de admin en `/crm/acceso` sigue llevando a `/crm`.
 
 ## Diseño técnico
 
@@ -178,7 +214,14 @@ Manual en producción (el usuario, con su autorización; agentes sin acceso a Ne
 | `components/AccessPanel.tsx` | nuevo, `"use client"` | F2, modificado en F3 | Estado `{ step: AccessStep; email: string; notice?: string }` y renderiza el formulario del paso dentro de un `Card`, con enlaces entre pasos. No guarda contraseñas en su estado |
 | `components/ForgotPasswordForm.tsx` | nuevo, `"use client"` | F3 | Correo → `emailOtp.requestPasswordReset`; siempre el mensaje neutro; `onCodeRequested(email)` |
 | `components/ResetPasswordForm.tsx` | nuevo, `"use client"` | F3 | Código, contraseña y confirmación → `emailOtp.resetPassword({ email, otp, password })`; si hay éxito, `onPasswordReset(email)` |
-| `index.ts` | nuevo | F1, ampliado en F2 | Exporta `getCrmAccess`, `CrmShell`, `NoCrmAccess` y `SignInForm` (F1), y `AccessPanel` (F2, en lugar de `SignInForm`) |
+| `index.ts` | nuevo | F1, ampliado en F2 y F4 | Exporta `getCrmAccess`, `CrmShell`, `NoCrmAccess` y `SignInForm` (F1), y `AccessPanel` (F2, en lugar de `SignInForm`). F4 añade `RunnerAccount` y `type AccessAudience` |
+| `types/auth.types.ts` | modificado | F4 | Añade `AccessAudience = "staff" \| "runner"`, `AuthDestination = "/crm" \| "/cuenta"` y `SignOutDestination = "/crm/acceso" \| "/cuenta"` |
+| `components/AccessPanel.tsx` | modificado | F4 | Prop `audience?: AccessAudience` (por defecto `"staff"`). Constante local `AUDIENCE_CONFIG: Record<AccessAudience, { destination: AuthDestination; signUpLabel: string; signUpNotice: string }>`. Pasa `destination` y `signUpLabel` a `SignInForm`, `notice` a `SignUpForm` y `destination` a `VerifyEmailForm`. Los pasos y el estado no cambian |
+| `components/SignInForm.tsx` | modificado | F4 | Props obligatorias `destination: AuthDestination` y `signUpLabel: string`; sustituyen al literal `"/crm"` de `router.replace` y al texto fijo del enlace al alta. Solo lo usa `AccessPanel`, que es donde vive el valor por defecto |
+| `components/SignUpForm.tsx` | modificado | F4 | Prop obligatoria `notice: string` en lugar del aviso fijo |
+| `components/VerifyEmailForm.tsx` | modificado | F4 | Prop obligatoria `destination: AuthDestination` en lugar del literal `"/crm"` |
+| `components/SignOutButton.tsx` | modificado | F4 | Prop `redirectTo?: SignOutDestination` (por defecto `"/crm/acceso"`); `CrmShell` y `NoCrmAccess` siguen sin pasarla |
+| `components/RunnerAccount.tsx` | nuevo, `"use client"` | F4 | Estados de sesión con `authClient.useSession()` (Requisito 12). Sin props ni maquetación de página: la columna de diseño de `/cuenta` la pone la landing |
 
 Todos los formularios:
 - tienen estado `pending` (botón deshabilitado con texto de progreso) y errores por campo de `safeParse(...).error.flatten().fieldErrors`;
@@ -214,7 +257,8 @@ Mensaje fijo de la solicitud de recuperación: "Si existe una cuenta con ese cor
 ### Seguridad
 - **Permisos:** la UI no envía ni lee roles; el shell recibe los roles de `requireCrmUser()` en el servidor. La autorización real de las APIs y acciones sigue en `lib/auth/guards.ts`.
 - **Cliente:** sin secretos ni `NEXT_PUBLIC_*`. Las cookies de sesión las gestiona el proxy de Neon Auth (`__Secure-neon-auth.*`).
-- **Redirecciones:** solo destinos internos fijos (`/crm`, `/crm/acceso`).
+- **Redirecciones:** solo destinos internos fijos (`/crm`, `/crm/acceso` y, desde F4, `/cuenta`), tipados como uniones cerradas y elegidos en el código, nunca desde la URL.
+- **(F4) Registro público:** no amplía la superficie. El endpoint de alta de Neon Auth ya era público ("Sign-up with Email" ON) y el control de acceso real sigue en `requireCrmUser()` (correo verificado + rol activo por `user_id`, denegado por defecto). `RunnerAccount` solo muestra el estado de sesión; cualquier recurso futuro para runners necesitará su propia guarda en el servidor.
 - **Requisitos manuales en Neon Auth:** dominio de confianza `https://carreras-viajeras.mentec.dev`, registro por email ON, verificación al registrarse con código y recuperación por código (F3). Se documentan en el README.
 
 ## Reutilización
@@ -254,6 +298,14 @@ Vitest. Los de servidor llevan `// @vitest-environment node` y `vi.mock("server-
   - **(F3) recuperación:**
     - la solicitud muestra el mensaje neutro tanto con éxito como con 404/400;
     - restablecer con éxito → login con el aviso.
+  - **(F4) audiencia** (casos nuevos en un `describe` aparte; los existentes no se editan):
+    - `audience="runner"`: login correcto → `router.replace("/cuenta")`; verificación con sesión → `/cuenta`; el enlace al alta dice "Registrarse"; el alta muestra el aviso de runner y no el de invitación; `EMAIL_NOT_VERIFIED` → paso de verificación como en staff;
+    - sin prop: el enlace "¿Te invitaron? Crea tu cuenta" y el aviso de invitación siguen presentes.
+- `modules/accounts/components/RunnerAccount.test.tsx` (F4; `@/lib/auth/client` mockeado con `useSession`, `signOut` y los métodos del panel, más `next/navigation`):
+  - `isPending` → "Cargando…";
+  - sin sesión o con `error` → se ve el formulario "Iniciar sesión" con el enlace "Registrarse";
+  - con sesión → "Qué bueno verte de nuevo." y el correo;
+  - "Cerrar sesión" → `signOut()` y luego `router.replace("/cuenta")`.
 - Sin unit tests (según SETUP):
   - páginas y layout de `app/` (Server Components asíncronos);
   - `CrmShell`, `NoCrmAccess` y `SignOutButton` (presentacionales o con una sola llamada, cubiertos por el checklist manual);
@@ -279,6 +331,12 @@ Requisito previo, manual y sin archivos: el usuario confirma en una rama de desa
 - [x] T1 — Schemas de recuperación y test · archivos: `modules/accounts/schemas/auth.schema.ts`, `modules/accounts/schemas/auth.schema.test.ts` · depende de: Fase 2 y el requisito previo · secuencial
 - [x] T2 — Formularios de recuperación y pasos en el panel, con test · archivos: `modules/accounts/components/ForgotPasswordForm.tsx`, `modules/accounts/components/ResetPasswordForm.tsx`, `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/SignInForm.tsx`, `modules/accounts/components/AccessPanel.test.tsx` · depende de: F3-T1 · secuencial
 - [x] T3 — README: requisitos previos manuales de Neon Auth y checklist manual en producción de esta spec · archivos: `README.md` · depende de: Fase 2 · paralelo (con F3-T1 y F3-T2)
+
+### Fase 4: audiencia runner para la cuenta pública (3 tareas, 11 archivos)
+La consume `landing-public-site.md` F3. No toca `app/`: la ruta `/cuenta` es de la landing.
+- [x] T1 — Tipos, audiencia en `AccessPanel`, destino y textos por prop en los formularios, `redirectTo` en `SignOutButton` y casos de test de la audiencia · archivos: `modules/accounts/types/auth.types.ts`, `modules/accounts/components/AccessPanel.tsx`, `modules/accounts/components/SignInForm.tsx`, `modules/accounts/components/SignUpForm.tsx`, `modules/accounts/components/VerifyEmailForm.tsx`, `modules/accounts/components/SignOutButton.tsx`, `modules/accounts/components/AccessPanel.test.tsx` · depende de: Fase 3 · secuencial
+- [x] T2 — `RunnerAccount` con test y exports; medir el Worker · archivos: `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx`, `modules/accounts/index.ts` · depende de: F4-T1 · secuencial
+- [x] T3 — README: modelo de acceso con cuentas de runner y checklist manual de F4 · archivos: `README.md` · depende de: — · paralelo (con F4-T1 y F4-T2)
 
 ## Preguntas abiertas
 1. **Si Neon Auth gestionado no admite la recuperación por código** (la comprobación previa de F3 lo dirá), ¿qué prefieres?

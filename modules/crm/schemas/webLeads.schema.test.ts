@@ -1,88 +1,178 @@
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
 import { webLeadFormSchema } from "./webLeads.schema";
 
-const SUBMISSION_ID = "6f9a1c3e-2b4d-4e8f-9a0b-1c2d3e4f5a6b";
-
+const SUBMISSION_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const VALID = {
-  name: "  Ana María Pérez ",
-  email: " Ana.Perez@Example.COM ",
+  name: "  Ana María Pérez  ",
+  email: "  Ana.Perez@Example.COM ",
   phone: "+51 938-127 170",
   destination: "maraton-santiago-2027",
   consent: "on",
   submissionId: SUBMISSION_ID,
-  "cf-turnstile-response": "turnstile-token",
+  "cf-turnstile-response": "token-123",
 };
 
-function fieldErrors(values: Record<string, unknown>) {
-  const result = webLeadFormSchema.safeParse(values);
-  expect(result.success).toBe(false);
-  return (result.error ? z.flattenError(result.error).fieldErrors : {}) as Record<string, string[] | undefined>;
+const OUTPUT_KEYS = [
+  "campaignCode",
+  "destination",
+  "email",
+  "fullName",
+  "marketingOptIn",
+  "phone",
+  "referredBy",
+  "submissionId",
+  "turnstileToken",
+  "utmCampaign",
+  "utmMedium",
+  "utmSource",
+];
+
+function fieldErrors(input: Record<string, unknown>) {
+  const result = webLeadFormSchema.safeParse(input);
+  if (result.success) throw new Error("expected the schema to fail");
+  return Object.fromEntries(result.error.issues.map((issue) => [String(issue.path[0]), issue.message]));
 }
 
 describe("webLeadFormSchema", () => {
-  it("normalizes a valid submission and drops extra keys", () => {
-    const result = webLeadFormSchema.parse({
-      ...VALID,
-      source: "whatsapp",
-      stage: "paid",
-      ownerUserId: "staff-1",
-      consentVersion: "fake",
-      website: "",
-    });
-    expect(result).toEqual({
+  it("returns the normalized submission: trimmed name, lowercase email, E.164 phone and no attribution", () => {
+    expect(webLeadFormSchema.parse(VALID)).toEqual({
       fullName: "Ana María Pérez",
       email: "ana.perez@example.com",
       phone: "+51938127170",
       destination: "maraton-santiago-2027",
+      marketingOptIn: false,
       submissionId: SUBMISSION_ID,
-      turnstileToken: "turnstile-token",
+      turnstileToken: "token-123",
+      campaignCode: null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      referredBy: null,
     });
   });
 
-  it.each(["rio", "roma"])("accepts the destination %s", (destination) => {
-    expect(webLeadFormSchema.parse({ ...VALID, destination }).destination).toBe(destination);
-  });
-
-  it("defaults a missing Turnstile token to an empty string", () => {
-    const withoutToken: Record<string, string> = { ...VALID };
-    delete withoutToken["cf-turnstile-response"];
-    expect(webLeadFormSchema.parse(withoutToken).turnstileToken).toBe("");
+  it("normalizes the campaign code, the UTM values and ref", () => {
+    expect(
+      webLeadFormSchema.parse({
+        ...VALID,
+        c: " MML26 ",
+        utm_source: "Instagram",
+        utm_medium: " social ",
+        utm_campaign: "PREVENTA",
+        ref: "Club-Lima",
+      }),
+    ).toMatchObject({
+      campaignCode: "mml26",
+      utmSource: "instagram",
+      utmMedium: "social",
+      utmCampaign: "preventa",
+      referredBy: "club-lima",
+    });
   });
 
   it.each([
-    ["a name of 1 character", { name: "A" }, "name", "Escribe tu nombre (2 a 80 caracteres)."],
-    ["a name of 81 characters", { name: "a".repeat(81) }, "name", "Escribe tu nombre (2 a 80 caracteres)."],
+    ["empty values", { c: "", utm_source: "", utm_medium: "", utm_campaign: "", ref: "" }],
+    [
+      "invalid values",
+      { c: "x y", utm_source: "<script>", utm_medium: "a b", utm_campaign: "promoción", ref: "a" },
+    ],
+    [
+      "values over 200 characters",
+      {
+        c: "a".repeat(201),
+        utm_source: "a".repeat(201),
+        utm_medium: "a".repeat(201),
+        utm_campaign: "a".repeat(201),
+        ref: "a".repeat(201),
+      },
+    ],
+  ])("turns %s of the attribution into null without an error", (_case, override) => {
+    expect(webLeadFormSchema.parse({ ...VALID, ...override })).toMatchObject({
+      campaignCode: null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      referredBy: null,
+    });
+  });
+
+  it.each([
+    ["missing", undefined, false],
+    ["off", "off", false],
+    ["yes", "yes", false],
+    ["on", "on", true],
+  ])("maps the promotions checkbox %s to %s without an error", (_case, marketing, expected) => {
+    const input = marketing === undefined ? VALID : { ...VALID, marketing };
+    expect(webLeadFormSchema.parse(input).marketingOptIn).toBe(expected);
+  });
+
+  it("drops extra keys such as source, stage, channel, campaignId, ownerUserId, consentVersion or price", () => {
+    const parsed = webLeadFormSchema.parse({
+      ...VALID,
+      source: "whatsapp",
+      stage: "paid",
+      channel: "event",
+      campaignId: "6b0f8c1e-2a4d-4f3b-9c7e-1d2a3b4c5d6e",
+      ownerUserId: "staff-1",
+      consentVersion: "crm-manual-v1",
+      price: "1",
+      website: "",
+      modo: "stand",
+    });
+    expect(Object.keys(parsed).sort()).toEqual(OUTPUT_KEYS);
+    expect(parsed).toMatchObject({ destination: "maraton-santiago-2027", campaignCode: null });
+  });
+
+  it("accepts any published-slug shape (rio, roma or a catalog slug), and a missing token becomes an empty string", () => {
+    const withoutToken: Partial<typeof VALID> = { ...VALID };
+    delete withoutToken["cf-turnstile-response"];
+    expect(webLeadFormSchema.parse({ ...withoutToken, destination: "rio" })).toMatchObject({
+      destination: "rio",
+      turnstileToken: "",
+    });
+    expect(webLeadFormSchema.parse({ ...VALID, destination: "roma" }).destination).toBe("roma");
+    expect(webLeadFormSchema.parse({ ...VALID, destination: "maraton-lima-2028" }).destination).toBe(
+      "maraton-lima-2028",
+    );
+  });
+
+  it.each([
+    ["a 1-character name", { name: " A " }, "name", "Escribe tu nombre (2 a 80 caracteres)."],
+    ["an 81-character name", { name: "a".repeat(81) }, "name", "Escribe tu nombre (2 a 80 caracteres)."],
     ["an invalid email", { email: "ana@" }, "email", "Escribe un correo válido."],
-    ["an email of 151 characters", { email: `${"a".repeat(139)}@example.com` }, "email", "Escribe un correo válido."],
+    ["an email over 150 characters", { email: `${"a".repeat(140)}@example.com` }, "email", "Escribe un correo válido."],
     [
       "a phone without country code",
       { phone: "938 127 170" },
       "phone",
       "Escribe el número con código de país, p. ej. +51 938 127 170.",
     ],
-    ["the old destination id santiago-2027", { destination: "santiago-2027" }, "destination", "Elige un destino."],
-    ["an unknown destination", { destination: "panama" }, "destination", "Elige un destino."],
-    ["a consent other than on", { consent: "yes" }, "consent", "Necesitamos tu autorización para guardar tus datos."],
-    ["a submissionId that is not a UUID", { submissionId: "abc" }, "submissionId", "Recarga la página e inténtalo de nuevo."],
-    [
-      "a Turnstile token longer than 2048 characters",
-      { "cf-turnstile-response": "t".repeat(2049) },
-      "cf-turnstile-response",
-      "Recarga la página e inténtalo de nuevo.",
-    ],
-  ])("rejects %s in its field", (_label, override, field, message) => {
-    expect(fieldErrors({ ...VALID, ...override })[field]).toEqual([message]);
+    ["an empty destination", { destination: "" }, "destination", "Elige la carrera."],
+    ["a destination with spaces", { destination: " roma " }, "destination", "Elige la carrera."],
+    ["a destination with uppercase letters", { destination: "Maraton-Santiago-2027" }, "destination", "Elige la carrera."],
+    ["a destination over 80 characters", { destination: "a".repeat(81) }, "destination", "Elige la carrera."],
+    ["an unchecked consent", { consent: "off" }, "consent", "Necesitamos tu autorización para guardar tus datos."],
+  ])("rejects %s with an error on its field", (_case, override, field, message) => {
+    expect(fieldErrors({ ...VALID, ...override })).toEqual({ [field]: message });
   });
 
-  it.each(["name", "email", "phone", "destination", "consent", "submissionId"])(
-    "rejects a missing %s with a Spanish message",
-    (field) => {
-      const values: Record<string, unknown> = { ...VALID };
-      delete values[field];
-      const errors = fieldErrors(values)[field];
-      expect(errors).toHaveLength(1);
-      expect(errors?.[0]).not.toMatch(/invalid|expected|required/i);
-    },
-  );
+  it("rejects missing fields with the Spanish messages, never zod's defaults", () => {
+    expect(fieldErrors({ submissionId: SUBMISSION_ID })).toEqual({
+      name: "Escribe tu nombre (2 a 80 caracteres).",
+      email: "Escribe un correo válido.",
+      phone: "Escribe el número con código de país, p. ej. +51 938 127 170.",
+      destination: "Elige la carrera.",
+      consent: "Necesitamos tu autorización para guardar tus datos.",
+    });
+  });
+
+  it("rejects a submissionId that is not a UUID", () => {
+    expect(Object.keys(fieldErrors({ ...VALID, submissionId: "abc" }))).toEqual(["submissionId"]);
+  });
+
+  it("rejects a Turnstile token over 2048 characters", () => {
+    expect(Object.keys(fieldErrors({ ...VALID, "cf-turnstile-response": "t".repeat(2049) }))).toEqual([
+      "cf-turnstile-response",
+    ]);
+  });
 });

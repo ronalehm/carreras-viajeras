@@ -10,16 +10,10 @@ const databaseUrl = z.string().refine((value) => {
   } catch { return false; }
 });
 
-const httpsUrl = z.url().refine((value) => {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password && !url.hash && !url.search;
-  } catch { return false; }
-});
 const environmentSchema = z.object({
   DATABASE_URL: databaseUrl,
-  NEON_AUTH_BASE_URL: httpsUrl,
-  NEON_AUTH_COOKIE_SECRET: z.string().min(32),
+  // Server-only Clerk key (Cloudflare Secret). The publishable key is consumed by Clerk itself.
+  CLERK_SECRET_KEY: z.string().regex(/^sk_(test|live)_\S+$/),
   APP_ORIGIN: z.string().refine((value) =>
     value === "https://carreras-viajeras.mentec.dev"
     || (process.env.NODE_ENV === "development"
@@ -36,8 +30,7 @@ function invalidEnvironment(error: z.ZodError): Error {
 export function getEnv() {
   const result = environmentSchema.safeParse({
     DATABASE_URL: process.env.DATABASE_URL,
-    NEON_AUTH_BASE_URL: process.env.NEON_AUTH_BASE_URL,
-    NEON_AUTH_COOKIE_SECRET: process.env.NEON_AUTH_COOKIE_SECRET,
+    CLERK_SECRET_KEY: process.env.CLERK_SECRET_KEY,
     APP_ORIGIN: process.env.APP_ORIGIN,
   });
   if (!result.success) throw invalidEnvironment(result.error);

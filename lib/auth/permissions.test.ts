@@ -4,56 +4,193 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { authErrorResponse, ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
-import { can, type Permission, type StaffRole } from "@/lib/auth/permissions";
+import {
+  can,
+  canManageRole,
+  manageableRoles,
+  type Permission,
+  type StaffRole,
+} from "@/lib/auth/permissions";
+import { staffRoleEnum } from "@/lib/db-schema";
+
+const ALL_ROLES = staffRoleEnum.enumValues;
+const ALL_PERMISSIONS = [
+  "crm.access",
+  "staff.manage",
+  "trips.manage",
+  "trips.manage_all",
+  "leads.manage",
+  "bookings.manage",
+  "offers.manage",
+  "offers.view",
+] as const satisfies readonly Permission[];
+
+// Expected matrix from docs/specs/accounts-clerk-rbac.md ("Diseño técnico").
+const EXPECTED_MATRIX: Record<Permission, Record<StaffRole, boolean>> = {
+  "crm.access": { commercial: true, organizer: true, admin: true, super_admin: true },
+  "staff.manage": { commercial: false, organizer: false, admin: true, super_admin: true },
+  "trips.manage": { commercial: true, organizer: true, admin: true, super_admin: true },
+  "trips.manage_all": { commercial: true, organizer: false, admin: true, super_admin: true },
+  "leads.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
+  "bookings.manage": { commercial: true, organizer: false, admin: true, super_admin: true },
+  "offers.manage": { commercial: false, organizer: false, admin: true, super_admin: true },
+  "offers.view": { commercial: true, organizer: false, admin: true, super_admin: true },
+};
+
+const MATRIX_CELLS = ALL_PERMISSIONS.flatMap((permission) =>
+  ALL_ROLES.map(
+    (role) => [role, permission, EXPECTED_MATRIX[permission][role]] as [StaffRole, Permission, boolean],
+  ),
+);
+
+// Every non-empty combination of roles (2^4 - 1 subsets).
+const ROLE_COMBINATIONS: StaffRole[][] = Array.from(
+  { length: 2 ** ALL_ROLES.length - 1 },
+  (_, index) => ALL_ROLES.filter((_, bit) => ((index + 1) >> bit) & 1),
+);
 
 describe("can", () => {
-  it.each<[StaffRole[], Permission, boolean]>([
-    [["commercial"], "crm.access", true],
-    [["commercial"], "staff.manage", false],
-    [["admin"], "crm.access", true],
-    [["admin"], "staff.manage", true],
-    [["commercial", "admin"], "crm.access", true],
-    [["commercial", "admin"], "staff.manage", true],
-    [[], "crm.access", false],
-    [[], "staff.manage", false],
-    [["commercial"], "trips.manage", true],
-    [["admin"], "trips.manage", true],
-    [["commercial", "admin"], "trips.manage", true],
-    [[], "trips.manage", false],
-    [["commercial"], "leads.manage", true],
-    [["admin"], "leads.manage", true],
-    [["commercial", "admin"], "leads.manage", true],
-    [[], "leads.manage", false],
-  ])("roles %j with %s → %s", (roles, permission, expected) => {
-    expect(can(roles, permission)).toBe(expected);
+  it("covers every staff_role enum value", () => {
+    expect(ALL_ROLES).toEqual(["commercial", "admin", "super_admin", "organizer"]);
   });
 
-  it("grants admin every permission", () => {
-    for (const permission of ["crm.access", "staff.manage", "trips.manage", "leads.manage"] as const) {
-      expect(can(["admin"], permission)).toBe(true);
+  it.each(MATRIX_CELLS)("role %s with %s → %s", (role, permission, expected) => {
+    expect(can([role], permission)).toBe(expected);
+  });
+
+  it.each(ROLE_COMBINATIONS)("roles %j get the union of their permissions", (...roles) => {
+    for (const permission of ALL_PERMISSIONS) {
+      const expected = roles.some((role) => EXPECTED_MATRIX[permission][role]);
+      expect(can(roles, permission)).toBe(expected);
     }
   });
 
-  it("denies everything without roles", () => {
-    expect(can([], "crm.access")).toBe(false);
-    expect(can([], "staff.manage")).toBe(false);
-    expect(can([], "trips.manage")).toBe(false);
-    expect(can([], "leads.manage")).toBe(false);
+  it.each<StaffRole>(["admin", "super_admin"])("grants %s every permission", (role) => {
+    for (const permission of ALL_PERMISSIONS) {
+      expect(can([role], permission)).toBe(true);
+    }
   });
 
-  it.each(["unknown.permission", "toString", "constructor", "__proto__"])(
+  it("limits organizer to crm.access and trips.manage", () => {
+    expect(ALL_PERMISSIONS.filter((permission) => can(["organizer"], permission))).toEqual([
+      "crm.access",
+      "trips.manage",
+    ]);
+  });
+
+  it("denies everything without roles", () => {
+    for (const permission of ALL_PERMISSIONS) {
+      expect(can([], permission)).toBe(false);
+    }
+  });
+
+  it.each(["unknown.permission", "trips.publish", "toString", "constructor", "__proto__"])(
     "denies unknown permission %s to every role",
     (permission) => {
       const unknown = permission as Permission;
-      expect(can(["commercial"], unknown)).toBe(false);
-      expect(can(["admin"], unknown)).toBe(false);
+      for (const role of ALL_ROLES) {
+        expect(can([role], unknown)).toBe(false);
+      }
+      expect(can([...ALL_ROLES], unknown)).toBe(false);
       expect(can([], unknown)).toBe(false);
     },
   );
 
-  it("gives commercial crm.access but not staff.manage", () => {
-    expect(can(["commercial"], "crm.access")).toBe(true);
-    expect(can(["commercial"], "staff.manage")).toBe(false);
+  it("gives commercial offers.view but not offers.manage", () => {
+    expect(can(["commercial"], "offers.view")).toBe(true);
+    expect(can(["commercial"], "offers.manage")).toBe(false);
+  });
+
+  it("denies an unknown role", () => {
+    const unknown = ["owner"] as unknown as StaffRole[];
+    for (const permission of ALL_PERMISSIONS) {
+      expect(can(unknown, permission)).toBe(false);
+    }
+  });
+});
+
+// Expected actor × target role table from docs/specs/accounts-clerk-rbac.md.
+const EXPECTED_MANAGEABLE: Record<StaffRole, StaffRole[]> = {
+  super_admin: ["commercial", "organizer", "admin"],
+  admin: ["commercial"],
+  commercial: [],
+  organizer: [],
+};
+
+describe("manageableRoles", () => {
+  it.each<[StaffRole[], StaffRole[]]>([
+    [["super_admin"], ["commercial", "organizer", "admin"]],
+    [["admin"], ["commercial"]],
+    [["admin", "super_admin"], ["commercial", "organizer", "admin"]],
+    [["super_admin", "admin"], ["commercial", "organizer", "admin"]],
+    [["commercial"], []],
+    [["organizer"], []],
+    [["commercial", "organizer"], []],
+    [["commercial", "admin"], ["commercial"]],
+    [["organizer", "super_admin"], ["commercial", "organizer", "admin"]],
+    [[], []],
+  ])("roles %j → %j", (roles, expected) => {
+    expect(manageableRoles(roles)).toEqual(expected);
+  });
+
+  it.each(ROLE_COMBINATIONS)(
+    "roles %j get the union, in order, without duplicates or super_admin",
+    (...roles) => {
+      const result = manageableRoles(roles);
+      const union = new Set(roles.flatMap((role) => EXPECTED_MANAGEABLE[role]));
+      expect(result).toEqual(
+        (["commercial", "organizer", "admin"] as const).filter((role) => union.has(role)),
+      );
+      expect(new Set(result).size).toBe(result.length);
+      expect(result).not.toContain("super_admin");
+    },
+  );
+
+  it("never includes super_admin, even for every role at once", () => {
+    expect(manageableRoles([...ALL_ROLES])).toEqual(["commercial", "organizer", "admin"]);
+  });
+
+  it("ignores unknown roles", () => {
+    expect(manageableRoles(["owner", "toString"] as unknown as StaffRole[])).toEqual([]);
+  });
+
+  it("returns a new array each call", () => {
+    const first = manageableRoles(["super_admin"]);
+    first.push("super_admin");
+    expect(manageableRoles(["super_admin"])).toEqual(["commercial", "organizer", "admin"]);
+  });
+});
+
+describe("canManageRole", () => {
+  const ACTOR_TARGET_CELLS = ALL_ROLES.flatMap((actor) =>
+    ALL_ROLES.map(
+      (target) =>
+        [actor, target, EXPECTED_MANAGEABLE[actor].includes(target)] as [
+          StaffRole,
+          StaffRole,
+          boolean,
+        ],
+    ),
+  );
+
+  it.each(ACTOR_TARGET_CELLS)("actor %s managing %s → %s", (actor, target, expected) => {
+    expect(canManageRole([actor], target)).toBe(expected);
+  });
+
+  it.each(ROLE_COMBINATIONS)("roles %j match manageableRoles for every target", (...roles) => {
+    for (const target of ALL_ROLES) {
+      expect(canManageRole(roles, target)).toBe(manageableRoles(roles).includes(target));
+    }
+  });
+
+  it("denies every target without roles", () => {
+    for (const target of ALL_ROLES) {
+      expect(canManageRole([], target)).toBe(false);
+    }
+  });
+
+  it("never allows managing super_admin", () => {
+    expect(canManageRole([...ALL_ROLES], "super_admin")).toBe(false);
   });
 });
 

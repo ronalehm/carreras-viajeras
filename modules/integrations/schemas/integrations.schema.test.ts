@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { contactPreferenceEnum, leadChannelEnum } from "@/lib/db-schema";
 import {
   ackRequestSchema,
+  activityRequestSchema,
   claimRequestSchema,
+  createIntegrationLeadSchema,
+  enqueueRequestSchema,
   eventIdSchema,
   failRequestSchema,
   leadIdSchema,
@@ -20,6 +24,24 @@ describe("claimRequestSchema", () => {
 
   it.each([0, 26, -1, 2.5, "2", "abc", null])("rejects limit %j", (limit) => {
     expect(claimRequestSchema.safeParse({ limit }).success).toBe(false);
+  });
+});
+
+describe("enqueueRequestSchema", () => {
+  it("defaults the daily limit to 20 without a body", () => {
+    expect(enqueueRequestSchema.parse({})).toEqual({ limit: 20 });
+  });
+
+  it.each([1, 20, 50])("accepts limit %d", (limit) => {
+    expect(enqueueRequestSchema.parse({ limit })).toEqual({ limit });
+  });
+
+  it.each([0, 51, -1, 2.5, "20", "abc", null])("rejects limit %j", (limit) => {
+    expect(enqueueRequestSchema.safeParse({ limit }).success).toBe(false);
+  });
+
+  it("drops unknown keys", () => {
+    expect(enqueueRequestSchema.parse({ limit: 5, stage: "reserved" })).toEqual({ limit: 5 });
   });
 });
 
@@ -53,5 +75,158 @@ describe("eventIdSchema and leadIdSchema", () => {
     expect(schema.safeParse(UUID).success).toBe(true);
     expect(schema.safeParse("abc").success).toBe(false);
     expect(schema.safeParse("").success).toBe(false);
+  });
+});
+
+describe("activityRequestSchema", () => {
+  const BODY = "Borrador para la etapa Cotizado enviado por correo al usuario.";
+
+  it("accepts a UUID eventId and a trimmed body, dropping unknown keys", () => {
+    expect(activityRequestSchema.parse({ eventId: UUID, body: `  ${BODY}  `, actorUserId: "user-1" })).toEqual({
+      eventId: UUID,
+      body: BODY,
+    });
+  });
+
+  it.each(["x", "x".repeat(500)])("accepts a body of %#", (body) => {
+    expect(activityRequestSchema.parse({ eventId: UUID, body }).body).toBe(body);
+  });
+
+  it.each([
+    ["empty body", { eventId: UUID, body: "" }],
+    ["blank body", { eventId: UUID, body: "   " }],
+    ["body of 501", { eventId: UUID, body: "x".repeat(501) }],
+    ["missing body", { eventId: UUID }],
+    ["non-string body", { eventId: UUID, body: 42 }],
+    ["invalid eventId", { eventId: "abc", body: BODY }],
+    ["missing eventId", { body: BODY }],
+  ])("rejects %s", (_case, input) => {
+    expect(activityRequestSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("createIntegrationLeadSchema", () => {
+  const NOW = new Date("2026-10-25T15:00:00Z");
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const googleForm = {
+    source: "google_form",
+    externalId: "1AbC-sheet_id:42",
+    consentVersion: "google-form-v1",
+    consentedAt: "2026-09-14T08:12:00-05:00",
+    fullName: "  Ana Pérez ",
+    phone: "+51 938-127 170",
+    email: " Ana.Perez@Example.COM ",
+    tripSlug: "maraton-santiago-2027",
+    destinationText: "Santiago",
+    channel: "instagram",
+    originDetail: " Historia de Instagram ",
+    referredBy: "Club Runners Lima",
+    contactPreference: "email",
+  };
+  const importRow = {
+    source: "import",
+    externalId: "mml-2026:17",
+    consentVersion: "import-mml-v1",
+    consentedAt: "2026-04-12T10:00:00Z",
+    fullName: "Luis García",
+    phone: "+51938127171",
+  };
+
+  it("accepts a google_form answer and normalizes phone, email and text", () => {
+    expect(createIntegrationLeadSchema.parse(googleForm)).toEqual({
+      source: "google_form",
+      externalId: "1AbC-sheet_id:42",
+      consentVersion: "google-form-v1",
+      consentedAt: "2026-09-14T08:12:00-05:00",
+      fullName: "Ana Pérez",
+      phone: "+51938127170",
+      email: "ana.perez@example.com",
+      tripSlug: "maraton-santiago-2027",
+      destinationText: "Santiago",
+      channel: "instagram",
+      originDetail: "Historia de Instagram",
+      referredBy: "Club Runners Lima",
+      contactPreference: "email",
+    });
+  });
+
+  it("accepts an import row: missing optionals become null and channel defaults to unknown", () => {
+    expect(createIntegrationLeadSchema.parse(importRow)).toEqual({
+      ...importRow,
+      email: null,
+      tripSlug: null,
+      destinationText: null,
+      channel: "unknown",
+      originDetail: null,
+      referredBy: null,
+      contactPreference: null,
+    });
+  });
+
+  it('turns "" (a blank spreadsheet cell), blanks and null into null in the optional fields', () => {
+    const blanks = { email: "", tripSlug: "", destinationText: "  ", originDetail: "", referredBy: null, contactPreference: "" };
+    expect(createIntegrationLeadSchema.parse({ ...importRow, ...blanks })).toMatchObject({
+      email: null,
+      tripSlug: null,
+      destinationText: null,
+      originDetail: null,
+      referredBy: null,
+      contactPreference: null,
+    });
+  });
+
+  it("accepts a consent given up to 5 minutes in the future (clock skew)", () => {
+    expect(createIntegrationLeadSchema.safeParse({ ...importRow, consentedAt: "2026-10-25T15:05:00Z" }).success).toBe(true);
+  });
+
+  it.each([
+    ["a version of the other entry path", { ...googleForm, consentVersion: "import-mml-v1" }],
+    ["a version of the other entry path (import)", { ...importRow, consentVersion: "google-form-v1" }],
+    ["an unknown version", { ...importRow, consentVersion: "import-mml-v2" }],
+    ["consentedAt without time zone", { ...importRow, consentedAt: "2026-04-12T10:00:00" }],
+    ["consentedAt more than 5 minutes in the future", { ...importRow, consentedAt: "2026-10-25T15:05:01Z" }],
+    ["consentedAt as a date only", { ...importRow, consentedAt: "2026-04-12" }],
+    ["externalId with spaces", { ...importRow, externalId: "mml 2026:17" }],
+    ["externalId of 101 characters", { ...importRow, externalId: "x".repeat(101) }],
+    ["an empty externalId", { ...importRow, externalId: "" }],
+    ["a phone without country code", { ...importRow, phone: "938 127 170" }],
+    ["source web_form", { ...importRow, source: "web_form" }],
+    ["an invalid email", { ...importRow, email: "ana@" }],
+    ["an invalid trip slug", { ...importRow, tripSlug: "Maraton Santiago" }],
+    ["an unknown channel", { ...importRow, channel: "foo" }],
+    ['an empty channel ("")', { ...importRow, channel: "" }],
+    ["a null channel", { ...importRow, channel: null }],
+    ["an unknown contact preference", { ...importRow, contactPreference: "sms" }],
+    ["an origin detail of 1 character", { ...importRow, originDetail: "x" }],
+    ["a referrer of 121 characters", { ...importRow, referredBy: "x".repeat(121) }],
+    ["a name of 1 character", { ...importRow, fullName: " A " }],
+  ])("rejects %s", (_case, body) => {
+    expect(createIntegrationLeadSchema.safeParse(body).success).toBe(false);
+  });
+
+  it("drops ownerUserId, stage, bulk and createdBy", () => {
+    const parsed = createIntegrationLeadSchema.parse({
+      ...importRow,
+      ownerUserId: "user-1",
+      stage: "paid",
+      bulk: false,
+      createdBy: "user-1",
+    });
+    for (const key of ["ownerUserId", "stage", "bulk", "createdBy"]) expect(parsed).not.toHaveProperty(key);
+  });
+
+  it("uses the channel and contact preference values of the database enums", () => {
+    for (const channel of leadChannelEnum.enumValues) {
+      expect(createIntegrationLeadSchema.parse({ ...importRow, channel }).channel).toBe(channel);
+    }
+    for (const contactPreference of contactPreferenceEnum.enumValues) {
+      expect(createIntegrationLeadSchema.parse({ ...importRow, contactPreference }).contactPreference).toBe(contactPreference);
+    }
   });
 });

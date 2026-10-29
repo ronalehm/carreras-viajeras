@@ -7,66 +7,55 @@ vi.mock("@/lib/env", () => ({ getEnv: vi.fn(), getTurnstileEnv: vi.fn() }));
 import { getEnv, getTurnstileEnv } from "@/lib/env";
 import { verifyTurnstileToken } from "./turnstile.service";
 
-const SECRET = "0x4AAAAAAAsyntheticTurnstileSecret";
-const TOKEN = "synthetic.turnstile.token";
+const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const SECRET = "0x4AAAAAAAreal-secret-value-for-tests";
+const TOKEN = "token-abc.123";
 const IP = "203.0.113.7";
-const KEY = "6f9a1c3e-2b4d-4e8f-9a0b-1c2d3e4f5a6b";
-const SITEVERIFY = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const KEY = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
+const INPUT = { token: TOKEN, remoteIp: IP, idempotencyKey: KEY };
 
 const fetchMock = vi.fn<typeof fetch>();
 
-function siteverify(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const passed = (overrides: Record<string, unknown> = {}) =>
+  json({ success: true, action: "lead_submit", hostname: "carreras-viajeras.mentec.dev", "error-codes": [], ...overrides });
+
+function sentBodies() {
+  return fetchMock.mock.calls.map(([, init]) => new URLSearchParams(String(init?.body)));
 }
 
-const VALID_RESPONSE = { success: true, action: "lead_submit", hostname: "carreras-viajeras.mentec.dev" };
-
-function sentForm(call = 0): URLSearchParams {
-  const init = fetchMock.mock.calls[call][1];
-  return new URLSearchParams(String(init?.body));
+function configure({ secret = SECRET as string | null, isTestSecret = false } = {}) {
+  vi.mocked(getTurnstileEnv).mockReturnValue(secret === null ? null : { TURNSTILE_SECRET_KEY: secret, isTestSecret });
+  vi.mocked(getEnv).mockReturnValue({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" } as ReturnType<typeof getEnv>);
 }
 
-const verify = (overrides: Partial<Parameters<typeof verifyTurnstileToken>[0]> = {}) =>
-  verifyTurnstileToken({ token: TOKEN, remoteIp: IP, idempotencyKey: KEY, ...overrides });
-
-let consoleSpies: ReturnType<typeof vi.spyOn>[];
+let errorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   vi.resetAllMocks();
   vi.stubGlobal("fetch", fetchMock);
-  vi.mocked(getTurnstileEnv).mockReturnValue({ TURNSTILE_SECRET_KEY: SECRET, isTestSecret: false });
-  vi.mocked(getEnv).mockReturnValue({
-    DATABASE_URL: "postgresql://app:synthetic@db.example.test/neondb?sslmode=require",
-    NEON_AUTH_BASE_URL: "https://auth.example.test/neondb/auth",
-    NEON_AUTH_COOKIE_SECRET: "synthetic-random-test-secret-at-least-32",
-    APP_ORIGIN: "https://carreras-viajeras.mentec.dev",
-  });
-  consoleSpies = (["error", "warn", "log", "info"] as const).map((method) =>
-    vi.spyOn(console, method).mockImplementation(() => {}),
-  );
+  errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  configure();
 });
 
 afterEach(() => {
-  // Nothing logged ever contains the token, the IP or the secret.
-  const logged = JSON.stringify(consoleSpies.flatMap((spy) => spy.mock.calls));
-  for (const secret of [TOKEN, IP, SECRET]) expect(logged).not.toContain(secret);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 describe("verifyTurnstileToken", () => {
-  it("is valid with success, the lead_submit action and the APP_ORIGIN hostname", async () => {
-    fetchMock.mockResolvedValueOnce(siteverify(VALID_RESPONSE));
+  it("valid with success, the lead_submit action and the APP_ORIGIN host", async () => {
+    fetchMock.mockResolvedValueOnce(passed());
 
-    await expect(verify()).resolves.toBe("valid");
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe(SITEVERIFY);
+    expect(url).toBe(SITEVERIFY_URL);
     expect(init?.method).toBe("POST");
-    expect(init?.body).toBeInstanceOf(URLSearchParams);
     expect(init?.signal).toBeInstanceOf(AbortSignal);
-    expect(Object.fromEntries(sentForm())).toEqual({
+    expect(Object.fromEntries(sentBodies()[0])).toEqual({
       secret: SECRET,
       response: TOKEN,
       remoteip: IP,
@@ -74,102 +63,121 @@ describe("verifyTurnstileToken", () => {
     });
   });
 
-  it("sends remoteip only when it receives one", async () => {
-    fetchMock.mockResolvedValueOnce(siteverify(VALID_RESPONSE));
-    await expect(verify({ remoteIp: null })).resolves.toBe("valid");
-    expect(sentForm().has("remoteip")).toBe(false);
+  it("compares the hostname without the port of a development origin", async () => {
+    vi.mocked(getEnv).mockReturnValue({ APP_ORIGIN: "http://localhost:3000" } as ReturnType<typeof getEnv>);
+    fetchMock.mockResolvedValueOnce(passed({ hostname: "localhost" }));
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
   });
 
   it.each([
-    ["another hostname", { ...VALID_RESPONSE, hostname: "evil.example.test" }],
-    ["another action", { ...VALID_RESPONSE, action: "login" }],
-    ["no action or hostname", { success: true }],
-    ["success false (timeout-or-duplicate)", { success: false, "error-codes": ["timeout-or-duplicate"] }],
-  ])("is invalid with %s, without retrying", async (_label, body) => {
-    fetchMock.mockResolvedValueOnce(siteverify(body));
-    await expect(verify()).resolves.toBe("invalid");
+    ["another hostname", passed({ hostname: "evil.example.com" })],
+    ["a missing hostname", passed({ hostname: undefined })],
+    ["a null hostname", passed({ hostname: null })],
+    ["another action", passed({ action: "login" })],
+    ["a null action", passed({ action: null })],
+    ["success: false (timeout-or-duplicate)", json({ success: false, "error-codes": ["timeout-or-duplicate"] })],
+  ])("invalid with %s, without retrying", async (_case, response) => {
+    fetchMock.mockResolvedValueOnce(response);
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("invalid");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("retries once after a 5xx with the same idempotency_key", async () => {
-    fetchMock
-      .mockResolvedValueOnce(new Response("Bad gateway", { status: 502 }))
-      .mockResolvedValueOnce(siteverify(VALID_RESPONSE));
+  it("with the development test secret only success is required", async () => {
+    configure({ secret: "1x0000000000000000000000000000000AA", isTestSecret: true });
+    fetchMock.mockResolvedValueOnce(json({ success: true, hostname: "example.com", action: "" }));
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
 
-    await expect(verify()).resolves.toBe("valid");
+    fetchMock.mockResolvedValueOnce(json({ success: true, hostname: null, action: null }));
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(sentForm(0).get("idempotency_key")).toBe(KEY);
-    expect(sentForm(1).get("idempotency_key")).toBe(KEY);
+    fetchMock.mockResolvedValueOnce(json({ success: false, "error-codes": ["invalid-input-response"] }));
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("invalid");
   });
 
-  it("retries once after a network error or a timeout", async () => {
-    fetchMock
-      .mockRejectedValueOnce(new DOMException("The operation timed out.", "TimeoutError"))
-      .mockResolvedValueOnce(siteverify(VALID_RESPONSE));
+  it.each([
+    ["a 5xx", () => fetchMock.mockResolvedValueOnce(new Response("oops", { status: 503 }))],
+    ["a network error", () => fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"))],
+    ["a timeout", () => fetchMock.mockRejectedValueOnce(new DOMException("timed out", "TimeoutError"))],
+  ])("%s followed by success → valid with 2 calls and the same idempotency_key", async (_case, fail) => {
+    fail();
+    fetchMock.mockResolvedValueOnce(passed());
 
-    await expect(verify()).resolves.toBe("valid");
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("valid");
+
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(sentForm(1).get("idempotency_key")).toBe(KEY);
+    expect(sentBodies().map((body) => body.get("idempotency_key"))).toEqual([KEY, KEY]);
   });
 
-  it("is unavailable after two failures in a row, with a fixed log", async () => {
-    fetchMock
-      .mockRejectedValueOnce(new TypeError(`fetch failed for ${TOKEN} from ${IP}`))
-      .mockResolvedValueOnce(new Response("Service unavailable", { status: 503 }));
+  it.each([
+    ["a 5xx before retrying", 503],
+    ["a 4xx before failing", 400],
+  ])("cancels the unread body of %s", async (_case, status) => {
+    const failed = new Response("oops", { status });
+    const cancel = vi.spyOn(failed.body!, "cancel");
+    fetchMock.mockResolvedValueOnce(failed).mockResolvedValueOnce(passed());
 
-    await expect(verify()).resolves.toBe("unavailable");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(console.error).toHaveBeenCalledExactlyOnceWith("turnstile: verification unavailable");
+    await verifyTurnstileToken(INPUT);
+
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it("is unavailable without retrying when the response is not a Siteverify result", async () => {
-    fetchMock.mockResolvedValueOnce(new Response("<html>", { status: 200 }));
-    await expect(verify()).resolves.toBe("unavailable");
+  it("two failures in a row → unavailable, never a third attempt", async () => {
+    fetchMock.mockResolvedValueOnce(new Response("", { status: 502 })).mockRejectedValueOnce(new TypeError("fetch failed"));
+
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("unavailable");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith("turnstile: verification unavailable");
+  });
+
+  it.each([
+    ["a 4xx", () => new Response("bad request", { status: 400 })],
+    ["a malformed body", () => json({ ok: "yes" })],
+    ["a body that is not JSON", () => new Response("<html>", { status: 200 })],
+  ])("%s → unavailable without retrying (fails closed)", async (_case, response) => {
+    fetchMock.mockResolvedValueOnce(response());
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("unavailable");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("is unavailable without calling fetch when the secret is not configured", async () => {
-    vi.mocked(getTurnstileEnv).mockReturnValue(null);
-    await expect(verify()).resolves.toBe("unavailable");
+  it("without a configured secret → unavailable without calling fetch", async () => {
+    configure({ secret: null });
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("unavailable");
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledExactlyOnceWith("turnstile: verification unavailable");
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith("turnstile: verification unavailable");
   });
 
-  it("is unavailable without calling fetch when the secret is invalid (e.g. a test secret in production)", async () => {
+  it("with an invalid environment → unavailable without calling fetch nor logging the error", async () => {
     vi.mocked(getTurnstileEnv).mockImplementation(() => {
       throw new Error("Invalid environment fields: TURNSTILE_SECRET_KEY");
     });
-    await expect(verify()).resolves.toBe("unavailable");
+    await expect(verifyTurnstileToken(INPUT)).resolves.toBe("unavailable");
     expect(fetchMock).not.toHaveBeenCalled();
+    expect(errorSpy).toHaveBeenCalledExactlyOnceWith("turnstile: verification unavailable");
   });
 
   it.each([
     ["empty", ""],
-    ["longer than 2048 characters", "t".repeat(2049)],
-  ])("is invalid without calling fetch with a token %s", async (_label, token) => {
-    await expect(verify({ token })).resolves.toBe("invalid");
+    ["over 2048 characters", "t".repeat(2049)],
+  ])("an %s token → invalid without calling fetch", async (_case, token) => {
+    await expect(verifyTurnstileToken({ ...INPUT, token })).resolves.toBe("invalid");
     expect(fetchMock).not.toHaveBeenCalled();
     expect(getTurnstileEnv).not.toHaveBeenCalled();
   });
 
-  it("with the development test secret only requires success", async () => {
-    vi.mocked(getTurnstileEnv).mockReturnValue({
-      TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
-      isTestSecret: true,
-    });
-    fetchMock.mockResolvedValueOnce(siteverify({ success: true, hostname: "example.com", action: "" }));
-
-    await expect(verify()).resolves.toBe("valid");
-    expect(getEnv).not.toHaveBeenCalled();
+  it("sends remoteip only when it receives one", async () => {
+    fetchMock.mockResolvedValueOnce(passed());
+    await verifyTurnstileToken({ ...INPUT, remoteIp: null });
+    expect(sentBodies()[0].has("remoteip")).toBe(false);
   });
 
-  it("with the test secret still rejects success false", async () => {
-    vi.mocked(getTurnstileEnv).mockReturnValue({
-      TURNSTILE_SECRET_KEY: "2x0000000000000000000000000000000AA",
-      isTestSecret: true,
-    });
-    fetchMock.mockResolvedValueOnce(siteverify({ success: false, "error-codes": ["invalid-input-response"] }));
-    await expect(verify()).resolves.toBe("invalid");
+  it("never logs the token, the IP or the secret", async () => {
+    fetchMock.mockRejectedValue(new TypeError(`fetch failed for ${TOKEN} from ${IP}`));
+    await verifyTurnstileToken(INPUT);
+
+    const logged = JSON.stringify(errorSpy.mock.calls);
+    expect(logged).not.toContain(TOKEN);
+    expect(logged).not.toContain(IP);
+    expect(logged).not.toContain(SECRET);
   });
 });

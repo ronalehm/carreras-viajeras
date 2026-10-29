@@ -1,9 +1,7 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { can, type StaffRole } from "@/lib/auth/permissions";
 import { STAFF_ROLE_LABELS } from "../utils/staffDisplay";
-import { SignOutButton } from "./SignOutButton";
+import { CrmSidebar, type CrmNavItem } from "./CrmSidebar";
 
 type CrmShellProps = {
   email: string;
@@ -12,58 +10,93 @@ type CrmShellProps = {
 };
 
 export function CrmShell({ email, roles, children }: CrmShellProps) {
-  // Visual only: each page and Server Action checks its permission again.
-  const canManageStaff = can(roles, "staff.manage");
-  const canManageTrips = can(roles, "trips.manage");
-  const canManageLeads = can(roles, "leads.manage");
+  // Presentation only: pages and actions still authorize every operation on the server.
+  const items: CrmNavItem[] = [
+    { label: "Dashboard", href: "/crm", icon: "dashboard", group: "overview" },
+  ];
+  if (can(roles, "leads.manage")) {
+    items.push(
+      { label: "Leads", href: "/crm/leads", icon: "leads", group: "sales" },
+      {
+        label: "Mis pendientes",
+        href: "/crm/leads?responsable=mios&seguimiento=pendientes",
+        icon: "pending",
+        group: "sales",
+      },
+      {
+        label: "Campañas",
+        href: "/crm/campanas",
+        icon: "campaigns",
+        group: "sales",
+      },
+    );
+  }
+  if (can(roles, "trips.manage"))
+    items.push({
+      label: "Viajes",
+      href: "/crm/viajes",
+      icon: "trips",
+      group: "sales",
+    });
+  if (can(roles, "offers.view"))
+    items.push({
+      label: "Ofertas",
+      href: "/crm/ofertas",
+      icon: "offers",
+      group: "sales",
+    });
+  if (can(roles, "bookings.manage"))
+    items.push({
+      label: "Reservas",
+      href: "/crm/reservas",
+      icon: "bookings",
+      group: "sales",
+    });
+  if (can(roles, "staff.manage")) {
+    items.push(
+      {
+        label: "Usuarios",
+        href: "/crm/admin/usuarios",
+        icon: "users",
+        group: "admin",
+      },
+      {
+        label: "Configuraciones",
+        href: "/crm/configuraciones",
+        icon: "settings",
+        group: "admin",
+      },
+    );
+  }
 
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b px-4 py-3">
-        <div className="flex flex-wrap items-center gap-4">
-          <Link href="/crm" className="font-heading font-medium">
-            CRM Carreras Viajeras
-          </Link>
-          {(canManageLeads || canManageTrips || canManageStaff) && (
-            <nav aria-label="CRM" className="flex flex-wrap gap-1">
-              {canManageLeads && (
-                <>
-                  <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
-                    Leads
-                  </Link>
-                  {/* Preset of the lead list (same URL as leadListHref in modules/crm). */}
-                  <Link
-                    href="/crm/leads?responsable=mios&seguimiento=pendientes"
-                    className={buttonVariants({ variant: "ghost" })}
-                  >
-                    Mis pendientes
-                  </Link>
-                </>
-              )}
-              {canManageTrips && (
-                <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
-                  Viajes
-                </Link>
-              )}
-              {canManageStaff && (
-                <Link href="/crm/admin/usuarios" className={buttonVariants({ variant: "ghost" })}>
-                  Usuarios
-                </Link>
-              )}
-            </nav>
-          )}
+    <div className="min-h-svh bg-muted/30">
+      <a
+        href="#crm-main-content"
+        className="sr-only fixed top-3 left-3 z-60 rounded-lg bg-card p-3 text-sm focus:not-sr-only"
+      >
+        Ir al contenido
+      </a>
+      <CrmSidebar
+        email={email}
+        roleLabels={roles.map((role) => STAFF_ROLE_LABELS[role])}
+        items={items}
+      />
+      <div className="min-w-0 lg:pl-64">
+        <div className="hidden h-20 items-center justify-between border-b border-border/60 bg-card px-10 text-xs text-muted-foreground lg:flex">
+          <span>Panel de gestión</span>
+          <span className="rounded-full bg-muted/70 px-3 py-1 font-medium tracking-wide text-muted-foreground">
+            CRM
+          </span>
         </div>
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="text-right text-sm">
-            <p>{email}</p>
-            <p className="text-muted-foreground">
-              {roles.map((role) => STAFF_ROLE_LABELS[role]).join(", ")}
-            </p>
-          </div>
-          <SignOutButton />
-        </div>
-      </header>
-      <main className="flex-1 p-4">{children}</main>
+        <main
+          id="crm-main-content"
+          tabIndex={-1}
+          className="mx-auto w-full max-w-7xl min-w-0 px-4 py-8 outline-none sm:px-6 lg:px-10 lg:py-10"
+        >
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

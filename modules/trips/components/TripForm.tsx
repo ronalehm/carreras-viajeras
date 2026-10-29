@@ -34,13 +34,18 @@ const FIELDS: TripField[] = [
   { name: "distances", label: "Distancias", required: true, hint: "Separadas por comas. Ejemplo: 42K, 21K, 10K." },
   { name: "summary", label: "Resumen", rows: 3, required: true, maxLength: 300, hint: "Entre 10 y 300 caracteres." },
   { name: "includes", label: "Qué incluye", rows: 5, hint: "Un elemento por línea, hasta 20 elementos." },
-  { name: "priceUsd", label: "Precio desde (USD)", type: "number", min: 0, max: 1_000_000,
-    hint: "Sin decimales. Déjalo vacío para mostrar «Precio a consultar»." },
+  { name: "excludes", label: "Qué no incluye", rows: 4, hint: "Un elemento por línea, hasta 20 elementos." },
+  { name: "notes", label: "Detalles por confirmar", rows: 3, maxLength: 1000,
+    hint: "Lo que aún falta confirmar del viaje." },
   { name: "capacity", label: "Cupos totales", type: "number", min: 1, max: 10_000,
     hint: "Cantidad informativa; no calcula disponibilidad." },
   { name: "imageUrl", label: "URL de la imagen", type: "url", maxLength: 2048,
     hint: "Enlace externo que empiece por https://." },
+  { name: "officialUrl", label: "Web oficial de la carrera", type: "url", maxLength: 2048 },
 ];
+
+// One item per line in a textarea; other lists (distances) are comma-separated.
+const LINE_LIST_FIELDS: (keyof TripInput)[] = ["includes", "excludes"];
 
 const INITIAL_STATE: TripActionState = { status: "idle" };
 
@@ -73,7 +78,7 @@ export function TripForm({ trip }: { trip?: Trip }) {
           const help = locked ? "Solo se puede cambiar en borrador." : hint;
           const original = trip?.[name];
           const initial = Array.isArray(original)
-            ? original.join(name === "includes" ? "\n" : ", ") : String(original ?? "");
+            ? original.join(LINE_LIST_FIELDS.includes(name) ? "\n" : ", ") : String(original ?? "");
           const props = {
             id, name, defaultValue: values?.[name] ?? initial, ...constraints,
             "aria-invalid": errors?.[name] ? true : undefined,
@@ -81,7 +86,7 @@ export function TripForm({ trip }: { trip?: Trip }) {
               .filter(Boolean).join(" ") || undefined,
           };
           return (
-            <div key={name} className={cn("flex flex-col gap-2", (rows || name === "imageUrl") && "sm:col-span-2")}>
+            <div key={name} className={cn("flex flex-col gap-2", (rows || type === "url") && "sm:col-span-2")}>
               <Label htmlFor={id}>{label}{constraints.required ? " *" : ""}</Label>
               {rows ? <Textarea {...props} rows={rows} />
                 : <Input {...props} type={type} step={type === "number" ? 1 : undefined} readOnly={locked} />}

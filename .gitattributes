@@ -1,0 +1,2 @@
+# Append-only approvals ledger: union keeps every signed line from both sides of a merge.
+docs/specs/approvals.jsonl merge=union
