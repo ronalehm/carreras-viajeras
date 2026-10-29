@@ -5,6 +5,7 @@ Requires Python Playwright and Chromium. Sign in directly in an interactive brow
 or supply credentials through secure environment variables.
 """
 import argparse
+from contextlib import contextmanager
 import json
 import os
 import re
@@ -82,17 +83,56 @@ def sign_in(page, interactive_login=False):
     page.wait_for_url(destination)
 
 
-def perform(report, data, interactive_login=False):
+def local_cdp_url(value):
+    try:
+        parsed = urlparse(value)
+        valid = (parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "::1", "localhost"}
+                 and parsed.port is not None and 1 <= parsed.port <= 65535
+                 and parsed.path in {"", "/"} and not parsed.query and not parsed.fragment
+                 and parsed.username is None and parsed.password is None)
+    except ValueError:
+        valid = False
+    if not valid:
+        raise argparse.ArgumentTypeError("Usa una dirección CDP local, por ejemplo http://127.0.0.1:9222.")
+    return value
+
+
+@contextmanager
+def browser_page(playwright, interactive_login=False, cdp_url=None):
+    browser = None
+    page = None
+    try:
+        if cdp_url:
+            # Reuse the user's already authenticated context. Do not copy cookies
+            # or create a fresh context that would lose the existing session.
+            browser = playwright.chromium.connect_over_cdp(cdp_url, no_defaults=True)
+            if not browser.contexts:
+                raise RuntimeError("El navegador conectado no tiene un contexto disponible.")
+            context = browser.contexts[0]
+        else:
+            chromium_path = os.environ.get("QA_CHROMIUM_PATH", "/usr/bin/chromium")
+            options = {"headless": not interactive_login, "proxy": proxy_settings()}
+            if Path(chromium_path).is_file():
+                options["executable_path"] = chromium_path
+            browser = playwright.chromium.launch(**options)
+            context = browser.new_context(locale="es-PE", timezone_id="America/Lima", ignore_https_errors=False)
+        # A new test tab keeps the user's existing tabs untouched.
+        page = context.new_page()
+        if cdp_url:
+            page.bring_to_front()
+        yield page
+    finally:
+        if cdp_url:
+            if page is not None and not page.is_closed():
+                page.close()
+        elif browser is not None:
+            browser.close()
+
+
+def perform(report, data, interactive_login=False, cdp_url=None):
     from playwright.sync_api import expect, sync_playwright
 
-    with sync_playwright() as playwright:
-        chromium_path = os.environ.get("QA_CHROMIUM_PATH", "/usr/bin/chromium")
-        options = {"headless": not interactive_login, "proxy": proxy_settings()}
-        if Path(chromium_path).is_file():
-            options["executable_path"] = chromium_path
-        browser = playwright.chromium.launch(**options)
-        context = browser.new_context(locale="es-PE", timezone_id="America/Lima", ignore_https_errors=False)
-        page = context.new_page()
+    with sync_playwright() as playwright, browser_page(playwright, interactive_login, cdp_url) as page:
         page.set_default_timeout(25000)
         try:
             page.goto(ORIGIN + "/crm/acceso", wait_until="domcontentloaded")
@@ -108,18 +148,15 @@ def perform(report, data, interactive_login=False):
             if identity["status"] != 200:
                 report["blocker"] = "admin_identity_unverified"
                 report["adminIdentityHttpStatus"] = identity["status"]
-                browser.close()
                 return
             roles = identity["staffRoles"]
             if not any(role in roles for role in ["admin", "super_admin"]):
                 report["blocker"] = "account_has_no_admin_role"
-                browser.close()
                 return
             report["authenticatedAsAdmin"] = True
         except Exception:
             # Login failures may include passwords, tokens or account data in call logs.
             report["blocker"] = "login_failed_or_requires_interactive_verification"
-            browser.close()
             return
 
         trip_id = None
@@ -199,7 +236,6 @@ def perform(report, data, interactive_login=False):
                 # A submitted action can have committed even if verification times out.
                 # Never retry an ambiguous write; the QA prefix identifies it for inspection.
                 result.update(status="failed", reason="ui_or_persistence_check_failed", persistence="unknown_if_submitted")
-        browser.close()
 
 
 def main():
@@ -208,7 +244,9 @@ def main():
     parser.add_argument("--preflight", action="store_true", help="Check connectivity and credential presence without logging in or writing.")
     parser.add_argument("--report", default="test-results/admin-registration.json")
     parser.add_argument("--interactive-login", action="store_true", help="Open a visible browser and let you sign in directly with Clerk, including verification codes.")
+    parser.add_argument("--cdp-url", type=local_cdp_url, help="Connect to a Chrome/Edge test profile already opened locally, e.g. http://127.0.0.1:9222. Keeps the external browser open.")
     args = parser.parse_args()
+    interactive_login = args.interactive_login or bool(args.cdp_url)
     now = datetime.now(ZoneInfo("America/Lima"))
     tag = "qa-" + now.strftime("%Y%m%d-%H%M%S") + "-" + uuid4().hex[:6]
     data = fixtures(tag, now.date())
@@ -216,19 +254,19 @@ def main():
         print(json.dumps({"tag": tag, "fixtures": data}, ensure_ascii=False, indent=2))
         return 0
     report = {"origin": ORIGIN, "timestamp": now.isoformat(), "tag": tag, "authenticatedAsAdmin": False, "writesAttempted": 0, "results": {name: {"status": "not_run", "submitted": False} for name in MODULES}}
-    report["authenticationMode"] = "interactive_browser" if args.interactive_login else "environment"
-    if args.interactive_login and not args.preflight:
+    report["authenticationMode"] = "connected_browser" if args.cdp_url else "interactive_browser" if interactive_login else "environment"
+    if interactive_login and not args.preflight:
         # The browser has its own TLS trust, proxy and cookies. A failed Python
         # health request does not establish that this browser cannot reach Clerk.
         # No forms are submitted until the real browser session proves admin access.
         report["preflight"] = {"network": "checked_in_browser", "missingEnvironment": []}
         ready = True
     else:
-        report["preflight"] = preflight(require_credentials=not args.interactive_login)
+        report["preflight"] = preflight(require_credentials=not interactive_login)
         ready = report["preflight"]["network"] == "ready" and not report["preflight"]["missingEnvironment"]
     if ready and not args.preflight:
         try:
-            perform(report, data, args.interactive_login)
+            perform(report, data, interactive_login, args.cdp_url)
         except Exception:
             report["blocker"] = "browser_execution_unavailable"
     else:

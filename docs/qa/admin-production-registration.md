@@ -13,8 +13,9 @@ patrocinadores, ofertas, reservas, campañas y viajes mediante la interfaz de
 - La precomprobación desde Codex Cloud se ejecutó y quedó bloqueada. El proxy rechaza
   el dominio con CONNECT 403; faltan QA_ADMIN_EMAIL y QA_ADMIN_PASSWORD.
 - No se inició sesión, no se enviaron formularios y no se crearon registros remotos.
-- Pasaron nueve regresiones del ejecutor: modo interactivo sin lectura de credenciales,
-  precomprobaciones, bloqueo de altas sin prueba admin y diagnóstico HTTP seguro. La ejecución
+- Pasaron catorce regresiones del ejecutor: modo interactivo sin lectura de credenciales,
+  precomprobaciones, bloqueo de altas sin prueba admin, diagnóstico HTTP seguro,
+  CDP limitado a loopback y conservación del navegador externo. La ejecución
   real en Windows sigue pendiente; las instrucciones no se anuncian como E2E aprobado.
 - No se modificaron guardas, roles, datos existentes, claves Clerk ni configuración
   de producción. El acceso y las variables se declararon en el borrador del entorno;
@@ -78,6 +79,61 @@ Get-Content test-results\admin-registration.json -Raw -Encoding UTF8
 true. Un error no acredita el registro: revisa el estado de cada módulo y cualquier
 escritura marcada como incierta antes de repetirlo. La ventana se cierra al terminar.
 
+## Reutilizar Google Chrome instalado y conservar una sesión de QA
+
+Si Google rechaza el login en Chromium automatizado, inicia sesión manualmente
+antes de conectar el test. Usa tu Chrome instalado con un directorio de datos
+separado. Chrome moderno no admite automatizar el perfil principal: no copies su
+carpeta User Data, cookies, contraseñas ni claves. El perfil QA se conserva en
+LOCALAPPDATA fuera del repositorio y puede reutilizarse en ejecuciones posteriores.
+Referencia de Chrome: https://developer.chrome.com/blog/remote-debugging-port.
+
+En la misma ventana de PowerShell del proyecto, actualiza el ejecutor y Playwright:
+
+```powershell
+git pull --ff-only
+.\.venv\Scripts\python.exe -m pip install --upgrade "playwright>=1.62.0" tzdata
+```
+
+Localiza Chrome y abre el perfil QA en modo normal, todavía sin automatización:
+
+```powershell
+$qaChrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe", "$env:LOCALAPPDATA\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $qaChrome) { throw "No se encontró Google Chrome instalado." }
+$qaProfile = Join-Path $env:LOCALAPPDATA "CarrerasViajeras-QA"
+& $qaChrome "--user-data-dir=$qaProfile" "https://carreras-viajeras.mentec.dev/crm/acceso"
+```
+
+Inicia sesión en el CRM con la cuenta admin y completa cualquier verificación
+normal. Confirma que puedes ver el panel administrativo. Después cierra solo esa
+ventana de Chrome QA para liberar el perfil; tu Chrome habitual puede seguir abierto.
+No se solicita desactivar controles de Google ni se garantiza que un proveedor
+acepte OAuth automatizado. El test utiliza la sesión del CRM obtenida manualmente.
+
+Reabre el mismo perfil con la conexión de pruebas limitada a tu equipo:
+
+```powershell
+& $qaChrome "--user-data-dir=$qaProfile" "--remote-debugging-port=9222" "--remote-debugging-address=127.0.0.1" "https://carreras-viajeras.mentec.dev/crm"
+```
+
+Cuando se vea el CRM, deja Chrome QA abierto y ejecuta:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\check-admin-registration.py --cdp-url http://127.0.0.1:9222 --report test-results\admin-registration.json
+```
+
+El test añade una pestaña al contexto existente, sin exportar cookies ni leer otras
+pestañas. Mantiene obligatoria la comprobación admin en /api/crm/me. Al terminar
+cierra solo su pestaña; no cierra el navegador o el contexto que abriste tú.
+Solo acepta direcciones CDP HTTP de loopback, sin usuario, contraseña, query o
+fragmento. Playwright 1.62 o posterior permite conectar sin aplicar sus ajustes
+predeterminados al contexto existente.
+
+El ciclo CDP se comprobó con Chromium local y pestañas about:blank: la pestaña
+anterior permaneció abierta y el navegador siguió vivo tras la desconexión. No se
+hicieron solicitudes a producción en esa comprobación. El login Google/Clerk y
+las altas en Windows siguen pendientes de ejecución real.
+
 ## Codex Cloud o automatización sin interfaz
 
 Con Python Playwright, Chromium y las variables QA seguras disponibles:
@@ -99,7 +155,8 @@ GET /api/crm/me antes de registrar.
 Todos los registros llevan un prefijo QA único con fecha/hora de Lima y sufijo
 aleatorio. El resultado se verifica recargando la ficha o historial, además del
 mensaje de éxito. El informe no contiene contraseñas, cookies, tokens ni datos
-personales de clientes. No se guardan capturas, trazas ni estado de sesión.
+personales de clientes. El ejecutor no exporta capturas, trazas ni archivos de estado de sesión. En modo
+CDP, Chrome conserva la sesión en el directorio privado del perfil QA.
 
 | Módulo | Registro y verificación |
 | --- | --- |

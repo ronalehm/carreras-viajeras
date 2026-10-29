@@ -110,6 +110,63 @@ class AdminRegistrationTests(unittest.TestCase):
                 self.assertFalse(report["authenticatedAsAdmin"])
                 browser.close.assert_called_once()
 
+    def test_cdp_accepts_only_loopback_without_credentials(self):
+        for endpoint in ["http://127.0.0.1:9222", "http://localhost:9333/", "http://[::1]:9222"]:
+            self.assertEqual(qa.local_cdp_url(endpoint), endpoint)
+        for endpoint in ["http://example.test:9222", "http://0.0.0.0:9222", "http://127.0.0.1", "http://user:private@127.0.0.1:9222", "http://127.0.0.1:9222/?private=1", "http://127.0.0.1:9222/#private", "http://[broken"]:
+            with self.subTest(endpoint=endpoint), self.assertRaises(qa.argparse.ArgumentTypeError):
+                qa.local_cdp_url(endpoint)
+
+    def test_cdp_reuses_session_and_closes_only_owned_test_tab(self):
+        api = Mock()
+        browser = api.chromium.connect_over_cdp.return_value
+        context = Mock()
+        browser.contexts = [context]
+        page = context.new_page.return_value
+        page.is_closed.return_value = False
+        with qa.browser_page(api, interactive_login=True, cdp_url="http://127.0.0.1:9222") as actual:
+            self.assertIs(actual, page)
+            page.bring_to_front.assert_called_once()
+        api.chromium.launch.assert_not_called()
+        browser.new_context.assert_not_called()
+        context.close.assert_not_called()
+        browser.close.assert_not_called()
+        page.close.assert_called_once()
+
+    def test_cdp_does_not_close_external_browser_when_a_test_raises(self):
+        api = Mock()
+        browser = api.chromium.connect_over_cdp.return_value
+        context = Mock()
+        browser.contexts = [context]
+        context.new_page.return_value.is_closed.return_value = False
+        with self.assertRaises(RuntimeError):
+            with qa.browser_page(api, cdp_url="http://127.0.0.1:9222"):
+                raise RuntimeError("synthetic test failure")
+        browser.close.assert_not_called()
+        context.close.assert_not_called()
+        context.new_page.return_value.close.assert_called_once()
+
+    def test_cdp_refuses_to_replace_a_missing_existing_context(self):
+        api = Mock()
+        browser = api.chromium.connect_over_cdp.return_value
+        browser.contexts = []
+        with self.assertRaises(RuntimeError):
+            with qa.browser_page(api, cdp_url="http://127.0.0.1:9222"):
+                self.fail("a new session must not be substituted")
+        browser.new_context.assert_not_called()
+        browser.close.assert_not_called()
+
+    def test_cdp_cli_implies_manual_login_without_environment_credentials(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "result.json"
+            with patch("sys.argv", ["qa", "--cdp-url", "http://127.0.0.1:9222", "--report", str(output)]), patch.dict(os.environ, {}, clear=True), patch.object(qa, "preflight") as probe, patch.object(qa, "perform") as browser, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(qa.main(), 2)
+                probe.assert_not_called()
+                self.assertEqual(browser.call_args.args[2:], (True, "http://127.0.0.1:9222"))
+            report = json.loads(output.read_text(encoding="utf-8"))
+            self.assertEqual(report["authenticationMode"], "connected_browser")
+            self.assertEqual(report["writesAttempted"], 0)
+
 
 if __name__ == "__main__":
     unittest.main()
