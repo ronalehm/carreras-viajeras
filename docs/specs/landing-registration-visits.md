@@ -11,8 +11,8 @@
 - Enmienda 1 (2026-10-29, tras ver la Fase 2 en el navegador): decisiones del usuario que se implementan en la **Fase 3**. Las Fases 1 y 2 están implementadas y revisadas; esta enmienda no cambia nada de ellas salvo lo que indica el Requisito 8.
   4. **Un solo «Registrarme»:** "borrar el primero, dejar el que está junto a WhatsApp". Sustituye la parte del Requisito 1 que pedía dos botones.
   5. **Ficha para PC y móvil:** la ficha "no está optimizada para PC"; debe servir para los dos. Cambia el maquetado de una columna de `landing-race-pages.md` en `/viajes/[slug]` (esa spec no se edita).
-  7. **Botones arriba en PC (2026-10-29, tras ver las capturas de la Fase 3):** con una oferta completa la tarjeta es más alta que la pantalla y «Registrarme» no se veía al cargar. El usuario eligió que, **solo en PC**, «Registrarme», WhatsApp y el aviso vayan al inicio de la tarjeta y el precio debajo, con scroll interno. En móvil no cambia.
   6. **Respuestas a las preguntas abiertas de esta spec:** solo el total de visitas, sin desglose diario; regla WAF de 30 peticiones por 10 s, y en el plan Free (una sola regla) no se crea la regla de visitas.
+  7. **Botones arriba en PC (2026-10-29, tras ver las capturas de la Fase 3):** con una oferta completa la tarjeta es más alta que la pantalla y «Registrarme» no se veía al cargar. El usuario eligió que, **solo en PC**, «Registrarme», WhatsApp y el aviso vayan al inicio de la tarjeta y el precio debajo, con scroll interno. En móvil no cambia.
 - Depende de: `landing-omnichannel-capture.md` (aprobada, F1–F4 implementadas: `campaigns`, `/viajes/[slug]/registro`, `/crm/campanas`), `landing-race-pages.md` (aprobada: `TripDetail`), `platform-neon-foundation.md` (aprobada: Drizzle `neon-http`, una sentencia por escritura, migraciones manuales).
 
 ## Objetivo
