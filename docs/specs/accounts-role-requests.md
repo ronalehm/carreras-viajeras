@@ -253,9 +253,9 @@ El admin pidió (2026-10-29):
 - [x] T5 — `AccountStatusSection`, `DeleteAccountDialog`, exports, ficha y README · archivos: `modules/accounts/components/AccountStatusSection.tsx`, `modules/accounts/components/DeleteAccountDialog.tsx`, `modules/accounts/index.ts`, `app/crm/(protected)/admin/usuarios/[id]/page.tsx`, `README.md` · depende de: T3, T4 · secuencial
 
 ### Fase 4: más roles gestionables
-- [ ] T1 — Matriz de gestión con tests · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — Schema, servicio y acción de concesión con marca, con tests · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts`, `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: T1 · secuencial
-- [ ] T3 — `GrantSponsorRoleForm`, `StaffTable` y ficha con marcas · archivos: `modules/accounts/components/GrantSponsorRoleForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `app/crm/(protected)/admin/usuarios/[id]/page.tsx` · depende de: T2 · secuencial
+- [x] T1 — Matriz de gestión con tests · archivos: `lib/auth/permissions.ts`, `lib/auth/permissions.test.ts` · depende de: — · secuencial (base, `lib/`)
+- [x] T2 — Schema, servicio y acción de concesión con marca, con tests · archivos: `modules/accounts/schemas/staff.schema.ts`, `modules/accounts/schemas/staff.schema.test.ts`, `modules/accounts/services/staff.service.ts`, `modules/accounts/services/staff.service.test.ts`, `modules/accounts/actions/staff.actions.ts`, `modules/accounts/actions/staff.actions.test.ts` · depende de: T1 · secuencial
+- [x] T3 — `GrantSponsorRoleForm`, `StaffTable` y ficha con marcas · archivos: `modules/accounts/components/GrantSponsorRoleForm.tsx`, `modules/accounts/components/StaffTable.tsx`, `app/crm/(protected)/admin/usuarios/[id]/page.tsx` · depende de: T2 · secuencial
 
 Orden: F1 → F4 → F2 → F3 es válido, porque F4 solo depende de F1. La F2 de `accounts-user-management.md` (invitar Patrocinador) toca `staff.schema.ts`, `staff.service.ts` y `staff.actions.ts`: se ejecuta antes o después de esta F4, nunca en paralelo.
 

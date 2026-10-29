@@ -52,6 +52,9 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
   ]);
   // Presentation only: the actions re-check canManageRole with the current actor.
   const roles = manageableRoles(access.user.staffRoles);
+  // Granting sponsor happens on the user's page with a brand. Inviting a sponsor needs a brand too
+  // and belongs to accounts-user-management F2: inviteStaffSchema rejects it, so it is not offered.
+  const invitableRoles = roles.filter((role) => role !== "sponsor");
 
   return (
     <section className="space-y-7">
@@ -74,10 +77,10 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
           description="Pendientes de aceptar y sin caducar"
         />
       </div>
-      {roles.length > 0 && (
+      {invitableRoles.length > 0 && (
         <Card className="shadow-none">
           <CardContent>
-            <InviteStaffForm roles={roles} />
+            <InviteStaffForm roles={invitableRoles} />
           </CardContent>
         </Card>
       )}

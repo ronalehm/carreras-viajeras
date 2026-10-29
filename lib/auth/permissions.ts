@@ -40,18 +40,18 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   "rewards.apply": ["commercial"],
 };
 
-// Roles each actor role may invite, grant or revoke from the CRM.
-// super_admin is never manageable from the CRM.
+// Roles each actor role may invite, grant or revoke from the CRM (accounts-role-requests R19).
+// super_admin is never manageable from the CRM. Granting sponsor also requires a brand, and
+// inviting a sponsor is not available yet: inviteStaffSchema rejects that role.
 const ROLE_MANAGEMENT: Readonly<Record<StaffRole, readonly StaffRole[]>> = {
-  super_admin: ["commercial", "organizer", "admin"],
-  admin: ["commercial"],
+  super_admin: ["commercial", "organizer", "sponsor", "admin"],
+  admin: ["commercial", "organizer", "sponsor"],
   commercial: [],
   organizer: [],
-  // Sponsor role management is introduced in a later phase, never through team forms.
   sponsor: [],
 };
 
-const MANAGEABLE_ROLE_ORDER: readonly StaffRole[] = ["commercial", "organizer", "admin"];
+const MANAGEABLE_ROLE_ORDER: readonly StaffRole[] = ["commercial", "organizer", "sponsor", "admin"];
 
 export function can(roles: readonly StaffRole[], permission: Permission): boolean {
   if (!Object.hasOwn(PERMISSION_MATRIX, permission)) return false;

@@ -120,10 +120,11 @@ describe("can", () => {
   });
 });
 
-// Expected actor × target role table from docs/specs/accounts-clerk-rbac.md.
+// Expected actor × target role table from docs/specs/accounts-role-requests.md (R19), which
+// amends the one in accounts-clerk-rbac.md.
 const EXPECTED_MANAGEABLE: Record<StaffRole, StaffRole[]> = {
-  super_admin: ["commercial", "organizer", "admin"],
-  admin: ["commercial"],
+  super_admin: ["commercial", "organizer", "sponsor", "admin"],
+  admin: ["commercial", "organizer", "sponsor"],
   commercial: [],
   organizer: [],
   sponsor: [],
@@ -131,16 +132,17 @@ const EXPECTED_MANAGEABLE: Record<StaffRole, StaffRole[]> = {
 
 describe("manageableRoles", () => {
   it.each<[StaffRole[], StaffRole[]]>([
-    [["super_admin"], ["commercial", "organizer", "admin"]],
-    [["admin"], ["commercial"]],
-    [["admin", "super_admin"], ["commercial", "organizer", "admin"]],
-    [["super_admin", "admin"], ["commercial", "organizer", "admin"]],
+    [["super_admin"], ["commercial", "organizer", "sponsor", "admin"]],
+    [["admin"], ["commercial", "organizer", "sponsor"]],
+    [["admin", "super_admin"], ["commercial", "organizer", "sponsor", "admin"]],
+    [["super_admin", "admin"], ["commercial", "organizer", "sponsor", "admin"]],
     [["commercial"], []],
     [["organizer"], []],
     [["sponsor"], []],
     [["commercial", "organizer"], []],
-    [["commercial", "admin"], ["commercial"]],
-    [["organizer", "super_admin"], ["commercial", "organizer", "admin"]],
+    [["commercial", "admin"], ["commercial", "organizer", "sponsor"]],
+    [["sponsor", "admin"], ["commercial", "organizer", "sponsor"]],
+    [["organizer", "super_admin"], ["commercial", "organizer", "sponsor", "admin"]],
     [[], []],
   ])("roles %j → %j", (roles, expected) => {
     expect(manageableRoles(roles)).toEqual(expected);
@@ -152,7 +154,7 @@ describe("manageableRoles", () => {
       const result = manageableRoles(roles);
       const union = new Set(roles.flatMap((role) => EXPECTED_MANAGEABLE[role]));
       expect(result).toEqual(
-        (["commercial", "organizer", "admin"] as const).filter((role) => union.has(role)),
+        (["commercial", "organizer", "sponsor", "admin"] as const).filter((role) => union.has(role)),
       );
       expect(new Set(result).size).toBe(result.length);
       expect(result).not.toContain("super_admin");
@@ -160,7 +162,7 @@ describe("manageableRoles", () => {
   );
 
   it("never includes super_admin, even for every role at once", () => {
-    expect(manageableRoles([...ALL_ROLES])).toEqual(["commercial", "organizer", "admin"]);
+    expect(manageableRoles([...ALL_ROLES])).toEqual(["commercial", "organizer", "sponsor", "admin"]);
   });
 
   it("ignores unknown roles", () => {
@@ -170,7 +172,12 @@ describe("manageableRoles", () => {
   it("returns a new array each call", () => {
     const first = manageableRoles(["super_admin"]);
     first.push("super_admin");
-    expect(manageableRoles(["super_admin"])).toEqual(["commercial", "organizer", "admin"]);
+    expect(manageableRoles(["super_admin"])).toEqual(["commercial", "organizer", "sponsor", "admin"]);
+  });
+
+  it("gives admin commercial, organizer and sponsor, and super_admin also admin (accounts-role-requests F4)", () => {
+    expect(manageableRoles(["admin"])).toEqual(["commercial", "organizer", "sponsor"]);
+    expect(manageableRoles(["super_admin"])).toEqual(["commercial", "organizer", "sponsor", "admin"]);
   });
 });
 
@@ -202,8 +209,16 @@ describe("canManageRole", () => {
     }
   });
 
-  it("never allows managing sponsor through team role actions", () => {
-    expect(canManageRole([...ALL_ROLES], "sponsor")).toBe(false);
+  it("lets admin and super_admin manage sponsor, and no other role", () => {
+    expect(canManageRole(["admin"], "sponsor")).toBe(true);
+    expect(canManageRole(["super_admin"], "sponsor")).toBe(true);
+    expect(canManageRole(["commercial", "organizer", "sponsor"], "sponsor")).toBe(false);
+  });
+
+  it("never lets admin manage admin nor super_admin", () => {
+    expect(canManageRole(["admin"], "admin")).toBe(false);
+    expect(canManageRole(["admin"], "super_admin")).toBe(false);
+    expect(canManageRole(["admin", "commercial", "organizer", "sponsor"], "admin")).toBe(false);
   });
 
   it("never allows managing super_admin", () => {

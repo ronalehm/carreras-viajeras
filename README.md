@@ -91,10 +91,12 @@ Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md): *
 
   | Actor | Roles que gestiona |
   |---|---|
-  | `super_admin` | `commercial`, `organizer` y `admin` |
-  | `admin` | solo `commercial` |
+  | `super_admin` | `commercial`, `organizer`, `sponsor` y `admin` |
+  | `admin` | `commercial`, `organizer` y `sponsor` |
   | `commercial`, `organizer` | ninguno |
   | cualquiera | nunca `super_admin`: solo con los scripts SQL |
+
+  Una cuenta puede tener varios roles a la vez. `sponsor` se concede desde la ficha eligiendo una marca existente (no por invitación desde el formulario del equipo), y a una cuenta desactivada no se le conceden roles (`accounts-role-requests.md` F3–F4).
 
 - **Aceptación automática:** la primera petición autenticada con el correo primario **verificado** que coincide (sin distinguir mayúsculas) con una invitación pendiente y vigente la acepta en una sola sentencia: crea el perfil y la asignación. Después, la autorización usa solo el `user_id` de Clerk, no el correo.
 - **Denegación por defecto:** sin sesión o si falla la lectura de la sesión → 401; si falla la lectura del usuario en Clerk, el correo primario no está verificado, la cuenta no tiene rol, la invitación caducó o se revocó, o falla la base → 403. Ni las respuestas ni los logs incluyen el mensaje original de Clerk o de la base. Body, query, cookies propias y metadatos de Clerk (`publicMetadata`, `unsafeMetadata`) nunca conceden permisos: no se guardan roles en Clerk.
@@ -164,7 +166,7 @@ Primero todo con la instancia de desarrollo de Clerk y una rama de Neon de desar
 - [ ] Super admin tras el bootstrap → `/crm` muestra "Super admin" y los enlaces "Viajes", "Reservas" y "Usuarios".
 - [ ] Cada persona del staff existente, tras crear su cuenta en Clerk y el remapeo → `/crm` muestra su rol ("Admin" o "Comercial") y sus leads y viajes conservan la autoría.
 - [ ] El super admin invita a un `admin` y a un `organizer`; cada uno crea su cuenta con el correo invitado y la verifica con código → ven "Admin" y "Organizador".
-- [ ] Un `admin` solo puede invitar "Comercial" y no ve acciones sobre admins, organizadores ni el super admin.
+- [ ] Un `admin` puede invitar "Comercial" y "Organizador" y conceder o revocar "Comercial", "Organizador" y "Patrocinador" (con marca) desde la ficha, pero no ve acciones sobre admins ni sobre el super admin (`accounts-role-requests.md` F4).
 - [ ] El organizador crea un viaje, lo ve en `/crm/viajes` como borrador y no ve los viajes ajenos: `/crm/viajes/<id de un viaje ajeno>` responde 404. Un comercial o un admin sí ven los dos.
 - [ ] (Cuando exista el organizador al que se asociarán, con autorización) [`seed-trips.sql`](#seed-de-viajes-pendiente-de-ejecutar) devuelve las filas insertadas en borrador con su `organizer_id`, y repetirlo devuelve 0 filas.
 - [ ] (Solo en la rama de desarrollo) `revoke-staff-role.sql -v role=super_admin` sobre el único super admin falla sin cambiar nada.
