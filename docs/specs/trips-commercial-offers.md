@@ -1,7 +1,7 @@
 # Ofertas comerciales versionadas por carrera, tipo de cambio y bloque financiero público
 
 - Módulo: trips (también `landing`; la matriz de permisos en `lib/auth/`)
-- Estado: borrador
+- Estado: aprobado
 - Plan maestro (aprobado por el usuario): QR o enlace → `/viajes/[slug]/registro` → **oferta** → identidad → contrato → pago con Mercado Pago Checkout Pro. **Esta spec es la segunda de la Fase 1 y solo cubre las ofertas comerciales versionadas por carrera**, el tipo de cambio que fija el equipo y el bloque financiero público.
 - Base revisada: rama `claude/trips-commercial-offers`, apilada sobre el PR #29 (`384ee0a`), que contiene el #26, el rediseño del #27 y `landing-omnichannel-capture` implementada. Migraciones hasta `drizzle/0007_awesome_dust.sql`. En Neon `production` faltan `0005`, `0006` y `0007`. Worker: 1602.73 KiB gzip.
 - Depende de:
