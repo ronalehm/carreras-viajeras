@@ -43,7 +43,7 @@ async function expectResponse(response: Response, status: number, body: unknown)
 }
 
 const UNAUTHORIZED = { error: "unauthorized" };
-const FORBIDDEN = { error: "forbidden" };
+const forbidden = (reason: string) => ({ error: "forbidden", reason });
 
 beforeEach(() => {
   auth.mockReset();
@@ -82,7 +82,7 @@ describe("GET /api/crm/me", () => {
     expect(response.status).toBe(403);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const text = await response.text();
-    expect(text).toBe(JSON.stringify(FORBIDDEN));
+    expect(text).toBe(JSON.stringify(forbidden("user_lookup_failed")));
     expect(text).not.toMatch(/Clerk API|sk_live/);
     expect(accept).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe("GET /api/crm/me", () => {
     signedInAs(user);
     load.mockResolvedValue(["admin"]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 403, forbidden("email_unverified"));
     expect(load).toHaveBeenCalledWith(USER_ID);
     expect(accept).not.toHaveBeenCalled();
   });
@@ -139,7 +139,7 @@ describe("GET /api/crm/me", () => {
     signedInAs(clerkUser());
     accept.mockResolvedValue([]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
   });
 
@@ -155,11 +155,12 @@ describe("GET /api/crm/me", () => {
     accept.mockResolvedValueOnce(["commercial"]).mockResolvedValueOnce([]);
 
     await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: ["commercial"] });
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(accept).toHaveBeenCalledTimes(2);
   });
 
   it("returns 403 on a database error without leaking the original message", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
     signedInAs(clerkUser());
     accept.mockRejectedValue(new Error("password authentication failed for user app"));
 
@@ -167,8 +168,10 @@ describe("GET /api/crm/me", () => {
     expect(response.status).toBe(403);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const text = await response.text();
-    expect(text).toBe(JSON.stringify(FORBIDDEN));
+    expect(text).toBe(JSON.stringify(forbidden("role_lookup_failed")));
     expect(text).not.toContain("password");
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    logError.mockRestore();
   });
 
   it("returns 403 when role=admin arrives via query, cookie, body or Clerk metadata", async () => {
@@ -185,7 +188,7 @@ describe("GET /api/crm/me", () => {
     );
     accept.mockResolvedValue([]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(GET).toHaveLength(0);
   });
 });

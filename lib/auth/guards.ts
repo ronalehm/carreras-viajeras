@@ -55,7 +55,7 @@ async function readClerkUser() {
   } catch {
     // 403, not 401: a signed-in user must not bounce between /crm/acceso and /crm.
     console.error("auth: user lookup failed");
-    throw new ForbiddenError();
+    throw new ForbiddenError("user_lookup_failed");
   }
 }
 
@@ -88,7 +88,7 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
         ? `auth: role lookup failed (${error.message})`
         : "auth: role lookup failed",
     );
-    throw new ForbiddenError();
+    throw new ForbiddenError("role_lookup_failed");
   }
 }
 
@@ -108,13 +108,13 @@ export async function requireUser(): Promise<CurrentUser> {
 
 export async function requireVerifiedEmail(): Promise<CurrentUser> {
   const user = await requireUser();
-  if (!user.emailVerified) throw new ForbiddenError();
+  if (!user.emailVerified) throw new ForbiddenError("email_unverified");
   return user;
 }
 
 export async function requirePermission(permission: Permission): Promise<CurrentUser> {
   const user = await requireVerifiedEmail();
-  if (!can(user.staffRoles, permission)) throw new ForbiddenError();
+  if (!can(user.staffRoles, permission)) throw new ForbiddenError("missing_permission");
   return user;
 }
 
