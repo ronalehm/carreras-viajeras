@@ -1,7 +1,7 @@
 # Captación omnicanal: registro por carrera, campañas (QR y enlaces) y modo stand
 
 - Módulo: landing (también `crm`)
-- Estado: borrador
+- Estado: aprobado
 - Plan maestro (aprobado por el usuario): QR o enlace → landing de la carrera → registro → oferta → identidad → contrato → pago con Mercado Pago. **Esta spec es la primera de la Fase 1 del plan y solo cubre la captación omnicanal.** Lo siguiente lo cubren specs futuras: `trips-commercial-offers` (oferta, anticipo, PEN), `bookings-runner-self-service` (identidad y datos del corredor), `bookings-contract-acceptance` (contrato), `bookings-mercadopago` (pago) y `public-official-site-content` (contenido oficial, textos legales públicos e indexación).
 - Base revisada: rama `claude/landing-omnichannel-capture` (apilada sobre el PR #26, `3a466f5`). Migraciones hasta `drizzle/0006_flashy_bastion.sql`. Worker medido en 1574.32 KiB gzip (`3a466f5`). El rediseño visual del PR #27 (`landing-home-redesign.md`, aprobada) está en `origin/main` (`66ffae1`). Desde `0b29034`, esta rama lo incluye, porque se fusionó el PR #26 en `506320b`.
 - Depende de:
