@@ -1,7 +1,7 @@
 # Entrada al registro desde la ficha de la carrera y visitas por campaña
 
 - Módulo: landing (también `crm`)
-- Estado: aprobado
+- Estado: borrador
 - Base: rama `claude/peaceful-lovelace-tvyqt8` sobre `main` (`4b4650f`). Migraciones hasta `drizzle/0012_reward_operations.sql`.
 - Enmienda a specs aprobadas, que **no se editan**: `landing-omnichannel-capture.md` (Requisito 8, sus tres preguntas abiertas y dos criterios de F4) y `landing-race-pages.md` (Requisito 9: el CTA de `/viajes/[slug]` ya no es solo WhatsApp). Si esta spec se aprueba, sus reglas prevalecen sobre esas partes.
 - Decisiones del usuario (2026-10-29), respuestas a las preguntas abiertas de `landing-omnichannel-capture.md`:
@@ -14,6 +14,7 @@
   6. **Respuestas a las preguntas abiertas de esta spec:** solo el total de visitas, sin desglose diario; regla WAF de 30 peticiones por 10 s, y en el plan Free (una sola regla) no se crea la regla de visitas.
   7. **Botones arriba en PC (2026-10-29, tras ver las capturas de la Fase 3):** con una oferta completa la tarjeta es más alta que la pantalla y «Registrarme» no se veía al cargar. El usuario eligió que, **solo en PC**, «Registrarme», WhatsApp y el aviso vayan al inicio de la tarjeta y el precio debajo, con scroll interno. En móvil no cambia.
   8. **Ancho completo y sin scroll interno en PC (2026-10-29, tras probar la Fase 3 en su navegador):** "sale el scroll y no se está usando todo el espacio de la pantalla". El usuario eligió: la ficha usa todo el ancho, con los mismos márgenes laterales que la cabecera del sitio; la tarjeta muestra todo el precio **sin scroll interno** y **no queda fija**: baja con la página. Los botones siguen arriba de la tarjeta (decisión 7). Sustituye lo que el Requisito 8 decía del `max-w-6xl`, del `sticky` y del scroll interno.
+  9. **Registro para PC y móvil (2026-10-29):** "el registro debe mejorar la vista para PC, ahora mismo está más para móvil, que está bien, pero debe ser para ambos" (`/viajes/<slug>/registro`). Cambia el maquetado de `RaceRegistrationSection` de `landing-omnichannel-capture.md` (esa spec no se edita). Se implementa en la **Fase 4** (Requisito 9).
 - Depende de: `landing-omnichannel-capture.md` (aprobada, F1–F4 implementadas: `campaigns`, `/viajes/[slug]/registro`, `/crm/campanas`), `landing-race-pages.md` (aprobada: `TripDetail`), `platform-neon-foundation.md` (aprobada: Drizzle `neon-http`, una sentencia por escritura, migraciones manuales).
 
 ## Objetivo
@@ -68,6 +69,15 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
    - **Orden dentro de la tarjeta en PC (decisión 7):** primero las acciones («Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…"), separadas del precio por una línea de los tokens existentes, y debajo el precio. La tarjeta no supera el alto visible bajo la cabecera (`max-h` relativo a `100dvh`); si el precio no cabe, **solo el precio** hace scroll dentro de la tarjeta y las acciones quedan siempre visibles. Se hace solo con CSS (`order` en `lg`); el orden del DOM sigue siendo el de móvil (precio y después acciones), para que en móvil y para lectores de pantalla el precio se lea antes que los botones.
    - Solo tokens y componentes existentes (`app/globals.css`, `buttonVariants`); sin colores nuevos. Sin JavaScript nuevo: es maquetado con CSS grid de Tailwind.
    - No cambian los datos, los textos, las rutas ni `/viajes/[slug]/registro`.
+9. **Registro de la carrera en PC y móvil (F4, decisión 9).** `/viajes/<slug>/registro` (`RaceRegistrationSection`):
+   - **Móvil (< 1024 px):** sin cambios: encabezado, bloque de precio (si hay oferta, fondo claro) y bloque de registro (fondo `bg-sky`) con «Regístrate», el texto y el formulario, en una columna.
+   - **PC (≥ 1024 px):**
+     - **Encabezado:** el contenido se alinea con los márgenes de la cabecera del sitio (`lg:px-[6%]`, sin `max-w-5xl`).
+     - **Debajo, una sola banda `bg-sky` a todo el ancho** con los mismos márgenes y dos columnas: a la **izquierda** «Regístrate», el texto y, si hay oferta, el precio (`OfferSummary`) como tarjeta de fondo claro con borde (tokens existentes); a la **derecha**, el formulario en una tarjeta de fondo claro (`26rem`–`32rem` de ancho). Ambas columnas empiezan arriba; ninguna queda fija ni tiene scroll interno.
+     - **Sin oferta:** la izquierda muestra solo «Regístrate» y el texto, y la derecha el formulario.
+     - Con el registro cerrado (P-L), la tarjeta de la derecha muestra el aviso "El registro en línea abrirá pronto…" con WhatsApp en lugar del formulario.
+   - **Modo stand:** sin cambios (es para la tableta del equipo).
+   - Solo maquetado con clases de Tailwind y tokens existentes; sin JavaScript nuevo; no cambian textos, campos, validaciones, la acción, el contador de visitas ni `/contacto`.
 
 ## Criterios de aceptación
 
@@ -102,6 +112,13 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
 - [ ] (F3) Dado un viaje sin imagen, sin «Qué incluye», «No incluye» ni notas, entonces la ficha sigue bien en las dos anchuras (sin huecos vacíos ni columna izquierda rota).
 - [ ] (F3) Dado el README, entonces la descripción de «Registrarme» en la guía de campañas dice "un solo botón, junto a WhatsApp" y la de la ficha menciona las dos columnas en PC.
 - [ ] (F3) Lint, tests, typegen + `tsc` y `build:worker` sin errores. Worker medido.
+
+### Fase 4: registro para PC (decisión 9)
+- [ ] (F4) Dada `/viajes/maraton-santiago-2027/registro?c=mml26` con oferta a 1280, 1440 y 1920 px, entonces el encabezado y la banda de registro se alinean con los márgenes de la cabecera; a la izquierda se ven «Regístrate», el texto y el precio en tarjeta, y a la derecha el formulario en tarjeta; sin scroll horizontal ni scroll interno.
+- [ ] (F4) Dada la misma página sin oferta, entonces la izquierda muestra «Regístrate» y el texto, y la derecha el formulario; sin huecos raros.
+- [ ] (F4) Dada la página a 360 px, entonces el orden y el aspecto son los de antes (encabezado, precio, registro) y no hay scroll horizontal.
+- [ ] (F4) Dado `?modo=stand`, entonces la página es la de antes (sin cambios). Dado el registro cerrado (P-L), entonces la tarjeta derecha muestra el aviso con WhatsApp.
+- [ ] (F4) Lint, tests, typegen + `tsc` y `build:worker` sin errores. Worker medido.
 
 ## Diseño técnico
 
@@ -174,6 +191,10 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 
 `modules/landing/components/TripDetail.tsx` solo. El `<article>` pasa a `max-w-6xl` y a un grid de una columna que en `lg` es `lg:grid-cols-[minmax(0,1fr)_24rem]`. El orden del DOM es el de móvil (Requisito 8). En `lg`: el encabezado lleva `lg:col-span-2`; la imagen, los datos clave e incluye/no incluye/notas llevan `lg:col-start-1`; el bloque de acción lleva `lg:col-start-2 lg:row-start-2 lg:row-span-6 lg:self-start lg:sticky` con un `top` que deje libre la cabecera del sitio, y estilo de tarjeta (`lg:rounded-xl lg:border lg:p-6`, sin el `border-t` de sección). En `lg` la tarjeta es un flex en columna con `max-h` relativo a `100dvh`; las acciones llevan `lg:order-first lg:shrink-0` y una línea inferior de separación; el precio va en un contenedor con `lg:min-h-0 lg:overflow-y-auto`. La imagen deja el `<header>` y pasa a ser su propio elemento de la columna izquierda; su `sizes` se ajusta a la columna. Sin componentes nuevos.
 
+### Registro en PC (F4)
+
+Solo `modules/landing/components/RaceRegistrationSection.tsx`. En la rama normal (no stand), el bloque de precio y el de registro se envuelven en un contenedor que en móvil no cambia nada y en `lg` es la banda `bg-sky` con `lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(26rem,32rem)] lg:gap-x-12 lg:px-[6%]`. El DOM sigue el orden de móvil (precio, después «Regístrate», texto y formulario); en `lg` se colocan con `lg:col-start-*`/`lg:row-start-*` u `order` para que el precio quede en la izquierda bajo el texto y el formulario en la derecha. Los fondos por bloque de móvil (`bg-background` del precio, `bg-sky` del registro) pasan a ser tarjetas en `lg` (`lg:rounded-xl lg:border lg:bg-background lg:p-6`). El encabezado cambia `max-w-5xl sm:px-[8%]` por `lg:max-w-none lg:px-[6%]` (y mantiene `sm:px-[8%]` entre 640 y 1023 px).
+
 ## Reutilización
 
 - `attributionParams`, `firstParam` (`modules/landing/utils/inquiry.ts`), `isRegistrationOpen` (`lib/registrationConsent.ts`), `buttonVariants` (`components/ui/button`).
@@ -210,6 +231,11 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [x] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
 - [x] T4 — Decisión 8: ancho completo con el padding de la cabecera, columna derecha de `26rem`, tarjeta sin `sticky`, `max-h` ni scroll interno (botones arriba en `lg`); README alineado · archivos: `modules/landing/components/TripDetail.tsx`, `README.md` · depende de: T1, T2 · secuencial
 - [x] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
+
+### Fase 4: registro para PC (3 tareas, 2 archivos)
+- [ ] T1 — `RaceRegistrationSection`: encabezado alineado y banda de registro en dos columnas en `lg` (Requisito 9) · archivos: `modules/landing/components/RaceRegistrationSection.tsx` · depende de: Fase 3 · secuencial
+- [ ] T2 — README: el registro en PC (dos columnas, precio y texto a la izquierda, formulario a la derecha) · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [ ] T3 — Verificación visual a 360, 1280, 1440 y 1920 px (con y sin oferta, P-L, modo stand) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ## Preguntas abiertas
 1. **Desglose diario.** *(Resuelta: solo el total.)* Los datos se guardan por día. ¿Quieres ya en `/crm/campanas/<id>` una lista de visitas por día (útil para comparar los días de una feria), o basta el total por ahora?
