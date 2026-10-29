@@ -1,7 +1,7 @@
 # Páginas públicas servidas desde caché estática en Workers Free
 
 - Módulo: platform, content, landing
-- Estado: borrador
+- Estado: aprobado
 - Origen: Error 1102 ("Worker exceeded resource limits") en `https://carreras-viajeras.mentec.dev/`
   el 29 de octubre de 2026; el usuario pide corregirlo sin pasar a Workers Paid.
 - Referencias: `AGENTS.md`, `docs/SETUP.md`, `landing-news-updates.md`, `landing-public-site.md`,
