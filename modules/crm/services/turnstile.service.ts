@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getEnv, getTurnstileEnv } from "@/lib/env";
 
 const SITEVERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
-// Must match the action the widget renders with (landing ContactForm).
+// Must match the action the widget renders with (landing TurnstileWidget / LeadCaptureForm).
 const LEAD_SUBMIT_ACTION = "lead_submit";
 const MAX_TOKEN_LENGTH = 2048;
 const MAX_ATTEMPTS = 2;

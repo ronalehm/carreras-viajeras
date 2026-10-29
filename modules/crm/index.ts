@@ -24,8 +24,8 @@ export { CampaignForm } from "./components/CampaignForm";
 export { CampaignQr } from "./components/CampaignQr";
 export { CampaignTable } from "./components/CampaignTable";
 export { CAMPAIGN_STATUS_LABELS, campaignLinks } from "./utils/campaignDisplay";
-// Public web form action (landing /contacto): ContactSection (Server Component) passes it to
-// ContactForm as a prop, so the landing never imports crm from a client component.
+// Public web form action: the app/ pages pass it as a prop to the landing's RaceRegistrationSection
+// and ContactSection, so the landing never imports crm from a client component.
 export { submitWebLeadAction } from "./actions/webLeads.actions";
 export type { WebLeadFormState } from "./types/webLeads.types";
 export { ActivityForm } from "./components/ActivityForm";

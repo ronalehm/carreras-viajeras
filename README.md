@@ -227,12 +227,12 @@ Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fas
 - **Una landing por carrera publicada:** cada viaje publicado en `/crm/viajes` tiene su página en `/viajes/<slug>`, sin tocar código ni redesplegar. Para difundir una carrera nueva se comparte esa URL (no hay listado `/viajes` ni enlaces desde `/` a carreras distintas de Santiago).
 - **Todo sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas, precios y cupos formateados; `paymentTerms` y `notes` divididos en un párrafo por línea no vacía). No lee `TRIPS`.
 - **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, Server Component): una columna centrada con cabecera ("Ciudad, País · distancias", título, resumen e imagen si hay `imageUrl`), datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), precio "Desde" (`formatTripPrice`, "Precio a consultar" si falta) con las líneas de cuotas, reserva y acompañante solo si tienen valor, y las condiciones de pago; después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos. Ningún bloque aparece vacío.
-- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`, cuyos destinos siguen fijos (`DESTINATION_IDS`).
+- **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto` ni al registro de la carrera (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
 - **Metadatos:** `<title>` es el título del viaje, la meta description es el resumen y `og:image` es `imageUrl` solo si existe.
 - **404:** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `notFound()` responde con estado `404`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. No hay `loading.tsx`, para que el estado no quede en `200`.
 - **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado.
 - **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
-- **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta`, `HeroCarousel` y del mensaje de `/contacto`. **Si el equipo cambia la fecha, el precio o los cupos de Santiago en el CRM, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
+- **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta` y `HeroCarousel`. **Si el equipo cambia la fecha, el precio o los cupos de Santiago en el CRM, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
 - `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` aparece como dinámica (`ƒ`).
 
 #### Precondición operativa (antes de mergear)
@@ -523,9 +523,73 @@ ROLLBACK;
 
 Si un caso se acepta, o falla por otra restricción distinta de la del comentario, no aplicar la migración en `production` y avisar antes de seguir.
 
+### Campañas, QR y modo stand
+
+Especificado en [`landing-omnichannel-capture.md`](docs/specs/landing-omnichannel-capture.md). Cada carrera publicada tiene su página de registro en `/viajes/<slug>/registro`: nombre, ciudad y país, fecha, distancias e imagen del catálogo (sin precios ni cupos), el botón «Quiero correr esta maratón», que baja al formulario, y «Ver el paquete completo», que abre `/viajes/<slug>`. El formulario pide solo nombre y apellido, WhatsApp con código de país y correo, más la aceptación del texto legal y una casilla opcional de promociones (siempre desmarcada). `/contacto` usa el mismo formulario con un selector de carrera: los viajes publicados y, después, "Río de Janeiro · Quiero novedades" y "Roma · Quiero novedades". Cada envío válido crea un lead "Nuevo" en el CRM, vía "Formulario web", sin responsable.
+
+Hoy el registro solo se alcanza con un QR o un enlace de campaña: ni la portada ni `/viajes/<slug>` enlazan a él.
+
+**Requisitos antes de usarlo en producción:** la [migración de campañas y registro](#migración-de-campañas-y-registro) aplicada en `production`, las claves de [Turnstile](#activar-la-protección-antispam-turnstile) cargadas y el texto legal aprobado (P-L, abajo).
+
+#### Crear una campaña
+
+Una campaña es un QR o un enlace con su carrera y su canal. Sirve para saber qué stand, publicación o aliado trajo a cada persona.
+
+1. En el CRM, **Campañas** → **Nueva campaña** (cuentas `commercial` y `admin`).
+2. Rellena:
+   - **código:** de 3 a 32 caracteres, en minúsculas, con números y guiones (por ejemplo `mml26` o `ig-preventa-santiago`). Aparece en el enlace y no se puede repetir;
+   - **nombre**, para reconocerla en el CRM (por ejemplo "QR stand MML");
+   - **viaje** (la carrera a la que lleva el QR);
+   - **canal:** "Feria, carrera o activación", "Instagram", "TikTok", "Facebook", "Club, gimnasio o aliado"… (todos los del CRM salvo "Desconocido");
+   - **evento o stand**, si lo hay (por ejemplo "Media Maratón de Lima 2026").
+3. Al guardar se abre su ficha, con el **enlace público** (`https://carreras-viajeras.mentec.dev/viajes/<slug>/registro?c=<código>`), el **enlace del modo stand** y el **QR** del enlace público.
+
+Cómo se atribuye cada lead:
+
+- Un lead registrado desde el enlace o el QR de una campaña **activa y de la misma carrera** queda con el canal de la campaña, la campaña y, como detalle del origen, su evento (o su nombre si no tiene). Se ve en la ficha del lead, tarjeta "Registro" → "Campaña".
+- Sin campaña válida (enlace sin `?c=`, campaña cerrada, inexistente o de otra carrera), el registro funciona igual y el lead queda con el canal "Web". El comercial puede corregir el origen en la ficha; el cambio queda en el historial.
+- Puedes añadir UTM al enlace (`&utm_source=instagram&utm_medium=social&utm_campaign=preventa`) o un aliado (`&ref=club-lima`). Se guardan en la ficha ("UTM", referente), pero **no cambian el canal**: lo decide solo la campaña. Ningún parámetro cambia precios, etapa, responsable ni consentimiento.
+- En la lista de campañas, la columna de registros **cuenta leads nuevos, no visitas**: abrir la página o escanear el QR no guarda nada. El informe origen × etapa de `/crm` sigue contando por canal.
+- **Sin duplicados:** si la misma persona (el mismo correo, sin importar mayúsculas) vuelve a registrarse en la misma carrera, no se crea otro lead: su ficha recibe una actividad "Volvió a registrarse" con la campaña, los UTM, la versión del texto legal y su elección de promociones. El lead existente no cambia (ni origen, ni campaña, ni promociones), y la persona ve el mismo mensaje de éxito. Dos personas con el mismo teléfono y correos distintos son dos leads.
+
+#### Imprimir el QR
+
+1. En la ficha de la campaña, pulsa **Descargar QR (SVG)**: descarga `campana-<código>.svg`. El SVG es vectorial: se puede ampliar sin perder calidad.
+2. Descárgalo siempre **desde el CRM de producción** (`carreras-viajeras.mentec.dev`): el enlace del QR usa la dirección del sitio donde lo generas, así que uno descargado con `npm run dev` apuntaría a tu computadora.
+3. Antes de imprimir en cantidad, imprime una prueba, escanéala con un par de móviles y comprueba que abre el registro de la carrera correcta. Deja un margen blanco alrededor del código y no lo imprimas demasiado pequeño (como orientación, no menos de 3 × 3 cm).
+
+El QR lleva siempre al registro de su carrera. **Cerrar la campaña no rompe el QR:** sigue abriendo la página y el registro funciona, pero los nuevos leads ya no se atribuyen a esa campaña (quedan como "Web"). Los leads que ya trajo conservan su campaña. Una campaña cerrada no se reabre ni se borra; para una tirada nueva, crea otra campaña con otro código.
+
+Si la carrera se despublica o se archiva, el QR lleva a una página 404 hasta que se vuelva a publicar.
+
+#### Modo stand (tableta del equipo)
+
+Para registrar corredores en una feria desde una tableta:
+
+1. Abre en la tableta el **enlace del modo stand** de la ficha de la campaña (es el enlace público con `&modo=stand`). No lo publiques ni lo conviertas en QR: está pensado para la tableta del equipo (no da ningún permiso especial, solo cambia la presentación).
+2. La página muestra solo el nombre de la carrera y el formulario, con campos y botones grandes, sin la cabecera ni el pie del sitio.
+3. Cada corredor escribe sus datos y pulsa "Enviar mis datos". Tras un envío correcto se ve "Registro guardado. ¡Gracias!", sin ningún dato del corredor, y el botón **Registrar a otra persona**, que abre un formulario vacío para el siguiente.
+4. El formulario no sugiere lo que escribió el corredor anterior (autocompletado desactivado) y no guarda nada en el navegador. Aun así, conviene desactivar en la tableta el guardado de formularios del navegador y no dejarla sin vigilancia.
+5. La verificación de Cloudflare (Turnstile) se repite en cada registro; si pide una comprobación, el corredor la resuelve antes de enviar.
+
+Si el servidor rechaza el envío (datos incompletos, verificación fallida o servicio no disponible), el formulario conserva lo escrito para reintentar y, salvo en los errores de datos, ofrece "Escríbenos por WhatsApp" como alternativa.
+
+#### Texto legal y apertura del registro (puerta P-L)
+
+El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
+
+**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso.
+
+Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
+
+1. En `lib/registrationConsent.ts`, sustituir `privacyText` y `marketingText` por los textos aprobados, cambiar `version` a `registro-web-v1` y poner `isPlaceholder: false`.
+2. El texto definitivo debe cubrir también a quienes ya tratan los datos: n8n en tu computadora, tu proveedor de correo y Gemini (que solo recibe el nombre de pila y el viaje).
+3. Una vez publicado, **cualquier cambio del texto exige una versión nueva** (`registro-web-v2`…): cada lead guarda la versión que aceptó.
+4. Pendiente de confirmar con el área legal: si basta un aviso informativo en lugar de la casilla obligatoria "Acepto…" (pregunta abierta 1 de la spec).
+
 ### Activar la protección antispam (Turnstile)
 
-Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en el formulario de `/contacto` y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
+Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de verificación en los formularios de `/contacto` y del registro de cada carrera (`/viajes/<slug>/registro`) y el servidor comprueba que la ha resuelto una persona. Esta guía no necesita programar. **Nunca escribas en este README, en un chat ni en un correo los valores reales de las claves.**
 
 1. Entra en el panel de Cloudflare (dash.cloudflare.com) con la cuenta del dominio `mentec.dev` y abre el menú **Turnstile** → **Add widget**.
 2. Rellena: nombre "Carreras Viajeras – formulario de contacto"; hostname `carreras-viajeras.mentec.dev`; modo **Managed**; sin *pre-clearance*. Guarda.
@@ -537,7 +601,7 @@ Turnstile es el control antispam gratuito de Cloudflare: muestra una casilla de 
    Para probar en local sin el widget real, usa las **claves de prueba** que publica Cloudflare: Site Key `1x00000000000000000000AA` y Secret Key `1x0000000000000000000000000000000AA` (siempre aprueban). Solo funcionan con `npm run dev`: fuera de desarrollo el servidor las rechaza. Al revés, tu widget real solo funciona en `carreras-viajeras.mentec.dev`, así que con `npm run dev` usa siempre las de prueba. En `.dev.vars` (que usa `npm run preview`, en modo producción) no pongas claves de prueba.
 5. **En Cloudflare (producción):** Workers & Pages → `carreras-viajeras` → **Settings** → **Variables and Secrets** → **Add** → tipo **Secret**, nombre `TURNSTILE_SECRET_KEY`, valor tu Secret Key → guardar. Si prefieres la terminal: `npx wrangler secret put TURNSTILE_SECRET_KEY` y pega el valor cuando lo pida.
 6. **Variable de build:** en el mismo Worker, **Settings** → **Build** → *Variables and secrets* → añade `NEXT_PUBLIC_TURNSTILE_SITE_KEY` con tu Site Key. Es pública y se incrusta al compilar. Si despliegas desde tu computadora con `npm run deploy`, se toma de `.env.local`: **antes de desplegar, comprueba que ahí está tu Site Key real y no la de prueba**; si no, el formulario rechazará todos los envíos.
-7. **Comprobar:** tras el siguiente despliegue (solo cuando lo autorices), abre `/contacto`. Debe verse la casilla de verificación de Cloudflare y, al enviar una consulta de prueba, el mensaje "¡Listo! Recibimos tu consulta…". Si aparece "No pudimos verificar el envío", revisa que el hostname del widget sea `carreras-viajeras.mentec.dev` y que las dos claves sean las correctas. (El formulario conectado llega en la Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md); hasta entonces solo se cargan las claves.)
+7. **Comprobar:** tras el siguiente despliegue (solo cuando lo autorices), abre `/contacto`. Debe verse la casilla de verificación de Cloudflare y, al enviar un registro de prueba, el mensaje "¡Listo! Recibimos tus datos. Te escribiremos por WhatsApp.". Si aparece "No pudimos verificar el envío", revisa que el hostname del widget sea `carreras-viajeras.mentec.dev` y que las dos claves sean las correctas. Mientras el texto legal siga siendo el marcador P-L, en producción no se ve el formulario sino el aviso "El registro en línea abrirá pronto…" (ver [Texto legal y apertura del registro](#texto-legal-y-apertura-del-registro-puerta-p-l)); hasta entonces, prueba con `npm run dev` y las claves de prueba.
 8. **Si una clave se filtra:** en Turnstile → tu widget → **Rotate secret key**, y actualiza el Secret `TURNSTILE_SECRET_KEY` del Worker (paso 5) y tus archivos locales (paso 4).
 
 ### Secretos de integraciones
@@ -784,7 +848,19 @@ curl -s -X POST -H "Authorization: Bearer $N8N_API_TOKEN" http://localhost:3000/
 
 #### 9. Regla WAF opcional contra abusos
 
-En el plan Free de Cloudflare, sin tocar código: panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → crear una regla para las peticiones `POST` a la ruta `/contacto` que bloquee una IP cuando supere unas pocas peticiones cada 10 segundos. Es una defensa adicional a Turnstile, que protegerá el formulario cuando se conecte (Fase 4 de [`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)).
+Es una defensa adicional a Turnstile para los dos formularios públicos: `/contacto` y el registro de cada carrera (`/viajes/<slug>/registro`). Cada envío es una sola petición `POST` a la propia página; abrir la página es un `GET` y no cuenta. Se configura sin tocar código, en el plan Free de Cloudflare (una regla, periodo de 10 segundos, contada por IP):
+
+1. Panel de Cloudflare → el dominio `mentec.dev` → **Security** → **WAF** → **Rate limiting rules** → **Create rule** (si ya existía la regla antigua solo para `POST /contacto`, edítala en lugar de crear otra).
+2. Nombre: "Formularios de captación". En **Edit expression**, pega:
+
+   ```txt
+   (http.request.method eq "POST" and http.host eq "carreras-viajeras.mentec.dev" and (http.request.uri.path eq "/contacto" or (starts_with(http.request.uri.path, "/viajes/") and ends_with(http.request.uri.path, "/registro"))))
+   ```
+
+3. **Characteristics:** IP. **When rate exceeds:** 10 peticiones por **10 segundos**. **Action:** Block durante **10 segundos**.
+4. Guarda y despliega la regla.
+
+Por qué ese umbral: un stand envía como mucho un registro cada ~30 segundos desde la misma IP, y en una feria varios móviles pueden salir a Internet con la misma IP del operador o del Wi-Fi del recinto. Con 10 envíos cada 10 segundos ninguno de los dos casos se acerca al límite, y un script que envía en bucle queda bloqueado en segundos (Turnstile ya rechaza los envíos sin verificar). Si el editor de tu plan no ofrece el método o las funciones `starts_with`/`ends_with`, usa solo la ruta (`http.request.uri.path eq "/contacto" or http.request.uri.path wildcard "/viajes/*/registro"`) y sube el umbral a 20 peticiones por 10 segundos, porque entonces también cuentan las visitas. Si alguna vez bloquea a gente real (por ejemplo, en el stand), sube el umbral; no la desactives sin avisar.
 
 #### 10. Workflow "Alta desde Google Forms"
 
