@@ -105,11 +105,11 @@ describe("getBookingById", () => {
   });
 
   it("reads one booking with its paid amount, whether its trip is archived and without lead", async () => {
-    const fake = useFakeDb([[[...LIST_ROW, true, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00", null, null]]]);
+    const fake = useFakeDb([[[...LIST_ROW, true, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00", null, null, false]]]);
     await expect(getBookingById(BOOKING_ID)).resolves.toMatchObject({
       id: BOOKING_ID, paidUsd: 300, totalUsd: 1499, distance: "42K", balanceDueOn: "2027-04-01", internalNote: "Nota",
       trip: { id: TRIP_ID, title: "Maratón de Santiago 2027", archived: true },
-      lead: null,
+      lead: null, priceLocked: false,
     });
     const statement = normalize(fake.queries[0].sql);
     expect(statement).toContain(`"trips"."status" = 'archived'`);
@@ -211,6 +211,14 @@ describe("getLeadBooking", () => {
 });
 
 describe("updateBooking", () => {
+  it("maps only the named concurrent price guard and preserves other database failures", async () => {
+    const fake = useFakeDb();
+    fake.transaction.mockRejectedValueOnce({ cause: { code: "23514", constraint: "bookings_reward_price_locked" } });
+    await expect(updateBooking(update)).resolves.toBe("discount_locked");
+    const other = new Error("unrelated database failure");
+    fake.transaction.mockRejectedValueOnce(other);
+    await expect(updateBooking(update)).rejects.toBe(other);
+  });
   it("decides with its WHERE and diagnoses in the same batch", async () => {
     const fake = useFakeDb([[[BOOKING_ID]], [["pending", "ana@example.com", false, false]]]);
     await expect(updateBooking(update)).resolves.toBe("updated");
@@ -228,10 +236,11 @@ describe("updateBooking", () => {
     );
     expect(mutation.params).toEqual([
       "Ana Pérez", "ana@example.com", "Paquete corredor", "42K", 1499, "2027-04-01", null,
-      BOOKING_ID, "cancelled", "ana@example.com", "ana@example.com", "cancelled",
+      BOOKING_ID, "cancelled", "ana@example.com", "ana@example.com", "cancelled", 1499, "discount",
     ]);
+    expect(normalize(diagnosis.sql)).toContain(`"trips"."status" = 'archived', "bookings"."total_usd", exists (`);
     expect(normalize(diagnosis.sql)).toContain(
-      `"trips"."status" = 'archived' from "bookings" inner join "trips" on "trips"."id" = "bookings"."trip_id" where "bookings"."id" = $1`,
+      `from "bookings" inner join "trips" on "trips"."id" = "bookings"."trip_id" where "bookings"."id" = $1`,
     );
   });
 
@@ -244,6 +253,7 @@ describe("updateBooking", () => {
     ["email_locked", [["confirmed", "otro@example.com", true, false]]],
     ["duplicate", [["pending", "otro@example.com", false, false]]],
     ["duplicate", [["confirmed", "ana@example.com", true, false]]],
+    ["discount_locked", [["pending", "ana@example.com", true, false, 1200, true]]],
   ])("returns %s when nothing was updated", async (expected, current) => {
     useFakeDb([[], current]);
     await expect(updateBooking(update)).resolves.toBe(expected);

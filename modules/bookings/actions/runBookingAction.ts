@@ -33,6 +33,8 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = {
   trip_archived: "El viaje está archivado: la reserva solo se puede cancelar. Recarga la página.",
   invalid_lead: "El lead ya no existe o está archivado. Crea la reserva sin vincular o recarga la página.",
   lead_taken: "Ese lead ya tiene una reserva activa.",
+  payment_conflict: "Esta solicitud ya se usó para otro pago o fue anulada. Recarga el formulario.",
+  discount_locked: "El total de una reserva con recompensa aplicada no se puede editar.",
 };
 
 // Field that shows each service result under its input.

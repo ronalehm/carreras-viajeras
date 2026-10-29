@@ -29,7 +29,7 @@ const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
 const PAYMENT_ID = "22222222-2222-4222-8222-222222222222";
 const ACTOR = "staff-1";
-const input: PaymentInput = { bookingId: BOOKING_ID, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva" };
+const input: PaymentInput = { bookingId: BOOKING_ID, requestKey: "33333333-3333-4333-8333-333333333333", amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva" };
 
 beforeEach(() => vi.mocked(getDb).mockReset());
 
@@ -65,25 +65,30 @@ describe("listBookingPayments", () => {
 
 describe("addPayment", () => {
   it("inserts in one statement only for a non-cancelled booking, recorded by the actor", async () => {
-    const fake = useFakeDb([[{ id: PAYMENT_ID }]]);
+    const fake = useFakeDb([[{ added: true, booking_ok: true }]]);
     await expect(addPayment(input, ACTOR)).resolves.toBe("added");
 
     expect(fake.transaction).not.toHaveBeenCalled();
     expect(fake.queries).toHaveLength(1);
-    expect(normalize(fake.queries[0].sql)).toBe(
-      "INSERT INTO booking_payments (booking_id, amount_usd, paid_on, concept, recorded_by) "
-      + "SELECT id, $1::integer, $2::date, $3, $4 FROM bookings "
-      + "WHERE id = $5::uuid AND status <> 'cancelled' RETURNING id",
-    );
-    expect(fake.queries[0].params).toEqual([300, "2027-03-03", "Reserva", ACTOR, BOOKING_ID]);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toContain("FOR UPDATE");
+    expect(statement).toContain("ON CONFLICT (booking_id, request_key) DO UPDATE");
+    expect(statement).toContain("booking_payments.voided_at IS NULL");
+    expect(statement).toContain("booking_payments.recorded_by = EXCLUDED.recorded_by");
+    expect(fake.queries[0].params).toEqual([BOOKING_ID, 300, "2027-03-03", "Reserva", ACTOR, input.requestKey]);
   });
 
   it("ignores recorder and voiding fields smuggled into the input", async () => {
-    const fake = useFakeDb([[{ id: PAYMENT_ID }]]);
+    const fake = useFakeDb([[{ added: true, booking_ok: true }]]);
     await addPayment({ ...input, recordedBy: "user-x", voidedBy: "user-y" } as PaymentInput, ACTOR);
     expect(fake.queries[0].params).not.toContain("user-x");
     expect(fake.queries[0].params).not.toContain("user-y");
-    expect(normalize(fake.queries[0].sql)).not.toMatch(/voided/);
+    expect(normalize(fake.queries[0].sql)).not.toMatch(/voided_by/);
+  });
+
+  it("rejects reuse with a different receipt or voided receipt", async () => {
+    useFakeDb([[{ added: false, booking_ok: true }]]);
+    await expect(addPayment(input, ACTOR)).resolves.toBe("payment_conflict");
   });
 
   it("returns not_found when the booking is missing or cancelled", async () => {
@@ -94,17 +99,15 @@ describe("addPayment", () => {
 
 describe("voidPayment", () => {
   it("voids once, only while the booking is not cancelled, and returns the booking", async () => {
-    const fake = useFakeDb([[[BOOKING_ID]]]);
+    const fake = useFakeDb([[{ booking_id: BOOKING_ID }]]);
     await expect(voidPayment(PAYMENT_ID, ACTOR)).resolves.toEqual({ bookingId: BOOKING_ID });
 
     expect(fake.queries).toHaveLength(1);
-    expect(normalize(fake.queries[0].sql)).toBe(
-      'update "booking_payments" set "voided_at" = now(), "voided_by" = $1 where ('
-      + '"booking_payments"."id" = $2 and "booking_payments"."voided_at" is null and exists ('
-      + 'select 1 from "bookings" where ("bookings"."id" = "booking_payments"."booking_id" and "bookings"."status" <> $3))'
-      + ') returning "booking_id"',
-    );
-    expect(fake.queries[0].params).toEqual([ACTOR, PAYMENT_ID, "cancelled"]);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toContain("FOR UPDATE OF b");
+    expect(statement).toContain("p.voided_at IS NULL");
+    expect(statement).toContain("b.status <> 'cancelled'");
+    expect(fake.queries[0].params).toEqual([PAYMENT_ID, ACTOR, PAYMENT_ID]);
   });
 
   it("returns not_found for a missing or already voided payment, or a cancelled booking", async () => {

@@ -10,7 +10,12 @@ export type Permission =
   | "leads.manage"
   | "bookings.manage"
   | "offers.manage"
-  | "offers.view";
+  | "offers.view"
+  | "sponsors.manage"
+  | "sponsor.portal"
+  | "content.manage"
+  | "rewards.manage"
+  | "rewards.apply";
 
 // Roles that hold every known permission.
 const FULL_ACCESS_ROLES: readonly StaffRole[] = ["admin", "super_admin"];
@@ -27,6 +32,12 @@ const PERMISSION_MATRIX: Readonly<Record<Permission, readonly StaffRole[]>> = {
   // Offers and exchange rate: commercial reads them (CRM pages without forms); only admin manages.
   "offers.manage": [],
   "offers.view": ["commercial"],
+  "sponsors.manage": [],
+  // Access also requires an active brand assignment in requireSponsor().
+  "sponsor.portal": ["sponsor"],
+  "content.manage": [],
+  "rewards.manage": [],
+  "rewards.apply": ["commercial"],
 };
 
 // Roles each actor role may invite, grant or revoke from the CRM.
@@ -36,6 +47,8 @@ const ROLE_MANAGEMENT: Readonly<Record<StaffRole, readonly StaffRole[]>> = {
   admin: ["commercial"],
   commercial: [],
   organizer: [],
+  // Sponsor role management is introduced in a later phase, never through team forms.
+  sponsor: [],
 };
 
 const MANAGEABLE_ROLE_ORDER: readonly StaffRole[] = ["commercial", "organizer", "admin"];

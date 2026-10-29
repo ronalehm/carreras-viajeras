@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { can } from "@/lib/auth/permissions";
+import { BookingRewardsPanel } from "@/modules/rewards";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
 import {
@@ -102,7 +104,7 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           </dl>
         </>
       ) : (
-        <BookingForm booking={booking} />
+        <BookingForm booking={booking} priceLocked={booking.priceLocked} />
       )}
       <section aria-labelledby="booking-payments" className="flex flex-col gap-4">
         <h2 id="booking-payments" className="text-lg font-semibold">Pagos</h2>
@@ -122,6 +124,7 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
         <ItineraryTable items={items} editable={!cancelled} />
         {!cancelled && <ItineraryItemForm owner={{ bookingId: booking.id }} />}
       </section>
+      <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
     </section>
   );
 }

@@ -15,48 +15,52 @@ import {
   getCrmAccess,
   InvitationsTable,
   InviteStaffForm,
-  listStaffOverview,
-  StaffTable,
+  listPendingInvitations,
+  listUsers,
+  UserFilters,
+  userListFilterSchema,
+  UserTable,
 } from "@/modules/accounts";
 
-export const metadata: Metadata = {
-  title: "Usuarios del equipo",
-};
+export const metadata: Metadata = { title: "Usuarios" };
 
-export default async function StaffAdminPage() {
+export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/admin/usuarios">) {
   // The layout does not re-render on client navigation, so the page checks staff.manage itself.
   const access = await getCrmAccess("staff.manage");
   if (access.status === "unauthenticated") redirect("/crm/acceso");
-
   if (access.status === "forbidden") {
     return (
       <section className="flex flex-col gap-2">
-        <h1 className="text-xl font-semibold">Usuarios del equipo</h1>
+        <h1 className="text-xl font-semibold">Usuarios</h1>
         <p className="text-muted-foreground">
-          No tienes permiso para gestionar el equipo. Si lo necesitas, pídeselo
-          a un administrador.
+          No tienes permiso para gestionar usuarios. Si lo necesitas, pídeselo a un administrador.
         </p>
       </section>
     );
   }
 
-  const { staff, invitations } = await listStaffOverview();
-  // UI hint only: each Server Action re-checks canManageRole for the actor.
+  // Invalid, empty or repeated values are dropped: the list shows without that filter.
+  const filter = userListFilterSchema.parse(await searchParams);
+  const [{ users, truncated }, invitations] = await Promise.all([
+    listUsers(filter),
+    listPendingInvitations(),
+  ]);
+  // Presentation only: the actions re-check canManageRole with the current actor.
   const roles = manageableRoles(access.user.staffRoles);
 
   return (
     <section className="space-y-7">
       <CrmPageHeader
-        title="Usuarios del equipo"
+        title="Usuarios"
         section="Administración"
-        description="Un equipo conectado para acompañar cada meta. Invita personas y administra sus permisos."
+        description="Consulta las cuentas del equipo, patrocinadores y corredores. Invita personas y administra sus permisos."
       />
       <div className="grid gap-4 sm:grid-cols-2">
         <SummaryCard
-          label="Miembros activos"
-          value={staff.length}
+          label="Cuentas mostradas"
+          value={users.length}
           icon={<UsersRound />}
-          description="Personas con acceso al CRM"
+          description={truncated ? "Primeros resultados de la búsqueda" : "Resultados de los filtros actuales"}
         />
         <SummaryCard
           label="Invitaciones vigentes"
@@ -74,13 +78,14 @@ export default async function StaffAdminPage() {
       )}
       <Card className="gap-5 overflow-hidden shadow-none">
         <CardHeader className="border-b pb-5">
-          <CardTitle>Equipo activo</CardTitle>
+          <CardTitle>Cuentas</CardTitle>
           <CardDescription>
-            Personas y roles que participan en la gestión.
+            Busca una cuenta y abre su ficha para consultar sus roles.
           </CardDescription>
         </CardHeader>
-        <CardContent className="min-w-0">
-          <StaffTable staff={staff} manageableRoles={roles} />
+        <CardContent className="min-w-0 space-y-5">
+          <UserFilters q={filter.q} role={filter.role} />
+          <UserTable users={users} truncated={truncated} filtered={Boolean(filter.q || filter.role)} />
         </CardContent>
       </Card>
       <Card className="gap-5 overflow-hidden shadow-none">
@@ -91,10 +96,7 @@ export default async function StaffAdminPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="min-w-0">
-          <InvitationsTable
-            invitations={invitations}
-            manageableRoles={roles}
-          />
+          <InvitationsTable invitations={invitations} manageableRoles={roles} />
         </CardContent>
       </Card>
     </section>

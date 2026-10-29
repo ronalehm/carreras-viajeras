@@ -161,15 +161,19 @@ describe.each(actions)("$name called directly", ({ action, service, valid }) => 
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "error", code: "forbidden" });
     expect(service).not.toHaveBeenCalled();
+    expect(revalidate).not.toHaveBeenCalled();
   });
 
-  it("succeeds for a verified admin with valid data and revalidates the admin page", async () => {
+  it("succeeds for a verified admin with valid data and revalidates the user list and every user page", async () => {
     signedInAdmin();
 
     await expect(action(IDLE, form(valid))).resolves.toMatchObject({ status: "success" });
     expect(service).toHaveBeenCalledTimes(1);
     expect(service.mock.calls[0][1]).toBe("admin-1");
-    expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+    expect(revalidate.mock.calls).toEqual([
+      ["/crm/admin/usuarios"],
+      ["/crm/(protected)/admin/usuarios/[id]", "page"],
+    ]);
   });
 
   it("returns invalid_input with fieldErrors for an empty form, without calling the service", async () => {
@@ -331,25 +335,28 @@ describe("revokeStaffRoleAction", () => {
 // Role management matrix (actor × target role). Expected outcomes are written out by hand, not
 // derived from canManageRole, so the test pins the rules of the spec.
 type Outcome = "success" | "forbidden" | "invalid_input";
-const TARGET_ROLES: readonly StaffRole[] = ["commercial", "organizer", "admin", "super_admin"];
+const TARGET_ROLES: readonly StaffRole[] = ["commercial", "organizer", "admin", "super_admin", "sponsor"];
 
 const ALL_FORBIDDEN: Record<StaffRole, Outcome> = {
   commercial: "forbidden",
   organizer: "forbidden",
   admin: "forbidden",
   super_admin: "forbidden",
+  sponsor: "forbidden",
 };
 const AS_SUPER_ADMIN: Record<StaffRole, Outcome> = {
   commercial: "success",
   organizer: "success",
   admin: "success",
   super_admin: "invalid_input",
+  sponsor: "invalid_input",
 };
 const AS_ADMIN: Record<StaffRole, Outcome> = {
   commercial: "success",
   organizer: "forbidden",
   admin: "forbidden",
   super_admin: "invalid_input",
+  sponsor: "invalid_input",
 };
 
 const ACTORS: { label: string; roles: StaffRole[]; outcomes: Record<StaffRole, Outcome> }[] = [
@@ -357,6 +364,7 @@ const ACTORS: { label: string; roles: StaffRole[]; outcomes: Record<StaffRole, O
   { label: "admin", roles: ["admin"], outcomes: AS_ADMIN },
   { label: "commercial", roles: ["commercial"], outcomes: ALL_FORBIDDEN },
   { label: "organizer", roles: ["organizer"], outcomes: ALL_FORBIDDEN },
+  { label: "sponsor", roles: ["sponsor"], outcomes: ALL_FORBIDDEN },
   { label: "super_admin + admin", roles: ["super_admin", "admin"], outcomes: AS_SUPER_ADMIN },
   { label: "admin + commercial", roles: ["admin", "commercial"], outcomes: AS_ADMIN },
   { label: "admin + organizer", roles: ["admin", "organizer"], outcomes: AS_ADMIN },
@@ -412,7 +420,9 @@ describe("role management matrix", () => {
       if (expected === "success") {
         expect(state).toMatchObject({ status: "success" });
         expect(service).toHaveBeenCalledExactlyOnceWith(serviceInput(role), "admin-1");
-        expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+        expect(revalidate.mock.calls).toEqual([
+          ["/crm/admin/usuarios"], ["/crm/(protected)/admin/usuarios/[id]", "page"],
+        ]);
       } else {
         expect(state).toMatchObject({ status: "error", code: expected });
         expect(service).not.toHaveBeenCalled();
@@ -542,7 +552,9 @@ describe("revokeInvitationAction by actor", () => {
         "organizer",
         "admin",
       ]);
-      expect(revalidate).toHaveBeenCalledExactlyOnceWith("/crm/admin/usuarios");
+      expect(revalidate.mock.calls).toEqual([
+        ["/crm/admin/usuarios"], ["/crm/(protected)/admin/usuarios/[id]", "page"],
+      ]);
     });
   });
 });

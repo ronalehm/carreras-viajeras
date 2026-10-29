@@ -21,7 +21,7 @@ export async function getRunnerPortal(bookingParam: unknown): Promise<RunnerPort
   try {
     user = await getCurrentUser();
   } catch (error) {
-    // Neon Auth or database failure while resolving roles.
+    // Clerk or database failure while resolving roles.
     if (error instanceof ForbiddenError) return { status: "error" };
     throw error;
   }

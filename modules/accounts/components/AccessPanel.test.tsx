@@ -14,7 +14,7 @@ import { AccessPanel } from "./AccessPanel";
 
 const STAFF_NOTICE = "Solo para personas invitadas por un administrador.";
 const RUNNER_NOTICE =
-  "Este paso identifica tu acceso al sitio. Todavía no crea un perfil viajero independiente ni te inscribe en un evento.";
+  "Este paso identifica tu acceso al sitio. Después podrás completar tu perfil; no te inscribe en un evento.";
 
 function expectSignInTo(destination: string) {
   expect(screen.getByTestId("clerk-sign-in")).toBeTruthy();
@@ -46,10 +46,10 @@ describe("AccessPanel", () => {
     expect(screen.getByText(STAFF_NOTICE)).toBeTruthy();
   });
 
-  it("renders Clerk SignIn to /cuenta with the runner notice for runners", () => {
+  it("renders Clerk SignIn to /cuenta/perfil with the runner notice for runners", () => {
     render(<AccessPanel audience="runner" />);
 
-    expectSignInTo("/cuenta");
+    expectSignInTo("/cuenta/perfil");
     expect(screen.getByText(RUNNER_NOTICE)).toBeTruthy();
     expect(screen.queryByText(STAFF_NOTICE)).toBeNull();
   });

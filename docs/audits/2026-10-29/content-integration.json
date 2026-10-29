@@ -1,0 +1,60 @@
+{
+  "results": [
+    {
+      "name": "create circular post/revision atomically",
+      "status": "passed"
+    },
+    {
+      "name": "draft does not appear in any public reader",
+      "status": "passed"
+    },
+    {
+      "name": "duplicate slug returns safe result without partial insert",
+      "status": "passed"
+    },
+    {
+      "name": "publishes saved revision with session actor",
+      "status": "passed"
+    },
+    {
+      "name": "stale publish cannot change version/publication state",
+      "status": "passed"
+    },
+    {
+      "name": "draft edit preserves published revision and category",
+      "status": "passed"
+    },
+    {
+      "name": "stale edit and stale publish preserve newer draft",
+      "status": "passed"
+    },
+    {
+      "name": "current publish switches public revision together",
+      "status": "passed"
+    },
+    {
+      "name": "unpublish removes article and listings",
+      "status": "passed"
+    },
+    {
+      "name": "slug remains locked after unpublish",
+      "status": "passed"
+    },
+    {
+      "name": "archive blocks subsequent mutations",
+      "status": "passed"
+    },
+    {
+      "name": "cross-post revision pointers rejected by composite FK",
+      "status": "passed"
+    },
+    {
+      "name": "SQL image constraints reject missing alt",
+      "status": "passed"
+    },
+    {
+      "name": "public listing respects order, bounds and filters",
+      "status": "passed"
+    }
+  ]
+}

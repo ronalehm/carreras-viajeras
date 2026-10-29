@@ -1,0 +1,17 @@
+# Project configuration for Codex CLI 0.163.x.
+# Models, authentication, approval policy and the main sandbox are inherited.
+[agents]
+enabled = true
+max_concurrent_threads_per_session = 3
+
+[agents.spec]
+description = "Prepara una especificación verificable como borrador; nunca concede aprobación."
+config_file = "agents/spec.toml"
+
+[agents.developer]
+description = "Implementa una tarea autorizada, delimitada por archivos, con las pruebas necesarias."
+config_file = "agents/developer.toml"
+
+[agents.reviewer]
+description = "Revisa cambios y evidencia contra la tarea y las specs vigentes, sin modificar archivos."
+config_file = "agents/reviewer.toml"

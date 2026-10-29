@@ -7,6 +7,7 @@ vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(), loadStaffRoles: vi.fn(),
 }));
+vi.mock("./rewardReconciliation", () => ({ reconcileBookingAfterCommit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn(() => { throw new Error("NEXT_REDIRECT"); }) }));
 vi.mock("../services/bookings.service", () => ({
@@ -17,6 +18,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
 import { bookingFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
+import { reconcileBookingAfterCommit } from "./rewardReconciliation";
 import { createBooking, setBookingStatus, updateBooking } from "../services/bookings.service";
 import type { BookingActionState } from "../types/bookings.types";
 import { changeBookingStatusAction, createBookingAction, updateBookingAction } from "./bookings.actions";
@@ -234,6 +236,8 @@ describe("changeBookingStatusAction", () => {
   ] as const)("cambia a %s", async (status, message) => {
     expect(await changeBookingStatusAction(IDLE, form({ bookingId: BOOKING_ID, status }))).toEqual({ status: "success", message });
     expect(setBookingStatus).toHaveBeenCalledExactlyOnceWith(BOOKING_ID, status, "staff-1");
+    expect(reconcileBookingAfterCommit).toHaveBeenCalledExactlyOnceWith(BOOKING_ID);
+    expect(vi.mocked(setBookingStatus).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(reconcileBookingAfterCommit).mock.invocationCallOrder[0]);
   });
 
   it("pasa siempre el actor de la sesión, aunque el formulario traiga otro", async () => {
@@ -253,6 +257,7 @@ describe("changeBookingStatusAction", () => {
       status: "error", code: "trip_archived", message: TRIP_ARCHIVED,
     });
     expect(revalidatePath).not.toHaveBeenCalled();
+    expect(reconcileBookingAfterCommit).not.toHaveBeenCalled();
   });
 
   it("rechaza una transición no permitida sin revalidar", async () => {
@@ -261,5 +266,6 @@ describe("changeBookingStatusAction", () => {
       status: "error", code: "invalid_transition", message: "La reserva ya no está en ese estado. Recarga la página.",
     });
     expect(revalidatePath).not.toHaveBeenCalled();
+    expect(reconcileBookingAfterCommit).not.toHaveBeenCalled();
   });
 });

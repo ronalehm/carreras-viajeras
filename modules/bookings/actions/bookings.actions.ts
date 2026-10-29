@@ -6,6 +6,7 @@ import { createBooking, setBookingStatus, updateBooking } from "../services/book
 import type { BookingActionState } from "../types/bookings.types";
 import { BOOKINGS_PATH, LEADS_PATH } from "../utils/bookingDisplay";
 import { bookingPaths, failure, runBookingAction } from "./runBookingAction";
+import { reconcileBookingAfterCommit } from "./rewardReconciliation";
 
 const LEAD_PAGE_ROUTE = "/crm/(protected)/leads/[id]";
 
@@ -43,6 +44,7 @@ export async function changeBookingStatusAction(
     async ({ bookingId, status }, _values, actorUserId) => {
       const result = await setBookingStatus(bookingId, status, actorUserId);
       if (result !== "changed") return failure(result);
+      await reconcileBookingAfterCommit(bookingId);
       return {
         revalidate: bookingPaths(bookingId),
         message: status === "confirmed" ? "Reserva confirmada." : "Reserva cancelada.",

@@ -7,9 +7,11 @@ vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(), loadStaffRoles: vi.fn(),
 }));
+vi.mock("./rewardReconciliation", () => ({ reconcileBookingAfterCommit: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("../services/payments.service", () => ({ addPayment: vi.fn(), voidPayment: vi.fn() }));
 
+import { reconcileBookingAfterCommit } from "./rewardReconciliation";
 import { revalidatePath } from "next/cache";
 import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
 import { paymentFormSchema } from "../schemas/bookings.schema";
@@ -20,7 +22,8 @@ import { addPaymentAction, voidPaymentAction } from "./payments.actions";
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
 const PAYMENT_ID = "22222222-2222-4222-8222-222222222222";
 const IDLE = { status: "idle" } as const;
-const ADD = { bookingId: BOOKING_ID, amountUsd: "300", paidOn: "2027-03-03", concept: "Reserva" };
+const REQUEST_KEY = "33333333-3333-4333-8333-333333333333";
+const ADD = { bookingId: BOOKING_ID, requestKey: REQUEST_KEY, amountUsd: "300", paidOn: "2027-03-03", concept: "Reserva" };
 const VOID = { paymentId: PAYMENT_ID };
 // Keys a client could add to try to set server-owned columns.
 const SMUGGLED = { recordedBy: "user-x", voidedBy: "user-y" };
@@ -31,15 +34,11 @@ function form(values: Record<string, string>) {
   for (const [key, value] of Object.entries(values)) data.set(key, value);
   return data;
 }
-function signIn(roles: ("commercial" | "admin")[], emailVerified = true) {
+function signIn(roles: ("commercial" | "admin" | "organizer" | "sponsor")[], emailVerified = true) {
   auth.mockResolvedValue({ userId: "staff-1" });
-  currentUser.mockResolvedValue({
-    id: "staff-1",
-    primaryEmailAddressId: "idn_primary",
-    emailAddresses: [
-      { id: "idn_primary", emailAddress: "agent@example.com", verification: { status: emailVerified ? "verified" : "unverified" } },
-    ],
-  });
+  currentUser.mockResolvedValue({ id: "staff-1", primaryEmailAddressId: "primary", emailAddresses: [
+    { id: "primary", emailAddress: "agent@example.com", verification: { status: emailVerified ? "verified" : "unverified" } },
+  ] });
   vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue(roles);
   vi.mocked(loadStaffRoles).mockResolvedValue(roles);
 }
@@ -83,6 +82,11 @@ describe.each(actions)("$name: permisos en llamadas directas", ({ action, servic
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
+  it.each(["organizer", "sponsor"] as const)("rechaza %s aunque envíe un actor administrador", async (role) => {
+    signIn([role]);
+    expect(await action(IDLE, form({ ...values, ...SMUGGLED, role: "admin" }))).toMatchObject({ code: "forbidden" });
+    expect(service).not.toHaveBeenCalled();
+  });
   it("rechaza staff sin correo verificado", async () => {
     signIn(["admin"], false);
     expect(await action(IDLE, form(values))).toMatchObject({ code: "forbidden" });
@@ -123,11 +127,20 @@ describe.each(actions)("$name: permisos en llamadas directas", ({ action, servic
 });
 
 describe("addPaymentAction", () => {
+  it("reconciles only after a committed payment and rejects conflicting retries", async () => {
+    await addPaymentAction(IDLE, form(ADD));
+    expect(reconcileBookingAfterCommit).toHaveBeenCalledExactlyOnceWith(BOOKING_ID);
+    expect(vi.mocked(addPayment).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(reconcileBookingAfterCommit).mock.invocationCallOrder[0]);
+    vi.mocked(reconcileBookingAfterCommit).mockClear();
+    vi.mocked(addPayment).mockResolvedValue("payment_conflict");
+    expect(await addPaymentAction(IDLE, form(ADD))).toMatchObject({ code: "payment_conflict" });
+    expect(reconcileBookingAfterCommit).not.toHaveBeenCalled();
+  });
   it("registra con datos parseados y el actor de la sesión, ignorando campos del servidor", async () => {
     await addPaymentAction(IDLE, form({ ...ADD, ...SMUGGLED }));
     expect(addPayment).toHaveBeenCalledExactlyOnceWith(paymentFormSchema.parse(ADD), "staff-1");
     expect(vi.mocked(addPayment).mock.calls[0][0]).toEqual({
-      bookingId: BOOKING_ID, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva",
+      bookingId: BOOKING_ID, requestKey: REQUEST_KEY, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva",
     });
   });
 
@@ -149,6 +162,10 @@ describe("addPaymentAction", () => {
 });
 
 describe("voidPaymentAction", () => {
+  it("reconciles after voiding the real payment", async () => {
+    await voidPaymentAction(IDLE, form(VOID));
+    expect(reconcileBookingAfterCommit).toHaveBeenCalledExactlyOnceWith(BOOKING_ID);
+  });
   it("anula con el actor de la sesión, ignorando voidedBy", async () => {
     await voidPaymentAction(IDLE, form({ ...VOID, ...SMUGGLED }));
     expect(voidPayment).toHaveBeenCalledExactlyOnceWith(PAYMENT_ID, "staff-1");

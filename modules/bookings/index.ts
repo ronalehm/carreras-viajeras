@@ -30,4 +30,5 @@ export { TripUpdateList } from "./components/TripUpdateList";
 export type { CrmItineraryItem, CrmTripUpdate } from "./types/bookings.types";
 export { itineraryOriginPath } from "./utils/bookingDisplay";
 export { getRunnerPortal } from "./utils/runnerPortal";
+export type { RunnerPortalState } from "./utils/runnerPortal";
 export { RunnerPortal } from "./components/RunnerPortal";

@@ -1,6 +1,6 @@
 # Carreras Viajeras
 
-MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello world`), sin construir todavía landing, catálogo, pagos, comunidad ni CRM completo. La landing anterior está en otra carpeta y no forma parte de este repositorio.
+Aplicación de Carreras Viajeras: sitio público, captación omnicanal y CRM de viajes, ofertas, leads, reservas y usuarios. Las funciones implementadas y las entregas futuras se detallan en las specs y en las secciones siguientes.
 
 > **Precedencia:** la fase 1 aprobada de [`platform-neon-foundation.md`](docs/specs/platform-neon-foundation.md) define esta preparación. Los borradores anteriores que indican D1, Hyperdrive provisional o Access como sustituto de RBAC están obsoletos y no son instrucciones ejecutables. No seguir sus pasos de infraestructura. El acceso del equipo al CRM se rige por [`accounts-roles-permissions.md`](docs/specs/accounts-roles-permissions.md) y [`accounts-auth-ui.md`](docs/specs/accounts-auth-ui.md), con las partes de Neon Auth de esas specs y de la foundation sustituidas por [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md): **Clerk es el único proveedor de identidad**.
 
@@ -13,7 +13,7 @@ MVP para hackathon: preparación técnica sobre la plantilla web actual (`Hello 
 | Ejecución prevista | Cloudflare Workers Free mediante OpenNext |
 | Datos | Neon PostgreSQL Free + Drizzle con driver HTTPS `neon-http` |
 | Identidad | Clerk (`@clerk/nextjs`); un solo proveedor. Roles y permisos en Neon |
-| Validación | Zod; Turnstile para futuros formularios |
+| Validación | Zod; Turnstile opcional en la captura pública |
 | Automatización | Outbox persistente en Neon, API privada y n8n Community local |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
@@ -85,8 +85,8 @@ Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya esc
 Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md): **Clerk da la identidad y Neon, los roles.**
 
 - **Identidad (Clerk):** `/crm/acceso` y `/cuenta` muestran el `<SignIn>` de Clerk en español, con el alta incluida: crear la cuenta, verificar el correo con código, iniciar sesión y recuperar la contraseña los gestiona Clerk. "Cerrar sesión" es el `SignOutButton` de Clerk. El id estable es el `userId` de Clerk (`user_…`), que `auth()` obtiene verificando el token de sesión. El correo solo cuenta si es el **correo primario** de la cuenta y está verificado; se usa en minúsculas para aceptar invitaciones, mostrarse y vincular reservas, nunca para autorizar.
-- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) solo se ejecuta en `/crm/:path*` y `/api/crm/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`** (por ejemplo, `/mis-carreras` cuando llegue); si no, `auth()` falla y la guarda responde 401: falla cerrado.
-- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: no crea filas en `profiles` ni `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). Cada recurso futuro para runners necesitará su propia guarda en el servidor.
+- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) se ejecuta en `/crm/:path*`, `/api/crm/:path*` y `/cuenta/perfil/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`** (por ejemplo, `/mis-carreras` cuando llegue); si no, `auth()` falla y la guarda responde 401: falla cerrado.
+- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: no crea filas en `profiles` ni `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). El perfil propio en `/cuenta/perfil` exige su guarda y el correo primario verificado; cada recurso futuro para runners necesitará también su propia guarda en el servidor.
 - **Staff** (`commercial`, `organizer`, `admin`, `super_admin`): entra solo por invitación. La invitación no controla quién crea una cuenta (el registro es público); controla los **roles**, que viven en Neon (`staff_assignments`) y se leen en cada petición, así que una revocación se aplica en la siguiente. Se invita desde `/crm/admin/usuarios` y el enlace `<APP_ORIGIN>/crm/acceso` se comparte a mano; la invitación caduca a los 7 días. Quién puede invitar, asignar y revocar cada rol (se comprueba en cada Server Action, no solo en la UI):
 
   | Actor | Roles que gestiona |
@@ -1523,6 +1523,89 @@ Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` 
 
 El outbox del PR #8 ([`automation-outbox.md`](docs/specs/automation-outbox.md)) se retiró al integrar este trabajo: el sistema usa un único outbox (`outbox_events`) y la API `/api/integrations/n8n/*` descritos en [«Automatizaciones con n8n»](#automatizaciones-con-n8n).
 
+## Perfiles, patrocinadores y directorio de usuarios (PR #22)
+
+La integración conserva **Clerk como único proveedor de identidad**, los roles
+`super_admin` y `organizer`, las ofertas y el panel administrativo actuales. Las
+referencias a Neon Auth y a las migraciones `0005_short_spiral` y
+`0006_flat_mariko_yashida` en las specs históricas del PR describen su base antigua;
+para esta integración prevalece [el informe del PR #22](docs/integrations/pr-22-accounts.md).
+
+### Perfil propio del runner
+
+Desde `/cuenta`, una sesión de Clerk puede entrar a **Mi perfil** (`/cuenta/perfil`).
+Sin sesión se vuelve a `/cuenta`; un correo primario sin verificar no puede leer ni
+guardar el perfil. Cada guardado obtiene el `userId` y el correo desde la sesión,
+valida los campos en el servidor y exige de nuevo el consentimiento. Nunca acepta
+un identificador de otra cuenta desde el formulario. Un perfil no concede permisos
+de CRM ni crea asignaciones de equipo.
+
+Los datos de documento, contacto de emergencia y salud son opcionales y sensibles.
+Se muestran únicamente al titular en esta entrega. Los errores no incluyen valores
+del perfil ni mensajes originales de la base; el directorio administrativo solo
+lee las columnas mínimas de presentación. La solicitud de supresión de un perfil
+debe tramitarse mediante un procedimiento autorizado y no cambia automáticamente
+las reservas o asignaciones que tengan obligaciones de conservación propias.
+
+### Marcas y usuarios
+
+`/crm/admin/patrocinadores` permite a admin y super admin crear y editar marcas.
+Los slugs son inmutables y las marcas no se eliminan. El rol `sponsor` no concede
+acceso al CRM: `requireSponsor()` exige además una asignación activa a una marca.
+Los formularios actuales del equipo mantienen sus límites: super admin gestiona
+comercial, organizador y admin; admin solo comercial. La invitación y revocación
+de patrocinadores desde esos formularios pertenece a una entrega posterior.
+
+`/crm/admin/usuarios` reúne equipo, patrocinadores y runners, con búsqueda y filtros
+por los cinco roles reales o por la condición derivada de runner. Esta última no
+es un rol de autorización. La ficha conserva las comprobaciones actuales de
+gestión de roles, y la lista está limitada a 200 resultados con aviso de truncado.
+El portal de eventos de patrocinadores, su promoción pública y las fichas completas
+de corredores permanecen en las fases futuras de sus specs; este PR integra las
+fases de perfiles 1–2, patrocinadores 1–2 y directorio de usuarios 1.
+
+### Migración incremental de la integración
+
+`drizzle/0010_runner_profiles_sponsors.sql` se generó contra el snapshot `0009`,
+conservando **sin cambios** las migraciones y snapshots `0000`–`0009`. Crea los
+enums y `runner_profiles`, la tabla `sponsors`, añade `sponsor` al enum de roles y
+las columnas, índices y restricciones de marca/revisión. Conserva el organizador
+de cada viaje y todos los objetos de leads, campañas, ofertas y reservas actuales.
+
+Antes de usar este código, revisar el SQL y probarlo en una rama de desarrollo con
+`0000`–`0009` aplicadas. Aplicar `0010` una sola vez, mediante una operación manual
+autorizada; ningún build, arranque, setup o workflow la ejecuta. Los CHECK de rol
+usan `role::text`, por lo que no consumen el nuevo literal de enum como valor
+tipado antes de su commit. Verificar después las tablas y restricciones, la
+aceptación de invitaciones y que los objetos de `neon_auth` permanezcan intactos.
+
+Si una base ya recibió las migraciones antiguas de la rama del PR #22, detenerse y
+reconciliar su esquema real antes de aplicar `0010`: no reaplicar objetos, editar
+migraciones ya ejecutadas ni asumir que la numeración histórica sigue disponible.
+La aplicación de esta migración en Neon no se ha realizado durante la integración.
+
 ## Reglas de colaboración
 
 Leer [`docs/SETUP.md`](docs/SETUP.md) antes de modificar código. El negocio vive en `modules/<domain>/` y `app/` compone rutas. Reutilizar componentes y validar fronteras con Zod. El flujo SDD requiere spec aprobada, implementación y revisión; solo el usuario puede aprobar y ningún agente modifica el registro de aprobaciones.
+
+## Mi cuenta, recompensas y noticias
+
+La cuenta `/cuenta/perfil` reúne el editor del perfil, las carreras propias y sus
+beneficios, referidos, estrellas y canjes. `/mis-carreras` muestra el detalle de
+reserva, pagos, itinerario y avisos con Clerk. Administración configura las reglas
+y los premios en `/crm/recompensas`; el equipo comercial aplica descuentos desde
+la reserva. Una reserva confirmada y su primer pago positivo no anulado permiten
+acreditar el referido. Los reintentos no duplican movimientos.
+
+El contenido público se administra en `/crm/contenidos`. Crear o editar guarda
+un borrador; publicar lo hace visible en la portada y `/noticias`. La edición de
+una noticia publicada conserva su versión pública hasta publicarla de nuevo.
+
+Estas funciones requieren las migraciones incrementales **0011 y 0012**, después
+de 0010. No se ejecutan al instalar, arrancar ni compilar; no se ha migrado Neon
+con esta entrega. No se sembraron reglas, premios ni noticias reales.
+
+Consulta [operación y pruebas](docs/OPERACION-RUNNER-NOTICIAS.md) y la
+[auditoría de la ampliación](docs/audits/2026-10-29-runner-news.md) para configurar
+el programa, ejecutar los controles PostgreSQL desechables y conocer los bloqueos
+pendientes de autenticación, red y build del Worker.

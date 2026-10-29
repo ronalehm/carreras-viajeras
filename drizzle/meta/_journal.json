@@ -71,6 +71,27 @@
       "when": 1793265357503,
       "tag": "0009_chilly_patriot",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793274889568,
+      "tag": "0010_runner_profiles_sponsors",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793287437274,
+      "tag": "0011_runner_rewards_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793287453259,
+      "tag": "0012_reward_operations",
+      "breakpoints": true
     }
   ]
 }

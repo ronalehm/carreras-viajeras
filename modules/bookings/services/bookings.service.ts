@@ -3,7 +3,7 @@ import { and, asc, desc, eq, isNull, ne, notExists, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { bookingPayments, bookings, leads, trips } from "@/lib/db-schema";
+import { bookingBenefits, bookingPayments, bookings, leads, trips } from "@/lib/db-schema";
 import type {
   BookingInput,
   BookingStatus,
@@ -52,6 +52,7 @@ const detailColumns = {
   internalNote: bookings.internalNote,
   createdAt: bookings.createdAt,
   lead: { id: leads.id, fullName: leads.fullName },
+  priceLocked: sql<boolean>`exists (select 1 from booking_benefits where booking_id = ${bookings.id} and kind = 'discount')`,
 };
 
 // Both reads: bookings JOIN trips plus the paid amount. GROUP BY the primary keys covers every
@@ -167,7 +168,7 @@ function isActiveEmailConflict(error: unknown): boolean {
 // email unchanged once linked, no other active booking of the same trip with that email. The SELECT explains a no-op.
 export async function updateBooking(
   input: UpdateBookingInput,
-): Promise<"updated" | "not_found" | "cancelled" | "trip_archived" | "email_locked" | "duplicate"> {
+): Promise<"updated" | "not_found" | "cancelled" | "trip_archived" | "email_locked" | "duplicate" | "discount_locked"> {
   const db = getDb();
   const other = alias(bookings, "other");
   const result = await db.batch([
@@ -202,6 +203,12 @@ export async function updateBooking(
                 ),
               ),
           ),
+          or(
+            eq(bookings.totalUsd, input.totalUsd),
+            notExists(db.select({ one: sql`1` }).from(bookingBenefits).where(
+              and(eq(bookingBenefits.bookingId, bookings.id), eq(bookingBenefits.kind, "discount")),
+            )),
+          ),
         ),
       )
       .returning({ id: bookings.id }),
@@ -211,23 +218,31 @@ export async function updateBooking(
         participantEmail: bookings.participantEmail,
         linked: sql<boolean>`${bookings.runnerUserId} is not null`,
         tripArchived,
+        totalUsd: bookings.totalUsd,
+        discountLocked: sql<boolean>`exists (select 1 from booking_benefits where booking_id = ${bookings.id} and kind = 'discount')`,
       })
       .from(bookings)
       .innerJoin(trips, eq(trips.id, bookings.tripId))
       .where(eq(bookings.id, input.bookingId)),
   ]).catch((error: unknown) => {
     if (isActiveEmailConflict(error)) return "duplicate" as const;
+    // The database trigger closes the race with a concurrently applied discount.
+    const cause = error && typeof error === "object" && "cause" in error ? error.cause : error;
+    if (cause && typeof cause === "object" && "code" in cause && cause.code === "23514"
+      && "constraint" in cause && cause.constraint === "bookings_reward_price_locked") {
+      return "discount_locked" as const;
+    }
     throw error;
   });
-  if (result === "duplicate") return result;
+  if (typeof result === "string") return result;
   const [updated, current] = result;
-
   if (updated.length > 0) return "updated";
   const [booking] = current;
   if (!booking) return "not_found";
   if (booking.status === "cancelled") return "cancelled";
   if (booking.tripArchived) return "trip_archived";
   if (booking.linked && booking.participantEmail !== input.participantEmail) return "email_locked";
+  if (booking.discountLocked && booking.totalUsd !== input.totalUsd) return "discount_locked";
   return "duplicate";
 }
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { SignOutButton } from "@/modules/accounts";
 import { SiteBrand } from "@/modules/landing";
 
@@ -8,6 +9,7 @@ export function PortalHeader({ name }: { name?: string }) {
       <SiteBrand />
       <div className="flex min-w-0 items-center gap-3">
         {name && <span className="hidden truncate text-sm font-bold sm:inline">{name}</span>}
+        <Link href="/cuenta/perfil" className="text-sm font-semibold underline underline-offset-4">Mi cuenta</Link>
         <SignOutButton redirectTo="/cuenta" />
       </div>
     </header>

@@ -1,8 +1,8 @@
 import "server-only";
-import { and, asc, eq, exists, isNull, ne, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/lib/db";
-import { bookingPayments, bookings, profiles } from "@/lib/db-schema";
+import { bookingPayments, profiles } from "@/lib/db-schema";
 import type { CrmPayment, PaymentInput } from "../types/bookings.types";
 
 const bookingIdSchema = z.uuid();
@@ -26,41 +26,45 @@ export async function listBookingPayments(bookingId: string): Promise<CrmPayment
     .orderBy(asc(bookingPayments.paidOn), asc(bookingPayments.createdAt));
 }
 
-// One statement: the payment is inserted only for a booking that exists and is not cancelled.
-// recorded_by is always the actor; voided_* stay NULL.
-export async function addPayment(input: PaymentInput, actorUserId: string): Promise<"added" | "not_found"> {
-  const result = await getDb().execute<{ id: string }>(sql`
-    INSERT INTO booking_payments (booking_id, amount_usd, paid_on, concept, recorded_by)
-    SELECT id, ${input.amountUsd}::integer, ${input.paidOn}::date, ${input.concept}, ${actorUserId}
-    FROM bookings
-    WHERE id = ${input.bookingId}::uuid AND status <> 'cancelled'
-    RETURNING id
+// Lock the booking before writing: discounts, cancellation and payment registration
+// serialize on this same row. A receipt's stable request key makes retries idempotent.
+export async function addPayment(input: PaymentInput, actorUserId: string): Promise<"added" | "not_found" | "payment_conflict"> {
+  const result = await getDb().execute<{ added: boolean; booking_ok: boolean }>(sql`
+    WITH target AS MATERIALIZED (
+      SELECT id FROM bookings
+      WHERE id = ${input.bookingId}::uuid AND status <> 'cancelled'
+      FOR UPDATE
+    ), inserted AS (
+      INSERT INTO booking_payments (booking_id, amount_usd, paid_on, concept, recorded_by, request_key)
+      SELECT id, ${input.amountUsd}::integer, ${input.paidOn}::date, ${input.concept}, ${actorUserId}, ${input.requestKey}::uuid
+      FROM target
+      ON CONFLICT (booking_id, request_key) DO UPDATE SET request_key = EXCLUDED.request_key
+      WHERE booking_payments.amount_usd = EXCLUDED.amount_usd
+        AND booking_payments.paid_on = EXCLUDED.paid_on
+        AND booking_payments.concept = EXCLUDED.concept
+        AND booking_payments.recorded_by = EXCLUDED.recorded_by
+        AND booking_payments.voided_at IS NULL
+      RETURNING id
+    )
+    SELECT EXISTS (SELECT 1 FROM inserted) AS added, EXISTS (SELECT 1 FROM target) AS booking_ok
   `);
-  return result.rows.length > 0 ? "added" : "not_found";
+  const [row] = result.rows;
+  return row?.added ? "added" : row?.booking_ok ? "payment_conflict" : "not_found";
 }
 
-// A payment is voided once, and only while its booking is not cancelled. Missing payment, already
-// voided or cancelled booking → not_found.
-export async function voidPayment(
-  paymentId: string,
-  actorUserId: string,
-): Promise<{ bookingId: string } | "not_found"> {
-  const db = getDb();
-  const [voided] = await db
-    .update(bookingPayments)
-    .set({ voidedAt: sql`now()`, voidedBy: actorUserId })
-    .where(
-      and(
-        eq(bookingPayments.id, paymentId),
-        isNull(bookingPayments.voidedAt),
-        exists(
-          db
-            .select({ one: sql`1` })
-            .from(bookings)
-            .where(and(eq(bookings.id, bookingPayments.bookingId), ne(bookings.status, "cancelled"))),
-        ),
-      ),
+export async function voidPayment(paymentId: string, actorUserId: string): Promise<{ bookingId: string } | "not_found"> {
+  const result = await getDb().execute<{ booking_id: string }>(sql`
+    WITH target AS MATERIALIZED (
+      SELECT b.id FROM bookings b
+      JOIN booking_payments p ON p.booking_id = b.id
+      WHERE p.id = ${paymentId}::uuid AND b.status <> 'cancelled'
+      FOR UPDATE OF b
     )
-    .returning({ bookingId: bookingPayments.bookingId });
-  return voided ?? "not_found";
+    UPDATE booking_payments p
+    SET voided_at = now(), voided_by = ${actorUserId}
+    FROM target
+    WHERE p.id = ${paymentId}::uuid AND p.booking_id = target.id AND p.voided_at IS NULL
+    RETURNING p.booking_id
+  `);
+  return result.rows[0] ? { bookingId: result.rows[0].booking_id } : "not_found";
 }

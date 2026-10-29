@@ -3,6 +3,7 @@
 import { paymentFormSchema, paymentVoidSchema } from "../schemas/bookings.schema";
 import { addPayment, voidPayment } from "../services/payments.service";
 import type { BookingActionState } from "../types/bookings.types";
+import { reconcileBookingAfterCommit } from "./rewardReconciliation";
 import { bookingPaths, failure, runBookingAction } from "./runBookingAction";
 
 const MESSAGES = { not_found: "La reserva o el pago ya no admiten cambios. Recarga la página." };
@@ -13,9 +14,9 @@ export async function addPaymentAction(
 ): Promise<BookingActionState> {
   return runBookingAction(formData, paymentFormSchema, async (input, values, actorUserId) => {
     const result = await addPayment(input, actorUserId);
-    return result === "added"
-      ? { revalidate: bookingPaths(input.bookingId), message: "Pago registrado." }
-      : failure("not_found", values);
+    if (result !== "added") return failure(result, values);
+    await reconcileBookingAfterCommit(input.bookingId);
+    return { revalidate: bookingPaths(input.bookingId), message: "Pago registrado." };
   }, MESSAGES);
 }
 
@@ -25,8 +26,8 @@ export async function voidPaymentAction(
 ): Promise<BookingActionState> {
   return runBookingAction(formData, paymentVoidSchema, async ({ paymentId }, _values, actorUserId) => {
     const result = await voidPayment(paymentId, actorUserId);
-    return result === "not_found"
-      ? failure("not_found")
-      : { revalidate: bookingPaths(result.bookingId), message: "Pago anulado." };
+    if (result === "not_found") return failure("not_found");
+    await reconcileBookingAfterCommit(result.bookingId);
+    return { revalidate: bookingPaths(result.bookingId), message: "Pago anulado." };
   }, MESSAGES);
 }

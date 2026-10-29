@@ -143,13 +143,14 @@ describe("bookingStatusChangeSchema", () => {
 });
 
 describe("paymentFormSchema", () => {
-  const validPayment = { bookingId: BOOKING_ID, amountUsd: " 300 ", paidOn: "2027-03-03", concept: " Reserva " };
+  const REQUEST_KEY = "33333333-3333-4333-8333-333333333333";
+  const validPayment = { bookingId: BOOKING_ID, requestKey: REQUEST_KEY, amountUsd: " 300 ", paidOn: "2027-03-03", concept: " Reserva " };
   const parsePayment = (overrides: Record<string, string | undefined>) =>
     paymentFormSchema.safeParse({ ...validPayment, ...overrides });
 
   it("parses a valid payment into clean values", () => {
     expect(parsePayment({}).data).toEqual({
-      bookingId: BOOKING_ID, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva",
+      bookingId: BOOKING_ID, requestKey: REQUEST_KEY, amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva",
     });
   });
 
@@ -161,6 +162,8 @@ describe("paymentFormSchema", () => {
 
   it.each([
     ["bookingId", "abc"],
+    ["requestKey", "abc"],
+    ["requestKey", undefined],
     ["paidOn", ""],
     ["paidOn", "2027-02-30"],
     ["concept", "  "],
