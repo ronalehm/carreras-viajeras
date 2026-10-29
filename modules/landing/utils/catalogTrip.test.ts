@@ -30,14 +30,9 @@ const minimal: PublicTrip = {
   distances: ["42K", "21K"],
   summary: "Corre la Maratón de Lima 2027 con Carreras Viajeras.",
   includes: [],
-  priceUsd: null,
   capacity: null,
   imageUrl: null,
   officialUrl: null,
-  installmentsPriceUsd: null,
-  depositUsd: null,
-  companionPriceUsd: null,
-  paymentTerms: null,
   excludes: [],
   notes: null,
 };
@@ -52,14 +47,9 @@ const complete: PublicTrip = {
   endDate: "2027-05-17",
   distances: ["42K"],
   includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
-  priceUsd: 1499,
   capacity: 100,
   imageUrl: "https://carreras-viajeras.mentec.dev/images/cover-santiago.webp",
   officialUrl: "https://maratondesantiago.cl/",
-  installmentsPriceUsd: 1799,
-  depositUsd: 300,
-  companionPriceUsd: 1300,
-  paymentTerms: "  Saldo pagado en febrero de 2027.  \n\n\r\nLa web no recibe pagos.\n",
   excludes: ["Tours adicionales."],
   notes: "Aerolínea por confirmar.\n   \nHotel por confirmar.",
 };
@@ -116,8 +106,16 @@ describe("getCatalogTrip", () => {
     });
   });
 
-  it("never exposes the old price fields of trips, even when they have a value", async () => {
-    getPublished.mockResolvedValue(complete);
+  it("never exposes price fields, even if a row still carried the old price columns of trips", async () => {
+    // PublicTrip no longer has them; a stray row with those keys must not leak through either.
+    getPublished.mockResolvedValue({
+      ...complete,
+      priceUsd: 1499,
+      installmentsPriceUsd: 1799,
+      depositUsd: 300,
+      companionPriceUsd: 1300,
+      paymentTerms: "Saldo pagado en febrero de 2027.",
+    } as PublicTrip);
     const trip = await getCatalogTrip(complete.slug);
     for (const key of ["price", "installmentsPrice", "deposit", "companionPrice", "paymentTerms"]) {
       expect(trip).not.toHaveProperty(key);
