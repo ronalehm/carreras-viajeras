@@ -159,7 +159,7 @@ describe("createWebLead", () => {
 
   it("stores the versioned legal text, never the old web-form-v1", async () => {
     const { params } = await capture();
-    expect(params[P.consentVersion]).toBe("registro-web-pendiente-pl");
+    expect(params[P.consentVersion]).toBe(REGISTRATION_CONSENT.version);
     expect(params).not.toContain("web-form-v1");
   });
 

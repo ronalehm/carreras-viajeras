@@ -1101,16 +1101,11 @@ Si el servidor rechaza el envío (datos incompletos, verificación fallida o ser
 
 #### Texto legal y apertura del registro (puerta P-L)
 
-El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
+El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. **El usuario aprobó el texto el 2026-10-29** (versión `registro-web-v1`, `isPlaceholder: false`): la puerta P-L está cerrada y el registro queda abierto también en producción. Se mantiene la casilla obligatoria "Acepto…" (decisión del usuario en [`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)).
 
-**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso (y su visita sí se cuenta). Mientras tanto, la ficha `/viajes/<slug>` tampoco muestra «Registrarme»: el botón aparece automáticamente al abrir el registro, sin tocar la ficha.
-
-Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
-
-1. En `lib/registrationConsent.ts`, sustituir `privacyText` y `marketingText` por los textos aprobados, cambiar `version` a `registro-web-v1` y poner `isPlaceholder: false`.
-2. El texto definitivo debe cubrir también a quienes ya tratan los datos: n8n en tu computadora, tu proveedor de correo y Gemini (que solo recibe el nombre de pila y el viaje).
-3. Una vez publicado, **cualquier cambio del texto exige una versión nueva** (`registro-web-v2`…): cada lead guarda la versión que aceptó.
-4. Pendiente de confirmar con el área legal: si basta un aviso informativo en lugar de la casilla obligatoria "Acepto…" (pregunta abierta 1 de la spec).
+- **Qué se ve:** `/viajes/<slug>/registro` y `/contacto` muestran el formulario, y la ficha `/viajes/<slug>` muestra «Registrarme». Para que los envíos funcionen hace falta [Turnstile](#activar-la-protección-antispam-turnstile) configurado; sin sus claves, el formulario se ve pero cada envío responde "no pudimos verificar" y ofrece WhatsApp.
+- **Cambios del texto:** cualquier cambio exige una **versión nueva** (`registro-web-v2`…), porque cada lead guarda la versión que aceptó. El mecanismo de cierre sigue en el código: con `isPlaceholder: true`, producción vuelve a cerrar el registro.
+- **Pendiente de revisar:** el texto actual no menciona a quienes también tratan los datos (n8n, el proveedor de correo y Gemini, que solo recibe el nombre de pila y el viaje). Si se decide incluirlos, va en una versión nueva.
 
 ### Activar la protección antispam (Turnstile)
 
