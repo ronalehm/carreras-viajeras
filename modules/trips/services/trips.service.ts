@@ -15,7 +15,8 @@ const STATUS_SOURCES: Record<TripStatus, TripStatus[]> = {
   archived: ["draft", "published"],
 };
 
-// Only these columns leave the database for the landing: no id, status or audit dates.
+// Only these columns leave the database for the landing: no id, status, audit dates or the old price
+// columns (prices live in the trip offers).
 const publicColumns = {
   slug: trips.slug,
   title: trips.title,
@@ -27,21 +28,17 @@ const publicColumns = {
   distances: trips.distances,
   summary: trips.summary,
   includes: trips.includes,
-  priceUsd: trips.priceUsd,
   capacity: trips.capacity,
   imageUrl: trips.imageUrl,
   officialUrl: trips.officialUrl,
-  installmentsPriceUsd: trips.installmentsPriceUsd,
-  depositUsd: trips.depositUsd,
-  companionPriceUsd: trips.companionPriceUsd,
-  paymentTerms: trips.paymentTerms,
   excludes: trips.excludes,
   notes: trips.notes,
 } satisfies Record<keyof PublicTrip, unknown>;
 
 const tripIdSchema = z.uuid();
 
-// Explicit editable columns: status, id and audit dates never come from the input.
+// Explicit editable columns: status, id and audit dates never come from the input. The old price columns
+// are never written, so an update keeps their stored values (reference only).
 function editableColumns(input: TripInput) {
   return {
     slug: input.slug,
@@ -54,14 +51,9 @@ function editableColumns(input: TripInput) {
     distances: input.distances,
     summary: input.summary,
     includes: input.includes,
-    priceUsd: input.priceUsd,
     capacity: input.capacity,
     imageUrl: input.imageUrl,
     officialUrl: input.officialUrl,
-    installmentsPriceUsd: input.installmentsPriceUsd,
-    depositUsd: input.depositUsd,
-    companionPriceUsd: input.companionPriceUsd,
-    paymentTerms: input.paymentTerms,
     excludes: input.excludes,
     notes: input.notes,
   };

@@ -28,6 +28,14 @@ describe("can", () => {
     [["admin"], "bookings.manage", true],
     [["commercial", "admin"], "bookings.manage", true],
     [[], "bookings.manage", false],
+    [["commercial"], "offers.manage", false],
+    [["admin"], "offers.manage", true],
+    [["commercial", "admin"], "offers.manage", true],
+    [[], "offers.manage", false],
+    [["commercial"], "offers.view", true],
+    [["admin"], "offers.view", true],
+    [["commercial", "admin"], "offers.view", true],
+    [[], "offers.view", false],
   ])("roles %j with %s → %s", (roles, permission, expected) => {
     expect(can(roles, permission)).toBe(expected);
   });
@@ -39,6 +47,8 @@ describe("can", () => {
       "trips.manage",
       "leads.manage",
       "bookings.manage",
+      "offers.manage",
+      "offers.view",
     ] as const) {
       expect(can(["admin"], permission)).toBe(true);
     }
@@ -50,6 +60,8 @@ describe("can", () => {
     expect(can([], "trips.manage")).toBe(false);
     expect(can([], "leads.manage")).toBe(false);
     expect(can([], "bookings.manage")).toBe(false);
+    expect(can([], "offers.manage")).toBe(false);
+    expect(can([], "offers.view")).toBe(false);
   });
 
   it.each(["unknown.permission", "toString", "constructor", "__proto__"])(
@@ -61,6 +73,11 @@ describe("can", () => {
       expect(can([], unknown)).toBe(false);
     },
   );
+
+  it("gives commercial offers.view but not offers.manage", () => {
+    expect(can(["commercial"], "offers.view")).toBe(true);
+    expect(can(["commercial"], "offers.manage")).toBe(false);
+  });
 
   it("gives commercial crm.access but not staff.manage", () => {
     expect(can(["commercial"], "crm.access")).toBe(true);

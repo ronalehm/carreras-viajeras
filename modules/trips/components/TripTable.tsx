@@ -5,7 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { changeTripStatusAction } from "../actions/trips.actions";
 import type { Trip } from "../types/trips.types";
-import { formatTripDate, formatTripPrice } from "../utils/tripDisplay";
+import { formatTripDate } from "../utils/tripDisplay";
 
 const STATUS_LABELS = { draft: "Borrador", published: "Publicado", archived: "Archivado" };
 const STATUS_VARIANTS = { draft: "secondary", published: "default", archived: "outline" } as const;
@@ -18,7 +18,7 @@ export function TripTable({ trips }: { trips: Trip[] }) {
     <Table>
       <TableHeader>
         <TableRow>
-          {["Viaje", "Destino", "Carrera", "Precio", "Estado", "Acciones"].map((title) => (
+          {["Viaje", "Destino", "Carrera", "Estado", "Acciones"].map((title) => (
             <TableHead key={title}>{title}</TableHead>
           ))}
         </TableRow>
@@ -35,7 +35,6 @@ export function TripTable({ trips }: { trips: Trip[] }) {
               </TableCell>
               <TableCell>{trip.city}, {trip.country}</TableCell>
               <TableCell>{formatTripDate(trip.raceDate)}</TableCell>
-              <TableCell>{formatTripPrice(trip.priceUsd)}</TableCell>
               <TableCell><Badge variant={STATUS_VARIANTS[trip.status]}>{STATUS_LABELS[trip.status]}</Badge></TableCell>
               <TableCell>
                 {trip.status !== "archived" && (

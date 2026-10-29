@@ -7,7 +7,6 @@ export const tripStatusSchema = z.enum(["draft", "published", "archived"], {
 });
 
 const SLUG_MESSAGE = "Usa minúsculas, números y guiones (p. ej. maraton-santiago-2027).";
-const PRICE_MESSAGE = "Indica un precio en dólares, sin decimales.";
 const HTTPS_URL_MESSAGE = "Indica una URL que empiece por https://.";
 const CAPACITY_MESSAGE = "Indica un número entero de cupos entre 1 y 10,000.";
 const DATE_MESSAGE = "Indica una fecha válida.";
@@ -21,11 +20,11 @@ export const tripSlugSchema = z
   .max(80, SLUG_MESSAGE)
   .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, SLUG_MESSAGE);
 
-const requiredText = (min: number, max: number, message: string) =>
+export const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
 // Free-text list: split, trim and drop empty items before validating. A missing key is an empty list.
-const textList = (separator: RegExp | string) =>
+export const textList = (separator: RegExp | string) =>
   z
     .string()
     .optional()
@@ -36,16 +35,8 @@ const textList = (separator: RegExp | string) =>
         .filter((item) => item !== ""),
     );
 
-const wholeNumber = (message: string) =>
+export const wholeNumber = (message: string) =>
   z.string().regex(/^\d+$/, message).transform(Number);
-
-// Optional whole amount in USD (priceUsd and the other trip prices).
-const usdAmount = () =>
-  blankToNull(
-    wholeNumber(PRICE_MESSAGE).pipe(
-      z.number().int().max(1_000_000, "El precio no puede superar 1,000,000 USD."),
-    ),
-  );
 
 // Optional external https:// URL (imageUrl, officialUrl).
 const httpsUrl = (message: string) =>
@@ -68,7 +59,8 @@ const longText = () => blankToNull(z.string().max(1000, "Puede tener hasta 1000 
 
 const TRAVEL_DATE_FIELDS: PropertyKey[] = ["raceDate", "startDate", "endDate"];
 
-// Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as status.
+// Input: the strings of Object.fromEntries(formData). z.object drops unknown keys such as status and
+// the old price fields (priceUsd, depositUsd…): prices live in the trip offers, never in trips.
 export const tripFormSchema = z
   .object({
     title: requiredText(3, 120, "El título debe tener entre 3 y 120 caracteres."),
@@ -87,11 +79,6 @@ export const tripFormSchema = z
     summary: requiredText(10, 300, "El resumen debe tener entre 10 y 300 caracteres."),
     includes: lineList(),
     excludes: lineList(),
-    priceUsd: usdAmount(),
-    installmentsPriceUsd: usdAmount(),
-    depositUsd: usdAmount(),
-    companionPriceUsd: usdAmount(),
-    paymentTerms: longText(),
     notes: longText(),
     capacity: blankToNull(
       wholeNumber(CAPACITY_MESSAGE).pipe(

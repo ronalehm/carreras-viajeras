@@ -67,32 +67,70 @@ describe("runtime environment", () => {
   });
 });
 
-describe("automation API token", () => {
-  const token = "synthetic-automation-token-at-least-32-chars";
+describe("optional integration environment", () => {
+  const TOKEN = "synthetic-n8n-token-with-32-char"; // exactly 32: the minimum
 
-  it("returns a token of at least 32 characters", async () => {
-    setEnv({ AUTOMATION_API_TOKEN: token });
-    const { getAutomationApiToken } = await import("@/lib/env");
-    expect(getAutomationApiToken()).toBe(token);
+  it("does not require the integration secrets in getEnv", async () => {
+    setEnv({ ...valid, N8N_API_TOKEN: undefined, TURNSTILE_SECRET_KEY: undefined });
+    const { getEnv } = await import("@/lib/env");
+    expect(getEnv()).toEqual(valid);
   });
 
-  it.each([
-    ["missing", undefined],
-    ["shorter than 32 characters", "synthetic-short-token-31-chars!"],
-  ])("rejects a %s token without exposing its value", async (_case, value) => {
-    setEnv({ AUTOMATION_API_TOKEN: value });
-    const { getAutomationApiToken } = await import("@/lib/env");
+  it.each([undefined, ""])("getIntegrationEnv returns null without a token (%j)", async (token) => {
+    setEnv({ N8N_API_TOKEN: token });
+    const { getIntegrationEnv } = await import("@/lib/env");
+    expect(getIntegrationEnv()).toBeNull();
+  });
+
+  it("getIntegrationEnv rejects a 31-character token with the field name only", async () => {
+    const short = "x".repeat(31);
+    setEnv({ N8N_API_TOKEN: short });
+    const { getIntegrationEnv } = await import("@/lib/env");
     let error: unknown;
-    try { getAutomationApiToken(); } catch (caught) { error = caught; }
+    try { getIntegrationEnv(); } catch (caught) { error = caught; }
     expect(error).toBeInstanceOf(Error);
-    expect((error as Error).message).toBe("Invalid environment fields: AUTOMATION_API_TOKEN");
-    if (value) expect(JSON.stringify(error) + (error as Error).message).not.toContain(value);
+    expect((error as Error).message).toBe("Invalid environment fields: N8N_API_TOKEN");
+    expect(JSON.stringify(error)).not.toContain(short);
     expect((error as Error).cause).toBeUndefined();
   });
 
-  it("does not affect getEnv() when the token is missing", async () => {
-    setEnv({ ...valid, AUTOMATION_API_TOKEN: undefined });
-    const { getEnv } = await import("@/lib/env");
-    expect(getEnv()).toEqual(valid);
+  it("getIntegrationEnv returns a valid token", async () => {
+    expect(TOKEN).toHaveLength(32);
+    setEnv({ N8N_API_TOKEN: TOKEN });
+    const { getIntegrationEnv } = await import("@/lib/env");
+    expect(getIntegrationEnv()).toEqual({ N8N_API_TOKEN: TOKEN });
+  });
+
+  it.each([undefined, ""])("getTurnstileEnv returns null without a secret (%j)", async (secret) => {
+    setEnv({ TURNSTILE_SECRET_KEY: secret });
+    const { getTurnstileEnv } = await import("@/lib/env");
+    expect(getTurnstileEnv()).toBeNull();
+  });
+
+  it("getTurnstileEnv returns a real secret in production", async () => {
+    setEnv({ NODE_ENV: "production", TURNSTILE_SECRET_KEY: "0x-synthetic-turnstile-secret" });
+    const { getTurnstileEnv } = await import("@/lib/env");
+    expect(getTurnstileEnv()).toEqual({
+      TURNSTILE_SECRET_KEY: "0x-synthetic-turnstile-secret",
+      isTestSecret: false,
+    });
+  });
+
+  it.each([
+    "1x0000000000000000000000000000000AA",
+    "2x0000000000000000000000000000000AA",
+    "3x0000000000000000000000000000000AA",
+  ])("allows the Cloudflare test secret %s only in development", async (secret) => {
+    setEnv({ NODE_ENV: "development", TURNSTILE_SECRET_KEY: secret });
+    const { getTurnstileEnv } = await import("@/lib/env");
+    expect(getTurnstileEnv()).toEqual({ TURNSTILE_SECRET_KEY: secret, isTestSecret: true });
+
+    for (const nodeEnv of ["production", "test"]) {
+      vi.stubEnv("NODE_ENV", nodeEnv);
+      let error: unknown;
+      try { getTurnstileEnv(); } catch (caught) { error = caught; }
+      expect((error as Error).message).toBe("Invalid environment fields: TURNSTILE_SECRET_KEY");
+      expect(JSON.stringify(error)).not.toContain(secret);
+    }
   });
 });

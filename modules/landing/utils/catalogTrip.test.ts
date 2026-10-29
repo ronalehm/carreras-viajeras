@@ -10,7 +10,6 @@ vi.mock("@/modules/trips", async () => {
     getPublishedTripBySlug: vi.fn(),
     formatTripDate: display.formatTripDate,
     formatTripDateRange: display.formatTripDateRange,
-    formatTripPrice: display.formatTripPrice,
   };
 });
 
@@ -31,14 +30,9 @@ const minimal: PublicTrip = {
   distances: ["42K", "21K"],
   summary: "Corre la Maratón de Lima 2027 con Carreras Viajeras.",
   includes: [],
-  priceUsd: null,
   capacity: null,
   imageUrl: null,
   officialUrl: null,
-  installmentsPriceUsd: null,
-  depositUsd: null,
-  companionPriceUsd: null,
-  paymentTerms: null,
   excludes: [],
   notes: null,
 };
@@ -53,14 +47,9 @@ const complete: PublicTrip = {
   endDate: "2027-05-17",
   distances: ["42K"],
   includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
-  priceUsd: 1499,
   capacity: 100,
   imageUrl: "https://carreras-viajeras.mentec.dev/images/cover-santiago.webp",
   officialUrl: "https://maratondesantiago.cl/",
-  installmentsPriceUsd: 1799,
-  depositUsd: 300,
-  companionPriceUsd: 1300,
-  paymentTerms: "  Saldo pagado en febrero de 2027.  \n\n\r\nLa web no recibe pagos.\n",
   excludes: ["Tours adicionales."],
   notes: "Aerolínea por confirmar.\n   \nHotel por confirmar.",
 };
@@ -91,11 +80,6 @@ describe("getCatalogTrip", () => {
       travelDates: formatTripDateRange("2027-05-14", "2027-05-17"),
       capacity: "100 cupos",
       officialUrl: "https://maratondesantiago.cl/",
-      price: "US$ 1,499",
-      installmentsPrice: "US$ 1,799",
-      deposit: "US$ 300",
-      companionPrice: "US$ 1,300",
-      paymentTerms: ["Saldo pagado en febrero de 2027.", "La web no recibe pagos."],
       includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
       excludes: ["Tours adicionales."],
       notes: ["Aerolínea por confirmar.", "Hotel por confirmar."],
@@ -116,21 +100,27 @@ describe("getCatalogTrip", () => {
       travelDates: null,
       capacity: "Cupos por confirmar",
       officialUrl: null,
-      price: "Precio a consultar",
-      installmentsPrice: null,
-      deposit: null,
-      companionPrice: null,
-      paymentTerms: [],
       includes: [],
       excludes: [],
       notes: [],
     });
   });
 
-  it("keeps a zero price as a price", async () => {
-    getPublished.mockResolvedValue({ ...minimal, depositUsd: 0 });
-    const trip = await getCatalogTrip(minimal.slug);
-    expect(trip?.deposit).toBe("US$ 0");
+  it("never exposes price fields, even if a row still carried the old price columns of trips", async () => {
+    // PublicTrip no longer has them; a stray row with those keys must not leak through either.
+    getPublished.mockResolvedValue({
+      ...complete,
+      priceUsd: 1499,
+      installmentsPriceUsd: 1799,
+      depositUsd: 300,
+      companionPriceUsd: 1300,
+      paymentTerms: "Saldo pagado en febrero de 2027.",
+    } as PublicTrip);
+    const trip = await getCatalogTrip(complete.slug);
+    for (const key of ["price", "installmentsPrice", "deposit", "companionPrice", "paymentTerms"]) {
+      expect(trip).not.toHaveProperty(key);
+    }
+    expect(JSON.stringify(trip)).not.toMatch(/US\$|1,499|1,799|1,300|Saldo pagado/);
   });
 
   it("propagates database errors", async () => {

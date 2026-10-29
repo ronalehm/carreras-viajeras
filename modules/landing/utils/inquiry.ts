@@ -1,37 +1,48 @@
-export const DESTINATION_IDS = ["santiago-2027", "rio", "roma"] as const;
-export type DestinationId = (typeof DESTINATION_IDS)[number];
-
 // Dato público del canal comercial (+51 938 127 170).
 export const WHATSAPP_NUMBER = "51938127170";
 
-const DESTINATION_NAMES: Record<DestinationId, string> = {
-  "santiago-2027": "Maratón de Santiago 42K 2027",
-  rio: "Río de Janeiro",
-  roma: "Roma",
-};
+/** Texto fijo de WhatsApp como alternativa al formulario (sin datos personales). */
+export const GENERAL_INQUIRY_MESSAGE = "Hola, quiero información para correr con Carreras Viajeras.";
 
-/** `?destino=` → id válido o "santiago-2027". */
-export function parseDestinationId(value: unknown): DestinationId {
-  return DESTINATION_IDS.find((id) => id === value) ?? "santiago-2027";
+const ATTRIBUTION_KEYS = ["c", "utm_source", "utm_medium", "utm_campaign", "ref"] as const;
+const MAX_ATTRIBUTION_LENGTH = 200;
+
+// Enlaces antiguos de `?destino=` que siguen funcionando (la portada de `main` usa santiago-2027).
+const DESTINATION_ALIASES = new Map([["santiago-2027", "maraton-santiago-2027"]]);
+
+export type LeadAttributionParams = Partial<Record<(typeof ATTRIBUTION_KEYS)[number], string>>;
+
+/** Primer valor de un parámetro de búsqueda (`?x=a&x=b` → "a"). */
+export function firstParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
-/** Plantilla literal de la consulta del diseño (`app.js`). */
-export function buildInquiryMessage(input: {
-  name: string;
-  email: string;
-  phone: string;
-  destination: DestinationId;
-}): string {
-  const clause =
-    input.destination === "santiago-2027"
-      ? " y la preventa por corredor: US$1,499 al contado o US$1,799 en cuotas, con reserva anunciada de US$300"
-      : " cuando haya una propuesta confirmada";
-  return [
-    `Hola, soy ${input.name}. Me interesa ${DESTINATION_NAMES[input.destination]}${clause}. Quisiera conocer disponibilidad, inclusiones y condiciones finales.`,
-    `Correo: ${input.email}`,
-    `WhatsApp: ${input.phone}`,
-    "Entiendo que esta consulta no constituye reserva ni pago.",
-  ].join("\n");
+/**
+ * `?c=`, UTM y `ref` para los campos ocultos del formulario: solo esas cinco claves, su primer
+ * valor, no vacío y de 200 caracteres como máximo. No son de confianza: el servidor los normaliza
+ * y decide la atribución.
+ */
+export function attributionParams(
+  searchParams: Record<string, string | string[] | undefined>,
+): LeadAttributionParams {
+  const params: LeadAttributionParams = {};
+  for (const key of ATTRIBUTION_KEYS) {
+    const value = firstParam(searchParams[key]);
+    if (value?.trim() && value.length <= MAX_ATTRIBUTION_LENGTH) params[key] = value;
+  }
+  return params;
+}
+
+/** `?destino=` → un valor permitido, su alias si está permitido, o "" (sin preselección). */
+export function resolveDestination(
+  value: string | string[] | undefined,
+  allowed: readonly string[],
+): string {
+  const destination = firstParam(value);
+  if (destination === undefined) return "";
+  if (allowed.includes(destination)) return destination;
+  const alias = DESTINATION_ALIASES.get(destination);
+  return alias !== undefined && allowed.includes(alias) ? alias : "";
 }
 
 /** Consulta por WhatsApp desde la página de un viaje del catálogo (sin precio, para no quedar desfasada). */

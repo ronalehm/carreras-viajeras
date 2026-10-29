@@ -10,11 +10,13 @@ import type { BookingActionState } from "../types/bookings.types";
 // a public endpoint.
 
 export const BOOKINGS_PATH = "/crm/reservas";
+export const LEADS_PATH = "/crm/leads";
 type ErrorState = Extract<BookingActionState, { status: "error" }>;
 type ErrorCode = ErrorState["code"];
 type ErrorMessages = Partial<Record<ErrorCode, string>>;
-// A successful mutation names the booking it touched, to revalidate (and, on create, open) it.
-type Mutation = { bookingId: string; message: string } | ErrorState;
+// A successful mutation names the booking it touched, to revalidate (and, on create, open) it, and
+// the lead it is linked to, whose page shows it.
+type Mutation = { bookingId: string; message: string; leadId?: string | null } | ErrorState;
 
 const ERROR_MESSAGES: Record<ErrorCode, string> = {
   unauthorized: "Tu sesión no es válida. Vuelve a iniciar sesión.",
@@ -26,6 +28,8 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = {
   not_found: "La reserva ya no existe o está cancelada. Recarga la página.",
   invalid_transition: "La reserva ya no está en ese estado. Recarga la página.",
   trip_archived: "El viaje está archivado: la reserva solo se puede cancelar. Recarga la página.",
+  invalid_lead: "El lead ya no existe o está archivado. Crea la reserva sin vincular o recarga la página.",
+  lead_taken: "Ese lead ya tiene una reserva activa.",
 };
 
 // Field that shows each service result under its input.
@@ -89,5 +93,6 @@ export async function runBookingAction<Input>(
 
   revalidatePath(BOOKINGS_PATH);
   revalidatePath(`${BOOKINGS_PATH}/${result.bookingId}`);
+  if (result.leadId) revalidatePath(`${LEADS_PATH}/${result.leadId}`);
   return { state: { status: "success", message: result.message }, bookingId: result.bookingId };
 }

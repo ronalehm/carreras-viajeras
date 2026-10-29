@@ -15,7 +15,9 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
   // Visual only: each page and Server Action checks its permission again.
   const canManageStaff = can(roles, "staff.manage");
   const canManageTrips = can(roles, "trips.manage");
+  const canManageLeads = can(roles, "leads.manage");
   const canManageBookings = can(roles, "bookings.manage");
+  const canViewOffers = can(roles, "offers.view");
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -24,11 +26,33 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
           <Link href="/crm" className="font-heading font-medium">
             CRM Carreras Viajeras
           </Link>
-          {(canManageStaff || canManageTrips || canManageBookings) && (
+          {(canManageLeads || canManageTrips || canViewOffers || canManageBookings || canManageStaff) && (
             <nav aria-label="CRM" className="flex flex-wrap gap-1">
+              {canManageLeads && (
+                <>
+                  <Link href="/crm/leads" className={buttonVariants({ variant: "ghost" })}>
+                    Leads
+                  </Link>
+                  {/* Preset of the lead list (same URL as leadListHref in modules/crm). */}
+                  <Link
+                    href="/crm/leads?responsable=mios&seguimiento=pendientes"
+                    className={buttonVariants({ variant: "ghost" })}
+                  >
+                    Mis pendientes
+                  </Link>
+                  <Link href="/crm/campanas" className={buttonVariants({ variant: "ghost" })}>
+                    Campañas
+                  </Link>
+                </>
+              )}
               {canManageTrips && (
                 <Link href="/crm/viajes" className={buttonVariants({ variant: "ghost" })}>
                   Viajes
+                </Link>
+              )}
+              {canViewOffers && (
+                <Link href="/crm/ofertas" className={buttonVariants({ variant: "ghost" })}>
+                  Ofertas
                 </Link>
               )}
               {canManageBookings && (

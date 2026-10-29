@@ -2,24 +2,22 @@ import Image from "next/image";
 import { ArrowUpRight, Check, X } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { OfferView } from "../utils/catalogOffer";
 import type { TripLanding } from "../utils/catalogTrip";
 import { buildTripInquiryMessage, buildWhatsAppUrl, WHATSAPP_NUMBER } from "../utils/inquiry";
+import { OfferSummary } from "./OfferSummary";
 
 const section = "border-t border-primary/15 pt-8";
 const sectionTitle = "mb-4 text-sm font-bold tracking-wide";
 
-export function TripDetail({ trip }: { trip: TripLanding }) {
+// The price section is the offer in force (resolved by the server) or a notice without amounts.
+export function TripDetail({ trip, offer }: { trip: TripLanding; offer: OfferView | null }) {
   const facts = [
     { label: "Carrera", value: trip.raceDate },
     { label: "Viaje", value: trip.travelDates ?? "Fechas por confirmar" },
     { label: "Distancias", value: trip.distances.join(" · ") },
     { label: "Cupos", value: trip.capacity },
   ];
-  const priceLines = [
-    trip.installmentsPrice && `En cuotas: ${trip.installmentsPrice} (total)`,
-    trip.deposit && `Reserva con ${trip.deposit}`,
-    trip.companionPrice && `Acompañante: ${trip.companionPrice}`,
-  ].filter((line): line is string => Boolean(line));
   const whatsAppUrl = buildWhatsAppUrl(
     WHATSAPP_NUMBER,
     buildTripInquiryMessage({ title: trip.title, raceDate: trip.raceDate, location: trip.location }),
@@ -77,25 +75,16 @@ export function TripDetail({ trip }: { trip: TripLanding }) {
         </dl>
       </section>
 
-      <section aria-labelledby="trip-price-title" className={section}>
-        <h2 id="trip-price-title" className="sr-only">
-          Precio
-        </h2>
-        <p className="text-xs">Desde</p>
-        <p className="mt-1 text-4xl font-bold tracking-tight">{trip.price}</p>
-        {priceLines.length > 0 && (
-          <ul className="mt-4 grid gap-1 text-sm">
-            {priceLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        )}
-        {trip.paymentTerms.map((paragraph, index) => (
-          <p key={index} className="mt-3 text-xs leading-relaxed">
-            {paragraph}
-          </p>
-        ))}
-      </section>
+      {offer ? (
+        <OfferSummary offer={offer} className={section} />
+      ) : (
+        <section aria-labelledby="trip-price-title" className={section}>
+          <h2 id="trip-price-title" className="sr-only">
+            Precio
+          </h2>
+          <p className="text-base font-bold">Todavía no publicamos el precio de este viaje.</p>
+        </section>
+      )}
 
       {trip.includes.length > 0 && (
         <section aria-labelledby="trip-includes-title" className={section}>
