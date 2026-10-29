@@ -203,8 +203,8 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [ ] T5 — Verificación funcional (ficha con y sin P-L, petición en Red, modo stand, contadores del CRM) y medición del Worker · archivos: — · depende de: T4 · secuencial
 
 ### Fase 3: un solo «Registrarme» y ficha para PC (3 tareas, 2 archivos)
-- [ ] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
-- [ ] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
+- [x] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
+- [x] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
 - [ ] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ## Preguntas abiertas

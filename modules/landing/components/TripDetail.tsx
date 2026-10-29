@@ -102,8 +102,7 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
         </section>
       </div>
 
-      <aside
-        aria-label="Precio y registro"
+      <div
         className={cn(
           section,
           "grid min-w-0 gap-8",
@@ -150,7 +149,7 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
             tiempo real. No se reciben pagos en la web.
           </p>
         </div>
-      </aside>
+      </div>
 
       {hasDetails && (
         <div className="grid min-w-0 gap-10 lg:col-start-1">
