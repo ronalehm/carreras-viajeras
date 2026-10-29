@@ -37,8 +37,8 @@ const COUNTS =
   'left join (select "campaign_id", count(*) as "lead_count" from "leads" where "leads"."campaign_id" is not null group by "leads"."campaign_id") "lead_counts" on "lead_counts"."campaign_id" = "campaigns"."id" left join (select "campaign_id", sum("visits") as "visit_count" from "campaign_visit_days" group by "campaign_visit_days"."campaign_id") "visit_counts" on "visit_counts"."campaign_id" = "campaigns"."id"';
 
 // List row in select order (array mode): id, code, name, channel, event_name, status,
-// trip slug/title, created_at, lead_count (bigint) and visit_count (sum of integer: numeric), both
-// strings from Neon.
+// trip slug/title, created_at, lead_count (count: bigint) and visit_count (sum of integer: bigint),
+// both strings from Neon.
 function listRow(overrides: Record<number, unknown> = {}) {
   const row: unknown[] = [
     CAMPAIGN_ID,
