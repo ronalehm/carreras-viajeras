@@ -1,7 +1,7 @@
 # Entrada al registro desde la ficha de la carrera y visitas por campaña
 
 - Módulo: landing (también `crm`)
-- Estado: borrador
+- Estado: aprobado
 - Base: rama `claude/peaceful-lovelace-tvyqt8` sobre `main` (`4b4650f`). Migraciones hasta `drizzle/0012_reward_operations.sql`.
 - Enmienda a specs aprobadas, que **no se editan**: `landing-omnichannel-capture.md` (Requisito 8, sus tres preguntas abiertas y dos criterios de F4) y `landing-race-pages.md` (Requisito 9: el CTA de `/viajes/[slug]` ya no es solo WhatsApp). Si esta spec se aprueba, sus reglas prevalecen sobre esas partes.
 - Decisiones del usuario (2026-10-29), respuestas a las preguntas abiertas de `landing-omnichannel-capture.md`:
