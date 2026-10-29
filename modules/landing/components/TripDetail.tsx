@@ -38,14 +38,16 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
 
   const hasDetails = trip.includes.length > 0 || trip.excludes.length > 0 || trip.notes.length > 0;
 
-  // DOM order is the mobile order. On lg the body has two rows: [image, facts] and [details], with
-  // the action block spanning both in the right column. The last row is 1fr so that, when the
-  // action block is taller, the extra height goes below the details instead of between rows.
+  // DOM order is the mobile order. On lg the article spans the full width with the site header's
+  // side padding, and the body has two rows: [image, facts] and [details], with the action card
+  // spanning both in the right column at its natural height (it scrolls with the page). The last
+  // row is 1fr so that, when the card is taller, the extra height goes below the details instead of
+  // between rows; the left blocks are self-start so they never stretch into gaps either.
   return (
     <article
       className={cn(
         "mx-auto grid max-w-2xl grid-cols-1 gap-10 px-4 py-12 text-primary sm:py-16",
-        "lg:max-w-6xl lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-x-12",
+        "lg:max-w-none lg:grid-cols-[minmax(0,1fr)_26rem] lg:gap-x-12 lg:px-[6%]",
         hasDetails && "lg:grid-rows-[auto_auto_1fr]",
       )}
     >
@@ -57,7 +59,7 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
         <p className="mt-4 text-base leading-relaxed wrap-break-word">{trip.summary}</p>
       </header>
 
-      <div className="grid min-w-0 gap-10 lg:col-start-1">
+      <div className="grid min-w-0 gap-10 lg:col-start-1 lg:self-start">
         {trip.imageUrl && (
           <div className="relative aspect-video overflow-hidden rounded-lg">
             <Image
@@ -66,7 +68,7 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
               fill
               unoptimized
               preload
-              sizes="(min-width: 1024px) 688px, (min-width: 672px) 672px, 100vw"
+              sizes="(min-width: 1024px) calc(88vw - 29rem), (min-width: 672px) 640px, calc(100vw - 2rem)"
               className="object-cover"
             />
           </div>
@@ -106,29 +108,25 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
         className={cn(
           section,
           "grid min-w-0 gap-8",
-          "lg:sticky lg:top-32 lg:col-start-2 lg:row-start-2 lg:self-start lg:rounded-xl lg:border lg:bg-card lg:p-6",
-          // Capped to the viewport below the site header once stuck: the price scrolls inside, the
-          // actions (first on lg) stay. On load the card starts lower, so its end may fall below the
-          // fold, but the actions at its top are already visible.
-          "lg:flex lg:max-h-[calc(100dvh-9rem)] lg:flex-col lg:gap-4",
+          // Card at its natural height: no sticky, no max height, no inner scroll.
+          "lg:col-start-2 lg:row-start-2 lg:self-start lg:gap-4 lg:rounded-xl lg:border lg:bg-card lg:p-6",
           hasDetails && "lg:row-span-2",
         )}
       >
-        <div className="lg:min-h-0 lg:overflow-y-auto">
-          {offer ? (
-            <OfferSummary offer={offer} />
-          ) : (
-            <section aria-labelledby="trip-price-title">
-              <h2 id="trip-price-title" className="sr-only">
-                Precio
-              </h2>
-              <p className="text-base font-bold">Todavía no publicamos el precio de este viaje.</p>
-            </section>
-          )}
-        </div>
+        {offer ? (
+          <OfferSummary offer={offer} />
+        ) : (
+          <section aria-labelledby="trip-price-title">
+            <h2 id="trip-price-title" className="sr-only">
+              Precio
+            </h2>
+            <p className="text-base font-bold">Todavía no publicamos el precio de este viaje.</p>
+          </section>
+        )}
 
-        {/* On lg the actions are shown first (CSS order only; the DOM keeps price first). */}
-        <div className="lg:order-first lg:shrink-0 lg:border-b lg:border-primary/15 lg:pb-4">
+        {/* On lg the actions are shown first, above the price (CSS order only; the DOM keeps price
+            first, so mobile and screen readers get the price before the buttons). */}
+        <div className="lg:order-first lg:border-b lg:border-primary/15 lg:pb-4">
           {registrationLink}
           {whatsAppUrl && (
             <a
@@ -152,7 +150,7 @@ export function TripDetail({ trip, offer, registrationHref }: TripDetailProps) {
       </div>
 
       {hasDetails && (
-        <div className="grid min-w-0 gap-10 lg:col-start-1">
+        <div className="grid min-w-0 gap-10 lg:col-start-1 lg:self-start">
           {trip.includes.length > 0 && (
             <section aria-labelledby="trip-includes-title" className={section}>
               <h2 id="trip-includes-title" className={sectionTitle}>
