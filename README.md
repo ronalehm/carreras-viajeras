@@ -165,7 +165,8 @@ Primero todo con la instancia de desarrollo de Clerk y una rama de Neon de desar
 - [ ] Cada persona del staff existente, tras crear su cuenta en Clerk y el remapeo → `/crm` muestra su rol ("Admin" o "Comercial") y sus leads y viajes conservan la autoría.
 - [ ] El super admin invita a un `admin` y a un `organizer`; cada uno crea su cuenta con el correo invitado y la verifica con código → ven "Admin" y "Organizador".
 - [ ] Un `admin` solo puede invitar "Comercial" y no ve acciones sobre admins, organizadores ni el super admin.
-- [ ] El organizador crea un viaje, lo ve en `/crm/viajes` y no ve los viajes ajenos (requiere la Fase 5).
+- [ ] El organizador crea un viaje, lo ve en `/crm/viajes` como borrador y no ve los viajes ajenos: `/crm/viajes/<id de un viaje ajeno>` responde 404. Un comercial o un admin sí ven los dos.
+- [ ] (Cuando exista el organizador al que se asociarán, con autorización) [`seed-trips.sql`](#seed-de-viajes-pendiente-de-ejecutar) devuelve las filas insertadas en borrador con su `organizer_id`, y repetirlo devuelve 0 filas.
 - [ ] (Solo en la rama de desarrollo) `revoke-staff-role.sql -v role=super_admin` sobre el único super admin falla sin cambiar nada.
 - [ ] Una cuenta sin rol ve la pantalla "sin acceso", y `GET /api/crm/me` sin sesión responde 401 con `Cache-Control: no-store`.
 - [ ] "Cerrar sesión" en el CRM lleva a `/crm/acceso`; la sesión persiste al recargar; recuperar la contraseña con código y volver a entrar funciona.
@@ -190,7 +191,7 @@ Especificada en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md) (F
 
 - **Compatible hacia atrás.** El código anterior ignora la columna nueva y trata un rol desconocido como sin permisos. Por eso la migración puede aplicarse antes del despliegue y no impide volver a la versión anterior del Worker.
 - **Orden respecto al despliegue: aplicar `0009` antes de desplegar el código de la Fase 3.** La Fase 3 no se mergea sola en `main`: las Fases 1–5 de `accounts-clerk-rbac.md` se mergean juntas, y la `0009` se aplica antes de ese merge (ver [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). Ese código selecciona `organizer_id` en las lecturas de viajes del CRM (`listTrips`, `getTripById`) y lo incluye al crear viajes: sin la migración fallan por columna inexistente `/crm/viajes`, `/crm/viajes/nuevo`, `/crm/reservas` y `/crm/reservas/nueva`. Lo mismo ocurre con `npm run dev` contra una rama de Neon que no la tenga. La lectura pública de la landing no selecciona esa columna.
-- **Rol `organizer` antes de la Fase 5.** Solo un `super_admin` puede invitar o asignar "Organizador" (Fase 4), pero hasta que la Fase 5 añada el alcance por organizador su permiso `trips.manage` alcanza **todos** los viajes. Como las Fases 1–5 se mergean juntas, esto solo afecta a entornos de desarrollo sin la Fase 5: no asignar ahí ese rol. El rol "Super admin" se muestra en `/crm/admin/usuarios` como etiqueta, sin botones: solo se asigna y revoca con los scripts.
+- **Rol `organizer`.** Solo un `super_admin` puede invitar o asignar "Organizador" (Fase 4), y la Fase 5 limita su permiso `trips.manage` a sus propios viajes (ver [Rol organizador](#rol-organizador)). Las Fases 1–5 se mergean juntas, en un solo merge, así que ningún despliegue tiene el rol sin ese alcance. El rol "Super admin" se muestra en `/crm/admin/usuarios` como etiqueta, sin botones: solo se asigna y revoca con los scripts.
 - **Orden respecto a las demás migraciones:** después de `0008`, respetando el journal de Drizzle. Necesita `profiles` (`0000`) y `trips` (`0001`); en una rama copia de `production`, aplicar antes las que falten de `0005`–`0008` siguiendo sus secciones.
 - **No se deshace.** PostgreSQL no permite quitar un valor de un enum. La vuelta atrás es reactivar la versión anterior del Worker, no revertir la migración.
 
@@ -232,6 +233,12 @@ Se ejecutan con psql y `DATABASE_MIGRATION_URL`, cada uno en una transacción y 
     -f scripts/sql/remap-user-id.sql
   ```
 
+- **Seed de viajes en borrador para un organizador** ([`scripts/sql/seed-trips.sql`](scripts/sql/seed-trips.sql)). **Preparado, sin ejecutar:** solo cuando exista el organizador al que se asociarán. Ver [Seed de viajes](#seed-de-viajes-pendiente-de-ejecutar).
+
+  ```sh
+  psql "$DATABASE_MIGRATION_URL" -v organizer_email='<correo del organizador>' -f scripts/sql/seed-trips.sql
+  ```
+
 ### Alta del super admin
 
 El super admin es `linderhassinger01@gmail.com`. El rol `super_admin` tiene todos los permisos del CRM y, según [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md), es el único que invita, asigna y revoca administradores y organizadores desde `/crm/admin/usuarios`. **El CRM nunca asigna ni revoca `super_admin`:** solo `bootstrap-admin.sql` y `revoke-staff-role.sql`. Puede haber más de un super admin: una cuenta de staff existente también puede recibir el rol, pero solo **después** de su remapeo (paso 8 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)).
@@ -264,8 +271,26 @@ Devuelve una fila con `role = super_admin`. Comprobación: `SELECT user_id, role
 - Ejecutar los scripts o la migración con `DATABASE_URL` (runtime), o entregar `DATABASE_MIGRATION_URL` al Worker o a n8n.
 - Aplicar `0009` o ejecutar los scripts en `production` sin autorización explícita, editar `0009` después de aplicarla en alguna rama, o intentar deshacerla.
 - Desplegar el código de la Fase 3 en un entorno cuya rama de Neon no tenga `0009`.
-- Asignar el rol `organizer` antes de la Fase 5: hasta entonces no existe el alcance por organizador y su permiso `trips.manage` alcanzaría todos los viajes.
 - Modificar el schema `neon_auth`.
+
+### Rol organizador
+
+Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md) (Fases 3–5). Es para quien organiza eventos en la plataforma: gestiona **sus propios viajes** (`trips`) y nada más.
+
+- **Qué puede hacer (Fase 5):** en `/crm` ve "Organizador" y solo el enlace "Viajes". En `/crm/viajes` crea, edita, publica, despublica y archiva los viajes cuyo `trips.organizer_id` es su `user_id`. Los viajes que crea se guardan en borrador con su id; el formulario nunca fija el organizador (si el envío trae un `organizerId`, se ignora). Un viaje publicado por un organizador aparece en `/viajes/<slug>` como cualquier otro.
+- **Viajes ajenos:** se comportan como inexistentes. No aparecen en su lista, `/crm/viajes/<id>` responde 404, editarlos devuelve "no encontrado" y publicarlos, despublicarlos o archivarlos devuelve una transición no válida.
+- **Qué no puede hacer:** ver ni gestionar leads, reservas, ofertas y tipo de cambio (`/crm/ofertas`) ni el staff. Por eso un viaje suyo publicado se ve sin precio («Todavía no publicamos el precio de este viaje.») hasta que un admin cree y active su oferta.
+- **El resto del staff:** `commercial`, `admin` y `super_admin` siguen viendo y gestionando todos los viajes, también los de los organizadores. Los viajes que crean ellos quedan sin organizador (`organizer_id` nulo). Si una persona tiene `organizer` y además otro de esos roles, ve todos los viajes.
+- **Fuera del alcance:** asignar o cambiar el organizador de un viaje desde el CRM y que el organizador vea los leads o reservas de sus viajes (preguntas abiertas 5 y 6 de la spec). Los viajes nuevos de un organizador los crea él mismo o el [seed](#seed-de-viajes-pendiente-de-ejecutar); un viaje existente no cambia de organizador.
+
+**Cómo dar el rol.** Solo un `super_admin`, desde `/crm/admin/usuarios` (un `admin` no ve la opción "Organizador", y la Server Action la rechaza aunque se envíe a mano):
+
+1. **Persona nueva:** en "Invitar", su correo y el rol "Organizador". Compartir a mano el enlace `<APP_ORIGIN>/crm/acceso`; la invitación caduca a los 7 días.
+2. La persona crea su cuenta en `/crm/acceso` **con ese mismo correo** y lo verifica con el código. En su primera entrada se acepta la invitación (se crean su perfil y su asignación) y `/crm` muestra "Organizador".
+3. **Persona que ya es staff:** en "Equipo activo", "Asignar Organizador" en su fila.
+4. **Quitar el rol:** "Revocar Organizador" en su fila; se aplica en la siguiente petición. Sus viajes conservan su `organizer_id` y los sigue gestionando el resto del staff.
+
+Comprobación: `SELECT p.user_id, p.email FROM profiles p JOIN staff_assignments sa ON sa.user_id = p.user_id WHERE sa.role = 'organizer' AND sa.revoked_at IS NULL;` lista a los organizadores activos.
 
 ### Remapeo de cuentas de Neon Auth a Clerk
 
@@ -337,9 +362,9 @@ Especificado en [`trips-catalog.md`](docs/specs/trips-catalog.md). Cada viaje ti
 ### Cómo se cargan los datos
 
 - El equipo crea y mantiene los viajes desde **`/crm/viajes`** (crear, editar, publicar, despublicar y archivar). La Fase 2 implementa el listado, `/crm/viajes/nuevo` y `/crm/viajes/<id>`; requieren la migración `0001` aplicada en el entorno que se utilice.
-- Lo pueden hacer `commercial` y `admin` (permiso `trips.manage`). Una cuenta sin rol de staff, incluidas las cuentas de runner de la landing (`/cuenta`), no tiene acceso.
+- Lo pueden hacer `commercial`, `admin` y `super_admin` con todos los viajes, y `organizer` solo con los suyos (permiso `trips.manage`; ver [Rol organizador](#rol-organizador)). Una cuenta sin rol de staff, incluidas las cuentas de runner de la landing (`/cuenta`), no tiene acceso.
 - Un viaje nace en borrador y no aparece en la web hasta que se publica. El `slug` solo se puede cambiar mientras está en borrador.
-- No hay seeds ni `INSERT` manuales: "Maratón de Santiago 2027" se creará desde el CRM con el slug exacto `maraton-santiago-2027` y 100 cupos, copiando los datos que hoy tiene la landing.
+- Los viajes se crean desde el CRM: "Maratón de Santiago 2027" se crea desde `/crm/viajes/nuevo` con el slug exacto `maraton-santiago-2027` y 100 cupos, copiando los datos que tenía la landing. La única carga por SQL prevista es [`seed-trips.sql`](#seed-de-viajes-pendiente-de-ejecutar): manual, sin ejecutar todavía, solo inserta viajes en borrador para un organizador y nunca modifica los que ya existen.
 - **El precio vive en las ofertas, no en el viaje.** El viaje es solo el catálogo descriptivo (título, fechas, distancias, qué incluye, cupos informativos…). El precio, los anticipos y las condiciones de pago se cargan, aprueban y activan como ofertas versionadas en **`/crm/ofertas`** ([`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md); ver [Ofertas comerciales](#migración-de-ofertas-comerciales-0008)). El formulario de `/crm/viajes` ya no tiene "Precio desde", "Precio total en cuotas", "Reserva", "Precio de acompañante" ni "Condiciones de pago", y la lista ya no tiene la columna "Precio".
 - **Columnas antiguas de precio, solo como referencia.** Las cinco columnas `price_usd`, `deposit_usd`, `installments_price_usd`, `companion_price_usd` y `payment_terms` **siguen en la tabla `trips`, sin uso**: el código no las muestra, no las publica ni las escribe (al guardar un viaje conservan su valor) y no se publican en la web. No se migraron a ofertas porque sus importes eran contradictorios. Para consultarlas, en el SQL Editor de Neon:
 
@@ -348,6 +373,63 @@ Especificado en [`trips-catalog.md`](docs/specs/trips-catalog.md). Cada viaje ti
   ```
 
   Borrarlas (`DROP COLUMN`) será una operación aparte, con su propia migración y autorización expresa; no forma parte de esta spec.
+
+### Seed de viajes (pendiente de ejecutar)
+
+Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md) (Fase 5, Requisito 12). [`scripts/sql/seed-trips.sql`](scripts/sql/seed-trips.sql) inserta en `trips` viajes **en borrador** ya asociados a un [organizador](#rol-organizador). **Está preparado y no se ha ejecutado en ninguna rama.** Ningún script de `package.json`, ni el build, el arranque o el setup lo ejecutan. Lo ejecuta el usuario, con su autorización, cuando exista el organizador al que se asociarán.
+
+**Qué inserta.** Solo las carreras con datos completos en el repositorio, porque `trips` exige fecha de carrera, al menos una distancia y un resumen:
+
+| Slug | Título | Datos |
+|---|---|---|
+| `maraton-santiago-2027` | Maratón de Santiago 2027 | Santiago, Chile · carrera el 2027-05-16, sin fechas de viaje · 42K · 100 cupos · 9 elementos de "Qué incluye", 2 de "No incluye" y 2 párrafos de "Detalles por confirmar" · imagen `https://carreras-viajeras.mentec.dev/images/cover-santiago.webp` · web oficial `https://maratondesantiago.cl/` |
+
+- Los textos salen de `modules/landing/utils/trips.ts` antes de `51ceec6` (`git show 51ceec6^:modules/landing/utils/trips.ts`).
+- Río, Roma, Medellín, Buenos Aires, España y EE. UU. no entran: el repositorio solo tiene sus imágenes (`carrera-*.jpeg`, `destino-*.webp`) y "Sin carrera, fecha ni precio confirmados". Se añadirán con una enmienda de la spec cuando el negocio facilite, por carrera, el nombre oficial, la ciudad, la fecha, las distancias y un resumen.
+- **Sin precios.** No escribe las columnas antiguas de precio de `trips` ni crea ofertas: el precio lo carga y activa un admin en `/crm/ofertas`. Tampoco copia las condiciones de pago antiguas (`paymentNote`), que pertenecen a la oferta.
+
+**Comportamiento.**
+
+- `-v organizer_email` es obligatorio. Se compara recortado y en minúsculas con `profiles.email`.
+- Falla **sin cambiar nada** si el correo está vacío, si falta la migración `0009` en esa rama o si no hay **exactamente un** perfil con ese correo y el rol `organizer` activo (ninguno, o más de uno). Mientras dura, bloquea esa asignación: una revocación simultánea espera a que termine.
+- Inserta cada viaje con `status = 'draft'` y `organizer_id` = el `user_id` de ese perfil, en una sola transacción. No aparece en la web hasta que se publica desde `/crm/viajes`.
+- Es idempotente por `slug` (`ON CONFLICT (slug) DO NOTHING`): devuelve solo las filas insertadas y repetirlo devuelve 0 filas.
+- **No modifica viajes existentes.** Santiago probablemente ya existe en `production` (ver [Precondición operativa](#precondición-operativa-antes-de-mergear)): ahí el seed devuelve 0 filas para ese slug, y el viaje existente no cambia ni pasa al organizador. Asignar un viaje existente a un organizador es una operación aparte, con su propia autorización (pregunta abierta 6 de la spec).
+
+**Cuándo y cómo ejecutarlo.**
+
+1. **Requisitos en esa rama de Neon:** las migraciones hasta `0009` aplicadas y el código de las Fases 1–5 desplegado (o `npm run dev` contra esa rama), para que el organizador gestione sus viajes.
+2. **El organizador existe:** un super admin le dio el rol ([Cómo dar el rol](#rol-organizador)), la persona creó y verificó su cuenta y `/crm` le muestra "Organizador". Esta consulta devuelve **exactamente una fila**:
+
+   ```sql
+   SELECT p.user_id, p.email
+   FROM profiles p
+   JOIN staff_assignments sa ON sa.user_id = p.user_id
+   WHERE p.email = lower('<correo del organizador>') AND sa.role = 'organizer' AND sa.revoked_at IS NULL;
+   ```
+
+3. **Primero en una rama de desarrollo** de Neon, con el organizador de la instancia de desarrollo de Clerk:
+
+   ```sh
+   psql "$DATABASE_MIGRATION_URL" -v organizer_email='<correo del organizador>' -f scripts/sql/seed-trips.sql
+   ```
+
+4. **Verificar:**
+   - la salida lista cada fila insertada (`id`, `slug`, `title`, `status = draft`, `organizer_id` = el `user_id` del paso 2);
+   - `SELECT slug, status, organizer_id FROM trips WHERE organizer_id = '<user_id del paso 2>' ORDER BY slug;` devuelve esos viajes;
+   - el organizador los ve en `/crm/viajes` como borradores y puede editarlos; un comercial o un admin también los ve;
+   - `/viajes/<slug>` responde 404 hasta que se publique;
+   - ejecutarlo otra vez devuelve 0 filas.
+5. **En `production`**, solo con autorización explícita: repetir los pasos 2–4 con el organizador de la instancia de producción de Clerk. Los `user_id` de desarrollo y de producción son distintos; el script los resuelve por el correo.
+
+**Qué no hacer.**
+
+- Ejecutarlo antes de que exista el organizador, en `production` sin autorización o con `DATABASE_URL` (runtime) en vez de `DATABASE_MIGRATION_URL`.
+- Añadirlo a `package.json`, al build, al arranque o a un setup.
+- Cambiar el `ON CONFLICT` por `DO UPDATE` o usar el script para asignar viajes existentes: el seed solo inserta.
+- Escribir precios en las columnas antiguas de `trips` o añadir carreras sin datos confirmados.
+- Publicar los viajes con un `UPDATE` a mano: se publican desde `/crm/viajes`.
+- Borrar viajes: si sobra alguno, se archiva desde `/crm/viajes`. En una rama de desarrollo también se puede restablecer la rama.
 
 ### Migración de la tabla de viajes
 
