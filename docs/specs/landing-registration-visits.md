@@ -1,7 +1,7 @@
 # Entrada al registro desde la ficha de la carrera y visitas por campaña
 
 - Módulo: landing (también `crm`)
-- Estado: aprobado
+- Estado: borrador
 - Base: rama `claude/peaceful-lovelace-tvyqt8` sobre `main` (`4b4650f`). Migraciones hasta `drizzle/0012_reward_operations.sql`.
 - Enmienda a specs aprobadas, que **no se editan**: `landing-omnichannel-capture.md` (Requisito 8, sus tres preguntas abiertas y dos criterios de F4) y `landing-race-pages.md` (Requisito 9: el CTA de `/viajes/[slug]` ya no es solo WhatsApp). Si esta spec se aprueba, sus reglas prevalecen sobre esas partes.
 - Decisiones del usuario (2026-10-29), respuestas a las preguntas abiertas de `landing-omnichannel-capture.md`:
@@ -11,6 +11,7 @@
 - Enmienda 1 (2026-10-29, tras ver la Fase 2 en el navegador): decisiones del usuario que se implementan en la **Fase 3**. Las Fases 1 y 2 están implementadas y revisadas; esta enmienda no cambia nada de ellas salvo lo que indica el Requisito 8.
   4. **Un solo «Registrarme»:** "borrar el primero, dejar el que está junto a WhatsApp". Sustituye la parte del Requisito 1 que pedía dos botones.
   5. **Ficha para PC y móvil:** la ficha "no está optimizada para PC"; debe servir para los dos. Cambia el maquetado de una columna de `landing-race-pages.md` en `/viajes/[slug]` (esa spec no se edita).
+  7. **Botones arriba en PC (2026-10-29, tras ver las capturas de la Fase 3):** con una oferta completa la tarjeta es más alta que la pantalla y «Registrarme» no se veía al cargar. El usuario eligió que, **solo en PC**, «Registrarme», WhatsApp y el aviso vayan al inicio de la tarjeta y el precio debajo, con scroll interno. En móvil no cambia.
   6. **Respuestas a las preguntas abiertas de esta spec:** solo el total de visitas, sin desglose diario; regla WAF de 30 peticiones por 10 s, y en el plan Free (una sola regla) no se crea la regla de visitas.
 - Depende de: `landing-omnichannel-capture.md` (aprobada, F1–F4 implementadas: `campaigns`, `/viajes/[slug]/registro`, `/crm/campanas`), `landing-race-pages.md` (aprobada: `TripDetail`), `platform-neon-foundation.md` (aprobada: Drizzle `neon-http`, una sentencia por escritura, migraciones manuales).
 
@@ -62,6 +63,7 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
    - **Bloque de acción:** el precio (`OfferSummary` o el aviso sin precio), «Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…" forman un único bloque, en ese orden.
    - **Móvil (< 1024 px, `lg`):** una columna, en este orden: encabezado (lugar, título y resumen), imagen, datos clave, bloque de acción, «Qué incluye», «No incluye» y «Detalles por confirmar». Así «Registrarme» queda junto al precio y a WhatsApp sin recorrer toda la página. Sin scroll horizontal a 360 px.
    - **PC (≥ 1024 px):** ancho máximo `max-w-6xl` (antes `max-w-2xl`). El encabezado ocupa todo el ancho; debajo, dos columnas: a la izquierda (flexible) la imagen, los datos clave, «Qué incluye», «No incluye» y «Detalles por confirmar»; a la derecha (fija, ~24 rem) el bloque de acción, **fijo al hacer scroll** (`sticky`, por debajo de la cabecera del sitio) y presentado como tarjeta con borde y fondo de los tokens existentes.
+   - **Orden dentro de la tarjeta en PC (decisión 7):** primero las acciones («Registrarme», «Consultar por WhatsApp» y el aviso "Consulta sin compromiso…"), separadas del precio por una línea de los tokens existentes, y debajo el precio. La tarjeta no supera el alto visible bajo la cabecera (`max-h` relativo a `100dvh`); si el precio no cabe, **solo el precio** hace scroll dentro de la tarjeta y las acciones quedan siempre visibles. Se hace solo con CSS (`order` en `lg`); el orden del DOM sigue siendo el de móvil (precio y después acciones), para que en móvil y para lectores de pantalla el precio se lea antes que los botones.
    - Solo tokens y componentes existentes (`app/globals.css`, `buttonVariants`); sin colores nuevos. Sin JavaScript nuevo: es maquetado con CSS grid de Tailwind.
    - No cambian los datos, los textos, las rutas ni `/viajes/[slug]/registro`.
 
@@ -92,6 +94,7 @@ Esta spec añade el botón «Registrarme» en la ficha y un contador de visitas 
 - [ ] (F3) Dado `/viajes/maraton-santiago-2027?c=mml26` con el registro abierto, entonces hay **un único** «Registrarme», inmediatamente encima de «Consultar por WhatsApp» (en `outline`), con el `href` del Requisito 1. Sustituye el primer criterio de la Fase 2 en lo que se refiere a "dos «Registrarme»".
 - [ ] (F3) Dada la ficha a 360 px, entonces el orden es encabezado, imagen, datos clave, bloque de acción (precio, «Registrarme», WhatsApp, aviso), «Qué incluye», «No incluye» y «Detalles por confirmar»; no hay scroll horizontal (`scrollWidth === clientWidth`).
 - [ ] (F3) Dada la ficha a 1280 px, entonces el encabezado ocupa el ancho del contenido (máx. `max-w-6xl`), el contenido queda en dos columnas y el bloque de acción está a la derecha, como tarjeta, y permanece visible al hacer scroll por la columna izquierda sin tapar la cabecera del sitio.
+- [ ] (F3) Dada la ficha a 1280×800 y a 1440×900 con una oferta completa (dos anticipos, beneficio, condiciones y tipo de cambio), entonces «Registrarme» y WhatsApp se ven **al cargar la página** en la parte superior de la tarjeta, siguen visibles al hacer scroll mientras dura la columna izquierda, y el precio, debajo, hace scroll dentro de la tarjeta. A 360 px el orden sigue siendo precio y después los botones.
 - [ ] (F3) Dado el registro cerrado por P-L (producción local), entonces el bloque de acción muestra el precio, WhatsApp en su variante actual y el aviso, sin «Registrarme», en las dos anchuras.
 - [ ] (F3) Dado un viaje sin imagen, sin «Qué incluye», «No incluye» ni notas, entonces la ficha sigue bien en las dos anchuras (sin huecos vacíos ni columna izquierda rota).
 - [ ] (F3) Dado el README, entonces la descripción de «Registrarme» en la guía de campañas dice "un solo botón, junto a WhatsApp" y la de la ficha menciona las dos columnas en PC.
@@ -166,7 +169,7 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 
 ### Ficha en PC y móvil (F3)
 
-`modules/landing/components/TripDetail.tsx` solo. El `<article>` pasa a `max-w-6xl` y a un grid de una columna que en `lg` es `lg:grid-cols-[minmax(0,1fr)_24rem]`. El orden del DOM es el de móvil (Requisito 8). En `lg`: el encabezado lleva `lg:col-span-2`; la imagen, los datos clave e incluye/no incluye/notas llevan `lg:col-start-1`; el bloque de acción lleva `lg:col-start-2 lg:row-start-2 lg:row-span-6 lg:self-start lg:sticky` con un `top` que deje libre la cabecera del sitio, y estilo de tarjeta (`lg:rounded-xl lg:border lg:p-6`, sin el `border-t` de sección). La imagen deja el `<header>` y pasa a ser su propio elemento de la columna izquierda; su `sizes` se ajusta a la columna. Sin componentes nuevos.
+`modules/landing/components/TripDetail.tsx` solo. El `<article>` pasa a `max-w-6xl` y a un grid de una columna que en `lg` es `lg:grid-cols-[minmax(0,1fr)_24rem]`. El orden del DOM es el de móvil (Requisito 8). En `lg`: el encabezado lleva `lg:col-span-2`; la imagen, los datos clave e incluye/no incluye/notas llevan `lg:col-start-1`; el bloque de acción lleva `lg:col-start-2 lg:row-start-2 lg:row-span-6 lg:self-start lg:sticky` con un `top` que deje libre la cabecera del sitio, y estilo de tarjeta (`lg:rounded-xl lg:border lg:p-6`, sin el `border-t` de sección). En `lg` la tarjeta es un flex en columna con `max-h` relativo a `100dvh`; las acciones llevan `lg:order-first lg:shrink-0` y una línea inferior de separación; el precio va en un contenedor con `lg:min-h-0 lg:overflow-y-auto`. La imagen deja el `<header>` y pasa a ser su propio elemento de la columna izquierda; su `sizes` se ajusta a la columna. Sin componentes nuevos.
 
 ## Reutilización
 
