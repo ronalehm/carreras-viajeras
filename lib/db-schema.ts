@@ -18,9 +18,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const staffRoleEnum = pgEnum("staff_role", ["commercial", "admin"]);
+export const staffRoleEnum = pgEnum("staff_role", [
+  "commercial",
+  "admin",
+  "super_admin",
+  "organizer",
+]);
 
-// Staff accounts only. user_id is the stable Neon Auth id (no cross-schema FK).
+// Staff accounts only. user_id is the stable Clerk user id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
 export const profiles = pgTable(
   "profiles",
@@ -130,6 +135,10 @@ export const trips = pgTable(
     excludes: text("excludes").array().notNull().default([]),
     notes: text("notes"),
     status: tripStatusEnum("status").notNull().default("draft"),
+    // NULL = no organizer (created by commercial/admin/super_admin). Never set from the form.
+    organizerId: text("organizer_id").references(() => profiles.userId, {
+      onDelete: "restrict",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -139,6 +148,7 @@ export const trips = pgTable(
   },
   (table) => [
     uniqueIndex("trips_slug_uq").on(table.slug),
+    index("trips_organizer_idx").on(table.organizerId),
     check(
       "trips_slug_format_chk",
       sql`${table.slug} ~ '^[a-z0-9]+(-[a-z0-9]+)*$' AND char_length(${table.slug}) BETWEEN 3 AND 80`,
@@ -313,7 +323,7 @@ export const itineraryStatusEnum = pgEnum("itinerary_status", [
 ]);
 
 // One booking = one participant on one trip. Cancelled, never deleted.
-// runner_user_id is the Neon Auth id (no cross-schema FK), linked once by verified email;
+// runner_user_id is the Clerk user id (no cross-schema FK), linked once by verified email;
 // after that, authorization uses only runner_user_id. Amounts are integer USD.
 export const bookings = pgTable(
   "bookings",

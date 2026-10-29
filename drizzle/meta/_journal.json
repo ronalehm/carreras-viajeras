@@ -43,6 +43,13 @@
       "when": 1792895009295,
       "tag": "0005_abnormal_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793263945928,
+      "tag": "0006_tricky_secret_warriors",
+      "breakpoints": true
     }
   ]
 }
