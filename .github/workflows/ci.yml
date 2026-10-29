@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint, tests, types and Worker
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      WRANGLER_SEND_METRICS: "false"
+      CI: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test -- --run --maxWorkers=3
+      - name: Generate route types
+        run: ./node_modules/.bin/next typegen
+      - name: Type check
+        run: ./node_modules/.bin/tsc --noEmit
+      - name: Build Next.js and package the Worker
+        run: npm run build:worker
+      - name: Check packaged environment
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const output = readFileSync('.open-next/cloudflare/next-env.mjs', 'utf8');
+          if (/\b(?:DATABASE_URL|CLERK_SECRET_KEY|N8N_API_TOKEN|TURNSTILE_SECRET_KEY)\b/.test(output)) {
+            throw new Error('Non-public runtime variables found in the Worker environment module');
+          }
+          NODE
+
+  database:
+    name: PostgreSQL migrations and concurrency
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+      - name: Start isolated PostgreSQL fixture
+        run: |
+          docker run -d --name carreras-rewards-tests --network none \
+            --label codex.task=carreras-runner-news \
+            --tmpfs /var/lib/postgresql \
+            --env POSTGRES_HOST_AUTH_METHOD=trust \
+            postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+          for attempt in $(seq 1 30); do
+            if docker exec carreras-rewards-tests pg_isready -U postgres; then exit 0; fi
+            sleep 1
+          done
+          exit 1
+      - name: Run disposable database checks
+        run: node scripts/check-feature-database.mjs
+      - name: Remove test service
+        if: always()
+        run: docker rm -f carreras-rewards-tests

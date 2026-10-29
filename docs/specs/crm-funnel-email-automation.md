@@ -128,27 +128,27 @@ Perdido no habilita un correo cuando existe una baja de contacto. Las plantillas
 
 ### Fase 1 — Embudo, recorrido y avisos reales (5 tareas, 15 archivos)
 
-- [ ] T1 — Contratos y API pública · `modules/crm/types/leads.types.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/crm/index.ts` · depende de aprobación · secuencial.
-- [ ] T2 — Lectura acotada del tablero · `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de T1.
-- [ ] T3 — Vista y filtros · `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadPipeline.tsx`, `app/crm/(protected)/leads/page.tsx` · depende de T1 y T2.
-- [ ] T4 — Recorrido y orientación · `modules/crm/utils/leadGuidance.ts`, `modules/crm/utils/leadGuidance.test.ts`, `modules/crm/components/LeadJourney.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de T1.
-- [ ] T5 — Revisión integrada y componentes · `modules/crm/components/LeadPipeline.test.tsx` · depende de T2–T4 · validar navegador, permisos, filtros, fechas y acciones existentes.
+- [x] T1 — Contratos y API pública · `modules/crm/types/leads.types.ts`, `modules/crm/schemas/leads.schema.ts`, `modules/crm/index.ts` · depende de aprobación · secuencial.
+- [x] T2 — Lectura acotada del tablero · `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts` · depende de T1.
+- [x] T3 — Vista y filtros · `modules/crm/utils/leadListQuery.ts`, `modules/crm/utils/leadListQuery.test.ts`, `modules/crm/components/LeadFilters.tsx`, `modules/crm/components/LeadPipeline.tsx`, `app/crm/(protected)/leads/page.tsx` · depende de T1 y T2.
+- [x] T4 — Recorrido y orientación · `modules/crm/utils/leadGuidance.ts`, `modules/crm/utils/leadGuidance.test.ts`, `modules/crm/components/LeadJourney.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de T1.
+- [x] T5 — Revisión integrada y componentes · `modules/crm/components/LeadPipeline.test.tsx` · depende de T2–T4 · validar navegador, permisos, filtros, fechas y acciones existentes.
 
 ### Fase 2 — Envío automático y registro duradero (5 tareas, ~15 archivos)
 
-- [ ] T1 — Datos y migración revisable · `lib/db-schema.ts`, siguiente SQL de `drizzle/`, snapshot y journal · depende de F1; no aplicar remotamente.
-- [ ] T2 — Configuración · `lib/env.ts`, `lib/env.test.ts` · depende de F2 T1 · validación condicional, desactivada por defecto y sin claves SMTP en la aplicación.
-- [ ] T3 — Motor y contratos · `modules/integrations/schemas/email.schema.ts`, `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/index.ts` · depende de F2 T1–T2 · registro por evento, elegibilidad, claims, autorización y resultados.
-- [ ] T4 — Procesamiento y confirmaciones · `app/api/integrations/n8n/email/claim/route.ts`, `app/api/integrations/n8n/email/[id]/[operation]/route.ts`, `scripts/n8n/client-stage-email.json` · depende de F2 T3 · operaciones authorize/ack/fail con allowlist, flujo inactivo y separado del consumidor actual.
-- [ ] T5 — Validación del motor · `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts`, `scripts/n8n/client-stage-email.test.ts` · depende de F2 T3–T4 · comprobar concurrencia, tokens, fallos y ausencia de envíos indebidos.
+- [x] T1 — Datos y migración revisable · `lib/db-schema.ts`, siguiente SQL de `drizzle/`, snapshot y journal · depende de F1; no aplicar remotamente.
+- [x] T2 — Configuración · `lib/env.ts`, `lib/env.test.ts` · depende de F2 T1 · validación condicional, desactivada por defecto y sin claves SMTP en la aplicación.
+- [x] T3 — Motor y contratos · `modules/integrations/schemas/email.schema.ts`, `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/index.ts` · depende de F2 T1–T2 · registro por evento, elegibilidad, claims, autorización y resultados.
+- [x] T4 — Procesamiento y confirmaciones · `app/api/integrations/n8n/email/claim/route.ts`, `app/api/integrations/n8n/email/[id]/[operation]/route.ts`, `scripts/n8n/client-stage-email.json` · depende de F2 T3 · operaciones authorize/ack/fail con allowlist, flujo inactivo y separado del consumidor actual.
+- [x] T5 — Validación del motor · `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts`, `scripts/n8n/client-stage-email.test.ts` · depende de F2 T3–T4 · comprobar concurrencia, tokens, fallos y ausencia de envíos indebidos.
 
 ### Fase 3 — Mensajes y errores reales en el panel (5 tareas, ~15 archivos)
 
-- [ ] T1 — Contratos y lectura · `modules/crm/types/leads.types.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/services/leadMessages.service.ts`, `modules/crm/services/leadMessages.service.test.ts` · depende de F2.
-- [ ] T2 — Acciones y orientación · `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/utils/leadGuidance.ts`, `modules/crm/utils/leadGuidance.test.ts` · depende de F3 T1 · reintento protegido y avisos específicos de entrega.
-- [ ] T3 — Integración de UI · `modules/crm/index.ts`, `modules/crm/components/LeadMessages.tsx`, `modules/crm/components/LeadPipeline.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de F3 T1–T2.
-- [ ] T4 — Uso y activación · `README.md` · depende de F3 T3 · configuración segura, remitente, credencial SMTP de n8n, callbacks, resolución de resultados inciertos, pruebas y activación explícita.
-- [ ] T5 — Revisión final · `modules/crm/components/LeadMessages.test.tsx` · depende de F3 T1–T4 · registrar pruebas pasadas, bloqueadas y pendientes; envío de prueba solo con destinatario autorizado.
+- [x] T1 — Contratos y lectura · `modules/crm/types/leads.types.ts`, `modules/crm/services/leads.service.ts`, `modules/crm/services/leads.service.test.ts`, `modules/crm/services/leadMessages.service.ts`, `modules/crm/services/leadMessages.service.test.ts` · depende de F2.
+- [x] T2 — Acciones y orientación · `modules/crm/actions/leads.actions.ts`, `modules/crm/actions/leads.actions.test.ts`, `modules/crm/utils/leadGuidance.ts`, `modules/crm/utils/leadGuidance.test.ts` · depende de F3 T1 · reintento protegido y avisos específicos de entrega.
+- [x] T3 — Integración de UI · `modules/crm/index.ts`, `modules/crm/components/LeadMessages.tsx`, `modules/crm/components/LeadPipeline.tsx`, `app/crm/(protected)/leads/[id]/page.tsx` · depende de F3 T1–T2.
+- [x] T4 — Uso y activación · `README.md` · depende de F3 T3 · configuración segura, remitente, credencial SMTP de n8n, callbacks, resolución de resultados inciertos, pruebas y activación explícita.
+- [x] T5 — Revisión final · `modules/crm/components/LeadMessages.test.tsx` · depende de F3 T1–T4 · registrar pruebas pasadas, bloqueadas y pendientes; envío de prueba solo con destinatario autorizado.
 
 ## Estado del entorno
 

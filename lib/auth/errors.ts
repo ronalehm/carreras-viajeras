@@ -7,8 +7,15 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// Why access was denied: a fixed code, never data. Only /api/crm/me shows it, to the signed-in user.
+export type ForbiddenReason =
+  | "user_lookup_failed"
+  | "role_lookup_failed"
+  | "email_unverified"
+  | "missing_permission";
+
 export class ForbiddenError extends Error {
-  constructor() {
+  constructor(readonly reason?: ForbiddenReason) {
     super("forbidden");
     this.name = "ForbiddenError";
   }

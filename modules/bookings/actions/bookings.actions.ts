@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/auth/guards";
 import { bookingFormSchema, bookingStatusChangeSchema, updateBookingSchema } from "../schemas/bookings.schema";
 import { createBooking, setBookingStatus, updateBooking } from "../services/bookings.service";
 import type { BookingActionState } from "../types/bookings.types";
+import { reconcileBookingAfterCommit } from "./rewardReconciliation";
 
 const BOOKINGS_PATH = "/crm/reservas";
 const LEADS_PATH = "/crm/leads";
@@ -29,6 +30,8 @@ const ERROR_MESSAGES: Record<ErrorCode, string> = {
   invalid_transition: "La reserva ya no está en ese estado. Recarga la página.",
   invalid_lead: "El lead ya no existe o está archivado. Crea la reserva sin vincular o recarga la página.",
   lead_taken: "Ese lead ya tiene una reserva activa.",
+  payment_conflict: "Esta solicitud de pago ya fue utilizada. Recarga el formulario.",
+  discount_locked: "El total de una reserva con recompensa aplicada no se puede editar.",
 };
 
 // Field that shows each service result under its input.
@@ -132,6 +135,7 @@ export async function changeBookingStatusAction(
     async ({ bookingId, status }, _values, actorUserId) => {
       const result = await setBookingStatus(bookingId, status, actorUserId);
       if (result !== "changed") return failure(result);
+      await reconcileBookingAfterCommit(bookingId);
       return { bookingId, message: status === "confirmed" ? "Reserva confirmada." : "Reserva cancelada." };
     });
   // setBookingStatus does not say which lead (if any) is linked: confirming may move it to reserved

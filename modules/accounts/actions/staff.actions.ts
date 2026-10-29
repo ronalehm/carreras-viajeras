@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission, type CurrentUser } from "@/lib/auth/guards";
+import { canManageRole, manageableRoles, type StaffRole } from "@/lib/auth/permissions";
 import { getEnv } from "@/lib/env";
 import {
   invitationIdSchema,
@@ -18,7 +19,9 @@ import {
 } from "../services/staff.service";
 import type { StaffActionState } from "../types/staff.types";
 
-const ADMIN_USERS_PATH = "/crm/admin/usuarios";
+const USER_LIST_PATH = "/crm/admin/usuarios";
+// Route pattern: refreshes every user detail page (no layout.tsx in that segment, so "page").
+const USER_DETAIL_ROUTE = "/crm/(protected)/admin/usuarios/[id]";
 
 type StaffActionErrorCode = Extract<StaffActionState, { status: "error" }>["code"];
 
@@ -66,7 +69,7 @@ async function authorizeAdmin(): Promise<CurrentUser | StaffActionState> {
 async function runAdminAction<Input>(
   formData: FormData,
   schema: z.ZodType<Input>,
-  mutate: (input: Input, actorUserId: string) => Promise<StaffActionState>,
+  mutate: (input: Input, actor: CurrentUser) => Promise<StaffActionState>,
 ): Promise<StaffActionState> {
   const actor = await authorizeAdmin();
   if ("status" in actor) return actor;
@@ -76,20 +79,36 @@ async function runAdminAction<Input>(
 
   let state: StaffActionState;
   try {
-    state = await mutate(parsed.data, actor.id);
+    state = await mutate(parsed.data, actor);
   } catch {
     // Fixed text, no cause: the original database message never reaches responses or logs.
     throw new Error("staff action failed");
   }
-  if (state.status === "success") revalidatePath(ADMIN_USERS_PATH);
+  if (state.status === "success") {
+    revalidatePath(USER_LIST_PATH);
+    revalidatePath(USER_DETAIL_ROUTE, "page");
+  }
   return state;
+}
+
+// Invite, grant and revoke act on a role: after validation, the actor must be able to manage
+// that role (canManageRole), otherwise forbidden without calling the service.
+// super_admin never gets here: the schema already rejects it as invalid_input.
+function runRoleAction<Input extends { role: StaffRole }>(
+  formData: FormData,
+  schema: z.ZodType<Input>,
+  mutate: (input: Input, actorUserId: string) => Promise<StaffActionState>,
+): Promise<StaffActionState> {
+  return runAdminAction(formData, schema, async (input, actor) =>
+    canManageRole(actor.staffRoles, input.role) ? mutate(input, actor.id) : failure("forbidden"),
+  );
 }
 
 export async function inviteStaffAction(
   _prev: StaffActionState,
   formData: FormData,
 ): Promise<StaffActionState> {
-  return runAdminAction(formData, inviteStaffSchema, async (input, actorUserId) => {
+  return runRoleAction(formData, inviteStaffSchema, async (input, actorUserId) => {
     const result = await createInvitation(input, actorUserId);
     if (result === "pending_invitation_exists") return failure(result);
     return {
@@ -104,8 +123,9 @@ export async function revokeInvitationAction(
   _prev: StaffActionState,
   formData: FormData,
 ): Promise<StaffActionState> {
-  return runAdminAction(formData, invitationIdSchema, async ({ invitationId }, actorUserId) => {
-    const revoked = await revokeInvitation(invitationId, actorUserId);
+  return runAdminAction(formData, invitationIdSchema, async ({ invitationId }, actor) => {
+    // Only invitations for roles the actor manages; any other one behaves as not_found.
+    const revoked = await revokeInvitation(invitationId, actor.id, manageableRoles(actor.staffRoles));
     return revoked ? { status: "success", message: "Invitación revocada." } : failure("not_found");
   });
 }
@@ -114,7 +134,7 @@ export async function grantStaffRoleAction(
   _prev: StaffActionState,
   formData: FormData,
 ): Promise<StaffActionState> {
-  return runAdminAction(formData, staffRoleChangeSchema, async (input, actorUserId) => {
+  return runRoleAction(formData, staffRoleChangeSchema, async (input, actorUserId) => {
     const granted = await grantStaffRole(input, actorUserId);
     return granted ? { status: "success", message: "Rol asignado." } : failure("no_change");
   });
@@ -124,7 +144,7 @@ export async function revokeStaffRoleAction(
   _prev: StaffActionState,
   formData: FormData,
 ): Promise<StaffActionState> {
-  return runAdminAction(formData, staffRoleChangeSchema, async (input, actorUserId) => {
+  return runRoleAction(formData, staffRoleChangeSchema, async (input, actorUserId) => {
     const result = await revokeStaffRole(input, actorUserId);
     return result === "revoked" ? { status: "success", message: "Rol revocado." } : failure(result);
   });

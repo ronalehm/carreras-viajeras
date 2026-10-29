@@ -57,7 +57,7 @@ type BookingFormProps =
 
 // Create (with the trip selector, optionally linked to a lead) or edit (the trip and the lead are
 // fixed; the email locks once linked).
-export function BookingForm({ booking, tripOptions, prefill }: BookingFormProps) {
+export function BookingForm({ booking, tripOptions, prefill, priceLocked = false }: BookingFormProps & { priceLocked?: boolean }) {
   const [state, formAction, pending] = useActionState(
     booking ? updateBookingAction : createBookingAction, INITIAL_STATE,
   );
@@ -123,8 +123,10 @@ export function BookingForm({ booking, tripOptions, prefill }: BookingFormProps)
         )}
         {FIELDS.map(({ name, label, hint, rows, type = "text", ...constraints }) => {
           const id = `booking-${name}`;
-          const locked = name === "participantEmail" && !!booking?.linked;
-          const help = locked ? EMAIL_LOCKED_HINT : hint;
+          const emailLocked = name === "participantEmail" && !!booking?.linked;
+          const totalLocked = name === "totalUsd" && priceLocked;
+          const locked = emailLocked || totalLocked;
+          const help = totalLocked ? "Este total incluye una recompensa aplicada y no se puede editar." : emailLocked ? EMAIL_LOCKED_HINT : hint;
           const props = {
             id, name, defaultValue: values?.[name] ?? String(initial[name] ?? ""), ...constraints,
             "aria-invalid": errors?.[name] ? true : undefined,

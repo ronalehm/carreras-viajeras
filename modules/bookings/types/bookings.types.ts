@@ -1,8 +1,14 @@
 import type { z } from "zod";
 import type { bookingStatusEnum, itineraryKindEnum, itineraryStatusEnum } from "@/lib/db-schema";
-import type { bookingFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
+import type { bookingFormSchema, paymentFormSchema, updateBookingSchema } from "../schemas/bookings.schema";
 
 export type BookingStatus = (typeof bookingStatusEnum.enumValues)[number];
+
+export type PaymentInput = z.output<typeof paymentFormSchema>;
+export type CrmPayment = {
+  id: string; amountUsd: number; paidOn: string; concept: string;
+  recordedByEmail: string; voided: boolean;
+};
 export type ItineraryKind = (typeof itineraryKindEnum.enumValues)[number];
 export type ItineraryStatus = (typeof itineraryStatusEnum.enumValues)[number];
 
@@ -98,6 +104,7 @@ export type CrmBookingListItem = {
 };
 
 export type CrmBooking = CrmBookingListItem & {
+  priceLocked: boolean;
   distance: string | null;
   balanceDueOn: string | null; // YYYY-MM-DD
   internalNote: string | null;
@@ -112,7 +119,8 @@ export type BookingActionState =
   | {
       status: "error";
       code: "unauthorized" | "forbidden" | "invalid_input" | "invalid_trip" | "duplicate"
-        | "email_locked" | "not_found" | "invalid_transition" | "invalid_lead" | "lead_taken";
+        | "email_locked" | "not_found" | "invalid_transition" | "invalid_lead" | "lead_taken"
+        | "payment_conflict" | "discount_locked";
       message: string;
       fieldErrors?: Record<string, string[]>;
       values?: Record<string, string>;

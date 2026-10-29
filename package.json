@@ -9,16 +9,17 @@
     "lint": "eslint",
     "test": "vitest",
     "preview": "npm run build:worker && opennextjs-cloudflare preview",
-    "deploy": "npm run build:worker && opennextjs-cloudflare deploy",
+    "deploy": "npm run build:worker && node scripts/check-clerk-key.mjs --require-live && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
     "db:generate": "drizzle-kit generate",
-    "build:worker": "opennextjs-cloudflare build && node scripts/strip-env-secrets.mjs"
+    "build:worker": "opennextjs-cloudflare build && node scripts/strip-env-secrets.mjs && node scripts/check-clerk-key.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@clerk/localizations": "^4.24.3",
+    "@clerk/nextjs": "^7.9.22",
     "@neon/config": "^1.9.2",
     "@neon/env": "^1.6.3",
-    "@neondatabase/auth": "0.6.0-beta",
     "@neondatabase/serverless": "1.2.0",
     "@tanstack/react-query": "^5.104.0",
     "@tanstack/react-table": "^9.2.4",
@@ -54,9 +55,5 @@
     "typescript": "^5",
     "vitest": "^5.0.3",
     "wrangler": "^4.151.1"
-  },
-  "overrides": {
-    "@better-auth/api-key": "1.7.6",
-    "@better-auth/core": "1.7.6"
   }
 }

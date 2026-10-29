@@ -71,3 +71,15 @@ export const bookingStatusChangeSchema = z.object({
   bookingId: z.uuid({ error: BOOKING_ID_MESSAGE }),
   status: z.enum(["confirmed", "cancelled"], { error: "El estado no es válido." }),
 });
+
+export const paymentFormSchema = z.object({
+  bookingId: z.uuid({ error: BOOKING_ID_MESSAGE }),
+  requestKey: z.uuid({ error: "La solicitud de pago no es válida. Recarga el formulario." }),
+  amountUsd: usdIntegerSchema(1, "Indica el importe en dólares, sin decimales."),
+  paidOn: z.iso.date({ error: DATE_MESSAGE }),
+  concept: requiredText(1, 80, "El concepto debe tener entre 1 y 80 caracteres."),
+});
+
+export const paymentVoidSchema = z.object({
+  paymentId: z.uuid({ error: "El pago no es válido." }),
+});

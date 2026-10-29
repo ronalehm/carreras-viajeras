@@ -3,110 +3,221 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const getSession = vi.fn();
-vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
+const { auth, currentUser } = vi.hoisted(() => ({ auth: vi.fn(), currentUser: vi.fn() }));
+vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(),
+  loadSponsorId: vi.fn(),
   loadStaffRoles: vi.fn(),
 }));
 
-import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/access.service";
+import {
+  acceptInvitationAndLoadStaffRoles,
+  loadSponsorId,
+  loadStaffRoles,
+} from "@/lib/auth/access.service";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
+import type { StaffRole } from "@/lib/auth/permissions";
+import { InvalidEnvironmentError } from "@/lib/env";
 import {
   getCurrentUser,
   requireCrmUser,
   requirePermission,
+  requireSponsor,
   requireUser,
   requireVerifiedEmail,
 } from "@/lib/auth/guards";
 
 const accept = vi.mocked(acceptInvitationAndLoadStaffRoles);
 const load = vi.mocked(loadStaffRoles);
+const loadSponsor = vi.mocked(loadSponsorId);
 
-function sessionWith(user: Record<string, unknown>) {
-  getSession.mockResolvedValue({ data: { session: { id: "session-1" }, user }, error: null });
+const USER_ID = "user_2abc";
+
+function emailAddress(id: string, address: string, status: string | null) {
+  return { id, emailAddress: address, verification: status === null ? null : { status } };
 }
 
-const verifiedUser = { id: "user-1", email: "ana@example.com", emailVerified: true };
+function clerkUser(overrides: Record<string, unknown> = {}) {
+  return {
+    id: USER_ID,
+    primaryEmailAddressId: "idn_primary",
+    emailAddresses: [emailAddress("idn_primary", "ana@example.com", "verified")],
+    publicMetadata: {},
+    unsafeMetadata: {},
+    ...overrides,
+  };
+}
+
+function signedInAs(user: unknown) {
+  auth.mockResolvedValue({ userId: USER_ID });
+  currentUser.mockResolvedValue(user);
+}
+
+function expectNoServiceCalls() {
+  expect(accept).not.toHaveBeenCalled();
+  expect(load).not.toHaveBeenCalled();
+}
 
 beforeEach(() => {
-  getSession.mockReset();
+  auth.mockReset();
+  currentUser.mockReset();
   accept.mockReset();
   load.mockReset();
+  loadSponsor.mockReset();
 });
 
-describe("missing or invalid session", () => {
-  it.each([
-    ["no data", { data: null, error: null }],
-    ["empty session", { data: { session: null, user: null }, error: null }],
-    ["Neon Auth error", { data: null, error: { message: "upstream down", status: 500 } }],
-    ["empty user.id", { data: { session: {}, user: { ...verifiedUser, id: "" } }, error: null }],
-    ["user.id too long", { data: { session: {}, user: { ...verifiedUser, id: "x".repeat(256) } }, error: null }],
-    ["missing emailVerified", { data: { session: {}, user: { id: "user-1", email: "a@b.c" } }, error: null }],
-  ])("%s → UnauthorizedError without calling the service", async (_, result) => {
-    getSession.mockResolvedValue(result);
+describe("Clerk display name", () => {
+  it("uses the trusted display fields without treating them as authorization", async () => {
+    signedInAs(clerkUser({ firstName: "Ana", lastName: "Pérez", publicMetadata: { role: "admin" } }));
+    accept.mockResolvedValue([]);
+
+    await expect(getCurrentUser()).resolves.toMatchObject({ name: "Ana Pérez", staffRoles: [] });
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it("keeps a valid identity usable when the optional display fields are malformed", async () => {
+    signedInAs(clerkUser({ firstName: { role: "admin" }, lastName: 123 }));
+    accept.mockResolvedValue([]);
+
+    const user = await getCurrentUser();
+    expect(user?.id).toBe(USER_ID);
+    expect(user).not.toHaveProperty("name");
+  });
+});
+
+describe("session (auth)", () => {
+  it("without a session → UnauthorizedError without calling currentUser or the service", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    auth.mockResolvedValue({ userId: null });
 
     await expect(getCurrentUser()).resolves.toBeNull();
     await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
     await expect(requireCrmUser()).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(accept).not.toHaveBeenCalled();
-    expect(load).not.toHaveBeenCalled();
+    expect(currentUser).not.toHaveBeenCalled();
+    expectNoServiceCalls();
+    expect(logError).not.toHaveBeenCalled();
+    logError.mockRestore();
   });
 
-  it("treats a thrown Neon Auth call as no session and logs only a fixed message", async () => {
+  it("treats a thrown auth() as no session and logs only a fixed message", async () => {
     const logError = vi.spyOn(console, "error").mockImplementation(() => {});
-    getSession.mockRejectedValue(new Error("Missing NEON_AUTH_COOKIE_SECRET: secret detail"));
+    auth.mockRejectedValue(new Error("Missing CLERK_SECRET_KEY: sk_test_secret detail"));
 
     await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
     expect(logError).toHaveBeenCalledTimes(1);
     expect(logError).toHaveBeenCalledWith("auth: session lookup failed");
-    expect(JSON.stringify(logError.mock.calls)).not.toMatch(/NEON_AUTH|secret detail/);
-    expect(accept).not.toHaveBeenCalled();
-    expect(load).not.toHaveBeenCalled();
+    expect(JSON.stringify(logError.mock.calls)).not.toMatch(/CLERK_SECRET_KEY|sk_test|secret detail/);
+    expect(currentUser).not.toHaveBeenCalled();
+    expectNoServiceCalls();
     logError.mockRestore();
   });
+});
 
-  it("does not log when there is simply no session", async () => {
+describe("user lookup (currentUser)", () => {
+  it("maps a thrown currentUser() to ForbiddenError without cause or original message", async () => {
     const logError = vi.spyOn(console, "error").mockImplementation(() => {});
-    getSession.mockResolvedValue({ data: null, error: null });
+    auth.mockResolvedValue({ userId: USER_ID });
+    currentUser.mockRejectedValue(new Error("Clerk API rate limit exceeded for sk_live_secret"));
 
-    await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
-    expect(logError).not.toHaveBeenCalled();
+    const error = await requireUser().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect((error as ForbiddenError).cause).toBeUndefined();
+    expect((error as ForbiddenError).message).toBe("forbidden");
+    expect(String((error as ForbiddenError).stack)).not.toMatch(/rate limit|sk_live/);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith("auth: user lookup failed");
+    expectNoServiceCalls();
     logError.mockRestore();
   });
-});
 
-describe("unverified email", () => {
-  it("only loads roles, never accepts invitations, and denies permissions even for admin", async () => {
-    sessionWith({ ...verifiedUser, emailVerified: false });
-    load.mockResolvedValue(["admin"]);
+  it.each([
+    ["null user", null],
+    ["a different id", clerkUser({ id: "user_other" })],
+    ["an empty id", clerkUser({ id: "" })],
+    ["an id that is too long", clerkUser({ id: "x".repeat(256) })],
+    ["missing emailAddresses", clerkUser({ emailAddresses: undefined })],
+    ["malformed email address", clerkUser({ emailAddresses: [{ id: "idn_primary" }] })],
+  ])("%s → UnauthorizedError without calling the service", async (_, user) => {
+    signedInAs(user);
 
-    await expect(requireUser()).resolves.toMatchObject({ id: "user-1", emailVerified: false });
-    await expect(requireVerifiedEmail()).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
-    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
-    expect(load).toHaveBeenCalledWith("user-1");
-    expect(accept).not.toHaveBeenCalled();
+    await expect(getCurrentUser()).resolves.toBeNull();
+    await expect(requireUser()).rejects.toBeInstanceOf(UnauthorizedError);
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(UnauthorizedError);
+    expectNoServiceCalls();
   });
 });
 
-describe("verified email", () => {
-  it("accepts invitations with the trimmed, lowercased email", async () => {
-    sessionWith({ ...verifiedUser, email: "  Ana@Example.COM " });
+describe("primary email", () => {
+  it("accepts invitations with the trimmed, lowercased verified primary email", async () => {
+    signedInAs(
+      clerkUser({
+        emailAddresses: [
+          emailAddress("idn_other", "other@example.com", "verified"),
+          emailAddress("idn_primary", "  Ana@Example.COM ", "verified"),
+        ],
+      }),
+    );
     accept.mockResolvedValue(["commercial"]);
 
     await expect(getCurrentUser()).resolves.toEqual({
-      id: "user-1",
+      id: USER_ID,
       email: "ana@example.com",
       emailVerified: true,
       staffRoles: ["commercial"],
     });
-    expect(accept).toHaveBeenCalledWith("user-1", "ana@example.com");
+    expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
     expect(load).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["unverified primary with a verified secondary", clerkUser({
+      emailAddresses: [
+        emailAddress("idn_primary", "ana@example.com", "unverified"),
+        emailAddress("idn_secondary", "ana@work.example", "verified"),
+      ],
+    })],
+    ["primary without verification", clerkUser({
+      emailAddresses: [emailAddress("idn_primary", "ana@example.com", null)],
+    })],
+  ])("%s → only loads roles and denies permissions even for admin", async (_, user) => {
+    signedInAs(user);
+    load.mockResolvedValue(["admin"]);
+
+    await expect(requireUser()).resolves.toMatchObject({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: false,
+    });
+    await expect(requireVerifiedEmail()).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(load).toHaveBeenCalledWith(USER_ID);
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["no primaryEmailAddressId", clerkUser({ primaryEmailAddressId: null })],
+    ["a primaryEmailAddressId that matches no address", clerkUser({ primaryEmailAddressId: "idn_gone" })],
+  ])("%s → empty, unverified email", async (_, user) => {
+    signedInAs(user);
+    load.mockResolvedValue(["admin"]);
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: USER_ID,
+      email: "",
+      emailVerified: false,
+      staffRoles: ["admin"],
+    });
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(load).toHaveBeenCalledWith(USER_ID);
+    expect(accept).not.toHaveBeenCalled();
+  });
+});
+
+describe("roles from the database", () => {
   it("denies an account without roles", async () => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValue([]);
 
     await expect(requireVerifiedEmail()).resolves.toMatchObject({ staffRoles: [] });
@@ -115,15 +226,15 @@ describe("verified email", () => {
   });
 
   it("lets commercial into the CRM but not manage staff", async () => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValue(["commercial"]);
 
-    await expect(requireCrmUser()).resolves.toMatchObject({ id: "user-1", staffRoles: ["commercial"] });
+    await expect(requireCrmUser()).resolves.toMatchObject({ id: USER_ID, staffRoles: ["commercial"] });
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
   });
 
   it("lets admin into the CRM and manage staff", async () => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValue(["admin"]);
 
     await expect(requireCrmUser()).resolves.toMatchObject({ staffRoles: ["admin"] });
@@ -131,7 +242,7 @@ describe("verified email", () => {
   });
 
   it("re-reads roles on every call, so a revocation applies to the next one", async () => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValueOnce(["commercial"]).mockResolvedValueOnce([]);
 
     await expect(requireCrmUser()).resolves.toMatchObject({ staffRoles: ["commercial"] });
@@ -140,7 +251,8 @@ describe("verified email", () => {
   });
 
   it("maps database errors to ForbiddenError without cause or original message", async () => {
-    sessionWith(verifiedUser);
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
     accept.mockRejectedValue(new Error("password authentication failed for user app"));
 
     const error = await requireCrmUser().catch((caught: unknown) => caught);
@@ -148,22 +260,143 @@ describe("verified email", () => {
     expect((error as ForbiddenError).cause).toBeUndefined();
     expect((error as ForbiddenError).message).toBe("forbidden");
     expect(String((error as ForbiddenError).stack)).not.toContain("password");
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    expect(JSON.stringify(logError.mock.calls)).not.toContain("password");
+    logError.mockRestore();
+  });
+
+  it("names the misconfigured environment field, never its value", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    accept.mockRejectedValue(new InvalidEnvironmentError("Invalid environment fields: CLERK_SECRET_KEY"));
+
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      "auth: role lookup failed (Invalid environment fields: CLERK_SECRET_KEY)",
+    );
+    logError.mockRestore();
   });
 
   it("maps database errors to ForbiddenError for unverified accounts too", async () => {
-    sessionWith({ ...verifiedUser, emailVerified: false });
+    signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
     load.mockRejectedValue(new Error("connection refused"));
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
 
     await expect(requireUser()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    logError.mockRestore();
   });
 
-  it("ignores extra session fields such as user.role", async () => {
-    sessionWith({ ...verifiedUser, role: "admin", staffRoles: ["admin"], invitedBy: "x", userId: "other" });
+  it("ignores publicMetadata, unsafeMetadata and other extra Clerk user fields", async () => {
+    signedInAs(
+      clerkUser({
+        publicMetadata: { role: "admin" },
+        unsafeMetadata: { staffRoles: ["admin"] },
+        privateMetadata: { role: "admin" },
+        role: "admin",
+        staffRoles: ["admin"],
+      }),
+    );
     accept.mockResolvedValue([]);
 
-    const user = await getCurrentUser();
-    expect(user).toEqual({ id: "user-1", email: "ana@example.com", emailVerified: true, staffRoles: [] });
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: [],
+    });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
+describe("requireSponsor", () => {
+  const sponsorId = "6f1c2b9e-4a8d-4f3e-9b7a-2c5d8e1f0a3b";
+
+  it("without a session → UnauthorizedError without loading the brand", async () => {
+    auth.mockResolvedValue({ userId: null });
+
+    await expect(requireSponsor()).rejects.toBeInstanceOf(UnauthorizedError);
+    expect(loadSponsor).not.toHaveBeenCalled();
+  });
+
+  it("with an unverified email → ForbiddenError without loading the brand", async () => {
+    signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
+    load.mockResolvedValue(["sponsor"]);
+
+    await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+    expect(loadSponsor).not.toHaveBeenCalled();
+  });
+
+  it.each<[StaffRole[]]>([[["commercial"]], [["organizer"]], [[]]])(
+    "roles %j → ForbiddenError without loading the brand",
+    async (roles) => {
+      signedInAs(clerkUser());
+      accept.mockResolvedValue(roles);
+
+      await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+      expect(loadSponsor).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each<[StaffRole[]]>([[["admin"]], [["super_admin"]], [["sponsor"]]])(
+    "roles %j without a brand assignment → ForbiddenError",
+    async (roles) => {
+      signedInAs(clerkUser());
+      accept.mockResolvedValue(roles);
+      loadSponsor.mockResolvedValue(null);
+
+      await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
+      expect(loadSponsor).toHaveBeenCalledWith(USER_ID);
+    },
+  );
+
+  it("returns the current user with the brand of a sponsor", async () => {
+    signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", " Ana@Example.com ", "verified")] }));
+    accept.mockResolvedValue(["sponsor"]);
+    loadSponsor.mockResolvedValue(sponsorId);
+
+    await expect(requireSponsor()).resolves.toEqual({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: ["sponsor"],
+      sponsorId,
+    });
+    expect(loadSponsor).toHaveBeenCalledTimes(1);
+    expect(loadSponsor).toHaveBeenCalledWith(USER_ID);
+  });
+
+  it("maps a brand lookup failure to ForbiddenError without cause or original message", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue(["sponsor"]);
+    loadSponsor.mockRejectedValue(new Error("password authentication failed for user app"));
+
+    const error = await requireSponsor().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect((error as ForbiddenError).cause).toBeUndefined();
+    expect((error as ForbiddenError).message).toBe("forbidden");
+    expect(String((error as ForbiddenError).stack)).not.toContain("password");
+  });
+
+  it("keeps sponsor out of the CRM and of every existing permission", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue(["sponsor"]);
+
+    await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
+    for (const permission of [
+      "staff.manage",
+      "trips.manage",
+      "trips.manage_all",
+      "offers.manage",
+      "offers.view",
+      "leads.manage",
+      "bookings.manage",
+      "sponsors.manage",
+    ] as const) {
+      await expect(requirePermission(permission)).rejects.toBeInstanceOf(ForbiddenError);
+    }
   });
 });

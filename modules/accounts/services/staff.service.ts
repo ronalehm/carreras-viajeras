@@ -1,60 +1,31 @@
 import "server-only";
-import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
+import type { StaffRole } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
-import { profiles, staffAssignments, staffInvitations } from "@/lib/db-schema";
+import { staffInvitations } from "@/lib/db-schema";
 import type {
   InviteStaffInput,
   PendingInvitation,
-  StaffMember,
   StaffRoleChangeInput,
 } from "../types/staff.types";
 
 // Same predicate as the staff_invitations_pending_email_uq partial index (expiry is checked separately).
 const pendingInvitation = and(isNull(staffInvitations.acceptedAt), isNull(staffInvitations.revokedAt));
 
-type ActiveAssignmentRow = { userId: string; email: string } & StaffMember["roles"][number];
-
-function groupByUser(rows: ActiveAssignmentRow[]): StaffMember[] {
-  const members = new Map<string, StaffMember>();
-  for (const { userId, email, role, grantedAt } of rows) {
-    const member = members.get(userId) ?? { userId, email, roles: [] };
-    member.roles.push({ role, grantedAt });
-    members.set(userId, member);
-  }
-  return [...members.values()];
-}
-
-export async function listStaffOverview(): Promise<{
-  staff: StaffMember[];
-  invitations: PendingInvitation[];
-}> {
-  const db = getDb();
-  const [assignmentRows, invitations] = await db.batch([
-    db
-      .select({
-        userId: profiles.userId,
-        email: profiles.email,
-        role: staffAssignments.role,
-        grantedAt: staffAssignments.grantedAt,
-      })
-      .from(staffAssignments)
-      .innerJoin(profiles, eq(profiles.userId, staffAssignments.userId))
-      .where(isNull(staffAssignments.revokedAt))
-      .orderBy(asc(profiles.email), asc(staffAssignments.grantedAt)),
-    db
-      .select({
-        id: staffInvitations.id,
-        email: staffInvitations.email,
-        role: staffInvitations.role,
-        expiresAt: staffInvitations.expiresAt,
-        // Database clock, the same one that decides whether an invitation can still be accepted.
-        expired: sql<boolean>`${staffInvitations.expiresAt} <= now()`,
-      })
-      .from(staffInvitations)
-      .where(pendingInvitation)
-      .orderBy(asc(staffInvitations.createdAt)),
-  ]);
-  return { staff: groupByUser(assignmentRows), invitations };
+// One SELECT; the expiry flag comes from the database clock, the same one that decides whether
+// an invitation can still be accepted.
+export async function listPendingInvitations(): Promise<PendingInvitation[]> {
+  return getDb()
+    .select({
+      id: staffInvitations.id,
+      email: staffInvitations.email,
+      role: staffInvitations.role,
+      expiresAt: staffInvitations.expiresAt,
+      expired: sql<boolean>`${staffInvitations.expiresAt} <= now()`,
+    })
+    .from(staffInvitations)
+    .where(pendingInvitation)
+    .orderBy(asc(staffInvitations.createdAt));
 }
 
 // One batch (one transaction): revoke this email's expired pending invitation, then insert.
@@ -84,12 +55,24 @@ export async function createInvitation(
   return inserted[0] ?? "pending_invitation_exists";
 }
 
-// false = not_found: missing, already accepted or already revoked.
-export async function revokeInvitation(invitationId: string, actorUserId: string): Promise<boolean> {
+// false = not_found: missing, already accepted, already revoked or its role is not one of `roles`
+// (the roles the actor may manage). The role filter lives in the same UPDATE, so there is no TOCTOU.
+export async function revokeInvitation(
+  invitationId: string,
+  actorUserId: string,
+  roles: readonly StaffRole[],
+): Promise<boolean> {
+  if (roles.length === 0) return false;
   const rows = await getDb()
     .update(staffInvitations)
     .set({ revokedAt: sql`now()`, revokedBy: actorUserId })
-    .where(and(eq(staffInvitations.id, invitationId), pendingInvitation))
+    .where(
+      and(
+        eq(staffInvitations.id, invitationId),
+        pendingInvitation,
+        inArray(staffInvitations.role, roles),
+      ),
+    )
     .returning({ id: staffInvitations.id });
   return rows.length > 0;
 }

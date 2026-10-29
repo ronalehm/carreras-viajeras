@@ -1,5 +1,5 @@
 {
-  "id": "adec60f3-9b1c-416f-a97b-bd0c900b8be0",
+  "id": "74e13dd9-9593-432f-9e69-ffdbc78385af",
   "prevId": "7b11ad73-40d7-44fa-aa17-fc2161d817ca",
   "version": "7",
   "dialect": "postgresql",
@@ -575,284 +575,6 @@
         "campaigns_closed_chk": {
           "name": "campaigns_closed_chk",
           "value": "(\"campaigns\".\"status\" = 'closed') = (\"campaigns\".\"closed_at\" IS NOT NULL) AND (\"campaigns\".\"closed_at\" IS NULL) = (\"campaigns\".\"closed_by\" IS NULL)"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.client_emails": {
-      "name": "client_emails",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "source_event_id": {
-          "name": "source_event_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "lead_id": {
-          "name": "lead_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stage": {
-          "name": "stage",
-          "type": "lead_stage",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "template_version": {
-          "name": "template_version",
-          "type": "smallint",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 1
-        },
-        "recipient": {
-          "name": "recipient",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "sender": {
-          "name": "sender",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "subject": {
-          "name": "subject",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "body": {
-          "name": "body",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "client_email_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "attempts": {
-          "name": "attempts",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "attempt_token": {
-          "name": "attempt_token",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "lease_until": {
-          "name": "lease_until",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "execution_id": {
-          "name": "execution_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "smtp_message_id": {
-          "name": "smtp_message_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_error_code": {
-          "name": "last_error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "retry_requested_by": {
-          "name": "retry_requested_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "retry_requested_at": {
-          "name": "retry_requested_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "sent_at": {
-          "name": "sent_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "client_emails_event_uq": {
-          "name": "client_emails_event_uq",
-          "columns": [
-            {
-              "expression": "source_event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "client_emails_lead_created_idx": {
-          "name": "client_emails_lead_created_idx",
-          "columns": [
-            {
-              "expression": "lead_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "client_emails_ready_idx": {
-          "name": "client_emails_ready_idx",
-          "columns": [
-            {
-              "expression": "status",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "client_emails_source_event_id_outbox_events_id_fk": {
-          "name": "client_emails_source_event_id_outbox_events_id_fk",
-          "tableFrom": "client_emails",
-          "tableTo": "outbox_events",
-          "columnsFrom": [
-            "source_event_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "client_emails_lead_id_leads_id_fk": {
-          "name": "client_emails_lead_id_leads_id_fk",
-          "tableFrom": "client_emails",
-          "tableTo": "leads",
-          "columnsFrom": [
-            "lead_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "client_emails_retry_requested_by_profiles_user_id_fk": {
-          "name": "client_emails_retry_requested_by_profiles_user_id_fk",
-          "tableFrom": "client_emails",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "retry_requested_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "client_emails_attempts_chk": {
-          "name": "client_emails_attempts_chk",
-          "value": "\"client_emails\".\"attempts\" BETWEEN 0 AND 3"
-        },
-        "client_emails_lease_chk": {
-          "name": "client_emails_lease_chk",
-          "value": "(\"client_emails\".\"status\" IN ('claimed', 'sending')) = (\"client_emails\".\"lease_until\" IS NOT NULL)"
-        },
-        "client_emails_token_chk": {
-          "name": "client_emails_token_chk",
-          "value": "\"client_emails\".\"status\" NOT IN ('claimed', 'sending', 'sent', 'unknown') OR \"client_emails\".\"attempt_token\" IS NOT NULL"
-        },
-        "client_emails_sent_chk": {
-          "name": "client_emails_sent_chk",
-          "value": "(\"client_emails\".\"status\" = 'sent') = (\"client_emails\".\"sent_at\" IS NOT NULL)"
-        },
-        "client_emails_content_chk": {
-          "name": "client_emails_content_chk",
-          "value": "char_length(\"client_emails\".\"subject\") BETWEEN 1 AND 200 AND char_length(\"client_emails\".\"body\") BETWEEN 1 AND 4000 AND char_length(\"client_emails\".\"sender\") BETWEEN 3 AND 254 AND (\"client_emails\".\"recipient\" IS NULL OR char_length(\"client_emails\".\"recipient\") BETWEEN 3 AND 254)"
-        },
-        "client_emails_error_chk": {
-          "name": "client_emails_error_chk",
-          "value": "\"client_emails\".\"last_error_code\" IS NULL OR \"client_emails\".\"last_error_code\" ~ '^[a-z0-9_]{1,40}$'"
-        },
-        "client_emails_execution_chk": {
-          "name": "client_emails_execution_chk",
-          "value": "\"client_emails\".\"execution_id\" IS NULL OR char_length(\"client_emails\".\"execution_id\") BETWEEN 1 AND 120"
-        },
-        "client_emails_smtp_id_chk": {
-          "name": "client_emails_smtp_id_chk",
-          "value": "\"client_emails\".\"smtp_message_id\" IS NULL OR char_length(\"client_emails\".\"smtp_message_id\") BETWEEN 1 AND 254"
         }
       },
       "isRLSEnabled": false
@@ -1789,12 +1511,6 @@
           "notNull": true,
           "default": "gen_random_uuid()"
         },
-        "sequence": {
-          "name": "sequence",
-          "type": "bigserial",
-          "primaryKey": false,
-          "notNull": true
-        },
         "type": {
           "name": "type",
           "type": "outbox_event_type",
@@ -1894,42 +1610,6 @@
           ],
           "isUnique": true,
           "where": "\"outbox_events\".\"dedupe_key\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "outbox_events_sequence_uq": {
-          "name": "outbox_events_sequence_uq",
-          "columns": [
-            {
-              "expression": "sequence",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "outbox_events_lead_sequence_idx": {
-          "name": "outbox_events_lead_sequence_idx",
-          "columns": [
-            {
-              "expression": "lead_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "sequence",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -3011,6 +2691,12 @@
           "notNull": true,
           "default": "'draft'"
         },
+        "organizer_id": {
+          "name": "organizer_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -3041,9 +2727,38 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "trips_organizer_idx": {
+          "name": "trips_organizer_idx",
+          "columns": [
+            {
+              "expression": "organizer_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "trips_organizer_id_profiles_user_id_fk": {
+          "name": "trips_organizer_id_profiles_user_id_fk",
+          "tableFrom": "trips",
+          "tableTo": "profiles",
+          "columnsFrom": [
+            "organizer_id"
+          ],
+          "columnsTo": [
+            "user_id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -3116,19 +2831,6 @@
       "values": [
         "active",
         "closed"
-      ]
-    },
-    "public.client_email_status": {
-      "name": "client_email_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "claimed",
-        "sending",
-        "sent",
-        "failed",
-        "skipped",
-        "unknown"
       ]
     },
     "public.contact_preference": {
@@ -3250,7 +2952,9 @@
       "schema": "public",
       "values": [
         "commercial",
-        "admin"
+        "admin",
+        "super_admin",
+        "organizer"
       ]
     },
     "public.trip_offer_status": {

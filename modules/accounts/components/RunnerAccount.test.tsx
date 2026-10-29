@@ -1,75 +1,74 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authClient, router } = vi.hoisted(() => ({
-  authClient: {
-    useSession: vi.fn(),
-    signOut: vi.fn(),
-    signIn: { email: vi.fn() },
-    signUp: { email: vi.fn() },
-    emailOtp: {
-      sendVerificationOtp: vi.fn(),
-      verifyEmail: vi.fn(),
-      requestPasswordReset: vi.fn(),
-      resetPassword: vi.fn(),
-    },
-    getSession: vi.fn(),
-  },
-  router: { replace: vi.fn(), refresh: vi.fn() },
+const { useUser, signInProps, signOutProps } = vi.hoisted(() => ({
+  useUser: vi.fn(),
+  signInProps: vi.fn(),
+  signOutProps: vi.fn(),
 }));
 
-vi.mock("@/lib/auth/client", () => ({ authClient }));
-vi.mock("next/navigation", () => ({ useRouter: () => router }));
+vi.mock("@clerk/nextjs", () => ({
+  useUser,
+  SignIn: (props: Record<string, unknown>) => {
+    signInProps(props);
+    return <div data-testid="clerk-sign-in" />;
+  },
+  SignOutButton: ({ children, ...props }: { children: ReactNode }) => {
+    signOutProps(props);
+    return <div data-testid="clerk-sign-out">{children}</div>;
+  },
+}));
 
 import { RunnerAccount } from "./RunnerAccount";
 
-function session(state: { data?: unknown; isPending?: boolean; error?: unknown }) {
-  authClient.useSession.mockReturnValue({ data: null, isPending: false, error: null, ...state });
-}
-
-function expectRunnerPanel() {
-  expect(screen.getByRole("heading", { name: "Iniciar sesión" })).toBeTruthy();
-  expect(screen.getByRole("button", { name: "Registrarse" })).toBeTruthy();
+function userState(state: { isLoaded: boolean; isSignedIn?: boolean; user?: unknown }) {
+  useUser.mockReturnValue({ isSignedIn: undefined, user: undefined, ...state });
 }
 
 beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe("RunnerAccount", () => {
-  it("shows the loading status while the session is pending", () => {
-    session({ isPending: true });
+  it("shows the loading status while Clerk loads", () => {
+    userState({ isLoaded: false });
     render(<RunnerAccount />);
 
     expect(screen.getByRole("status").textContent).toBe("Cargando…");
+    expect(signInProps).not.toHaveBeenCalled();
   });
 
-  it("shows the runner access panel without a session", () => {
-    session({});
+  it("shows Clerk SignIn to /cuenta/perfil without a session", () => {
+    userState({ isLoaded: true, isSignedIn: false, user: null });
     render(<RunnerAccount />);
 
-    expectRunnerPanel();
+    expect(screen.getByTestId("clerk-sign-in")).toBeTruthy();
+    expect(signInProps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        forceRedirectUrl: "/cuenta/perfil",
+        signUpForceRedirectUrl: "/cuenta/perfil",
+      }),
+    );
+    expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("shows the runner access panel when useSession fails", () => {
-    session({ error: { status: 500 } });
+  it("greets the runner with their primary email, links to their profile and signs out back to /cuenta", () => {
+    userState({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { primaryEmailAddress: { emailAddress: "runner@example.com" } },
+    });
     render(<RunnerAccount />);
 
-    expectRunnerPanel();
-  });
-
-  it("greets the runner with their email and signs out back to /cuenta", async () => {
-    session({ data: { user: { email: "runner@example.com" }, session: {} } });
-    authClient.signOut.mockResolvedValue({ data: {}, error: null });
-    render(<RunnerAccount />);
-
-    expect(screen.getByRole("heading", { name: "Qué bueno verte de nuevo." })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Qué bueno verte de nuevo." })).toBeTruthy();
     expect(screen.getByText("runner@example.com")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Cerrar sesión" }));
-    await act(async () => {});
-
-    expect(authClient.signOut).toHaveBeenCalled();
-    expect(router.replace).toHaveBeenCalledWith("/cuenta");
-    expect(router.refresh).toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Ver mis carreras" }).getAttribute("href")).toBe("/mis-carreras");
+    const profileLink = screen.getByRole("link", { name: "Mi cuenta" });
+    const signOut = screen.getByRole("button", { name: "Cerrar sesión" });
+    expect(profileLink.getAttribute("href")).toBe("/cuenta/perfil");
+    expect(profileLink.compareDocumentPosition(signOut) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(signOutProps).toHaveBeenCalledWith({ redirectUrl: "/cuenta" });
+    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
+    expect(signInProps).not.toHaveBeenCalled();
   });
 });

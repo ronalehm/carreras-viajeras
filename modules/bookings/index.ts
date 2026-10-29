@@ -17,3 +17,11 @@ export { BookingForm } from "./components/BookingForm";
 export { BookingStatusBadge, BookingTable } from "./components/BookingTable";
 export { BOOKING_STATUS_LABELS } from "./utils/bookingDisplay";
 export type { CrmBooking, CrmBookingListItem } from "./types/bookings.types";
+
+export { getRunnerPortal } from "./utils/runnerPortal";
+export type { RunnerPortalState } from "./utils/runnerPortal";
+export { RunnerPortal } from "./components/RunnerPortal";
+
+export { listBookingPayments } from "./services/payments.service";
+export { PaymentForm } from "./components/PaymentForm";
+export { PaymentTable } from "./components/PaymentTable";

@@ -5,8 +5,7 @@ vi.mock("server-only", () => ({}));
 
 const valid = {
   DATABASE_URL: "postgresql://app:synthetic@db.example.test/neondb?sslmode=require",
-  NEON_AUTH_BASE_URL: "https://auth.example.test/neondb/auth",
-  NEON_AUTH_COOKIE_SECRET: "synthetic-random-test-secret-at-least-32",
+  CLERK_SECRET_KEY: "sk_test_synthetic0clerk0secret0for0tests",
   APP_ORIGIN: "https://carreras-viajeras.mentec.dev",
 };
 
@@ -55,10 +54,10 @@ describe("runtime environment", () => {
     ["DATABASE_URL", "postgresql://app:synthetic@db.example.test/neondb"],
     ["DATABASE_URL", "postgresql://app:synthetic@db.example.test/neondb?sslmode=disable"],
     ["DATABASE_URL", "https://example.test"],
-    ["NEON_AUTH_BASE_URL", "not-a-url"],
-    ["NEON_AUTH_BASE_URL", "http://auth.example.test/auth"],
-    ["NEON_AUTH_BASE_URL", "https://user:synthetic@auth.example.test/auth"],
-    ["NEON_AUTH_COOKIE_SECRET", "short"],
+    ["CLERK_SECRET_KEY", "pk_test_synthetic0publishable0key"],
+    ["CLERK_SECRET_KEY", "sk_prod_synthetic0clerk0secret"],
+    ["CLERK_SECRET_KEY", "sk_test_"],
+    ["CLERK_SECRET_KEY", "sk_live_synthetic clerk secret"],
     ["APP_ORIGIN", "https://untrusted.example.test"],
     ["APP_ORIGIN", "https://carreras-viajeras.mentec.dev/path"],
   ])("rejects invalid %s with field names only", async (name, value) => {
@@ -70,6 +69,38 @@ describe("runtime environment", () => {
     expect((error as Error).message).toBe(`Invalid environment fields: ${name}`);
     expect(JSON.stringify(error)).not.toContain(value);
     expect((error as Error).cause).toBeUndefined();
+  });
+
+  it.each(["sk_test_synthetic0clerk0secret", "sk_live_synthetic0clerk0secret"])(
+    "accepts the Clerk secret key format %s",
+    async (key) => {
+      setEnv({ ...valid, CLERK_SECRET_KEY: key });
+      const { getEnv } = await import("@/lib/env");
+      expect(getEnv().CLERK_SECRET_KEY).toBe(key);
+    },
+  );
+
+  it.each([undefined, ""])("rejects a missing CLERK_SECRET_KEY (%j) with the field name only", async (key) => {
+    setEnv({ ...valid, CLERK_SECRET_KEY: key });
+    const { getEnv } = await import("@/lib/env");
+    expect(() => getEnv()).toThrow(/^Invalid environment fields: CLERK_SECRET_KEY$/);
+  });
+
+  it("no longer reads or requires the Neon Auth variables", async () => {
+    setEnv({
+      ...valid,
+      NEON_AUTH_BASE_URL: undefined,
+      NEON_AUTH_COOKIE_SECRET: undefined,
+    });
+    const { getEnv } = await import("@/lib/env");
+    expect(getEnv()).toEqual(valid);
+    setEnv({ NEON_AUTH_BASE_URL: "not-a-url", NEON_AUTH_COOKIE_SECRET: "short" });
+    expect(getEnv()).toEqual(valid);
+  });
+
+  it("does not validate the environment on import", async () => {
+    setEnv({ ...valid, CLERK_SECRET_KEY: "invalid" });
+    await expect(import("@/lib/env")).resolves.toHaveProperty("getEnv");
   });
 
   it("permits exact localhost origins only in development", async () => {

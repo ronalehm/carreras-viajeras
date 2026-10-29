@@ -57,6 +57,17 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
       icon: "bookings",
       group: "sales",
     });
+  if (can(roles, "sponsors.manage"))
+    items.push({
+      label: "Patrocinadores",
+      href: "/crm/admin/patrocinadores",
+      icon: "sponsors",
+      group: "admin",
+    });
+  if (can(roles, "content.manage"))
+    items.push({ label: "Contenidos", href: "/crm/contenidos", icon: "content", group: "admin" });
+  if (can(roles, "rewards.manage"))
+    items.push({ label: "Recompensas", href: "/crm/recompensas", icon: "rewards", group: "admin" });
   if (can(roles, "staff.manage")) {
     items.push(
       {

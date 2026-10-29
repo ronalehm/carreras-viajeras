@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const getSession = vi.fn();
-vi.mock("@/lib/auth/server", () => ({ getAuth: () => ({ getSession }) }));
+const { auth, currentUser } = vi.hoisted(() => ({ auth: vi.fn(), currentUser: vi.fn() }));
+vi.mock("@clerk/nextjs/server", () => ({ auth, currentUser }));
 vi.mock("@/lib/auth/access.service", () => ({
   acceptInvitationAndLoadStaffRoles: vi.fn(),
   loadStaffRoles: vi.fn(),
@@ -16,10 +16,24 @@ import { acceptInvitationAndLoadStaffRoles, loadStaffRoles } from "@/lib/auth/ac
 const accept = vi.mocked(acceptInvitationAndLoadStaffRoles);
 const load = vi.mocked(loadStaffRoles);
 
-const verifiedUser = { id: "user-1", email: "ana@example.com", emailVerified: true };
+const USER_ID = "user_2abc";
 
-function sessionWith(user: Record<string, unknown>) {
-  getSession.mockResolvedValue({ data: { session: { id: "session-1" }, user }, error: null });
+function clerkUser(overrides: Record<string, unknown> = {}) {
+  return {
+    id: USER_ID,
+    primaryEmailAddressId: "idn_primary",
+    emailAddresses: [
+      { id: "idn_primary", emailAddress: "ana@example.com", verification: { status: "verified" } },
+    ],
+    publicMetadata: {},
+    unsafeMetadata: {},
+    ...overrides,
+  };
+}
+
+function signedInAs(user: unknown) {
+  auth.mockResolvedValue({ userId: USER_ID });
+  currentUser.mockResolvedValue(user);
 }
 
 async function expectResponse(response: Response, status: number, body: unknown) {
@@ -28,77 +42,139 @@ async function expectResponse(response: Response, status: number, body: unknown)
   await expect(response.json()).resolves.toEqual(body);
 }
 
-const FORBIDDEN = { error: "forbidden" };
+const UNAUTHORIZED = { error: "unauthorized" };
+const forbidden = (reason: string) => ({ error: "forbidden", reason });
 
 beforeEach(() => {
-  getSession.mockReset();
+  auth.mockReset();
+  currentUser.mockReset();
   accept.mockReset();
   load.mockReset();
 });
 
 describe("GET /api/crm/me", () => {
-  it("returns 401 without a session", async () => {
-    getSession.mockResolvedValue({ data: null, error: null });
+  it("returns 401 without a session, without calling currentUser or the database", async () => {
+    auth.mockResolvedValue({ userId: null });
 
-    await expectResponse(await GET(), 401, { error: "unauthorized" });
+    await expectResponse(await GET(), 401, UNAUTHORIZED);
+    expect(currentUser).not.toHaveBeenCalled();
     expect(accept).not.toHaveBeenCalled();
     expect(load).not.toHaveBeenCalled();
   });
 
-  it("returns 403 for an unverified email without consuming invitations", async () => {
-    sessionWith({ ...verifiedUser, emailVerified: false });
+  it("returns 401 and logs one fixed message when auth() throws", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    auth.mockRejectedValue(new Error("Missing CLERK_SECRET_KEY: secret detail"));
+
+    await expectResponse(await GET(), 401, UNAUTHORIZED);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith("auth: session lookup failed");
+    expect(currentUser).not.toHaveBeenCalled();
+    logError.mockRestore();
+  });
+
+  it("returns 403 without querying the database or leaking the text when currentUser() throws", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    auth.mockResolvedValue({ userId: USER_ID });
+    currentUser.mockRejectedValue(new Error("Clerk API unavailable: sk_live_secret"));
+
+    const response = await GET();
+    expect(response.status).toBe(403);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const text = await response.text();
+    expect(text).toBe(JSON.stringify(forbidden("user_lookup_failed")));
+    expect(text).not.toMatch(/Clerk API|sk_live/);
+    expect(accept).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+    logError.mockRestore();
+  });
+
+  it.each([
+    ["currentUser() returns null", null],
+    ["currentUser() returns another id", clerkUser({ id: "user_other" })],
+  ])("returns 401 when %s", async (_, user) => {
+    signedInAs(user);
+
+    await expectResponse(await GET(), 401, UNAUTHORIZED);
+    expect(accept).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("accepts a pending invitation with the lowercased verified primary email", async () => {
+    signedInAs(
+      clerkUser({
+        emailAddresses: [
+          { id: "idn_primary", emailAddress: "Ana@Example.COM", verification: { status: "verified" } },
+        ],
+      }),
+    );
+    accept.mockResolvedValue(["commercial"]);
+
+    await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: ["commercial"] });
+    expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an unverified primary email with a verified secondary", clerkUser({
+      emailAddresses: [
+        { id: "idn_primary", emailAddress: "ana@example.com", verification: { status: "unverified" } },
+        { id: "idn_secondary", emailAddress: "ana@work.example", verification: { status: "verified" } },
+      ],
+    })],
+    ["no primary email", clerkUser({ primaryEmailAddressId: null })],
+  ])("returns 403 for %s without consuming invitations, even for admin", async (_, user) => {
+    signedInAs(user);
     load.mockResolvedValue(["admin"]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
-    expect(load).toHaveBeenCalledWith("user-1");
+    await expectResponse(await GET(), 403, forbidden("email_unverified"));
+    expect(load).toHaveBeenCalledWith(USER_ID);
     expect(accept).not.toHaveBeenCalled();
   });
 
-  it("returns 403 for a free sign-up without roles", async () => {
-    sessionWith(verifiedUser);
+  it.each([
+    ["a free sign-up without roles"],
+    ["an expired or revoked invitation (acceptance yields no roles)"],
+  ])("returns 403 for %s", async () => {
+    signedInAs(clerkUser());
     accept.mockResolvedValue([]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
-    expect(accept).toHaveBeenCalledWith("user-1", "ana@example.com");
-  });
-
-  it("returns 403 when the invitation is expired or revoked (acceptance yields no roles)", async () => {
-    sessionWith(verifiedUser);
-    accept.mockResolvedValue([]);
-
-    await expectResponse(await GET(), 403, FORBIDDEN);
-    expect(accept).toHaveBeenCalledTimes(1);
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
+    expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
   });
 
   it.each([["commercial"], ["admin"]] as const)("returns 200 for %s", async (role) => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValue([role]);
 
-    await expectResponse(await GET(), 200, { userId: "user-1", staffRoles: [role] });
+    await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: [role] });
   });
 
   it("returns 403 on the next call after the role is revoked", async () => {
-    sessionWith(verifiedUser);
+    signedInAs(clerkUser());
     accept.mockResolvedValueOnce(["commercial"]).mockResolvedValueOnce([]);
 
-    await expectResponse(await GET(), 200, { userId: "user-1", staffRoles: ["commercial"] });
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: ["commercial"] });
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(accept).toHaveBeenCalledTimes(2);
   });
 
   it("returns 403 on a database error without leaking the original message", async () => {
-    sessionWith(verifiedUser);
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
     accept.mockRejectedValue(new Error("password authentication failed for user app"));
 
     const response = await GET();
     expect(response.status).toBe(403);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     const text = await response.text();
-    expect(text).toBe(JSON.stringify(FORBIDDEN));
+    expect(text).toBe(JSON.stringify(forbidden("role_lookup_failed")));
     expect(text).not.toContain("password");
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    logError.mockRestore();
   });
 
-  it("returns 403 when role=admin arrives via query, cookie, body or session user.role", async () => {
+  it("returns 403 when role=admin arrives via query, cookie, body or Clerk metadata", async () => {
     // GET() takes no request: this one only documents the attempted elevation, it is never read.
     const forged = new Request("https://carreras-viajeras.mentec.dev/api/crm/me?role=admin", {
       method: "POST",
@@ -107,10 +183,12 @@ describe("GET /api/crm/me", () => {
     });
     expect(new URL(forged.url).searchParams.get("role")).toBe("admin");
 
-    sessionWith({ ...verifiedUser, role: "admin", staffRoles: ["admin"] });
+    signedInAs(
+      clerkUser({ publicMetadata: { role: "admin" }, unsafeMetadata: { staffRoles: ["admin"] } }),
+    );
     accept.mockResolvedValue([]);
 
-    await expectResponse(await GET(), 403, FORBIDDEN);
+    await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(GET).toHaveLength(0);
   });
 });
