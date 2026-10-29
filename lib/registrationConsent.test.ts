@@ -10,31 +10,17 @@ describe("REGISTRATION_CONSENT", () => {
     expect(REGISTRATION_CONSENT.version).toMatch(/^[a-z0-9-]{1,40}$/);
   });
 
-  it("is the clearly identified P-L placeholder until the legal area approves the text", () => {
-    expect(REGISTRATION_CONSENT.isPlaceholder).toBe(true);
-    expect(REGISTRATION_CONSENT.version).toBe("registro-web-pendiente-pl");
-    expect(REGISTRATION_CONSENT.privacyText).toMatch(
-      /^\[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL \(P-L\)\]/,
-    );
-    expect(REGISTRATION_CONSENT.marketingText).toMatch(/^\[TEXTO PROVISIONAL – P-L\]/);
+  it("is the approved text: version registro-web-v1, without the P-L placeholder marker", () => {
+    expect(REGISTRATION_CONSENT.isPlaceholder).toBe(false);
+    expect(REGISTRATION_CONSENT.version).toBe("registro-web-v1");
+    expect(REGISTRATION_CONSENT.privacyText).not.toMatch(/PROVISIONAL|P-L/);
+    expect(REGISTRATION_CONSENT.marketingText).not.toMatch(/PROVISIONAL|P-L/);
   });
 });
 
 describe("isRegistrationOpen", () => {
-  it("is closed in production while the text is a placeholder", () => {
-    vi.stubEnv("NODE_ENV", "production");
-    expect(isRegistrationOpen()).toBe(false);
-  });
-
-  it.each(["development", "test"])("is open in %s with the placeholder", (nodeEnv) => {
+  it.each(["production", "development", "test"])("is open in %s with the approved text", (nodeEnv) => {
     vi.stubEnv("NODE_ENV", nodeEnv);
     expect(isRegistrationOpen()).toBe(true);
-  });
-
-  it("reads NODE_ENV on each call", () => {
-    vi.stubEnv("NODE_ENV", "development");
-    expect(isRegistrationOpen()).toBe(true);
-    vi.stubEnv("NODE_ENV", "production");
-    expect(isRegistrationOpen()).toBe(false);
   });
 });
