@@ -7,6 +7,7 @@ import {
   SiteHeader,
   attributionParams,
   firstParam,
+  getCatalogOffer,
   getCatalogTrip,
 } from "@/modules/landing";
 
@@ -21,11 +22,16 @@ export default async function RaceRegistrationPage({
   params,
   searchParams,
 }: PageProps<"/viajes/[slug]/registro">) {
-  const trip = await getCatalogTrip((await params).slug);
-  if (!trip) notFound();
+  const { slug } = await params;
   const query = await searchParams;
-  // Stand mode only changes the layout: it grants nothing on the server.
+  // Stand mode only changes the layout: it grants nothing on the server and shows no price block.
   const standMode = firstParam(query.modo) === "stand";
+  // ?c= only selects a valid campaign offer (decided by the server); every other parameter is ignored.
+  const [trip, offer] = await Promise.all([
+    getCatalogTrip(slug),
+    standMode ? null : getCatalogOffer(slug, firstParam(query.c) ?? null),
+  ]);
+  if (!trip) notFound();
   // The action comes from crm and is passed as a prop: landing never imports crm at runtime.
   const section = (
     <RaceRegistrationSection
@@ -33,6 +39,7 @@ export default async function RaceRegistrationPage({
       action={submitWebLeadAction}
       attribution={attributionParams(query)}
       standMode={standMode}
+      offer={offer}
     />
   );
 

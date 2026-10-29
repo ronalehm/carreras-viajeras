@@ -10,7 +10,6 @@ vi.mock("@/modules/trips", async () => {
     getPublishedTripBySlug: vi.fn(),
     formatTripDate: display.formatTripDate,
     formatTripDateRange: display.formatTripDateRange,
-    formatTripPrice: display.formatTripPrice,
   };
 });
 
@@ -91,11 +90,6 @@ describe("getCatalogTrip", () => {
       travelDates: formatTripDateRange("2027-05-14", "2027-05-17"),
       capacity: "100 cupos",
       officialUrl: "https://maratondesantiago.cl/",
-      price: "US$ 1,499",
-      installmentsPrice: "US$ 1,799",
-      deposit: "US$ 300",
-      companionPrice: "US$ 1,300",
-      paymentTerms: ["Saldo pagado en febrero de 2027.", "La web no recibe pagos."],
       includes: ["Inscripción a los 42K", "Vuelos ida y vuelta"],
       excludes: ["Tours adicionales."],
       notes: ["Aerolínea por confirmar.", "Hotel por confirmar."],
@@ -116,21 +110,19 @@ describe("getCatalogTrip", () => {
       travelDates: null,
       capacity: "Cupos por confirmar",
       officialUrl: null,
-      price: "Precio a consultar",
-      installmentsPrice: null,
-      deposit: null,
-      companionPrice: null,
-      paymentTerms: [],
       includes: [],
       excludes: [],
       notes: [],
     });
   });
 
-  it("keeps a zero price as a price", async () => {
-    getPublished.mockResolvedValue({ ...minimal, depositUsd: 0 });
-    const trip = await getCatalogTrip(minimal.slug);
-    expect(trip?.deposit).toBe("US$ 0");
+  it("never exposes the old price fields of trips, even when they have a value", async () => {
+    getPublished.mockResolvedValue(complete);
+    const trip = await getCatalogTrip(complete.slug);
+    for (const key of ["price", "installmentsPrice", "deposit", "companionPrice", "paymentTerms"]) {
+      expect(trip).not.toHaveProperty(key);
+    }
+    expect(JSON.stringify(trip)).not.toMatch(/US\$|1,499|1,799|1,300|Saldo pagado/);
   });
 
   it("propagates database errors", async () => {

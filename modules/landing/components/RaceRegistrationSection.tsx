@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { isRegistrationOpen } from "@/lib/registrationConsent";
 import { cn } from "@/lib/utils";
+import type { OfferView } from "../utils/catalogOffer";
 import type { TripLanding } from "../utils/catalogTrip";
 import {
   GENERAL_INQUIRY_MESSAGE,
@@ -12,19 +13,28 @@ import {
   type LeadAttributionParams,
 } from "../utils/inquiry";
 import { LeadCaptureForm, RegistrationClosedNotice, type LeadCaptureAction } from "./LeadCaptureForm";
+import { OfferSummary } from "./OfferSummary";
 
 type RaceRegistrationSectionProps = {
   trip: Pick<TripLanding, "slug" | "title" | "location" | "raceDate" | "distances" | "imageUrl">;
   action: LeadCaptureAction;
   attribution: LeadAttributionParams;
   standMode: boolean;
+  offer: OfferView | null; // resolved by the server from the slug and ?c= only
 };
 
 /**
- * Registration page of a published race: minimal commercial header (catalog data only, no prices)
- * and the lead form. Stand mode keeps only the race name and a larger form.
+ * Registration page of a published race: minimal commercial header (catalog data only), the price
+ * block of the offer in force (if any) and the lead form. Stand mode keeps only the race name and a
+ * larger form: no price block.
  */
-export function RaceRegistrationSection({ trip, action, attribution, standMode }: RaceRegistrationSectionProps) {
+export function RaceRegistrationSection({
+  trip,
+  action,
+  attribution,
+  standMode,
+  offer,
+}: RaceRegistrationSectionProps) {
   const whatsAppUrl = buildWhatsAppUrl(WHATSAPP_NUMBER, GENERAL_INQUIRY_MESSAGE);
   // Gate P-L: in production with the placeholder legal text the form is not shown.
   const form = isRegistrationOpen() ? (
@@ -52,6 +62,11 @@ export function RaceRegistrationSection({ trip, action, attribution, standMode }
       </section>
     );
   }
+
+  // The full package page keeps the campaign code so that it shows the same offer.
+  const packageHref = attribution.c
+    ? `/viajes/${trip.slug}?c=${encodeURIComponent(attribution.c)}`
+    : `/viajes/${trip.slug}`;
 
   return (
     <>
@@ -87,7 +102,7 @@ export function RaceRegistrationSection({ trip, action, attribution, standMode }
               Quiero correr esta maratón <ArrowDown aria-hidden />
             </a>
             <Link
-              href={`/viajes/${trip.slug}`}
+              href={packageHref}
               className="inline-flex items-center gap-1 text-base font-semibold underline decoration-highlight decoration-2 underline-offset-[6px]"
             >
               Ver el paquete completo <ArrowUpRight aria-hidden className="size-4" />
@@ -95,6 +110,12 @@ export function RaceRegistrationSection({ trip, action, attribution, standMode }
           </div>
         </div>
       </section>
+
+      {offer && (
+        <div className="bg-background px-4 py-12 text-night sm:py-16">
+          <OfferSummary offer={offer} className="mx-auto max-w-md" />
+        </div>
+      )}
 
       <section id="registro" aria-labelledby="registro-title" className="bg-sky px-4 py-12 text-night sm:py-16">
         <div className="mx-auto flex max-w-md flex-col gap-6">

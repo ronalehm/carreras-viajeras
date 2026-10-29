@@ -564,9 +564,9 @@ Requisito previo: F1 cerrada y la migración aplicada en la rama de Neon de prue
 
 ### Fase 3: bloque financiero público (3 tareas, 11 archivos)
 Requisito previo: F2 cerrada. La publicación en producción espera a las puertas P-L y P-T (textos provisionales; Pregunta abierta 1); la implementación no.
-- [ ] T1 — Vista de la oferta (`toOfferView`, `getCatalogOffer`) y `TripLanding` sin campos de precio, con tests · archivos: `modules/landing/utils/catalogOffer.ts`, `modules/landing/utils/catalogOffer.test.ts`, `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts` · depende de: Fase 2 · secuencial (base)
-- [ ] T2 — `OfferSummary` y su uso en `TripDetail` (con el aviso sin oferta) y en `RaceRegistrationSection` (salvo el modo stand; «Ver el paquete completo» con `?c=`) · archivos: `modules/landing/components/OfferSummary.tsx` (nuevo), `modules/landing/components/TripDetail.tsx`, `modules/landing/components/RaceRegistrationSection.tsx` · depende de: T1 · secuencial
-- [ ] T3 — Rutas y README:
+- [x] T1 — Vista de la oferta (`toOfferView`, `getCatalogOffer`) y `TripLanding` sin campos de precio, con tests · archivos: `modules/landing/utils/catalogOffer.ts`, `modules/landing/utils/catalogOffer.test.ts`, `modules/landing/utils/catalogTrip.ts`, `modules/landing/utils/catalogTrip.test.ts` · depende de: Fase 2 · secuencial (base)
+- [x] T2 — `OfferSummary` y su uso en `TripDetail` (con el aviso sin oferta) y en `RaceRegistrationSection` (salvo el modo stand; «Ver el paquete completo» con `?c=`) · archivos: `modules/landing/components/OfferSummary.tsx` (nuevo), `modules/landing/components/TripDetail.tsx`, `modules/landing/components/RaceRegistrationSection.tsx` · depende de: T1 · secuencial
+- [x] T3 — Rutas y README:
   - API pública de `landing` (`getCatalogOffer`);
   - `/viajes/[slug]` y `/viajes/[slug]/registro` con `?c=`;
   - README "Qué usa hoy la landing";
