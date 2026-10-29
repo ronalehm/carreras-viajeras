@@ -1,7 +1,7 @@
 # Embudo comercial completo y correos automáticos del ciclo de vida
 
 - Módulos: integrations, crm y accounts; datos compartidos en lib.
-- Estado: aprobado
+- Estado: borrador
 - Solicitud: que todo registro de un runner entre al embudo comercial y que cada paso envíe un correo automático: bienvenida con confirmación del registro, confirmación de contacto, seguimiento, confirmación de la separación y alerta para el comercial.
 - Referencias: `crm-funnel-email-automation.md` (motor de correos ya implementado), `crm-journey-automation.md` (se enmienda aquí), `crm-leads-capture.md`, `landing-omnichannel-capture.md`, `accounts-runner-profiles.md` y `docs/SETUP.md`.
 
@@ -171,8 +171,9 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
   1. `ALTER TYPE lead_source ADD VALUE 'runner_account'` y `ALTER TYPE outbox_event_type ADD VALUE 'lead.owner_assigned'`, fuera de transacción o en la suya propia.
   2. `CREATE TYPE client_email_kind AS ENUM ('stage', 'welcome_registration', 'welcome_contact', 'welcome_account', 'follow_up', 'booking_confirmed', 'team_alert', 'owner_alert')`; `ALTER TABLE client_emails ADD COLUMN kind client_email_kind NOT NULL DEFAULT 'stage'`; sustituir el índice único `client_emails_event_uq` por `(source_event_id, kind)`; índice `(lead_id, kind, created_at)` si las lecturas de la ficha lo necesitan.
   - `stage` sigue NOT NULL: guarda la etapa del lead en el momento del evento.
-  - Es compatible con el código desplegado: el insert actual usa el valor por defecto `stage`.
-  - **Debe aplicarse en production antes de mergear la F1.**
+  - Compatibilidad con el código desplegado: el insert actual usa el valor por defecto `stage`, pero su `ON CONFLICT (source_event_id)` se queda sin índice único al cambiarlo. Por eso el código anterior falla al preparar correos si `CRM_EMAIL_AUTOMATION_ENABLED=true`. Con la automatización apagada no se ejecuta y no falla.
+  - **Debe aplicarse en production antes de mergear la F1, con la automatización apagada, y debe seguir apagada hasta que la F1 esté desplegada.**
+  - El enum Zod `leadSourceSchema` (`modules/crm/schemas/leads.schema.ts`) incluye `runner_account`, para coincidir con la base. No se ofrece en el alta manual: es una vía de sistema, como `web_form`, `google_form` e `import`.
 - **`lib/db-schema.ts`**: enums nuevos, columna `kind` e índices. Tipos derivados en `modules/integrations/types`.
 - **`lib/env.ts`**: `getClientEmailEnv()` añade `teamAlertEmail` desde `CRM_TEAM_ALERT_EMAIL` (opcional, email ≤254). Una variable mal formada es un error que solo nombra el campo. También va en `.env.example` y `.dev.vars.example`.
 - **Plantillas**: `modules/integrations/utils/lifecycleEmailTemplates.ts`, con funciones puras por tipo. `clientEmailTemplate` (etapas) se conserva.
@@ -215,11 +216,11 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 ### Fase 1 — Datos y motor por tipos (5 tareas, ~14 archivos)
 
-- [ ] T1 — Schema y migración revisable · archivos: `lib/db-schema.ts`, `drizzle/0014_*.sql`, `drizzle/meta/0014_snapshot.json`, `drizzle/meta/_journal.json` · depende de: aprobación · secuencial (base)
+- [ ] T1 — Schema y migración revisable · archivos: `lib/db-schema.ts`, `drizzle/0014_*.sql`, `drizzle/meta/0014_snapshot.json`, `drizzle/meta/_journal.json`, `modules/crm/schemas/leads.schema.ts` y su test (enum `runner_account`, no seleccionable en el alta manual) · depende de: aprobación · secuencial (base)
 - [ ] T2 — Configuración del aviso al equipo · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (`lib/`)
 - [ ] T3 — Plantillas · archivos: `modules/integrations/utils/lifecycleEmailTemplates.ts`, `modules/integrations/utils/lifecycleEmailTemplates.test.ts` · depende de: T1 · paralelo con T2
 - [ ] T4 — Preparación y elegibilidad por tipo · archivos: `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/schemas/email.schema.ts`, `modules/integrations/index.ts` · depende de: T1–T3 · secuencial
-- [ ] T5 — Pruebas del motor · archivos: `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts` · depende de: T4
+- [ ] T5 — Pruebas del motor · archivos: `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts`, `modules/crm/services/leadMessages.service.test.ts` (mocks de `getClientEmailEnv` con `teamAlertEmail`) · depende de: T4
 
 ### Fase 2 — Entradas al embudo (5 tareas, ~14 archivos)
 
