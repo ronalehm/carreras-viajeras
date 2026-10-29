@@ -1026,6 +1026,8 @@ Si falta, la API de n8n responderá que no está configurada y el resto de la ap
 
 ### Automatizaciones con n8n
 
+Este apartado describe los borradores y avisos al equipo para revisión humana. El canal adicional de correo automático al cliente y el flujo para tu n8n en Docker se explican en [Embudo visual y correos al cliente](#embudo-visual-y-correos-al-cliente-desde-n8n-en-docker).
+
 n8n corre en tu computadora y no tiene dirección pública, así que **la web nunca llama a n8n**: es n8n quien pregunta cada minuto a una API privada de la web si hay novedades (modelo *pull*). Cada vez que se crea un lead, y cada vez que el equipo le cambia la etapa en el CRM, la base guarda un **evento** en una cola (`outbox_events`). n8n recoge esos eventos, te **avisa por correo** y te **prepara un borrador** del mensaje para el runner. **Nada se envía solo al runner:** tú (o el comercial) revisas el borrador y lo envías a mano desde WhatsApp Business App.
 
 Si n8n está apagado no se pierde nada: los eventos esperan en Neon y se recogen cuando vuelve a encenderse. La API solo responde en la web desplegada (`https://carreras-viajeras.mentec.dev`, cuando autorices el despliegue) o en tu computadora con `npm run dev` (`http://localhost:3000`), y necesita la migración `0005` aplicada (y la `0006` para el alta desde Google Forms y la importación, apartados 10 y 11, y para los recordatorios y el aviso de baja, apartados 12 y 13).
@@ -1523,6 +1525,52 @@ Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` 
 
 El outbox del PR #8 ([`automation-outbox.md`](docs/specs/automation-outbox.md)) se retiró al integrar este trabajo: el sistema usa un único outbox (`outbox_events`) y la API `/api/integrations/n8n/*` descritos en [«Automatizaciones con n8n»](#automatizaciones-con-n8n).
 
+## Embudo visual y correos al cliente desde n8n en Docker
+
+`/crm/leads` abre el embudo **Nuevo → Contactado → Cotizado → Reservado → Pagado**; **Perdido** es una salida desde cualquier etapa. Cada columna tiene hasta 10 contactos y el total completo. La vista **Lista** conserva la tabla, los filtros y la paginación (`?vista=lista`). Los archivados se consultan en lista, como solo lectura.
+
+Al abrir una ficha se ven el recorrido registrado, los avisos y el historial de correos de cada etapa. Un salto Nuevo → Reservado deja las etapas intermedias como «Sin registro». Los avisos distinguen seguimiento vencido, hoy, falta de responsable o próxima acción, correo ausente y errores de envío. «No contactar» conserva prioridad incluso si el contacto cambia otra vez de etapa.
+
+### Preparar el entorno
+
+1. Ejecutar `npm ci`. Los tests nuevos usan PostgreSQL embebido (PGlite), sin credenciales ni conexión a Neon: `npx vitest run modules/integrations/services/clientEmails.service.test.ts modules/crm/services/leadMessages.service.test.ts`.
+2. Revisar [`0013_client_stage_emails.sql`](drizzle/0013_client_stage_emails.sql) y aplicarla mediante el procedimiento autorizado en la rama Neon **dev-test**, antes de ejecutar este código contra esa base. Añade la tabla de correos y una secuencia a los eventos para ordenar cambios concurrentes; no borra datos. Las pruebas aplican todas las migraciones en memoria. No se ha aplicado esta migración a ninguna base remota desde este trabajo.
+3. Configurar la aplicación mediante su entorno seguro:
+
+   | Variable | Uso |
+   | --- | --- |
+   | `N8N_API_TOKEN` | Token privado compartido con la credencial Header Auth de n8n; mínimo 32 caracteres aleatorios. |
+   | `CRM_EMAIL_AUTOMATION_ENABLED` | `false` por defecto. `true` habilita la preparación y autorización. |
+   | `CRM_EMAIL_FROM` | Dirección de correo autorizada por tu cuenta SMTP. |
+   | `CRM_EMAIL_AUTOMATION_START_AT` | Fecha y hora ISO con zona, elegida **después** de la migración y del despliegue, por ejemplo `2026-11-01T15:00:00Z`. |
+
+   Las credenciales SMTP se guardan en tu instancia existente de n8n. La aplicación no necesita su contraseña. El CRM puede arrancar sin configurar estos correos.
+
+### Importar en tu n8n existente
+
+1. Importar [`scripts/n8n/client-stage-email.json`](scripts/n8n/client-stage-email.json) desde el editor de tu **n8n 2.43.7**. Los tipos de nodos se han contrastado con el código de esa versión; la importación y conexión SMTP deben probarse en tu instancia. Se importa **inactivo**, como flujo separado del que prepara borradores de WhatsApp para revisión humana.
+2. En **CRM connection**, editar el campo `crmOrigin`:
+
+   | Ubicación del CRM | URL vista desde n8n en Docker |
+   | --- | --- |
+   | `npm run dev` en tu PC con Docker Desktop | `http://host.docker.internal:3000` |
+   | CRM desplegado | Su URL pública HTTPS. |
+
+   El flujo usa este nodo de configuración, disponible en n8n Community; no requiere Variables de pago. Desde Docker, `localhost` apunta al propio contenedor. Si usas Docker Engine en Linux, añadir `extra_hosts: ["host.docker.internal:host-gateway"]` a tu servicio de n8n. Comprobar primero desde un nodo HTTP Request que `GET <crmOrigin>/api/health` devuelve `{ "status": "ok" }`.
+3. En cada nodo HTTP seleccionar la misma credencial **Header Auth**, con nombre de cabecera `Authorization` y valor `Bearer <N8N_API_TOKEN>`. En **Send SMTP once**, seleccionar tu credencial SMTP existente. El archivo exportado no contiene credenciales.
+4. Preparar un contacto con una dirección de prueba autorizada, establecer la fecha de corte y habilitar la aplicación. Crear o cambiar de etapa **después** de esa fecha; ejecutar **Prueba manual** y revisar el resultado en la ficha. Activar **Cada minuto** tras validar esa prueba. El flujo procesa un contacto por ejecución; mantener su límite en 1 para conservar la relación entre los nodos.
+
+### Resultados y recuperación
+
+El flujo reclama un mensaje, pide autorización justo antes de SMTP, envía una sola vez y confirma el resultado. El servidor vuelve a revisar etapa, evento vigente, destinatario, archivo y baja de contacto. Los eventos originales siguen disponibles para el consumidor anterior de n8n. Los eventos anteriores al corte y las importaciones se excluyen del envío automático. Los avisos de seguimiento vencido siguen siendo internos.
+
+**Enviado** significa que el servidor SMTP aceptó al destinatario. Esta conexión no confirma la entrega final. **Por confirmar** indica una respuesta ambigua o una ejecución interrumpida después de autorizar SMTP: revisar su ID de ejecución en n8n y evitar ejecutar otra vez el nodo SMTP o la ejecución completa. Si el resultado anterior confirma aceptación, reintentar únicamente **Confirm accepted** con los datos guardados de ese mismo intento; el callback es idempotente y puede resolver el estado incierto.
+
+Los callbacks HTTP tienen retries; SMTP y su autorización no. El nodo **Revisar ejecución** termina los resultados inciertos como error después de registrarlos, para conservar la información necesaria en n8n. Una reclamación que expire antes de autorizar puede volver a la cola, hasta tres intentos. **Reintentar correo** en el CRM solo aparece para un fallo confirmado anterior al envío, con automatización activa y contacto todavía elegible. Los mensajes aceptados, inciertos, de otra etapa o de un episodio anterior no admiten reenvío desde ese botón. El cambio de etapa conserva «No contactar» y no habilita nuevos envíos para quien pidió la baja.
+
+Al pausar los correos, poner `CRM_EMAIL_AUTOMATION_ENABLED=false` y desactivar el flujo programado. Al reactivarlos, elegir un corte nuevo si se quiere excluir lo ocurrido durante la pausa. Un correo ya aceptado por SMTP no puede retirarse mediante una baja posterior. Las ejecuciones con error pueden conservar datos necesarios para revisarlas: ajustar su retención en n8n; las ejecuciones correctas de este flujo no se guardan.
+
+La activación requiere probar la conexión desde tu contenedor y un destinatario autorizado. Las verificaciones locales de este cambio no han enviado correos reales ni configurado tu Docker desde la nube.
 ## Perfiles, patrocinadores y directorio de usuarios (PR #22)
 
 La integración conserva **Clerk como único proveedor de identidad**, los roles

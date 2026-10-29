@@ -2,6 +2,13 @@ import { describe, expect, it } from "vitest";
 import { leadListHref, ownerToParam, parseLeadListQuery, stageToParam } from "./leadListQuery";
 
 describe("parseLeadListQuery", () => {
+  it("preserves list view through filters and pagination, omitting the default board view", () => {
+    const filters = parseLeadListQuery({ vista: "lista", responsable: "mios", etapa: "quoted" });
+    expect(filters.view).toBe("list");
+    expect(leadListHref(filters, 2)).toBe("/crm/leads?etapa=quoted&responsable=mios&vista=lista&pagina=2");
+    expect(parseLeadListQuery({ vista: ["lista", "lista"] }).view).toBeUndefined();
+    expect(parseLeadListQuery({ vista: "foo" }).view).toBeUndefined();
+  });
   it("returns the defaults without filters", () => {
     expect(parseLeadListQuery({})).toEqual({ stage: undefined, owner: undefined, page: 1 });
   });
