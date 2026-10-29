@@ -42,17 +42,31 @@ const FIELDS: BookingField[] = [
 
 const INITIAL_STATE: BookingActionState = { status: "idle" };
 
-type BookingFormProps =
-  | { booking: CrmBooking; tripOptions?: never }
-  | { booking?: never; tripOptions: { id: string; title: string }[] };
+// "Crear reserva" from a lead's page: initial values and the hidden link to the lead.
+type BookingPrefill = {
+  leadId: string;
+  leadName: string;
+  participantName: string;
+  participantEmail: string | null;
+  tripId: string | null;
+};
 
-// Create (with the trip selector) or edit (the trip is fixed; the email locks once linked).
-export function BookingForm({ booking, tripOptions }: BookingFormProps) {
+type BookingFormProps =
+  | { booking: CrmBooking; tripOptions?: never; prefill?: never }
+  | { booking?: never; tripOptions: { id: string; title: string }[]; prefill?: BookingPrefill };
+
+// Create (with the trip selector, optionally linked to a lead) or edit (the trip and the lead are
+// fixed; the email locks once linked).
+export function BookingForm({ booking, tripOptions, prefill }: BookingFormProps) {
   const [state, formAction, pending] = useActionState(
     booking ? updateBookingAction : createBookingAction, INITIAL_STATE,
   );
   const errors = state.status === "error" ? state.fieldErrors : undefined;
   const values = state.status === "error" ? state.values : undefined;
+  const initial: Partial<Record<BookingField["name"], string | number | null>> = booking ?? {
+    participantName: prefill?.participantName,
+    participantEmail: prefill?.participantEmail,
+  };
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -75,6 +89,14 @@ export function BookingForm({ booking, tripOptions }: BookingFormProps) {
   return (
     <form noValidate onSubmit={handleSubmit} className="flex max-w-3xl flex-col gap-6">
       {booking && <input type="hidden" name="bookingId" value={booking.id} />}
+      {prefill && (
+        <>
+          <input type="hidden" name="leadId" value={prefill.leadId} />
+          <p className="text-sm text-muted-foreground">
+            Esta reserva quedará vinculada al lead «{prefill.leadName}». Al confirmarla, el lead pasará a Reservado.
+          </p>
+        </>
+      )}
       {state.status === "error" && (
         <p role="alert" className="text-sm text-destructive">{state.message}</p>
       )}
@@ -87,7 +109,7 @@ export function BookingForm({ booking, tripOptions }: BookingFormProps) {
           <div className="flex flex-col gap-2 sm:col-span-2">
             <Label htmlFor="booking-tripId">Viaje *</Label>
             <NativeSelect
-              id="booking-tripId" name="tripId" defaultValue={values?.tripId ?? ""} className="w-full"
+              id="booking-tripId" name="tripId" defaultValue={values?.tripId ?? prefill?.tripId ?? ""} className="w-full"
               aria-invalid={errors?.tripId ? true : undefined}
               aria-describedby={describedBy("booking-tripId", false, !!errors?.tripId)}
             >
@@ -104,7 +126,7 @@ export function BookingForm({ booking, tripOptions }: BookingFormProps) {
           const locked = name === "participantEmail" && !!booking?.linked;
           const help = locked ? EMAIL_LOCKED_HINT : hint;
           const props = {
-            id, name, defaultValue: values?.[name] ?? String(booking?.[name] ?? ""), ...constraints,
+            id, name, defaultValue: values?.[name] ?? String(initial[name] ?? ""), ...constraints,
             "aria-invalid": errors?.[name] ? true : undefined,
             "aria-describedby": describedBy(id, !!help, !!errors?.[name]),
           };

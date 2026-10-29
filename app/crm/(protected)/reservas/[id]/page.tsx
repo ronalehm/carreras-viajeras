@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
@@ -36,6 +37,14 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           <p className="text-sm text-muted-foreground">
             Cuenta: {booking.linked ? "Vinculada" : "Sin vincular"} · {booking.trip.title}
           </p>
+          {booking.lead && (
+            <p className="text-sm text-muted-foreground">
+              Lead:{" "}
+              <Link href={`/crm/leads/${booking.lead.id}`} className="text-foreground underline underline-offset-4 hover:text-primary">
+                {booking.lead.fullName}
+              </Link>
+            </p>
+          )}
         </div>
         {!cancelled && (
           <div className="flex flex-wrap gap-2">

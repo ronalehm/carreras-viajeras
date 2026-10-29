@@ -23,6 +23,7 @@ import { changeBookingStatusAction, createBookingAction, updateBookingAction } f
 
 const TRIP_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
+const LEAD_ID = "22222222-2222-4222-8222-222222222222";
 const IDLE = { status: "idle" } as const;
 const FIELDS = {
   participantName: "Ana Pérez", participantEmail: "  Ana@Example.com ", packageLabel: "Paquete corredor",
@@ -61,13 +62,14 @@ const actions: {
   values: Record<string, string>;
   invalid: Record<string, string>;
   redirects: boolean;
+  revalidatesLeads: boolean;
 }[] = [
-  { name: "crear", action: createBookingAction, service: createBooking, values: CREATE, invalid: { totalUsd: "1499.50" }, redirects: true },
-  { name: "editar", action: updateBookingAction, service: updateBooking, values: UPDATE, invalid: { totalUsd: "1499.50" }, redirects: false },
-  { name: "cambiar estado", action: changeBookingStatusAction, service: setBookingStatus, values: STATUS, invalid: { status: "pending" }, redirects: false },
+  { name: "crear", action: createBookingAction, service: createBooking, values: CREATE, invalid: { totalUsd: "1499.50" }, redirects: true, revalidatesLeads: false },
+  { name: "editar", action: updateBookingAction, service: updateBooking, values: UPDATE, invalid: { totalUsd: "1499.50" }, redirects: false, revalidatesLeads: false },
+  { name: "cambiar estado", action: changeBookingStatusAction, service: setBookingStatus, values: STATUS, invalid: { status: "pending" }, redirects: false, revalidatesLeads: true },
 ];
 
-describe.each(actions)("$name: permisos en llamadas directas", ({ action, service, values, invalid, redirects }) => {
+describe.each(actions)("$name: permisos en llamadas directas", ({ action, service, values, invalid, redirects, revalidatesLeads }) => {
   it("rechaza sin sesión antes de consultar o mutar", async () => {
     getSession.mockResolvedValue({ data: null, error: null });
     expect(await action(IDLE, form(values))).toEqual({
@@ -99,7 +101,7 @@ describe.each(actions)("$name: permisos en llamadas directas", ({ action, servic
     if (redirects) await expect(result).rejects.toThrow("NEXT_REDIRECT");
     else await expect(result).resolves.toMatchObject({ status: "success" });
     expect(service).toHaveBeenCalledOnce();
-    expect(revalidatePath).toHaveBeenCalledTimes(2);
+    expect(revalidatePath).toHaveBeenCalledTimes(revalidatesLeads ? 4 : 2);
     expect(revalidatePath).toHaveBeenCalledWith("/crm/reservas");
     expect(revalidatePath).toHaveBeenCalledWith(`/crm/reservas/${BOOKING_ID}`);
     if (redirects) expect(redirect).toHaveBeenCalledExactlyOnceWith(`/crm/reservas/${BOOKING_ID}`);
@@ -150,6 +152,40 @@ describe("createBookingAction", () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it("vincula el lead del campo oculto y revalida también su ficha", async () => {
+    await expect(createBookingAction(IDLE, form({ ...CREATE, leadId: LEAD_ID }))).rejects.toThrow("NEXT_REDIRECT");
+    expect(createBooking).toHaveBeenCalledExactlyOnceWith(
+      bookingFormSchema.parse({ ...CREATE, leadId: LEAD_ID }), "staff-1",
+    );
+    expect(vi.mocked(createBooking).mock.calls[0][0].leadId).toBe(LEAD_ID);
+    expect(revalidatePath).toHaveBeenCalledTimes(3);
+    expect(revalidatePath).toHaveBeenCalledWith(`/crm/leads/${LEAD_ID}`);
+  });
+
+  it.each([["", null], [undefined, null]])("crea sin vínculo con leadId %j", async (leadId, expected) => {
+    const values = leadId === undefined ? CREATE : { ...CREATE, leadId };
+    await expect(createBookingAction(IDLE, form(values))).rejects.toThrow("NEXT_REDIRECT");
+    expect(vi.mocked(createBooking).mock.calls[0][0].leadId).toBe(expected);
+    expect(revalidatePath).not.toHaveBeenCalledWith(expect.stringMatching(/^\/crm\/leads/));
+  });
+
+  it("rechaza un leadId que no es UUID sin llamar al service", async () => {
+    const result = await createBookingAction(IDLE, form({ ...CREATE, leadId: "abc" }));
+    expect(result).toMatchObject({ status: "error", code: "invalid_input", fieldErrors: { leadId: ["El lead indicado no es válido."] } });
+    expect(createBooking).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["invalid_lead", "El lead ya no existe o está archivado. Crea la reserva sin vincular o recarga la página."],
+    ["lead_taken", "Ese lead ya tiene una reserva activa."],
+  ] as const)("devuelve %s con su mensaje, conserva lo escrito y no redirige", async (code, message) => {
+    vi.mocked(createBooking).mockResolvedValue(code);
+    const values = { ...CREATE, leadId: LEAD_ID };
+    expect(await createBookingAction(IDLE, form(values))).toEqual({ status: "error", code, message, values });
+    expect(revalidatePath).not.toHaveBeenCalled();
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
   it("muestra el mensaje de USD enteros bajo el total", async () => {
     for (const totalUsd of ["1499.50", "-1", "abc"]) {
       const result = await createBookingAction(IDLE, form({ ...CREATE, totalUsd }));
@@ -188,7 +224,18 @@ describe("changeBookingStatusAction", () => {
     ["cancelled", "Reserva cancelada."],
   ] as const)("cambia a %s", async (status, message) => {
     expect(await changeBookingStatusAction(IDLE, form({ bookingId: BOOKING_ID, status }))).toEqual({ status: "success", message });
-    expect(setBookingStatus).toHaveBeenCalledExactlyOnceWith(BOOKING_ID, status);
+    expect(setBookingStatus).toHaveBeenCalledExactlyOnceWith(BOOKING_ID, status, "staff-1");
+  });
+
+  it("pasa siempre el actor de la sesión, aunque el formulario traiga otro", async () => {
+    await changeBookingStatusAction(IDLE, form({ ...STATUS, actorUserId: "user-x", createdBy: "user-y" }));
+    expect(setBookingStatus).toHaveBeenCalledExactlyOnceWith(BOOKING_ID, "confirmed", "staff-1");
+  });
+
+  it("revalida la lista de leads y todas las fichas (el vínculo lo conoce solo la base)", async () => {
+    await changeBookingStatusAction(IDLE, form(STATUS));
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/leads");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/(protected)/leads/[id]", "page");
   });
 
   it("rechaza una transición no permitida sin revalidar", async () => {
