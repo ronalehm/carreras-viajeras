@@ -75,13 +75,17 @@ de schema, autenticación, exports y documentación compartidos se hacen en secu
 
 ### Fase Codex
 
-- [ ] T1 — AGENTS, config y tres roles de Codex, con validación de configuración.
-- [ ] T2 — CLAUDE, SETUP y guía de uso coherentes con Clerk y aprobación humana.
-- [ ] T3 — Workflow CI y guía para activar la revisión real de Codex en GitHub.
-- [ ] T4 — Auditoría completa del repositorio con hallazgos y evidencia, sin atribuir
+- [x] T1 — AGENTS, config y tres roles de Codex, con validación de configuración.
+- [x] T2 — CLAUDE, SETUP y guía de uso coherentes con Clerk y aprobación humana.
+- [x] T3 — Workflow CI y guía para activar la revisión real de Codex en GitHub.
+- [x] T4 — Auditoría completa del repositorio con hallazgos y evidencia, sin atribuir
   pruebas o activación remotas no comprobadas.
 
 ## Operación
 
 Las operaciones remotas de migración, despliegue y publicación se tratan por
 separado. Los errores de red y las credenciales faltantes se registran expresamente.
+
+La configuración se guarda en el repositorio; la carga del proyecto confiable,
+la activación de la integración de GitHub y la ejecución remota de CI permanecen
+pendientes. Build/Workers no superaron el bloqueo de Google Fonts.
