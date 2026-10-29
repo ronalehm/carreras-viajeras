@@ -209,7 +209,7 @@ Orden: `Origin` → tamaño (`content-length` y longitud real del texto leído, 
 - [x] T1 — `TripDetail`: un solo «Registrarme» en el bloque de acción y maquetado de dos columnas en `lg` (Requisito 8) · archivos: `modules/landing/components/TripDetail.tsx` · depende de: Fase 2 · secuencial
 - [x] T2 — README: «Registrarme» único junto a WhatsApp y ficha en dos columnas en PC · archivos: `README.md` · depende de: T1 · paralelo (con T3)
 - [x] T4 — Decisión 8: ancho completo con el padding de la cabecera, columna derecha de `26rem`, tarjeta sin `sticky`, `max-h` ni scroll interno (botones arriba en `lg`); README alineado · archivos: `modules/landing/components/TripDetail.tsx`, `README.md` · depende de: T1, T2 · secuencial
-- [ ] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
+- [x] T3 — Verificación funcional a 360 px y 1280 px (orden, sticky, sin scroll horizontal, con y sin P-L, viaje sin imagen ni listas) y medición del Worker · archivos: — · depende de: T1 · paralelo (con T2)
 
 ## Preguntas abiertas
 1. **Desglose diario.** *(Resuelta: solo el total.)* Los datos se guardan por día. ¿Quieres ya en `/crm/campanas/<id>` una lista de visitas por día (útil para comparar los días de una feria), o basta el total por ahora?
