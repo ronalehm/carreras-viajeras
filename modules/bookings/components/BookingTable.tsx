@@ -1,14 +1,12 @@
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatTripPrice } from "@/modules/trips";
-import type { BookingStatus, CrmBookingListItem } from "../types/bookings.types";
-import { BOOKING_STATUS_LABELS } from "../utils/bookingDisplay";
+import type { CrmBookingListItem } from "../types/bookings.types";
+import { BookingStatusBadge } from "./BookingStatusBadge";
 
-const STATUS_VARIANTS = { pending: "secondary", confirmed: "default", cancelled: "outline" } as const;
-
-export function BookingStatusBadge({ status }: { status: BookingStatus }) {
-  return <Badge variant={STATUS_VARIANTS[status]}>{BOOKING_STATUS_LABELS[status]}</Badge>;
+// Requirement 9: a negative balance is shown as credit.
+function formatBalance(balanceUsd: number): string {
+  return balanceUsd < 0 ? `Saldo a favor ${formatTripPrice(-balanceUsd)}` : formatTripPrice(balanceUsd);
 }
 
 const COLUMNS = ["Participante", "Viaje", "Paquete", "Estado", "Total", "Pagado", "Saldo", "Cuenta"];
@@ -42,7 +40,7 @@ export function BookingTable({ bookings, filtered }: { bookings: CrmBookingListI
             <TableCell><BookingStatusBadge status={booking.status} /></TableCell>
             <TableCell>{formatTripPrice(booking.totalUsd)}</TableCell>
             <TableCell>{formatTripPrice(booking.paidUsd)}</TableCell>
-            <TableCell>{formatTripPrice(booking.totalUsd - booking.paidUsd)}</TableCell>
+            <TableCell>{formatBalance(booking.totalUsd - booking.paidUsd)}</TableCell>
             <TableCell>{booking.linked ? "Vinculada" : "Sin vincular"}</TableCell>
           </TableRow>
         ))}

@@ -36,8 +36,14 @@ const listColumns = {
   trip: { id: trips.id, title: trips.title },
 };
 
+// Decision 22: an archived trip freezes its bookings. Both read with trips joined.
+const tripArchived = sql<boolean>`${trips.status} = 'archived'`;
+// Write guard, correlated with the bookings row being updated.
+const tripOpen = sql`exists (select 1 from ${trips} where ${trips.id} = ${bookings.tripId} and ${trips.status} <> 'archived')`;
+
 const detailColumns = {
   ...listColumns,
+  trip: { ...listColumns.trip, archived: tripArchived },
   distance: bookings.distance,
   balanceDueOn: bookings.balanceDueOn,
   internalNote: bookings.internalNote,
@@ -100,14 +106,23 @@ export async function createBooking(
   return row?.trip_ok ? "duplicate" : "invalid_trip";
 }
 
-// One batch (one transaction). The UPDATE decides with its WHERE: not cancelled, email unchanged once
-// linked, no other active booking of the same trip with that email. The SELECT explains a no-op.
+// A concurrent create can win between the NOT EXISTS and the UPDATE: the partial unique index then
+// rejects it. db.batch throws Neon's error as is; single drizzle queries wrap it in `cause`.
+function isActiveEmailConflict(error: unknown): boolean {
+  return [error, (error as { cause?: unknown } | null)?.cause].some((candidate) => {
+    const pg = candidate as { code?: unknown; constraint?: unknown } | null | undefined;
+    return pg?.code === "23505" && pg.constraint === "bookings_trip_email_active_uq";
+  });
+}
+
+// One batch (one transaction). The UPDATE decides with its WHERE: not cancelled, trip not archived,
+// email unchanged once linked, no other active booking of the same trip with that email. The SELECT explains a no-op.
 export async function updateBooking(
   input: UpdateBookingInput,
-): Promise<"updated" | "not_found" | "cancelled" | "email_locked" | "duplicate"> {
+): Promise<"updated" | "not_found" | "cancelled" | "trip_archived" | "email_locked" | "duplicate"> {
   const db = getDb();
   const other = alias(bookings, "other");
-  const [updated, current] = await db.batch([
+  const result = await db.batch([
     db
       .update(bookings)
       .set({
@@ -124,6 +139,7 @@ export async function updateBooking(
         and(
           eq(bookings.id, input.bookingId),
           ne(bookings.status, "cancelled"),
+          tripOpen,
           or(isNull(bookings.runnerUserId), eq(bookings.participantEmail, input.participantEmail)),
           notExists(
             db
@@ -146,29 +162,53 @@ export async function updateBooking(
         status: bookings.status,
         participantEmail: bookings.participantEmail,
         linked: sql<boolean>`${bookings.runnerUserId} is not null`,
+        tripArchived,
       })
       .from(bookings)
+      .innerJoin(trips, eq(trips.id, bookings.tripId))
       .where(eq(bookings.id, input.bookingId)),
-  ]);
+  ]).catch((error: unknown) => {
+    if (isActiveEmailConflict(error)) return "duplicate" as const;
+    throw error;
+  });
+  if (result === "duplicate") return result;
+  const [updated, current] = result;
 
   if (updated.length > 0) return "updated";
   const [booking] = current;
   if (!booking) return "not_found";
   if (booking.status === "cancelled") return "cancelled";
+  if (booking.tripArchived) return "trip_archived";
   if (booking.linked && booking.participantEmail !== input.participantEmail) return "email_locked";
   return "duplicate";
 }
 
-// confirmed ← pending; cancelled ← pending | confirmed. Missing booking or another source status
-// → invalid_transition.
+// confirmed ← pending, only while the trip is not archived; cancelled ← pending | confirmed, also with
+// an archived trip. The SELECT in the same batch tells an archived trip from another source status
+// or a missing booking (invalid_transition).
 export async function setBookingStatus(
   bookingId: string,
   status: StatusChange,
-): Promise<"changed" | "invalid_transition"> {
-  const rows = await getDb()
-    .update(bookings)
-    .set({ status, updatedAt: sql`now()` })
-    .where(and(eq(bookings.id, bookingId), inArray(bookings.status, STATUS_SOURCES[status])))
-    .returning({ id: bookings.id });
-  return rows.length > 0 ? "changed" : "invalid_transition";
+): Promise<"changed" | "invalid_transition" | "trip_archived"> {
+  const db = getDb();
+  const [updated, [current]] = await db.batch([
+    db
+      .update(bookings)
+      .set({ status, updatedAt: sql`now()` })
+      .where(and(
+        eq(bookings.id, bookingId),
+        inArray(bookings.status, STATUS_SOURCES[status]),
+        status === "confirmed" ? tripOpen : undefined,
+      ))
+      .returning({ id: bookings.id }),
+    db
+      .select({ status: bookings.status, tripArchived })
+      .from(bookings)
+      .innerJoin(trips, eq(trips.id, bookings.tripId))
+      .where(eq(bookings.id, bookingId)),
+  ]);
+  if (updated.length > 0) return "changed";
+  return status === "confirmed" && current?.status === "pending" && current.tripArchived
+    ? "trip_archived"
+    : "invalid_transition";
 }

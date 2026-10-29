@@ -4,6 +4,7 @@ export { InvitationsTable } from "./components/InvitationsTable";
 export { InviteStaffForm } from "./components/InviteStaffForm";
 export { NoCrmAccess } from "./components/NoCrmAccess";
 export { RunnerAccount } from "./components/RunnerAccount";
+export { SignOutButton } from "./components/SignOutButton";
 export { StaffTable } from "./components/StaffTable";
 export { listStaffOverview } from "./services/staff.service";
 export { getCrmAccess } from "./utils/crmAccess";

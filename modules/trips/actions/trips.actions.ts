@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { z } from "zod";
 import { ForbiddenError, UnauthorizedError } from "@/lib/auth/errors";
 import { requirePermission } from "@/lib/auth/guards";
+import { formValues } from "@/lib/formValues";
 import { tripFormSchema, tripStatusChangeSchema, updateTripSchema } from "../schemas/trips.schema";
 import { createTrip, setTripStatus, updateTrip } from "../services/trips.service";
 import type { TripActionState, TripStatus } from "../types/trips.types";
@@ -39,14 +40,6 @@ function failure(
     ...(values && { values }),
     ...(fieldErrors && { fieldErrors }),
   };
-}
-
-// Echo only this action's known string fields, never files or arbitrary submitted keys.
-function formValues(formData: FormData, fields: readonly string[]): Record<string, string> {
-  return Object.fromEntries(fields.flatMap((field) => {
-    const value = formData.get(field);
-    return typeof value === "string" ? [[field, value]] : [];
-  }));
 }
 
 function fieldErrors(error: z.ZodError): Record<string, string[]> {

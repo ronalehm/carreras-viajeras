@@ -31,6 +31,7 @@ const FIELDS = {
 const CREATE = { tripId: TRIP_ID, ...FIELDS };
 const UPDATE = { bookingId: BOOKING_ID, ...FIELDS };
 const STATUS = { bookingId: BOOKING_ID, status: "confirmed" };
+const TRIP_ARCHIVED = "El viaje está archivado: la reserva solo se puede cancelar. Recarga la página.";
 // Keys a client could add to try to set server-owned columns.
 const SMUGGLED = { runnerUserId: "user-x", status: "confirmed", createdBy: "user-y" };
 
@@ -172,6 +173,7 @@ describe("updateBookingAction", () => {
     ["duplicate", "duplicate", "Ese correo ya tiene una reserva activa en este viaje.", "participantEmail"],
     ["not_found", "not_found", "La reserva ya no existe o está cancelada. Recarga la página.", undefined],
     ["cancelled", "not_found", "La reserva ya no existe o está cancelada. Recarga la página.", undefined],
+    ["trip_archived", "trip_archived", TRIP_ARCHIVED, undefined],
   ] as const)("mapea %s a %s y conserva el formulario", async (result, code, message, field) => {
     vi.mocked(updateBooking).mockResolvedValue(result);
     expect(await updateBookingAction(IDLE, form(UPDATE))).toEqual({
@@ -189,6 +191,14 @@ describe("changeBookingStatusAction", () => {
   ] as const)("cambia a %s", async (status, message) => {
     expect(await changeBookingStatusAction(IDLE, form({ bookingId: BOOKING_ID, status }))).toEqual({ status: "success", message });
     expect(setBookingStatus).toHaveBeenCalledExactlyOnceWith(BOOKING_ID, status);
+  });
+
+  it("rechaza confirmar con el viaje archivado sin revalidar", async () => {
+    vi.mocked(setBookingStatus).mockResolvedValue("trip_archived");
+    expect(await changeBookingStatusAction(IDLE, form(STATUS))).toEqual({
+      status: "error", code: "trip_archived", message: TRIP_ARCHIVED,
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 
   it("rechaza una transición no permitida sin revalidar", async () => {

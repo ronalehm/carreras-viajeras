@@ -11,6 +11,8 @@ export type CurrentUser = {
   email: string;
   emailVerified: boolean;
   staffRoles: StaffRole[];
+  /** Display only; never used for authorization. */
+  name?: string;
 };
 
 // Minimal trusted shape; z.object drops any extra user field (role, staffRoles, …).
@@ -19,6 +21,8 @@ const sessionSchema = z.object({
     id: z.string().min(1).max(255),
     email: z.string(),
     emailVerified: z.boolean(),
+    // A missing or malformed name must never invalidate the session.
+    name: z.string().optional().catch(undefined),
   }),
 });
 
@@ -53,7 +57,14 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   if (!user) return null;
   const email = user.email.trim().toLowerCase();
   const staffRoles = await loadRoles(user.id, email, user.emailVerified);
-  return { id: user.id, email, emailVerified: user.emailVerified, staffRoles };
+  const name = user.name?.trim();
+  return {
+    id: user.id,
+    email,
+    emailVerified: user.emailVerified,
+    staffRoles,
+    ...(name ? { name } : {}),
+  };
 });
 
 export async function requireUser(): Promise<CurrentUser> {

@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { NeonDbError } from "@neondatabase/serverless";
+import { DrizzleQueryError } from "drizzle-orm/errors";
 import { drizzle } from "drizzle-orm/neon-http";
 
 vi.mock("server-only", () => ({}));
@@ -25,6 +27,8 @@ function useFakeDb(responses: unknown[][] = []) {
 }
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
+// Write guard of Decision 22: the booking's trip is not archived.
+const TRIP_OPEN = `exists (select 1 from "trips" where "trips"."id" = "bookings"."trip_id" and "trips"."status" <> 'archived')`;
 
 const TRIP_ID = "3f1c2a6e-8b4d-4c1e-9f0a-2b7d5e6c8a91";
 const BOOKING_ID = "11111111-1111-4111-8111-111111111111";
@@ -91,11 +95,13 @@ describe("getBookingById", () => {
     expect(fake.queries).toHaveLength(0);
   });
 
-  it("reads one booking with its paid amount", async () => {
-    const fake = useFakeDb([[[...LIST_ROW, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00"]]]);
+  it("reads one booking with its paid amount and whether its trip is archived", async () => {
+    const fake = useFakeDb([[[...LIST_ROW, true, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00"]]]);
     await expect(getBookingById(BOOKING_ID)).resolves.toMatchObject({
       id: BOOKING_ID, paidUsd: 300, totalUsd: 1499, distance: "42K", balanceDueOn: "2027-04-01", internalNote: "Nota",
+      trip: { id: TRIP_ID, title: "Maratón de Santiago 2027", archived: true },
     });
+    expect(normalize(fake.queries[0].sql)).toContain(`"trips"."status" = 'archived'`);
     expect(normalize(fake.queries[0].sql)).toContain('where "bookings"."id" = $1 group by');
     expect(fake.queries[0].params).toEqual([BOOKING_ID]);
   });
@@ -143,7 +149,7 @@ describe("createBooking", () => {
 
 describe("updateBooking", () => {
   it("decides with its WHERE and diagnoses in the same batch", async () => {
-    const fake = useFakeDb([[[BOOKING_ID]], [["pending", "ana@example.com", false]]]);
+    const fake = useFakeDb([[[BOOKING_ID]], [["pending", "ana@example.com", false, false]]]);
     await expect(updateBooking(update)).resolves.toBe("updated");
 
     expect(fake.transaction).toHaveBeenCalledOnce();
@@ -152,6 +158,7 @@ describe("updateBooking", () => {
     expect(statement).toMatch(/^update "bookings" set "participant_name" = \$1, "participant_email" = \$2, "package_label" = \$3, "distance" = \$4, "total_usd" = \$5, "balance_due_on" = \$6, "internal_note" = \$7, "updated_at" = now\(\) where/);
     expect(statement).not.toMatch(/"trip_id" = \$|"status" = \$\d+,|"runner_user_id" = \$|created_by/);
     expect(statement).toContain('"bookings"."status" <> $9');
+    expect(statement).toContain(TRIP_OPEN);
     expect(statement).toContain('("bookings"."runner_user_id" is null or "bookings"."participant_email" = $10)');
     expect(statement).toContain(
       'not exists (select 1 from "bookings" "other" where ("other"."trip_id" = "bookings"."trip_id" and "other"."participant_email" = $11 and "other"."status" <> $12 and "other"."id" <> "bookings"."id"))',
@@ -160,37 +167,76 @@ describe("updateBooking", () => {
       "Ana Pérez", "ana@example.com", "Paquete corredor", "42K", 1499, "2027-04-01", null,
       BOOKING_ID, "cancelled", "ana@example.com", "ana@example.com", "cancelled",
     ]);
-    expect(normalize(diagnosis.sql)).toContain('from "bookings" where "bookings"."id" = $1');
+    expect(normalize(diagnosis.sql)).toContain(
+      `"trips"."status" = 'archived' from "bookings" inner join "trips" on "trips"."id" = "bookings"."trip_id" where "bookings"."id" = $1`,
+    );
   });
 
   it.each([
     ["not_found", []],
-    ["cancelled", [["cancelled", "ana@example.com", false]]],
-    ["email_locked", [["confirmed", "otro@example.com", true]]],
-    ["duplicate", [["pending", "otro@example.com", false]]],
-    ["duplicate", [["confirmed", "ana@example.com", true]]],
+    ["cancelled", [["cancelled", "ana@example.com", false, false]]],
+    ["cancelled", [["cancelled", "ana@example.com", false, true]]],
+    ["trip_archived", [["pending", "ana@example.com", false, true]]],
+    ["trip_archived", [["confirmed", "otro@example.com", true, true]]],
+    ["email_locked", [["confirmed", "otro@example.com", true, false]]],
+    ["duplicate", [["pending", "otro@example.com", false, false]]],
+    ["duplicate", [["confirmed", "ana@example.com", true, false]]],
   ])("returns %s when nothing was updated", async (expected, current) => {
     useFakeDb([[], current]);
     await expect(updateBooking(update)).resolves.toBe(expected);
+  });
+
+  // A concurrent create wins the race: the partial unique index rejects the UPDATE. db.batch throws
+  // Neon's error as is; a drizzle query error carries it in `cause`.
+  const conflict = (constraint: string) =>
+    Object.assign(new NeonDbError("duplicate key value"), { code: "23505", constraint });
+
+  it.each([
+    ["Neon's error", conflict("bookings_trip_email_active_uq")],
+    ["a wrapped error", new DrizzleQueryError("update ...", [], conflict("bookings_trip_email_active_uq"))],
+  ])("returns duplicate when the active-email index rejects it (%s)", async (_label, error) => {
+    useFakeDb().transaction.mockRejectedValueOnce(error);
+    await expect(updateBooking(update)).resolves.toBe("duplicate");
+  });
+
+  it("rethrows any other database error", async () => {
+    const error = conflict("bookings_pkey");
+    useFakeDb().transaction.mockRejectedValueOnce(error);
+    await expect(updateBooking(update)).rejects.toBe(error);
   });
 });
 
 describe("setBookingStatus", () => {
   it.each([
-    ["confirmed", ["pending"]],
-    ["cancelled", ["pending", "confirmed"]],
-  ] as const)("changes to %s only from %o", async (status, sources) => {
-    const fake = useFakeDb([[[BOOKING_ID]]]);
+    ["confirmed", ["pending"], ` and ${TRIP_OPEN}`],
+    ["cancelled", ["pending", "confirmed"], ""],
+  ] as const)("changes to %s only from %o and diagnoses in the same batch", async (status, sources, guard) => {
+    const fake = useFakeDb([[[BOOKING_ID]], [[status, false]]]);
     await expect(setBookingStatus(BOOKING_ID, status)).resolves.toBe("changed");
+    expect(fake.transaction).toHaveBeenCalledOnce();
     const placeholders = sources.map((_, i) => `$${i + 3}`).join(", ");
     expect(normalize(fake.queries[0].sql)).toBe(
-      `update "bookings" set "status" = $1, "updated_at" = now() where ("bookings"."id" = $2 and "bookings"."status" in (${placeholders})) returning "id"`,
+      `update "bookings" set "status" = $1, "updated_at" = now() where ("bookings"."id" = $2 and "bookings"."status" in (${placeholders})${guard}) returning "id"`,
     );
     expect(fake.queries[0].params).toEqual([status, BOOKING_ID, ...sources]);
+    expect(normalize(fake.queries[1].sql)).toContain(
+      `"trips"."status" = 'archived' from "bookings" inner join "trips" on "trips"."id" = "bookings"."trip_id" where "bookings"."id" = $1`,
+    );
   });
 
-  it("returns invalid_transition when no row matches", async () => {
-    useFakeDb([[]]);
-    await expect(setBookingStatus(BOOKING_ID, "confirmed")).resolves.toBe("invalid_transition");
+  it.each([
+    ["confirmed", [], "invalid_transition"],
+    ["confirmed", [["confirmed", false]], "invalid_transition"],
+    ["confirmed", [["cancelled", true]], "invalid_transition"],
+    ["confirmed", [["pending", true]], "trip_archived"],
+    ["cancelled", [["cancelled", true]], "invalid_transition"],
+  ] as const)("does not change to %s with %o: %s", async (status, current, expected) => {
+    useFakeDb([[], [...current]]);
+    await expect(setBookingStatus(BOOKING_ID, status)).resolves.toBe(expected);
+  });
+
+  it("cancels a booking of an archived trip", async () => {
+    useFakeDb([[[BOOKING_ID]], [["cancelled", true]]]);
+    await expect(setBookingStatus(BOOKING_ID, "cancelled")).resolves.toBe("changed");
   });
 });

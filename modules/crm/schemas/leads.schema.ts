@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { blankToNull } from "@/lib/blankToNull";
 
 // Same values as the lead_* enums in lib/db-schema.ts (kept in sync by leads.schema.test.ts).
 export const leadStageSchema = z.enum(["new", "contacted", "quoted", "reserved", "paid", "lost"]);
@@ -23,14 +24,6 @@ const CONSENT_MESSAGE = "Confirma que el contacto aceptó que guardemos sus dato
 
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
-
-// Optional form inputs arrive as "" when left blank: they become null.
-const blankToNull = <T extends z.ZodType<unknown, string>>(schema: T) =>
-  z
-    .string()
-    .trim()
-    .transform((value) => (value === "" ? null : value))
-    .pipe(schema.nullable());
 
 // E.164: drop spaces, parentheses, dashes and dots, then "+" and 8 to 15 digits.
 const phoneSchema = z

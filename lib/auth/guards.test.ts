@@ -157,6 +157,33 @@ describe("verified email", () => {
     await expect(requireUser()).rejects.toBeInstanceOf(ForbiddenError);
   });
 
+  it("exposes the trimmed session name", async () => {
+    sessionWith({ ...verifiedUser, name: "  Ana Pérez " });
+    accept.mockResolvedValue([]);
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: "user-1",
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: [],
+      name: "Ana Pérez",
+    });
+  });
+
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+    ["blank", "   "],
+    ["null", null],
+  ])("omits a %s name without invalidating the session", async (_, name) => {
+    sessionWith({ ...verifiedUser, name });
+    accept.mockResolvedValue([]);
+
+    const user = await getCurrentUser();
+    expect(user).toEqual({ id: "user-1", email: "ana@example.com", emailVerified: true, staffRoles: [] });
+    expect(user).not.toHaveProperty("name");
+  });
+
   it("ignores extra session fields such as user.role", async () => {
     sessionWith({ ...verifiedUser, role: "admin", staffRoles: ["admin"], invitedBy: "x", userId: "other" });
     accept.mockResolvedValue([]);
