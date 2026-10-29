@@ -85,8 +85,8 @@ Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya esc
 Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md): **Clerk da la identidad y Neon, los roles.**
 
 - **Identidad (Clerk):** `/crm/acceso` y `/cuenta` muestran el `<SignIn>` de Clerk en español, con el alta incluida: crear la cuenta, verificar el correo con código, iniciar sesión y recuperar la contraseña los gestiona Clerk. "Cerrar sesión" es el `SignOutButton` de Clerk. El id estable es el `userId` de Clerk (`user_…`), que `auth()` obtiene verificando el token de sesión. El correo solo cuenta si es el **correo primario** de la cuenta y está verificado; se usa en minúsculas para aceptar invitaciones, mostrarse y vincular reservas, nunca para autorizar.
-- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) se ejecuta en `/crm/:path*`, `/api/crm/:path*` y `/cuenta/perfil/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`** (por ejemplo, `/mis-carreras` cuando llegue); si no, `auth()` falla y la guarda responde 401: falla cerrado.
-- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: no crea filas en `profiles` ni `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). El perfil propio en `/cuenta/perfil` exige su guarda y el correo primario verificado; cada recurso futuro para runners necesitará también su propia guarda en el servidor.
+- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) se ejecuta en `/crm/:path*`, `/api/crm/:path*`, `/cuenta` (exacta, por la Server Action que registra la cuenta), `/cuenta/perfil/:path*` y `/mis-carreras/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`**; si no, `auth()` falla y la guarda responde 401: falla cerrado.
+- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: con el correo primario verificado se registra en `profiles` (ver [Usuarios del CRM](#usuarios-del-crm)), no crea filas `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). El perfil propio en `/cuenta/perfil` exige su guarda y el correo primario verificado; cada recurso futuro para runners necesitará también su propia guarda en el servidor.
 - **Staff** (`commercial`, `organizer`, `admin`, `super_admin`): entra solo por invitación. La invitación no controla quién crea una cuenta (el registro es público); controla los **roles**, que viven en Neon (`staff_assignments`) y se leen en cada petición, así que una revocación se aplica en la siguiente. Se invita desde `/crm/admin/usuarios` y el enlace `<APP_ORIGIN>/crm/acceso` se comparte a mano; la invitación caduca a los 7 días. Quién puede invitar, asignar y revocar cada rol (se comprueba en cada Server Action, no solo en la UI):
 
   | Actor | Roles que gestiona |
@@ -1723,12 +1723,63 @@ comercial, organizador y admin; admin solo comercial. La invitación y revocaci�
 de patrocinadores desde esos formularios pertenece a una entrega posterior.
 
 `/crm/admin/usuarios` reúne equipo, patrocinadores y runners, con búsqueda y filtros
-por los cinco roles reales o por la condición derivada de runner. Esta última no
+por los cinco roles reales o por Runner, que es toda cuenta del directorio. Runner no
 es un rol de autorización. La ficha conserva las comprobaciones actuales de
 gestión de roles, y la lista está limitada a 200 resultados con aviso de truncado.
 El portal de eventos de patrocinadores, su promoción pública y las fichas completas
 de corredores permanecen en las fases futuras de sus specs; este PR integra las
 fases de perfiles 1–2, patrocinadores 1–2 y directorio de usuarios 1.
+
+### Usuarios del CRM
+
+Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 1).
+
+**Por qué antes no aparecían los registrados.** El directorio de `/crm/admin/usuarios`
+lista la unión de `profiles`, `runner_profiles` y las reservas vinculadas. Hasta ahora
+solo se escribía en `profiles` al aceptar una invitación, y la aplicación no lee Clerk
+ni `neon_auth`. Una cuenta de Clerk sin invitación, sin perfil de runner y sin reserva
+vinculada no tenía ninguna fila en Neon, así que no aparecía.
+
+**Qué cambia.**
+
+- Cada petición con guarda de una cuenta con correo primario **verificado** la registra
+  en `profiles` (`user_id`, correo en minúsculas) dentro del mismo `db.batch` que lee sus
+  roles, sin viajes de red adicionales. Si el correo primario cambió, lo actualiza. Las
+  cuentas sin correo verificado no se registran. El correo solo sirve de presentación.
+- `/cuenta` sigue siendo estática: con sesión, el panel llama una vez a la Server Action
+  `registerAccountAction()`, que registra la cuenta y muestra "Ingresar al CRM" (→ `/crm`)
+  solo si tiene acceso al CRM (`admin`, `super_admin`, `commercial` u `organizer`). El
+  enlace es solo presentación: el layout de `/crm` sigue siendo la guarda.
+- Toda cuenta del directorio es **Runner** (el filtro "Runner" lista todas). Runner no es
+  un valor de `staff_role` ni concede permisos.
+
+**Backfill de las cuentas existentes (manual).** Las cuentas que no vuelvan a iniciar
+sesión no se registran solas. Para incorporarlas:
+
+1. Exporta las cuentas con la clave secreta de la **misma instancia de Clerk** que usa
+   el entorno de destino (desarrollo para la rama de desarrollo, producción para la de
+   producción). Pásala desde un archivo privado **fuera del repositorio** (que solo
+   contenga `CLERK_SECRET_KEY=…`), para que no quede en el historial de la shell, y
+   escribe el SQL también fuera del repositorio:
+
+   ```sh
+   node --env-file=<archivo privado> scripts/export-clerk-accounts.mjs > ~/accounts-backfill.sql
+   ```
+
+   El script pagina `GET https://api.clerk.com/v1/users` (100 por página) por HTTPS, no
+   imprime la clave, no se conecta a Neon y solo escribe en la salida estándar. Sin
+   `CLERK_SECRET_KEY` termina con código 1. Emite una única sentencia
+   `INSERT INTO profiles (user_id, email) VALUES … ON CONFLICT (user_id) DO NOTHING;` con
+   las cuentas de correo primario verificado, en minúsculas y con los literales escapados
+   (o solo un comentario SQL si no hay ninguna).
+2. Revisa `~/accounts-backfill.sql`: contiene correos de personas, así que no lo subas al
+   repositorio ni lo compartas, y bórralo cuando termines.
+3. Aplícalo a mano, como operación autorizada, en la **rama Neon correcta** (la que usa
+   la instancia de Clerk del paso 1), por ejemplo desde el SQL Editor de Neon. Es
+   idempotente: las cuentas ya registradas no cambian.
+4. Comprueba en `/crm/admin/usuarios` que las cuentas aparecen como Runner y sin roles.
+
+Ningún build, arranque ni workflow ejecuta este backfill.
 
 ### Migración incremental de la integración
 

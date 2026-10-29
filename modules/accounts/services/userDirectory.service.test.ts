@@ -34,7 +34,7 @@ function listRow(overrides: Record<string, unknown> = {}) {
     email: "a@example.com",
     roles: [],
     sponsor_name: null,
-    is_runner: false,
+    is_runner: true,
     active_bookings: "0",
     ...overrides,
   };
@@ -65,10 +65,11 @@ describe("listUsers", () => {
     // Linked bookings: the not cancelled count and the latest one for the identity.
     expect(statement).toContain("count(*) FILTER (WHERE b.status <> 'cancelled') AS active");
     expect(statement).toContain("WHERE b.runner_user_id = ids.user_id ORDER BY b.created_at DESC, b.id LIMIT 1");
-    // Identity (requirement 5) and derived runner.
+    // Identity (requirement 5); every listed account is a Runner (accounts-role-requests R3).
     expect(statement).toContain("coalesce(rp.full_name, lb.participant_name) AS name");
     expect(statement).toContain("coalesce(p.email, rp.email, lb.participant_email) AS email");
-    expect(statement).toContain("(rp.user_id IS NOT NULL OR lb.participant_email IS NOT NULL) AS is_runner");
+    expect(statement).toContain("true AS is_runner");
+    expect(statement).not.toMatch(/IS NOT NULL\)? AS is_runner/);
   });
 
   it("orders by name (or email) then id and asks for one row past the limit, without filters", async () => {
@@ -131,22 +132,34 @@ describe("listUsers", () => {
     expect(fake.queries[0].params).toEqual([role, 201]);
   });
 
-  it("filters runner by the derived flag, without a parameter", async () => {
+  it("lists every account for runner: no condition and no parameter", async () => {
     const fake = useFakeDb();
     await listUsers({ role: "runner" });
 
-    expect(normalize(fake.queries[0].sql)).toContain("FROM directory WHERE is_runner ORDER BY");
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toMatch(/FROM directory ORDER BY lower\(coalesce\(name, email\)\), user_id LIMIT \$1$/);
+    expect(statement).not.toContain("WHERE is_runner");
     expect(fake.queries[0].params).toEqual([201]);
   });
 
-  it("combines search and role with AND", async () => {
+  it("keeps only the search for runner", async () => {
     const fake = useFakeDb();
     await listUsers({ q: "ana", role: "runner" });
 
     expect(normalize(fake.queries[0].sql)).toContain(
-      "WHERE (strpos(lower(coalesce(name, '')), lower($1)) > 0 OR strpos(lower(email), lower($2)) > 0) AND is_runner ORDER BY",
+      "FROM directory WHERE (strpos(lower(coalesce(name, '')), lower($1)) > 0 OR strpos(lower(email), lower($2)) > 0) ORDER BY",
     );
     expect(fake.queries[0].params).toEqual(["ana", "ana", 201]);
+  });
+
+  it("combines search and role with AND", async () => {
+    const fake = useFakeDb();
+    await listUsers({ q: "ana", role: "commercial" });
+
+    expect(normalize(fake.queries[0].sql)).toContain(
+      "WHERE (strpos(lower(coalesce(name, '')), lower($1)) > 0 OR strpos(lower(email), lower($2)) > 0) AND $3::text = ANY (roles) ORDER BY",
+    );
+    expect(fake.queries[0].params).toEqual(["ana", "ana", "commercial", 201]);
   });
 
   it("maps rows to JS types", async () => {
@@ -165,8 +178,8 @@ describe("listUsers", () => {
       users: [
         { userId: "user-c2", name: null, email: "c2@example.com", roles: ["commercial"], sponsorName: null, isRunner: true, activeBookings: 2 },
         { userId: "user-r", name: "Ana Pérez", email: "ana@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 1 },
-        { userId: "user-s", name: null, email: "lucia@marca.com", roles: ["sponsor"], sponsorName: "Marca Norte", isRunner: false, activeBookings: 0 },
-        { userId: "user-e", name: null, email: "e@example.com", roles: [], sponsorName: null, isRunner: false, activeBookings: 0 },
+        { userId: "user-s", name: null, email: "lucia@marca.com", roles: ["sponsor"], sponsorName: "Marca Norte", isRunner: true, activeBookings: 0 },
+        { userId: "user-e", name: null, email: "e@example.com", roles: [], sponsorName: null, isRunner: true, activeBookings: 0 },
       ],
       truncated: false,
     });
@@ -293,7 +306,7 @@ describe("getUserDetail", () => {
         ],
       },
       sponsor: null,
-      isRunner: false,
+      isRunner: true,
     });
   });
 
@@ -305,7 +318,7 @@ describe("getUserDetail", () => {
       hasRoleProfile: true,
       member: null,
       sponsor: null,
-      isRunner: false,
+      isRunner: true,
     });
   });
 

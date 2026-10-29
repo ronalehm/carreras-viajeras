@@ -39,13 +39,26 @@ function acceptInvitationStatement(db: Db, userId: string, email: string) {
   `);
 }
 
+// Every account with a verified primary email is known: insert it, or refresh a changed email.
+// Touches only (user_id, email); the WHERE skips the write when nothing changed.
+function registerProfileStatement(db: Db, userId: string, email: string) {
+  return db.execute(sql`
+    INSERT INTO profiles (user_id, email)
+    VALUES (${userId}, ${email})
+    ON CONFLICT (user_id) DO UPDATE SET email = excluded.email
+    WHERE profiles.email <> excluded.email
+  `);
+}
+
 // email must already be trimmed and lowercased; errors propagate (the guard decides).
+// One batch (one HTTP round trip, one transaction): register, accept invitations, load roles.
 export async function acceptInvitationAndLoadStaffRoles(
   userId: string,
   email: string,
 ): Promise<StaffRole[]> {
   const db = getDb();
-  const [, rows] = await db.batch([
+  const [, , rows] = await db.batch([
+    registerProfileStatement(db, userId, email),
     acceptInvitationStatement(db, userId, email),
     activeRolesQuery(db, userId),
   ]);

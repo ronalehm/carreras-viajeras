@@ -20,6 +20,7 @@ type UserListRow = {
   email: string;
   roles: StaffRole[];
   sponsor_name: string | null;
+  // Always true: every listed account is a Runner (accounts-role-requests R3).
   is_runner: boolean;
   // count(*) is bigint: text on the wire.
   active_bookings: string | number;
@@ -33,12 +34,13 @@ function listConditions({ q, role }: UserListFilter): SQL {
       sql`(strpos(lower(coalesce(name, '')), lower(${q})) > 0 OR strpos(lower(email), lower(${q})) > 0)`,
     );
   }
-  if (role === "runner") conditions.push(sql`is_runner`);
-  else if (role !== undefined) conditions.push(sql`${role}::text = ANY (roles)`);
+  // Every listed account is a Runner, so "runner" adds no condition (accounts-role-requests R3).
+  if (role !== undefined && role !== "runner") conditions.push(sql`${role}::text = ANY (roles)`);
   return conditions.length > 0 ? sql`WHERE ${sql.join(conditions, sql` AND `)}` : sql``;
 }
 
-// One statement: everyone with a role profile, a runner profile or a linked booking.
+// One statement: every known account (profiles: everyone who signed in with a verified email or
+// was backfilled), plus runner profiles and linked bookings. Every listed account is a Runner.
 // Only presentation columns: no phone, birth date, document, emergency contact, medical notes,
 // internal notes or amounts. One extra row tells whether the list was cut at the limit.
 async function readUsers(
@@ -56,7 +58,7 @@ async function readUsers(
              coalesce(p.email, rp.email, lb.participant_email) AS email,
              coalesce(a.roles, '{}') AS roles,
              a.sponsor_name,
-             (rp.user_id IS NOT NULL OR lb.participant_email IS NOT NULL) AS is_runner,
+             true AS is_runner,
              coalesce(bk.active, 0) AS active_bookings
       FROM ids
       LEFT JOIN profiles p ON p.user_id = ids.user_id
@@ -152,7 +154,8 @@ async function readUserDetail(userId: string): Promise<UserDetail | null> {
       sponsorAssignment?.sponsorId && sponsorAssignment.sponsorName !== null
         ? { id: sponsorAssignment.sponsorId, name: sponsorAssignment.sponsorName }
         : null,
-    isRunner: runner !== undefined || latestBooking !== undefined,
+    // Every account of the directory is a Runner (accounts-role-requests R3).
+    isRunner: true,
   };
 }
 

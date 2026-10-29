@@ -233,10 +233,10 @@ El admin pidió (2026-10-29):
 ## Plan de tareas
 
 ### Fase 1: registrados = Runner y "Ingresar al CRM"
-- [ ] T1 — Registro en `profiles` dentro del batch de la guarda y comentario de `profiles`, con tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/db-schema.ts` · depende de: — · secuencial (base, `lib/`)
-- [ ] T2 — `registerAccountAction`, `matcher` de `/cuenta` y `RunnerAccount` con "Ingresar al CRM", con tests · archivos: `modules/accounts/actions/account.actions.ts`, `modules/accounts/actions/account.actions.test.ts`, `middleware.ts`, `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx` · depende de: T1 · paralelo (con T3, T4)
-- [ ] T3 — Runner para toda cuenta del directorio, con tests · archivos: `modules/accounts/services/userDirectory.service.ts`, `modules/accounts/services/userDirectory.service.test.ts`, `modules/accounts/types/userDirectory.types.ts` · depende de: T1 · paralelo (con T2, T4)
-- [ ] T4 — Script de backfill con test y README · archivos: `scripts/export-clerk-accounts.mjs`, `scripts/export-clerk-accounts.test.ts`, `README.md` · depende de: — · paralelo (con T2, T3)
+- [x] T1 — Registro en `profiles` dentro del batch de la guarda y comentario de `profiles`, con tests · archivos: `lib/auth/access.service.ts`, `lib/auth/access.service.test.ts`, `lib/db-schema.ts` · depende de: — · secuencial (base, `lib/`)
+- [x] T2 — `registerAccountAction`, `matcher` de `/cuenta` y `RunnerAccount` con "Ingresar al CRM", con tests · archivos: `modules/accounts/actions/account.actions.ts`, `modules/accounts/actions/account.actions.test.ts`, `middleware.ts`, `modules/accounts/components/RunnerAccount.tsx`, `modules/accounts/components/RunnerAccount.test.tsx` · depende de: T1 · paralelo (con T3, T4)
+- [x] T3 — Runner para toda cuenta del directorio, con tests · archivos: `modules/accounts/services/userDirectory.service.ts`, `modules/accounts/services/userDirectory.service.test.ts`, `modules/accounts/types/userDirectory.types.ts` · depende de: T1 · paralelo (con T2, T4)
+- [x] T4 — Script de backfill con test y README · archivos: `scripts/export-clerk-accounts.mjs`, `scripts/export-clerk-accounts.test.ts`, `README.md` · depende de: — · paralelo (con T2, T3)
 
 ### Fase 2: solicitud del rol Admin
 - [ ] T1 — Schema `role_requests` y migración generada · archivos: `lib/db-schema.ts`, `drizzle/0015_*.sql`, `drizzle/meta/*` · depende de: Fase 1 · secuencial (base)

@@ -33,7 +33,8 @@ export const staffRoleEnum = pgEnum("staff_role", [
   "sponsor",
 ]);
 
-// Accounts with an assigned role (staff or sponsor). user_id is the stable Clerk user id (no cross-schema FK).
+// Known accounts: every Clerk account with a verified primary email that signed in (registered by the
+// guard) or was backfilled, with or without roles. user_id is the stable Clerk user id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
 export const profiles = pgTable(
   "profiles",
