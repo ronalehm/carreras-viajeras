@@ -261,3 +261,48 @@ describe("roles from the database", () => {
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
   });
 });
+
+describe("display name (firstName/lastName)", () => {
+  it("joins the trimmed firstName and lastName", async () => {
+    signedInAs(clerkUser({ firstName: " Ana ", lastName: "Pérez " }));
+    accept.mockResolvedValue([]);
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: [],
+      name: "Ana Pérez",
+    });
+  });
+
+  it.each([
+    ["only firstName", { firstName: " Ana ", lastName: null }, "Ana"],
+    ["only lastName", { lastName: "Pérez " }, "Pérez"],
+  ])("%s → that name", async (_, names, expected) => {
+    signedInAs(clerkUser(names));
+    accept.mockResolvedValue([]);
+
+    await expect(getCurrentUser()).resolves.toMatchObject({ name: expected });
+  });
+
+  it.each([
+    ["both missing", {}],
+    ["both null", { firstName: null, lastName: null }],
+    ["both empty", { firstName: "", lastName: "" }],
+    ["both blank", { firstName: "   ", lastName: "   " }],
+    ["a number and an object", { firstName: 42, lastName: { value: "Pérez" } }],
+  ])("%s → no name and a valid session", async (_, names) => {
+    signedInAs(clerkUser(names));
+    accept.mockResolvedValue(["commercial"]);
+
+    const user = await getCurrentUser();
+    expect(user).toEqual({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: ["commercial"],
+    });
+    expect(user).not.toHaveProperty("name");
+  });
+});

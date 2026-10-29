@@ -1,7 +1,7 @@
 # Portal del runner: `/mis-carreras` (reservas, pagos, itinerario y avisos)
 
 - Módulo: bookings
-- Estado: borrador
+- Estado: aprobado
 - Depende de:
   - `platform-neon-foundation.md` (aprobada): Neon + Drizzle `neon-http` (`getDb()`, `db.batch` atómico), schema en `lib/db-schema.ts`, migraciones generadas con `npm run db:generate` y aplicadas a mano. "Runner solo accede a recursos propios."
   - `accounts-roles-permissions.md` (aprobada, implementada): `getCurrentUser` (sesión + correo verificado + roles por `user_id`), `requirePermission`, `can()`, `getCrmAccess(permission)`, `profiles`, errores `UnauthorizedError`/`ForbiddenError`. CRM denegado por defecto.
@@ -728,7 +728,7 @@ Requisitos previos: F1 cerrada y migración aplicada en la rama de Neon de prueb
 - [x] T3 — Componentes presentacionales del portal · archivos: `modules/bookings/components/PortalHeader.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/TripTimeline.tsx`, `modules/bookings/components/TripUpdates.tsx` · depende de: T1 · paralelo (con T2)
 - [x] T4 — Composición `RunnerPortal`, exports y ruta `/mis-carreras`; comprobar `ƒ /mis-carreras` y `○ /cuenta` en el build; medir el Worker · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/index.ts`, `app/mis-carreras/page.tsx` · depende de: T2, T3 · secuencial
 - [x] T5 — Enmienda (Decisión 23): `h1` y `h2` del viaje con `display-title`; títulos de grupo de `TripTimeline` y número de `RaceSelector` en `primary` con el acento en borde, punto o subrayado (contraste AA); `break-words` en el correo del estado vacío; un único `WhatsAppLink` reutilizado en `BookingOverview` (reserva cancelada) y `RunnerPortal` · archivos: `modules/bookings/components/RunnerPortal.tsx`, `modules/bookings/components/BookingOverview.tsx`, `modules/bookings/components/RaceSelector.tsx`, `modules/bookings/components/TripTimeline.tsx` · depende de: T4 · secuencial
-- [ ] T6 — Enmienda (Decisión 24): integrar `main` con Clerk; `name` desde `firstName`/`lastName` en `getCurrentUser` con sus tests; `/mis-carreras` en el `matcher` de `middleware.ts`; lint, vitest y build (`ƒ /mis-carreras`, `○ /cuenta`) · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `middleware.ts` · depende de: T5 · secuencial
+- [x] T6 — Enmienda (Decisión 24): integrar `main` con Clerk; `name` desde `firstName`/`lastName` en `getCurrentUser` con sus tests; `/mis-carreras` en el `matcher` de `middleware.ts`; lint, vitest y build (`ƒ /mis-carreras`, `○ /cuenta`) · archivos: `lib/auth/guards.ts`, `lib/auth/guards.test.ts`, `middleware.ts` · depende de: T5 · secuencial
 
 ### Fase 6 — Redirección del runner tras ingresar (3 tareas, 6 archivos)
 Requisito previo: enmiendas de `accounts-auth-ui.md` y `landing-public-site.md` aprobadas por el usuario, y F5 cerrada (si no, el runner llegaría a una ruta inexistente).
