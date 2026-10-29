@@ -271,9 +271,7 @@ export async function setBookingStatus(
       FROM lead_updated
     )`
     : sql``;
-  const tripGuard = status === "confirmed"
-    ? sql` AND EXISTS (SELECT 1 FROM trips WHERE trips.id = bookings.trip_id AND trips.status <> 'archived')`
-    : sql``;
+  const tripGuard = status === "confirmed" ? sql` AND ${tripOpen}` : sql``;
   const result = await getDb().execute<{ changed: boolean; trip_archived: boolean }>(sql`
     WITH changed AS (
       UPDATE bookings
@@ -284,7 +282,7 @@ export async function setBookingStatus(
     SELECT EXISTS (SELECT 1 FROM changed) AS changed,
       EXISTS (
         SELECT 1 FROM bookings JOIN trips ON trips.id = bookings.trip_id
-        WHERE bookings.id = ${bookingId}::uuid AND bookings.status = 'pending' AND trips.status = 'archived'
+        WHERE bookings.id = ${bookingId}::uuid AND bookings.status = 'pending' AND ${tripArchived}
       ) AS trip_archived
   `);
   const row = result.rows[0];

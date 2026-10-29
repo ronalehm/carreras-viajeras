@@ -271,7 +271,7 @@ describe("updateBooking", () => {
 
 describe("setBookingStatus", () => {
   it.each([
-    ["confirmed", ["pending"], " AND EXISTS \\(SELECT 1 FROM trips WHERE trips.id = bookings.trip_id AND trips.status <> 'archived'\\)"],
+    ["confirmed", ["pending"], ` AND ${TRIP_OPEN.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`],
     ["cancelled", ["pending", "confirmed"], ""],
   ] as const)("changes to %s only from %o in one statement (trip guard only when confirming)", async (status, sources, guard) => {
     const fake = useFakeDb([[{ changed: true }]]);
@@ -283,7 +283,7 @@ describe("setBookingStatus", () => {
       `^WITH changed AS \\( UPDATE bookings SET status = \\$1::booking_status, updated_at = now\\(\\) WHERE id = \\$2::uuid AND status IN \\(${placeholders.replaceAll("$", "\\$")}\\)${guard} RETURNING id, lead_id \\)`,
     ));
     expect(normalize(fake.queries[0].sql)).toMatch(
-      /SELECT EXISTS \(SELECT 1 FROM changed\) AS changed, EXISTS \( SELECT 1 FROM bookings JOIN trips ON trips\.id = bookings\.trip_id WHERE bookings\.id = \$\d+::uuid AND bookings\.status = 'pending' AND trips\.status = 'archived' \) AS trip_archived$/,
+      /SELECT EXISTS \(SELECT 1 FROM changed\) AS changed, EXISTS \( SELECT 1 FROM bookings JOIN trips ON trips\.id = bookings\.trip_id WHERE bookings\.id = \$\d+::uuid AND bookings\.status = 'pending' AND "trips"\."status" = 'archived' \) AS trip_archived$/,
     );
     expect(fake.queries[0].params.slice(0, 2 + sources.length)).toEqual([status, BOOKING_ID, ...sources]);
   });

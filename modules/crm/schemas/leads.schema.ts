@@ -55,7 +55,6 @@ const CONSENT_MESSAGE = "Confirma que el contacto aceptó que guardemos sus dato
 const requiredText = (min: number, max: number, message: string) =>
   z.string({ error: message }).trim().min(min, message).max(max, message);
 
-
 const ownerUserIdSchema = z
   .string({ error: "Elige un responsable." })
   .min(1, "Elige un responsable.")
