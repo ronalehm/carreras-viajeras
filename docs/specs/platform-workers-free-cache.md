@@ -1,7 +1,7 @@
 # Páginas públicas servidas desde caché estática en Workers Free
 
 - Módulo: platform, content, landing
-- Estado: borrador
+- Estado: aprobado
 - Origen: Error 1102 ("Worker exceeded resource limits") en `https://carreras-viajeras.mentec.dev/`
   el 29 de octubre de 2026; el usuario pide corregirlo sin pasar a Workers Paid.
 - Referencias: `AGENTS.md`, `docs/SETUP.md`, `landing-news-updates.md`, `landing-public-site.md`,
@@ -157,19 +157,19 @@ la caché `staticAssetsIncrementalCache` de `@opennextjs/cloudflare`. No añade 
 
 ### Fase 1 — portada estática
 
-- [ ] T1 — Caché de assets estáticos e intercepción; `populateCache local` en `build:worker`
+- [x] T1 — Caché de assets estáticos e intercepción; `populateCache local` en `build:worker`
   · archivos: `open-next.config.ts`, `package.json` · depende de: — · secuencial (base)
-- [ ] T2 — Cliente axios y provider de TanStack Query
+- [x] T2 — Cliente axios y provider de TanStack Query
   · archivos: `lib/api.ts`, `app/providers.tsx`, `app/layout.tsx` · depende de: T1 · secuencial
-- [ ] T3 — Endpoint `GET /api/noticias/portada`
+- [x] T3 — Endpoint `GET /api/noticias/portada`
   · archivos: `app/api/noticias/portada/route.ts`, `app/api/noticias/portada/route.test.ts`
   · depende de: T2 · paralelo con T4
-- [ ] T4 — Carga de noticias en el navegador y portada estática
+- [x] T4 — Carga de noticias en el navegador y portada estática
   · archivos: `modules/content/schemas/content.schema.ts`, `modules/content/services/homeNews.api.ts`,
   `modules/content/hooks/useHomeNews.ts`, `modules/content/components/HomeNewsSection.tsx`,
   `modules/content/components/NewsSection.tsx`, `modules/content/components/NewsArticle.test.tsx`,
   `modules/content/index.ts`, `app/page.tsx` y sus tests · depende de: T2 · paralelo con T3
-- [ ] T5 — README (ejecución en Free, caché estática, límites conocidos) y validación build,
+- [x] T5 — README (ejecución en Free, caché estática, límites conocidos) y validación build,
   `build:worker` y preview · archivos: `README.md` · depende de: T3, T4 · secuencial
 
 ### Fase 2 — `/contacto` (por detallar)

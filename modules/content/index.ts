@@ -5,6 +5,7 @@ export { contentQuerySchema } from "./schemas/content.schema";
 export { ContentForm } from "./components/ContentForm";
 export { ContentTable } from "./components/ContentTable";
 export { NewsSection } from "./components/NewsSection";
+export { HomeNewsSection } from "./components/HomeNewsSection";
 export { NewsCard } from "./components/NewsCard";
 export { NewsArticle } from "./components/NewsArticle";
 export type { PublicPost, ManagedPost, ManagedPostListItem } from "./types/content.types";
