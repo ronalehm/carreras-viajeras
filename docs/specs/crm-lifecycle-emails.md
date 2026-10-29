@@ -216,11 +216,11 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 ### Fase 1 — Datos y motor por tipos (5 tareas, ~14 archivos)
 
-- [ ] T1 — Schema y migración revisable · archivos: `lib/db-schema.ts`, `drizzle/0014_*.sql`, `drizzle/meta/0014_snapshot.json`, `drizzle/meta/_journal.json`, `modules/crm/schemas/leads.schema.ts` y su test (enum `runner_account`, no seleccionable en el alta manual) · depende de: aprobación · secuencial (base)
-- [ ] T2 — Configuración del aviso al equipo · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (`lib/`)
-- [ ] T3 — Plantillas · archivos: `modules/integrations/utils/lifecycleEmailTemplates.ts`, `modules/integrations/utils/lifecycleEmailTemplates.test.ts` · depende de: T1 · paralelo con T2
-- [ ] T4 — Preparación y elegibilidad por tipo · archivos: `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/schemas/email.schema.ts`, `modules/integrations/index.ts` · depende de: T1–T3 · secuencial
-- [ ] T5 — Pruebas del motor y ajustes para desplegar la F1 sola · depende de: T4. Archivos y cambios:
+- [x] T1 — Schema y migración revisable · archivos: `lib/db-schema.ts`, `drizzle/0014_*.sql`, `drizzle/meta/0014_snapshot.json`, `drizzle/meta/_journal.json`, `modules/crm/schemas/leads.schema.ts` y su test (enum `runner_account`, no seleccionable en el alta manual) · depende de: aprobación · secuencial (base)
+- [x] T2 — Configuración del aviso al equipo · archivos: `lib/env.ts`, `lib/env.test.ts`, `.env.example`, `.dev.vars.example` · depende de: T1 · secuencial (`lib/`)
+- [x] T3 — Plantillas · archivos: `modules/integrations/utils/lifecycleEmailTemplates.ts`, `modules/integrations/utils/lifecycleEmailTemplates.test.ts` · depende de: T1 · paralelo con T2
+- [x] T4 — Preparación y elegibilidad por tipo · archivos: `modules/integrations/services/clientEmails.service.ts`, `modules/integrations/schemas/email.schema.ts`, `modules/integrations/index.ts` · depende de: T1–T3 · secuencial
+- [x] T5 — Pruebas del motor y ajustes para desplegar la F1 sola · depende de: T4. Archivos y cambios:
   - `modules/integrations/services/clientEmails.service.test.ts`, `modules/integrations/schemas/email.schema.test.ts` y `modules/crm/services/leadMessages.service.test.ts`: mocks de `@/lib/env` con `teamAlertEmail` y `getEnv`.
   - `modules/crm/utils/leadDisplay.ts` y su test: etiqueta «Cuenta web», adelantada desde F2-T5 porque `Record<LeadSource, string>` la exige para compilar.
   - `modules/crm/services/leads.service.ts` y su test: el estado de la tarjeta del embudo ignora `team_alert` y `owner_alert`. Se adelanta desde F3-T1 para que la F1 no muestre un aviso interno como correo al cliente.
