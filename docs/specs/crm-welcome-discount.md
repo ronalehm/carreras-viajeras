@@ -150,11 +150,11 @@ Al ser texto plano, la negrita se omite y las viñetas se escriben con «- ».
 
 ### Fase 1 — Configuración, emisión y correo (5 tareas)
 
-- [ ] T1 — Migración y schema · archivos: `lib/db-schema.ts` (o `lib/rewards-schema.ts`), migración nueva, snapshot y journal · depende de: aprobación · secuencial (base)
-- [ ] T2 — Configuración versionada · archivos: `modules/rewards/services/welcomeDiscount.service.ts` y su test, `modules/rewards/actions/welcomeDiscount.actions.ts` y su test, `modules/rewards/schemas/rewards.schema.ts`, `modules/rewards/index.ts` · depende de: T1
-- [ ] T3 — Generador y plantillas · archivos: `modules/integrations/utils/welcomeCode.ts` y su test, `modules/integrations/utils/lifecycleEmailTemplates.ts` y su test · depende de: T1 · paralelo con T2
-- [ ] T4 — Emisión en el motor · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T2 y T3
-- [ ] T5 — Sección de configuración en el admin · archivos: `modules/rewards/components/RewardProgramAdmin.tsx` y su test, `app/crm/(protected)/recompensas/page.tsx` · depende de: T2
+- [x] T1 — Migración y schema · archivos: `lib/db-schema.ts` (o `lib/rewards-schema.ts`), migración nueva, snapshot y journal · depende de: aprobación · secuencial (base)
+- [x] T2 — Configuración versionada · archivos: `modules/rewards/services/welcomeDiscount.service.ts` y su test, `modules/rewards/actions/welcomeDiscount.actions.ts` y su test, `modules/rewards/schemas/rewards.schema.ts`, `modules/rewards/index.ts` · depende de: T1
+- [x] T3 — Generador y plantillas · archivos: `modules/integrations/utils/welcomeCode.ts` y su test, `modules/integrations/utils/lifecycleEmailTemplates.ts` y su test · depende de: T1 · paralelo con T2
+- [x] T4 — Emisión en el motor · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T2 y T3
+- [x] T5 — Sección de configuración en el admin · archivos: `modules/rewards/components/RewardProgramAdmin.tsx` y su test, `app/crm/(protected)/recompensas/page.tsx` · depende de: T2
 
 ### Fase 2 — Aplicación en la reserva y ficha (4 tareas)
 
