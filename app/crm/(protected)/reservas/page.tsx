@@ -4,13 +4,15 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { buttonVariants } from "@/components/ui/button";
 import { getCrmAccess } from "@/modules/accounts";
-import { BookingFilters, BookingTable, listBookings } from "@/modules/bookings";
+import { BOOKING_KIND_SIMULATED, BookingFilters, BookingTable, listBookings } from "@/modules/bookings";
 import { listTrips, tripScopeFor } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reservas" };
 
 // A malformed or repeated ?viaje is ignored: the list shows every booking.
 const tripFilterSchema = z.uuid().optional().catch(undefined);
+// Only ?tipo=simuladas lists the simulated (demo) bookings; anything else lists the real ones.
+const simulatedFilterSchema = z.literal(BOOKING_KIND_SIMULATED).optional().catch(undefined);
 
 export default async function BookingsPage({ searchParams }: PageProps<"/crm/reservas">) {
   const access = await getCrmAccess("bookings.manage");
@@ -25,17 +27,28 @@ export default async function BookingsPage({ searchParams }: PageProps<"/crm/res
       </section>
     );
   }
-  const tripId = tripFilterSchema.parse((await searchParams).viaje);
+  const params = await searchParams;
+  const tripId = tripFilterSchema.parse(params.viaje);
+  const simulated = simulatedFilterSchema.parse(params.tipo) !== undefined;
   // bookings.manage implies trips.manage_all, so this scope is always "all".
-  const [bookings, trips] = await Promise.all([listBookings(tripId), listTrips(tripScopeFor(access.user))]);
+  const [bookings, trips] = await Promise.all([
+    listBookings({ tripId, simulated }),
+    listTrips(tripScopeFor(access.user)),
+  ]);
   return (
     <section className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <h1 className="text-xl font-semibold">Reservas</h1>
         <Link href="/crm/reservas/nueva" className={buttonVariants()}>Nueva reserva</Link>
       </div>
-      <BookingFilters trips={trips.map(({ id, title }) => ({ id, title }))} tripId={tripId} />
-      <BookingTable bookings={bookings} filtered={tripId !== undefined} />
+      <BookingFilters trips={trips.map(({ id, title }) => ({ id, title }))} tripId={tripId} simulated={simulated} />
+      {simulated && (
+        <p className="text-sm text-muted-foreground">
+          Reservas simuladas del checkout de demostración (Stripe en modo de prueba): sin cargo real. No cuentan en
+          totales ni informes comerciales.
+        </p>
+      )}
+      <BookingTable bookings={bookings} filtered={tripId !== undefined || simulated} />
     </section>
   );
 }

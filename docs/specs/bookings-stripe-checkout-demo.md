@@ -132,12 +132,12 @@ Cada «Sí, apruebo» es independiente.
   - capacidad omitida;
   - metadata y descripción de la sesión;
   - el webhook coteja `stripe_mode` con `livemode`.
-- [ ] D.4 Pantallas y CRM:
+- [x] D.4 Pantallas y CRM:
   - distintivo "SIMULADA" en checkout, retorno, `/mis-carreras` y CRM de reservas;
   - exclusión de totales;
   - sección "Demo de checkout" en `/crm/contratos` (si se aprueba la decisión 1);
   - sin outbox comercial para reservas simuladas.
-- [ ] D.5 README: variables, procedimiento de esta spec, consultas de verificación y procedimiento de limpieza.
+- [x] D.5 README: variables, procedimiento de esta spec, consultas de verificación y procedimiento de limpieza.
 
 ## Aceptación
 

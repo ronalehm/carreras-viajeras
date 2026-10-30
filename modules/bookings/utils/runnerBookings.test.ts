@@ -49,6 +49,9 @@ function detail(overrides: Partial<RunnerBookingDetail> = {}): RunnerBookingDeta
     packageLabel: "Paquete corredor",
     distance: "42K",
     totalUsd: 1499,
+    paidUsd: 300,
+    paymentInReview: false,
+    simulated: false,
     balanceDueOn: "2027-04-01",
     createdAt: new Date("2027-03-04T03:00:00Z"), // 3 Mar in Lima
     payments: [{ id: "p1", amountUsd: 300, paidOn: "2027-03-03", concept: "Reserva" }],
@@ -99,10 +102,8 @@ describe("orderRunnerBookings", () => {
 });
 
 describe("getPaymentSummary", () => {
-  const pay = (amountUsd: number) => ({ id: String(amountUsd), amountUsd, paidOn: "2027-03-03", concept: "Cuota" });
-
   it("is completed with balance 0", () => {
-    expect(getPaymentSummary(1499, [pay(1000), pay(499)], "2027-04-01")).toEqual({
+    expect(getPaymentSummary(1499, 1499, "2027-04-01")).toEqual({
       totalUsd: 1499,
       paidUsd: 1499,
       balanceUsd: 0,
@@ -112,7 +113,7 @@ describe("getPaymentSummary", () => {
   });
 
   it("is pending with its due date when partial", () => {
-    expect(getPaymentSummary(1499, [pay(300)], "2027-04-01")).toEqual({
+    expect(getPaymentSummary(1499, 300, "2027-04-01")).toEqual({
       totalUsd: 1499,
       paidUsd: 300,
       balanceUsd: 1199,
@@ -122,13 +123,13 @@ describe("getPaymentSummary", () => {
   });
 
   it("allows a negative balance when overpaid", () => {
-    const result = getPaymentSummary(1499, [pay(1600)], null);
+    const result = getPaymentSummary(1499, 1600, null);
     expect(result.balanceUsd).toBe(-101);
     expect(result.status).toBe("completed");
   });
 
   it("is completed with total 0 and no payments", () => {
-    expect(getPaymentSummary(0, [], null)).toMatchObject({ paidUsd: 0, balanceUsd: 0, status: "completed" });
+    expect(getPaymentSummary(0, 0, null)).toMatchObject({ paidUsd: 0, balanceUsd: 0, status: "completed" });
   });
 });
 
@@ -176,7 +177,7 @@ describe("buildTimeline", () => {
 
   it("marks payments completed without a due date when paid in full", () => {
     const payments = [{ id: "p1", amountUsd: 1499, paidOn: "2027-03-03", concept: "Total" }];
-    const entry = buildTimeline(detail({ payments }), TODAY).preparation[1];
+    const entry = buildTimeline(detail({ payments, paidUsd: 1499 }), TODAY).preparation[1];
     expect(entry).toMatchObject({ status: "completed", details: "Pagado US$ 1,499 de US$ 1,499", start: null });
   });
 

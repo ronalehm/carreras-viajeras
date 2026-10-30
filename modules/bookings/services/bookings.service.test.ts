@@ -53,12 +53,21 @@ const update: UpdateBookingInput = { bookingId: BOOKING_ID, ...fields };
 
 beforeEach(() => vi.mocked(getDb).mockReset());
 
-// List rows in select order: id, name, email, status, package, total, paid, linked, trip (id, title).
-const LIST_ROW = [BOOKING_ID, "Ana Pérez", "ana@example.com", "pending", "Paquete corredor", "1499", "300", false, TRIP_ID, "Maratón de Santiago 2027"];
+// List rows in select order: id, name, email, status, package, total, simulated, linked, trip (id, title).
+const LIST_ROW = [BOOKING_ID, "Ana Pérez", "ana@example.com", "pending", "Paquete corredor", "1499", false, false, TRIP_ID, "Maratón de Santiago 2027"];
+const SIMULATED_ID = "33333333-3333-4333-8333-333333333333";
+const SIMULATED_ROW = [SIMULATED_ID, "Demo Uno", "demo@example.com", "confirmed", "Paquete corredor", "11000", true, true, TRIP_ID, "Maratón de Santiago 2027"];
+// Common balance batch (getBookingBalance): totals (id, total, manual paid), then settlements
+// (id, booking, amount, paid at, status).
+const BALANCE = [[BOOKING_ID, "1499", "300"]];
+const SETTLEMENTS = [
+  ["set-1", BOOKING_ID, "200", new Date("2026-03-06T15:00:00Z"), "applied"],
+  ["set-2", BOOKING_ID, "100", new Date("2026-03-07T15:00:00Z"), "needs_review"],
+];
 
 describe("listBookings", () => {
-  it("sums only non-voided payments and orders by race date, then participant", async () => {
-    const fake = useFakeDb([[LIST_ROW]]);
+  it("lists real bookings only, with the common balance read in one batch for the whole page", async () => {
+    const fake = useFakeDb([[LIST_ROW], BALANCE, SETTLEMENTS]);
 
     await expect(listBookings()).resolves.toEqual([{
       id: BOOKING_ID,
@@ -67,29 +76,43 @@ describe("listBookings", () => {
       status: "pending",
       packageLabel: "Paquete corredor",
       totalUsd: 1499,
-      paidUsd: 300,
+      // 300 manual + 200 Stripe applied; the 100 in review never counts.
+      paidUsd: 500,
+      balanceUsd: 999,
+      paymentInReview: true,
+      simulated: false,
       linked: false,
       trip: { id: TRIP_ID, title: "Maratón de Santiago 2027" },
     }]);
 
+    expect(fake.queries).toHaveLength(3);
     const statement = normalize(fake.queries[0].sql);
-    expect(statement).toContain(
-      'coalesce(sum("booking_payments"."amount_usd") filter (where "booking_payments"."voided_at" is null), 0)',
-    );
     expect(statement).toContain('"bookings"."runner_user_id" is not null');
     expect(statement).toContain('inner join "trips" on "trips"."id" = "bookings"."trip_id"');
-    expect(statement).toContain('left join "booking_payments" on "booking_payments"."booking_id" = "bookings"."id"');
-    expect(statement).toMatch(/group by "bookings"\."id", "trips"\."id" order by "trips"\."race_date" desc, "bookings"\."participant_name" asc$/);
-    expect(statement).not.toMatch(/ where /);
+    // No payment join or aggregate in the list itself: paid comes only from getBookingBalance.
+    expect(statement).not.toMatch(/booking_payments|booking_stripe_settlements|sum\(/);
+    expect(statement).toMatch(/where "bookings"\."is_simulated" = \$1 order by "trips"\."race_date" desc, "bookings"\."participant_name" asc$/);
+    expect(fake.queries[0].params).toEqual([false]);
+    expect(fake.transaction).toHaveBeenCalledOnce();
+    expect(fake.queries[1].params).toEqual([BOOKING_ID]);
     // The runner's id never leaves the service: only whether it is set.
     expect(statement).not.toMatch(/select .*"bookings"\."runner_user_id",/);
   });
 
+  it("lists simulated bookings apart, never mixed with real ones", async () => {
+    const fake = useFakeDb([[SIMULATED_ROW], [[SIMULATED_ID, "11000", "0"]], [["set-9", SIMULATED_ID, "300", new Date("2026-10-30T15:00:00Z"), "applied"]]]);
+    const [booking] = await listBookings({ simulated: true });
+    expect(booking).toMatchObject({ id: SIMULATED_ID, simulated: true, paidUsd: 300, balanceUsd: 10700, paymentInReview: false });
+    expect(fake.queries[0].params).toEqual([true]);
+  });
+
   it("filters by trip", async () => {
     const fake = useFakeDb([[]]);
-    await expect(listBookings(TRIP_ID)).resolves.toEqual([]);
-    expect(normalize(fake.queries[0].sql)).toContain('where "bookings"."trip_id" = $1 group by');
-    expect(fake.queries[0].params).toEqual([TRIP_ID]);
+    await expect(listBookings({ tripId: TRIP_ID, simulated: false })).resolves.toEqual([]);
+    expect(normalize(fake.queries[0].sql)).toContain('where ("bookings"."is_simulated" = $1 and "bookings"."trip_id" = $2) order by');
+    expect(fake.queries[0].params).toEqual([false, TRIP_ID]);
+    // Nothing listed: no balance batch.
+    expect(fake.queries).toHaveLength(1);
   });
 });
 
@@ -100,27 +123,33 @@ describe("getBookingById", () => {
     expect(fake.queries).toHaveLength(0);
   });
 
-  it("reads one booking with its paid amount and without lead", async () => {
-    const fake = useFakeDb([[[...LIST_ROW, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00", null, null, false]]]);
+  // getBookingBalance's batch is issued first (the detail select runs when Promise.all awaits it).
+  const DETAIL_ROW = [...LIST_ROW, "42K", "2027-04-01", "Nota", "2026-03-03 15:00:00+00", null, null, false];
+
+  it("reads one booking with its common balance and the Stripe payments, without lead", async () => {
+    const fake = useFakeDb([BALANCE, SETTLEMENTS, [DETAIL_ROW]]);
     await expect(getBookingById(BOOKING_ID)).resolves.toMatchObject({
-      id: BOOKING_ID, paidUsd: 300, totalUsd: 1499, distance: "42K", balanceDueOn: "2027-04-01", internalNote: "Nota",
-      lead: null, priceLocked: false,
+      id: BOOKING_ID, totalUsd: 1499, paidUsd: 500, balanceUsd: 999, paymentInReview: true, simulated: false,
+      distance: "42K", balanceDueOn: "2027-04-01", internalNote: "Nota", lead: null, priceLocked: false,
+      stripePayments: [{ id: "set-1", amountUsd: 200, paidOn: "2026-03-06" }],
+      needsReview: [{ id: "set-2", amountUsd: 100, paidOn: "2026-03-07" }],
     });
-    const statement = normalize(fake.queries[0].sql);
+    const statement = normalize(fake.queries[2].sql);
     expect(statement).toContain('left join "leads" on "leads"."id" = "bookings"."lead_id"');
-    expect(statement).toContain('where "bookings"."id" = $1 group by "bookings"."id", "trips"."id", "leads"."id"');
-    expect(fake.queries[0].params).toEqual([BOOKING_ID]);
+    expect(statement).toMatch(/where "bookings"\."id" = \$1$/);
+    expect(statement).not.toMatch(/booking_payments|group by/);
+    expect(fake.queries[2].params).toEqual([BOOKING_ID]);
   });
 
   it("returns the linked lead's id and name", async () => {
-    useFakeDb([[[...LIST_ROW, null, null, null, "2026-03-03 15:00:00+00", LEAD_ID, "Ana Pérez Rojas"]]]);
+    useFakeDb([BALANCE, [], [[...LIST_ROW, null, null, null, "2026-03-03 15:00:00+00", LEAD_ID, "Ana Pérez Rojas"]]]);
     await expect(getBookingById(BOOKING_ID)).resolves.toMatchObject({
-      lead: { id: LEAD_ID, fullName: "Ana Pérez Rojas" },
+      lead: { id: LEAD_ID, fullName: "Ana Pérez Rojas" }, paidUsd: 300, paymentInReview: false,
     });
   });
 
   it("returns null when it does not exist", async () => {
-    useFakeDb([[]]);
+    useFakeDb([[], [], []]);
     await expect(getBookingById(BOOKING_ID)).resolves.toBeNull();
   });
 });
@@ -156,8 +185,9 @@ describe("createBooking", () => {
     expect(statement).toContain(
       "link.lead_id IS NULL OR EXISTS ( SELECT 1 FROM leads WHERE leads.id = link.lead_id AND leads.archived_at IS NULL ) AS lead_ok",
     );
+    // A simulated booking never blocks a real one (like bookings_lead_active_uq).
     expect(statement).toContain(
-      "link.lead_id IS NULL OR NOT EXISTS ( SELECT 1 FROM bookings active WHERE active.lead_id = link.lead_id AND active.status <> 'cancelled' ) AS lead_free",
+      "link.lead_id IS NULL OR NOT EXISTS ( SELECT 1 FROM bookings active WHERE active.lead_id = link.lead_id AND active.status <> 'cancelled' AND NOT active.is_simulated ) AS lead_free",
     );
     expect(fake.queries[0].params[1]).toBe(LEAD_ID);
   });
@@ -189,13 +219,13 @@ describe("getLeadBooking", () => {
     expect(fake.queries).toHaveLength(0);
   });
 
-  it("reads the lead's non-cancelled booking", async () => {
+  it("reads the lead's non-cancelled real booking", async () => {
     const fake = useFakeDb([[[BOOKING_ID, "pending"]]]);
     await expect(getLeadBooking(LEAD_ID)).resolves.toEqual({ id: BOOKING_ID, status: "pending" });
     expect(normalize(fake.queries[0].sql)).toBe(
-      'select "id", "status" from "bookings" where ("bookings"."lead_id" = $1 and "bookings"."status" <> $2) limit $3',
+      'select "id", "status" from "bookings" where ("bookings"."lead_id" = $1 and "bookings"."status" <> $2 and "bookings"."is_simulated" = $3) limit $4',
     );
-    expect(fake.queries[0].params).toEqual([LEAD_ID, "cancelled", 1]);
+    expect(fake.queries[0].params).toEqual([LEAD_ID, "cancelled", false, 1]);
   });
 
   it("returns null when the lead has no active booking", async () => {
@@ -224,12 +254,13 @@ describe("updateBooking", () => {
     expect(statement).not.toMatch(/"trip_id" = \$|"status" = \$\d+,|"runner_user_id" = \$|created_by/);
     expect(statement).toContain('"bookings"."status" <> $9');
     expect(statement).toContain('("bookings"."runner_user_id" is null or "bookings"."participant_email" = $10)');
+    // Only another active real booking blocks the email (bookings_trip_email_active_uq excludes simulated ones).
     expect(statement).toContain(
-      'not exists (select 1 from "bookings" "other" where ("other"."trip_id" = "bookings"."trip_id" and "other"."participant_email" = $11 and "other"."status" <> $12 and "other"."id" <> "bookings"."id"))',
+      'not exists (select 1 from "bookings" "other" where ("other"."trip_id" = "bookings"."trip_id" and "other"."participant_email" = $11 and "other"."status" <> $12 and "other"."is_simulated" = $13 and "other"."id" <> "bookings"."id"))',
     );
     expect(mutation.params).toEqual([
       "Ana Pérez", "ana@example.com", "Paquete corredor", "42K", 1499, "2027-04-01", null,
-      BOOKING_ID, "cancelled", "ana@example.com", "ana@example.com", "cancelled", 1499, "discount",
+      BOOKING_ID, "cancelled", "ana@example.com", "ana@example.com", "cancelled", false, 1499, "discount",
     ]);
     expect(normalize(diagnosis.sql)).toContain('from "bookings" where "bookings"."id" = $1');
   });
@@ -258,7 +289,7 @@ describe("setBookingStatus", () => {
     expect(fake.queries).toHaveLength(1);
     const placeholders = sources.map((_, i) => `$${i + 3}::booking_status`).join(", ");
     expect(normalize(fake.queries[0].sql)).toMatch(new RegExp(
-      `^WITH changed AS \\( UPDATE bookings SET status = \\$1::booking_status, updated_at = now\\(\\) WHERE id = \\$2::uuid AND status IN \\(${placeholders.replaceAll("$", "\\$")}\\) RETURNING id, lead_id \\)`,
+      `^WITH changed AS \\( UPDATE bookings SET status = \\$1::booking_status, updated_at = now\\(\\) WHERE id = \\$2::uuid AND status IN \\(${placeholders.replaceAll("$", "\\$")}\\) RETURNING id, lead_id, is_simulated \\)`,
     ));
     expect(normalize(fake.queries[0].sql)).toMatch(/SELECT EXISTS \(SELECT 1 FROM changed\) AS changed$/);
     expect(fake.queries[0].params.slice(0, 2 + sources.length)).toEqual([status, BOOKING_ID, ...sources]);
@@ -269,8 +300,9 @@ describe("setBookingStatus", () => {
     await setBookingStatus(BOOKING_ID, "confirmed", ACTOR);
 
     const statement = normalize(fake.queries[0].sql);
+    // Only a real booking reaches the lead: a simulated one (demo checkout) yields no target.
     expect(statement).toContain(
-      "target AS ( SELECT leads.id, leads.stage FROM leads JOIN changed ON changed.lead_id = leads.id WHERE leads.archived_at IS NULL AND leads.stage NOT IN ('reserved', 'paid') FOR UPDATE OF leads )",
+      "target AS ( SELECT leads.id, leads.stage FROM leads JOIN changed ON changed.lead_id = leads.id AND NOT changed.is_simulated WHERE leads.archived_at IS NULL AND leads.stage NOT IN ('reserved', 'paid') FOR UPDATE OF leads )",
     );
     expect(statement).toContain(
       "lead_updated AS ( UPDATE leads SET stage = 'reserved'::lead_stage, lost_reason = NULL, updated_at = now() FROM target WHERE leads.id = target.id RETURNING leads.id, target.stage AS stage_from )",
@@ -282,6 +314,20 @@ describe("setBookingStatus", () => {
       "INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.stage_changed', id, jsonb_build_object('stageFrom', stage_from, 'stageTo', 'reserved', 'trigger', 'booking') FROM lead_updated",
     );
     expect(fake.queries[0].params).toEqual(["confirmed", BOOKING_ID, "pending", "Reserva confirmada en el CRM.", ACTOR]);
+  });
+
+  it("confirming a simulated booking enqueues no commercial event: every lead write hangs on a real booking", async () => {
+    const fake = useFakeDb([[{ changed: true }]]);
+    await expect(setBookingStatus(BOOKING_ID, "confirmed", ACTOR)).resolves.toBe("changed");
+    const statement = normalize(fake.queries[0].sql);
+    // The only source of rows for the lead update, the activity and the outbox event is target,
+    // which requires NOT changed.is_simulated: a simulated booking changes status and nothing else.
+    expect(statement).toContain("RETURNING id, lead_id, is_simulated )");
+    expect(statement).toContain("JOIN changed ON changed.lead_id = leads.id AND NOT changed.is_simulated");
+    expect(statement).toMatch(/lead_updated AS \( UPDATE leads .* FROM target WHERE leads\.id = target\.id/);
+    expect(statement.match(/FROM lead_updated/g)).toHaveLength(2);
+    expect(statement.match(/INSERT INTO outbox_events/g)).toHaveLength(1);
+    expect(statement).toMatch(/INSERT INTO outbox_events \(type, lead_id, payload\) SELECT .* FROM lead_updated \)/);
   });
 
   it("cancelling never touches the lead", async () => {

@@ -11,12 +11,13 @@ export type {
   ScheduleEdge,
 } from "./types/bookings.types";
 export { getBookingById, getLeadBooking, listBookings } from "./services/bookings.service";
+export { getBookingBalance } from "./services/bookingBalance.service";
 export { changeBookingStatusAction } from "./actions/bookings.actions";
 export { BookingFilters } from "./components/BookingFilters";
 export { BookingForm } from "./components/BookingForm";
-export { BookingStatusBadge, BookingTable } from "./components/BookingTable";
-export { BOOKING_STATUS_LABELS } from "./utils/bookingDisplay";
-export type { CrmBooking, CrmBookingListItem } from "./types/bookings.types";
+export { BookingStatusBadge, BookingTable, SimulatedBookingBadge } from "./components/BookingTable";
+export { BOOKING_KIND_SIMULATED, BOOKING_STATUS_LABELS, SIMULATED_BOOKING_LABEL } from "./utils/bookingDisplay";
+export type { BookingBalance, CrmBooking, CrmBookingListItem, StripePayment } from "./types/bookings.types";
 
 export { getRunnerPortal } from "./utils/runnerPortal";
 export type { RunnerPortalState } from "./utils/runnerPortal";

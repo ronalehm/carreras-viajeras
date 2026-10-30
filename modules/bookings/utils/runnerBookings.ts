@@ -6,7 +6,6 @@ import type {
   PaymentSummary,
   RunnerBookingDetail,
   RunnerBookingSummary,
-  RunnerPayment,
   RunnerTrip,
   ScheduleEdge,
   Timeline,
@@ -34,13 +33,8 @@ export function orderRunnerBookings<T extends RunnerBookingSummary>(bookings: re
   });
 }
 
-// Payments are already non-voided (the service filters them). Balance < 0 is credit in favour.
-export function getPaymentSummary(
-  totalUsd: number,
-  payments: readonly RunnerPayment[],
-  balanceDueOn: string | null,
-): PaymentSummary {
-  const paidUsd = payments.reduce((sum, p) => sum + p.amountUsd, 0);
+// paidUsd comes from the common balance (getBookingBalance). Balance < 0 is credit in favour.
+export function getPaymentSummary(totalUsd: number, paidUsd: number, balanceDueOn: string | null): PaymentSummary {
   const balanceUsd = totalUsd - paidUsd;
   const completed = balanceUsd <= 0;
   return {
@@ -89,7 +83,7 @@ function byStart(a: TimelineEntry, b: TimelineEntry): number {
 export function buildTimeline(detail: RunnerBookingDetail, today: string): Timeline {
   const items: TimelineEntry[] = detail.items.map((item) => ({ ...item, key: item.id, derived: false }));
 
-  const payment = getPaymentSummary(detail.totalUsd, detail.payments, detail.balanceDueOn);
+  const payment = getPaymentSummary(detail.totalUsd, detail.paidUsd, detail.balanceDueOn);
   const preparation = [
     derivedEntry({
       key: "booking",

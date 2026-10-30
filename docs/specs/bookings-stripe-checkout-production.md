@@ -195,15 +195,15 @@ Cada fase tiene hasta cinco tareas y unos quince archivos. Paquetes, schema, `li
 
 ### Fase 3: pantallas y saldos
 
-- [ ] 3.1 `RunnerCheckout` y el bloque de oferta de la landing: textos de producción, estados con acción, referencia de error y enlace evaluado por petición.
-- [ ] 3.2 `getBookingBalance` en bookings, usado por el portal y el CRM de reservas, con indicador «Stripe» y «en revisión».
+- [x] 3.1 `RunnerCheckout` y el bloque de oferta de la landing: textos de producción, estados con acción, referencia de error y enlace evaluado por petición.
+- [x] 3.2 `getBookingBalance` en bookings, usado por el portal y el CRM de reservas, con indicador «Stripe» y «en revisión».
 - [x] 3.3 0021 y `lib/db-schema.ts`. Aplicar 0000–0021 en PostgreSQL desechable y comprobar que no hay diferencias en `db:generate`.
 
 ### Fase 4: validación y documentación
 
-- [ ] 4.1 lint, Vitest, typegen, `tsc` y `build:worker`, más la comprobación de que el módulo de entorno empaquetado no contiene `STRIPE_*` secretos.
+- [x] 4.1 lint, Vitest, typegen, `tsc` y `build:worker`, más la comprobación de que el módulo de entorno empaquetado no contiene `STRIPE_*` secretos.
 - [ ] 4.2 Prueba funcional en modo test (Clerk de desarrollo y Neon de desarrollo) de pago total, anticipo, saldo, cancelación, vencimiento y replay de un evento.
-- [ ] 4.3 README: variables, procedimiento de migración y despliegue de esta spec, y operación (alertas `needs_review`, conciliación y reversión).
+- [x] 4.3 README: variables, procedimiento de migración y despliegue de esta spec, y operación (alertas `needs_review`, conciliación y reversión).
 
 ## Aceptación
 

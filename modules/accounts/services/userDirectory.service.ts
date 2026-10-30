@@ -82,7 +82,7 @@ async function readUsers(
         WHERE sa.user_id = ids.user_id AND sa.revoked_at IS NULL
       ) a ON true
       LEFT JOIN LATERAL (
-        SELECT count(*) FILTER (WHERE b.status <> 'cancelled') AS active
+        SELECT count(*) FILTER (WHERE b.status <> 'cancelled' AND NOT b.is_simulated) AS active
         FROM bookings b
         WHERE b.runner_user_id = ids.user_id
       ) bk ON true

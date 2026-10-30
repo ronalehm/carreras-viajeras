@@ -39,17 +39,20 @@ const LIST = [
   [FINISHED, "confirmed", "Maratón de Lima 2026", "Lima", "Perú", "2026-05-17", null, null, []],
   [ACTIVE, "confirmed", "Maratón de Santiago 2027", "Santiago", "Chile", "2027-05-16", "2027-05-14", "2027-05-18", ["Hotel"]],
 ];
-// Detail batch: booking, manual payments, applied Stripe settlements, items, updates.
+// Detail batch: booking, manual payments, items, updates; then the common balance batch
+// (getBookingBalance): totals (id, total, manual paid), settlements (id, booking, amount, paid at, status).
 const DETAIL = [
-  [["Paquete corredor", "42K", "1499", "2027-04-01", "2026-03-03 15:00:00+00"]],
+  [["Paquete corredor", "42K", "1499", false, "2027-04-01", "2026-03-03 15:00:00+00"]],
   [["pay-1", "300", "2026-03-03", "Reserva"]],
-  [["stripe-settlement-1", "200", new Date("2026-03-06T03:00:00Z")]],
   [
     ["item-1", "flight", "confirmed", "Vuelo de ida", null, "LIM", "2027-05-14", "01:30:00", "America/Lima", "2027-05-14", "06:55:00", "America/Santiago"],
     ["item-2", "hotel", "pending", "Hotel", null, null, null, null, null, null, null, null],
   ],
   [["upd-1", "Recojo de kits", "Lleva tu DNI", "2027-05-10 12:00:00+00"]],
+  [[ACTIVE, "1499", "300"]],
+  [["stripe-settlement-1", ACTIVE, "200", new Date("2026-03-06T03:00:00Z"), "applied"]],
 ];
+const detailFor = (id: string) => [...DETAIL.slice(0, 4), [[id, "1499", "300"]], DETAIL[5].map((row) => [row[0], id, ...(row as unknown[]).slice(2)])];
 
 beforeEach(() => vi.mocked(getDb).mockReset());
 
@@ -58,13 +61,14 @@ describe("loadRunnerPortal", () => {
     const fake = useFakeDb([[], LIST, ...DETAIL]);
     await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
 
-    expect(fake.transaction).toHaveBeenCalledTimes(2);
+    // Link + list, the detail batch and the balance batch.
+    expect(fake.transaction).toHaveBeenCalledTimes(3);
     const [link, list] = fake.queries;
     expect(normalize(link.sql)).toBe(
       'update "bookings" set "runner_user_id" = $1, "updated_at" = now() where ("bookings"."participant_email" = $2 and "bookings"."runner_user_id" is null)',
     );
     expect(link.params).toEqual([USER, EMAIL]);
-    expect(normalize(list.sql)).toMatch(/^select .* from "bookings" inner join "trips" on "trips"\."id" = "bookings"\."trip_id" where "bookings"\."runner_user_id" = \$1$/);
+    expect(normalize(list.sql)).toMatch(/^select .* from "bookings" inner join "trips" on "trips"\."id" = "bookings"\."trip_id" where \("bookings"\."runner_user_id" = \$1 and not \(/);
     expect(list.params).toEqual([USER]);
   });
 
@@ -88,15 +92,13 @@ describe("loadRunnerPortal", () => {
     const fake = useFakeDb([[], LIST, ...DETAIL]);
     await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
 
-    const [booking, payments, stripePayments, items, updates] = fake.queries.slice(2);
+    const [booking, payments, items, updates] = fake.queries.slice(2, 6);
     const OWNED = '"bookings"."id" = $1 and "bookings"."runner_user_id" = $2';
-    for (const query of [booking, payments, stripePayments, items, updates]) {
+    for (const query of [booking, payments, items, updates]) {
       expect(normalize(query.sql)).toContain(OWNED);
       expect(query.params.slice(0, 2)).toEqual([ACTIVE, USER]);
     }
     expect(normalize(payments.sql)).toContain('"booking_payments"."voided_at" is null');
-    expect(normalize(stripePayments.sql)).toContain('"booking_stripe_settlements"."status" = $3');
-    expect(stripePayments.params).toEqual([ACTIVE, USER, "applied"]);
     expect(normalize(items.sql)).toContain('inner join "bookings" on "bookings"."trip_id" = "itinerary_items"."trip_id"');
     expect(normalize(items.sql)).toContain('"itinerary_items"."runner_visible" = $3');
     expect(items.params[2]).toBe(true);
@@ -107,14 +109,41 @@ describe("loadRunnerPortal", () => {
     expect(normalize(updates.sql)).toMatch(/order by "trip_updates"\."published_at" desc$/);
   });
 
-  it("reads applied Stripe settlements only for the runner's booking", async () => {
+  it("reads the common balance only for the runner's chosen booking", async () => {
     const fake = useFakeDb([[], LIST, ...DETAIL]);
     await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
 
-    const settlement = fake.queries.find(({ sql }) => normalize(sql).includes('from "booking_stripe_settlements"'));
-    expect(settlement).toBeDefined();
-    expect(normalize(settlement!.sql)).toContain('"bookings"."id" = $1 and "bookings"."runner_user_id" = $2');
-    expect(settlement!.params.slice(0, 2)).toEqual([ACTIVE, USER]);
+    expect(fake.transaction).toHaveBeenCalledTimes(3);
+    const [totals, settlements] = fake.queries.slice(6);
+    expect(normalize(totals.sql)).toContain("from booking_payments p where p.booking_id = bookings.id and p.voided_at is null");
+    expect(totals.params).toEqual([ACTIVE]);
+    expect(normalize(settlements.sql)).toContain('from "booking_stripe_settlements" where "booking_stripe_settlements"."booking_id" in ($1)');
+    expect(settlements.params).toEqual([ACTIVE]);
+  });
+
+  it("hides checkout bookings cancelled without any payment", async () => {
+    const fake = useFakeDb([[], LIST, ...DETAIL]);
+    await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
+
+    expect(normalize(fake.queries[1].sql)).toContain(
+      'where ("bookings"."runner_user_id" = $1 and not ("bookings"."status" = \'cancelled\' and "bookings"."offer_version_id" is not null and not exists (select 1 from booking_payments p where p.booking_id = "bookings"."id" and p.voided_at is null) and not exists (select 1 from booking_stripe_settlements s where s.booking_id = "bookings"."id")))',
+    );
+  });
+
+  it("counts Stripe in review apart: not paid, flagged, and absent from the history", async () => {
+    useFakeDb([[], LIST, ...DETAIL.slice(0, 5), [
+      ["stripe-settlement-1", ACTIVE, "200", new Date("2026-03-06T03:00:00Z"), "applied"],
+      ["stripe-settlement-2", ACTIVE, "500", new Date("2026-03-07T15:00:00Z"), "needs_review"],
+    ]]);
+    const { selected } = await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
+    expect(selected).toMatchObject({ paidUsd: 500, paymentInReview: true });
+    expect(selected?.payments.map((p) => p.id)).toEqual(["pay-1", "stripe-settlement-1"]);
+  });
+
+  it("flags a simulated booking", async () => {
+    useFakeDb([[], LIST, [["Paquete corredor", "42K", "11000", true, null, "2026-10-30 15:00:00+00"]], ...DETAIL.slice(1)]);
+    const { selected } = await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
+    expect(selected?.simulated).toBe(true);
   });
 
   it("selects the first booking by Requirement 7 and maps times to HH:MM and amounts to integers", async () => {
@@ -137,6 +166,10 @@ describe("loadRunnerPortal", () => {
       packageLabel: "Paquete corredor",
       distance: "42K",
       totalUsd: 1499,
+      // Common balance: 300 manual + 200 Stripe applied.
+      paidUsd: 500,
+      paymentInReview: false,
+      simulated: false,
       balanceDueOn: "2027-04-01",
       createdAt: new Date("2026-03-03T15:00:00Z"),
       payments: [
@@ -161,7 +194,7 @@ describe("loadRunnerPortal", () => {
   });
 
   it("selects a valid param that belongs to the user", async () => {
-    const fake = useFakeDb([[], LIST, ...DETAIL]);
+    const fake = useFakeDb([[], LIST, ...detailFor(FINISHED)]);
     const data = await loadRunnerPortal(USER, EMAIL, FINISHED, TODAY);
 
     expect(data.selected?.id).toBe(FINISHED);
@@ -183,7 +216,7 @@ describe("loadRunnerPortal", () => {
   });
 
   it("returns the list without a detail if the booking is no longer owned", async () => {
-    useFakeDb([[], LIST, [], [], [], []]);
+    useFakeDb([[], LIST, [], [], [], [], [], []]);
     const data = await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
     expect(data.bookings).toHaveLength(2);
     expect(data.selected).toBeNull();

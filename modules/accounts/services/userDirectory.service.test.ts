@@ -63,8 +63,8 @@ describe("listUsers", () => {
         "FROM staff_assignments sa LEFT JOIN sponsors s ON s.id = sa.sponsor_id " +
         "WHERE sa.user_id = ids.user_id AND sa.revoked_at IS NULL",
     );
-    // Linked bookings: the not cancelled count and the latest one for the identity.
-    expect(statement).toContain("count(*) FILTER (WHERE b.status <> 'cancelled') AS active");
+    // Linked bookings: the not cancelled, real (not simulated) count and the latest one for the identity.
+    expect(statement).toContain("count(*) FILTER (WHERE b.status <> 'cancelled' AND NOT b.is_simulated) AS active");
     expect(statement).toContain("WHERE b.runner_user_id = ids.user_id ORDER BY b.created_at DESC, b.id LIMIT 1");
     // Identity (requirement 5); every listed account is a Runner (accounts-role-requests R3).
     expect(statement).toContain("coalesce(rp.full_name, lb.participant_name) AS name");

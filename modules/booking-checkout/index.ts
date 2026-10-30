@@ -18,3 +18,7 @@ export type { ContractAcceptanceResult } from "./services/contractAcceptance.ser
 export { handleStripeWebhook } from "./services/stripeWebhook.service";
 export { checkoutError, checkoutFailure, checkoutJson, hasAppOrigin } from "./utils/checkoutResponse";
 export type { CheckoutRoute } from "./utils/checkoutResponse";
+export { DemoParticipantsManager } from "./components/DemoParticipantsManager";
+export { grantDemoParticipantAction, revokeDemoParticipantAction } from "./actions/demoParticipants.actions";
+export { getCheckoutStatus, listDemoParticipants } from "./services/demoParticipants.service";
+export type { CheckoutStatus, DemoParticipant } from "./services/demoParticipants.service";

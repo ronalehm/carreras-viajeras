@@ -2,11 +2,15 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const { fetchCatalogTrip, location } = vi.hoisted(() => ({
+const { fetchCatalogTrip, fetchCheckoutAvailable, location, clerk } = vi.hoisted(() => ({
   fetchCatalogTrip: vi.fn(),
+  fetchCheckoutAvailable: vi.fn(),
   location: { pathname: "/", params: new URLSearchParams() },
+  clerk: { isLoaded: true, userId: null as string | null },
 }));
 vi.mock("../services/catalogTrips.api", () => ({ fetchCatalogTrip }));
+vi.mock("../services/checkoutAccess.api", () => ({ fetchCheckoutAvailable }));
+vi.mock("@clerk/nextjs", () => ({ useAuth: () => clerk }));
 vi.mock("next/navigation", () => ({
   usePathname: () => location.pathname,
   useSearchParams: () => location.params,
@@ -46,13 +50,13 @@ const offer = {
 };
 const action = vi.fn();
 
-function renderContent(url: string, checkoutEnabled = false) {
+function renderContent(url: string) {
   const parsed = new URL(url, "https://carreras-viajeras.mentec.dev");
   location.pathname = parsed.pathname;
   location.params = parsed.searchParams;
   // Test client: no delay between the single retry and the error state.
   const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
-  return { client, ...render(<QueryClientProvider client={client}><RacePageContent action={action} checkoutEnabled={checkoutEnabled} /></QueryClientProvider>) };
+  return { client, ...render(<QueryClientProvider client={client}><RacePageContent action={action} /></QueryClientProvider>) };
 }
 
 function hiddenValue(container: HTMLElement, name: string) {
@@ -61,6 +65,9 @@ function hiddenValue(container: HTMLElement, name: string) {
 
 beforeEach(() => {
   fetchCatalogTrip.mockReset();
+  fetchCheckoutAvailable.mockReset().mockResolvedValue(false);
+  clerk.isLoaded = true;
+  clerk.userId = null;
   document.title = "Registro | Carreras Viajeras";
 });
 afterEach(cleanup);
@@ -94,12 +101,56 @@ it("renders the registration with the offer of ?c=, the attribution, header and 
   await waitFor(() => expect(document.title).toBe("Registro · Maratón de Santiago | Carreras Viajeras"));
 });
 
-it("offers the sandbox checkout on the current registration shell and preserves the campaign", async () => {
+it("shows the checkout link when the per-request endpoint allows it and preserves the campaign", async () => {
   fetchCatalogTrip.mockResolvedValue({ trip, offer });
-  renderContent("/viajes/maraton-santiago-2027/registro?c=abc&c=ignored", true);
+  fetchCheckoutAvailable.mockResolvedValue(true);
+  clerk.userId = "user_demo";
+  renderContent("/viajes/maraton-santiago-2027/registro?c=abc&c=ignored");
 
   const checkoutLink = await screen.findByRole("link", { name: /Continuar al checkout/ });
   expect(checkoutLink.getAttribute("href")).toBe("/viajes/maraton-santiago-2027/checkout?c=abc");
+  expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/sandbox/i)).toBeNull();
+});
+
+it("hides the checkout link when the endpoint denies it", async () => {
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  renderContent("/viajes/maraton-santiago-2027/registro");
+
+  await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
+  await waitFor(() => expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+});
+
+it("shows nothing while the endpoint answers or after it fails, without retrying", async () => {
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  fetchCheckoutAvailable.mockReturnValue(new Promise(() => {}));
+  const pending = renderContent("/viajes/maraton-santiago-2027/registro");
+  await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
+  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  pending.unmount();
+
+  fetchCheckoutAvailable.mockReset().mockRejectedValue(new Error("Request failed with status code 500"));
+  renderContent("/viajes/maraton-santiago-2027/registro");
+  await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
+  await waitFor(() => expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1));
+  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("waits for Clerk before asking, and never asks without an offer", async () => {
+  clerk.isLoaded = false;
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  const first = renderContent("/viajes/maraton-santiago-2027/registro");
+  await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
+  expect(fetchCheckoutAvailable).not.toHaveBeenCalled();
+  first.unmount();
+
+  clerk.isLoaded = true;
+  fetchCatalogTrip.mockResolvedValue({ trip, offer: null });
+  renderContent("/viajes/maraton-santiago-2027/registro");
+  await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
+  expect(fetchCheckoutAvailable).not.toHaveBeenCalled();
 });
 
 it("stand mode shows no header, footer or price block and asks for no campaign offer", async () => {
