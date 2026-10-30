@@ -225,3 +225,105 @@ describe("lifecycleEmailTemplate", () => {
     }
   });
 });
+
+describe("lifecycleEmailTemplate with a welcome code", () => {
+  const welcomeCode = {
+    code: "CV-7KQ2MZ",
+    amountUsd: 50,
+    expiresOn: "2027-03-15",
+    accountUrl: "https://carrerasviajeras.example/cuenta",
+  };
+  const block = [
+    "Crea tu cuenta y llévate US$50 de descuento",
+    "Con tu cuenta de Carreras Viajeras tienes:",
+    "- Mis carreras: tus reservas, pagos y saldo en un solo lugar.",
+    "- Recompensas: acumula estrellas por tus viajes y referidos, y canjéalas por descuentos y beneficios.",
+    "- Novedades primero: entérate antes que nadie de nuevas carreras y preventas.",
+    "",
+    "Tu código de bienvenida es CV-7KQ2MZ: US$50 de descuento en tu primera reserva. Para usarlo, crea tu cuenta con este mismo correo en https://carrerasviajeras.example/cuenta y compártelo con nuestro equipo al reservar. Válido hasta el 15 de marzo de 2027.",
+  ].join("\n");
+
+  it("adds the account block before the signature of welcome_registration, with templateVersion 2", () => {
+    expect(lifecycleEmailTemplate("welcome_registration", { ...client, welcomeCode })).toEqual({
+      subject: "Recibimos tu registro para Maratón de Lima",
+      body:
+        "Hola Ana, te damos la bienvenida a Carreras Viajeras. Recibimos tu registro para Maratón de Lima. Pronto una persona de nuestro equipo te escribirá por WhatsApp para contarte cómo es el viaje y resolver tus dudas. Si quieres adelantarnos algo, responde este correo." +
+        `\n\n${block}` +
+        SIGNATURE,
+      templateVersion: 2,
+    });
+  });
+
+  it("adds the account block before the signature of welcome_contact, with templateVersion 2", () => {
+    expect(lifecycleEmailTemplate("welcome_contact", { ...client, welcomeCode })).toEqual({
+      subject: "Recibimos tu consulta",
+      body:
+        "Hola Ana, te damos la bienvenida a Carreras Viajeras y gracias por escribirnos. Recibimos tu consulta sobre Maratón de Lima. Pronto una persona de nuestro equipo te contactará por WhatsApp. Si quieres añadir algo, responde este correo." +
+        `\n\n${block}` +
+        SIGNATURE,
+      templateVersion: 2,
+    });
+  });
+
+  it("keeps the welcome unchanged (templateVersion 1) when welcomeCode is absent or undefined", () => {
+    for (const kind of ["welcome_registration", "welcome_contact"] as const) {
+      const plain = lifecycleEmailTemplate(kind, client);
+      expect(lifecycleEmailTemplate(kind, { ...client, welcomeCode: undefined })).toEqual(plain);
+      expect(plain.templateVersion).toBe(1);
+      expect(plain.body).not.toContain("Crea tu cuenta");
+      expect(plain.body).not.toContain("CV-");
+    }
+  });
+
+  it("shows the code exactly once and the amount in the heading and in the code sentence", () => {
+    for (const kind of ["welcome_registration", "welcome_contact"] as const) {
+      const { body } = lifecycleEmailTemplate(kind, { ...client, welcomeCode });
+      expect(body.split("CV-7KQ2MZ")).toHaveLength(2);
+      expect(body.split("US$50 de descuento")).toHaveLength(3);
+      expect(body).not.toContain("**");
+    }
+  });
+
+  it.each([
+    [50, "US$50"],
+    [10000, "US$10,000"],
+    [49.5, "US$49.50"],
+    [12.25, "US$12.25"],
+  ])("formats the amount %s as %s", (amountUsd, expected) => {
+    const { body } = lifecycleEmailTemplate("welcome_contact", { ...client, welcomeCode: { ...welcomeCode, amountUsd } });
+    expect(body).toContain(`Crea tu cuenta y llévate ${expected} de descuento\n`);
+    expect(body).toContain(`es CV-7KQ2MZ: ${expected} de descuento en tu primera reserva.`);
+  });
+
+  it.each([
+    ["2027-03-15", "15 de marzo de 2027"],
+    ["2027-01-01", "1 de enero de 2027"],
+    ["2026-12-31", "31 de diciembre de 2026"],
+  ])("formats the expiry date %s as «%s» from the string, without time zones", (expiresOn, expected) => {
+    const { body } = lifecycleEmailTemplate("welcome_registration", {
+      ...client,
+      welcomeCode: { ...welcomeCode, expiresOn },
+    });
+    expect(body).toContain(`Válido hasta el ${expected}.${SIGNATURE}`);
+  });
+
+  it("truncates only the free body, keeping the whole block and the signature within 4000 characters", () => {
+    const longRace = "Ultra ".repeat(900).trim();
+    for (const kind of ["welcome_registration", "welcome_contact"] as const) {
+      const email = lifecycleEmailTemplate(kind, { fullName: "Ana", race: longRace, welcomeCode });
+      expect(Array.from(email.body)).toHaveLength(4000);
+      expect(email.body.endsWith(`…\n\n${block}${SIGNATURE}`)).toBe(true);
+      expect(email.templateVersion).toBe(2);
+    }
+  });
+
+  it("does not change welcome_account or the other kinds", () => {
+    expect(lifecycleEmailTemplate("welcome_account", client).templateVersion).toBe(1);
+    expect(lifecycleEmailTemplate("follow_up", client).templateVersion).toBe(1);
+    expect(lifecycleEmailTemplate("booking_confirmed", client).templateVersion).toBe(1);
+    // @ts-expect-error only the registration and contact welcomes accept a welcome code.
+    lifecycleEmailTemplate("welcome_account", { ...client, welcomeCode });
+    // @ts-expect-error only the registration and contact welcomes accept a welcome code.
+    lifecycleEmailTemplate("follow_up", { ...client, welcomeCode });
+  });
+});
