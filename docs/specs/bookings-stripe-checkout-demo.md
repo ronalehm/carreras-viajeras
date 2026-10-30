@@ -1,6 +1,6 @@
 # Enmienda: modo DEMO de Stripe Checkout en el sitio publicado
 
-- Estado: borrador
+- Estado: aprobado
 - Spec base: [bookings-stripe-checkout-production.md](bookings-stripe-checkout-production.md) (aprobada; Fase 1 hecha, Fase 2 en curso).
 - Módulos: booking-checkout, contracts, bookings, accounts (CRM), migraciones.
 - Rama: `claude/blissful-davinci-pfjo58` (PR ronalehm/carreras-viajeras#53).
