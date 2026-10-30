@@ -26,6 +26,8 @@ export async function getRunnerProfilePage(): Promise<RunnerProfilePageState> {
     throw error;
   }
   if (!user) return { status: "unauthenticated" };
+  // Disabled or deleted from the CRM: fail closed, no profile query (accounts-role-requests R12).
+  if (user.blocked) return { status: "error" };
   // No profile query and no redirect: /cuenta would send the runner back here (loop).
   if (!user.emailVerified) return { status: "unverified", email: user.email };
 

@@ -102,6 +102,13 @@ describe("getRunnerPortal: access", () => {
     expect(loadMock).not.toHaveBeenCalled();
   });
 
+  it("fails closed for a blocked account (disabled from the CRM), without loading bookings", async () => {
+    getCurrentUserMock.mockResolvedValue({ ...verified, staffRoles: [], blocked: true });
+
+    await expect(getRunnerPortal(BOOKING_ID)).resolves.toEqual({ status: "error" });
+    expect(loadMock).not.toHaveBeenCalled();
+  });
+
   it("maps a ForbiddenError from getCurrentUser (auth or database failure) to error", async () => {
     getCurrentUserMock.mockRejectedValue(new ForbiddenError());
 

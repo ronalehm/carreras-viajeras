@@ -10,6 +10,7 @@ import {
   invitationIdSchema,
   inviteStaffSchema,
   staffRoleChangeSchema,
+  staffRoleRevokeSchema,
 } from "../schemas/staff.schema";
 import {
   createInvitation,
@@ -40,6 +41,7 @@ const FIELD_MESSAGES: Record<string, string> = {
   role: "Elige un rol válido.",
   invitationId: "La invitación no es válida.",
   userId: "El usuario no es válido.",
+  sponsorId: "Elige la marca del patrocinador.",
 };
 
 function failure(
@@ -144,7 +146,8 @@ export async function revokeStaffRoleAction(
   _prev: StaffActionState,
   formData: FormData,
 ): Promise<StaffActionState> {
-  return runRoleAction(formData, staffRoleChangeSchema, async (input, actorUserId) => {
+  // Revoking sponsor needs no brand: staffRoleRevokeSchema only takes the account and the role.
+  return runRoleAction(formData, staffRoleRevokeSchema, async (input, actorUserId) => {
     const result = await revokeStaffRole(input, actorUserId);
     return result === "revoked" ? { status: "success", message: "Rol revocado." } : failure(result);
   });

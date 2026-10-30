@@ -1,9 +1,10 @@
 import type { z } from "zod";
 import type { StaffRole } from "@/lib/auth/permissions";
+import type { AccountStatus } from "./accountStatus.types";
 import type { userRoleFilterSchema } from "../schemas/userDirectory.schema";
 import type { StaffMember } from "./staff.types";
 
-// "runner" is derived (runner profile or a linked booking), never a staff_role value.
+// "runner" is every account of the directory, never a staff_role value: filtering by it lists everyone.
 export type UserRoleFilter = z.infer<typeof userRoleFilterSchema>;
 
 export type UserListFilter = { q?: string; role?: UserRoleFilter };
@@ -17,10 +18,12 @@ export type UserListItem = {
   roles: StaffRole[];
   // Brand of the active sponsor assignment.
   sponsorName: string | null;
-  // Has a runner profile or at least one linked booking (cancelled ones included).
+  // Always true: every listed account is a Runner (accounts-role-requests R3). Kept for the components.
   isRunner: boolean;
   // Linked bookings that are not cancelled.
   activeBookings: number;
+  // "active" or "disabled": deleted accounts are never listed (accounts-role-requests R16).
+  status: AccountStatus;
 };
 
 export type UserDetail = {
@@ -32,5 +35,8 @@ export type UserDetail = {
   // Active roles with grantedAt (for StaffTable); null without active roles.
   member: StaffMember | null;
   sponsor: { id: string; name: string } | null;
+  // Always true, as in UserListItem.
   isRunner: boolean;
+  // "deleted" is only shown to super_admin; the page answers 404 to anyone else.
+  status: AccountStatus;
 };

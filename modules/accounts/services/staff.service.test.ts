@@ -30,6 +30,7 @@ function useFakeDb({ responses = [] as unknown[][], failWith }: { responses?: un
   return { queries, transaction };
 }
 
+const SPONSOR_ID = "8a6b2c1d-4e5f-4a7b-9c8d-1e2f3a4b5c6d";
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 const PENDING = '("staff_invitations"."accepted_at" is null and "staff_invitations"."revoked_at" is null)';
 
@@ -168,15 +169,59 @@ describe("grantStaffRole", () => {
     expect(fake.queries).toHaveLength(1);
     expect(normalize(fake.queries[0].sql)).toBe(
       "INSERT INTO staff_assignments (user_id, role, reason, granted_by) " +
-        "SELECT profiles.user_id, $1::staff_role, 'crm-admin', $2 FROM profiles WHERE profiles.user_id = $3 " +
+        "SELECT profiles.user_id, $1::staff_role, 'crm-admin', $2 FROM profiles " +
+        "WHERE profiles.user_id = $3 AND profiles.disabled_at IS NULL " +
         "ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING RETURNING id",
     );
     expect(fake.queries[0].params).toEqual(["admin", "admin-1", "user-2"]);
   });
 
+  it("never grants to a disabled or deleted account: the profile must have disabled_at IS NULL", async () => {
+    const fake = useFakeDb();
+
+    // A disabled (or deleted, which implies disabled) profile yields no row: no_change.
+    await expect(grantStaffRole({ userId: "user-2", role: "commercial" }, "admin-1")).resolves.toBe(false);
+    expect(normalize(fake.queries[0].sql)).toMatch(
+      /FROM profiles WHERE profiles\.user_id = \$3 AND profiles\.disabled_at IS NULL ON CONFLICT/,
+    );
+  });
+
   it("returns false (no_change) when no row is inserted", async () => {
     useFakeDb();
     await expect(grantStaffRole({ userId: "user-2", role: "admin" }, "admin-1")).resolves.toBe(false);
+  });
+
+  it("inserts sponsor with its brand only when the brand exists, keeping the disabled filter", async () => {
+    const fake = useFakeDb({ responses: [[{ id: "assignment-1" }]] });
+
+    await expect(
+      grantStaffRole({ userId: "user-2", role: "sponsor", sponsorId: SPONSOR_ID }, "admin-1"),
+    ).resolves.toBe(true);
+
+    expect(fake.queries).toHaveLength(1);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      "INSERT INTO staff_assignments (user_id, role, reason, granted_by, sponsor_id) " +
+        "SELECT profiles.user_id, 'sponsor'::staff_role, 'crm-admin', $1, sponsors.id " +
+        "FROM profiles JOIN sponsors ON sponsors.id = $2::uuid " +
+        "WHERE profiles.user_id = $3 AND profiles.disabled_at IS NULL " +
+        "ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING RETURNING id",
+    );
+    expect(fake.queries[0].params).toEqual(["admin-1", SPONSOR_ID, "user-2"]);
+  });
+
+  it("returns false (no_change) for an unknown brand or an already active sponsor", async () => {
+    useFakeDb();
+    await expect(
+      grantStaffRole({ userId: "user-2", role: "sponsor", sponsorId: SPONSOR_ID }, "admin-1"),
+    ).resolves.toBe(false);
+  });
+
+  it("never joins sponsors nor sets sponsor_id for team roles", async () => {
+    const fake = useFakeDb({ responses: [[{ id: "assignment-1" }]] });
+
+    await grantStaffRole({ userId: "user-2", role: "organizer" }, "admin-1");
+    expect(fake.queries[0].sql).not.toMatch(/sponsor/);
+    expect(fake.queries[0].params).toEqual(["organizer", "admin-1", "user-2"]);
   });
 });
 
@@ -207,6 +252,13 @@ describe("revokeStaffRole", () => {
   ])("maps %o to %s", async (row, expected) => {
     useFakeDb({ responses: [[row]] });
     await expect(revokeStaffRole({ userId: "user-2", role: "admin" }, "admin-1")).resolves.toBe(expected);
+  });
+
+  it("revokes sponsor with the same statement, without a brand", async () => {
+    const fake = useFakeDb({ responses: [[{ revoked: true, target_is_active_admin: false }]] });
+
+    await expect(revokeStaffRole({ userId: "user-2", role: "sponsor" }, "admin-1")).resolves.toBe("revoked");
+    expect(fake.queries[0].params).toEqual(["admin-1", "user-2", "sponsor", "sponsor", "sponsor", "user-2"]);
   });
 
   it("propagates database rejections", async () => {

@@ -34,6 +34,10 @@ const loadSponsor = vi.mocked(loadSponsorId);
 
 const USER_ID = "user_2abc";
 
+function access(staffRoles: StaffRole[], blocked = false) {
+  return { staffRoles, blocked };
+}
+
 function emailAddress(id: string, address: string, status: string | null) {
   return { id, emailAddress: address, verification: status === null ? null : { status } };
 }
@@ -70,7 +74,7 @@ beforeEach(() => {
 describe("Clerk display name", () => {
   it("uses the trusted display fields without treating them as authorization", async () => {
     signedInAs(clerkUser({ firstName: "Ana", lastName: "Pérez", publicMetadata: { role: "admin" } }));
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue(access([]));
 
     await expect(getCurrentUser()).resolves.toMatchObject({ name: "Ana Pérez", staffRoles: [] });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
@@ -78,7 +82,7 @@ describe("Clerk display name", () => {
 
   it("keeps a valid identity usable when the optional display fields are malformed", async () => {
     signedInAs(clerkUser({ firstName: { role: "admin" }, lastName: 123 }));
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue(access([]));
 
     const user = await getCurrentUser();
     expect(user?.id).toBe(USER_ID);
@@ -158,7 +162,7 @@ describe("primary email", () => {
         ],
       }),
     );
-    accept.mockResolvedValue(["commercial"]);
+    accept.mockResolvedValue(access(["commercial"]));
 
     await expect(getCurrentUser()).resolves.toEqual({
       id: USER_ID,
@@ -182,7 +186,7 @@ describe("primary email", () => {
     })],
   ])("%s → only loads roles and denies permissions even for admin", async (_, user) => {
     signedInAs(user);
-    load.mockResolvedValue(["admin"]);
+    load.mockResolvedValue(access(["admin"]));
 
     await expect(requireUser()).resolves.toMatchObject({
       id: USER_ID,
@@ -201,7 +205,7 @@ describe("primary email", () => {
     ["a primaryEmailAddressId that matches no address", clerkUser({ primaryEmailAddressId: "idn_gone" })],
   ])("%s → empty, unverified email", async (_, user) => {
     signedInAs(user);
-    load.mockResolvedValue(["admin"]);
+    load.mockResolvedValue(access(["admin"]));
 
     await expect(getCurrentUser()).resolves.toEqual({
       id: USER_ID,
@@ -218,7 +222,7 @@ describe("primary email", () => {
 describe("roles from the database", () => {
   it("denies an account without roles", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue(access([]));
 
     await expect(requireVerifiedEmail()).resolves.toMatchObject({ staffRoles: [] });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
@@ -227,7 +231,7 @@ describe("roles from the database", () => {
 
   it("lets commercial into the CRM but not manage staff", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue(["commercial"]);
+    accept.mockResolvedValue(access(["commercial"]));
 
     await expect(requireCrmUser()).resolves.toMatchObject({ id: USER_ID, staffRoles: ["commercial"] });
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
@@ -235,7 +239,7 @@ describe("roles from the database", () => {
 
   it("lets admin into the CRM and manage staff", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue(["admin"]);
+    accept.mockResolvedValue(access(["admin"]));
 
     await expect(requireCrmUser()).resolves.toMatchObject({ staffRoles: ["admin"] });
     await expect(requirePermission("staff.manage")).resolves.toMatchObject({ staffRoles: ["admin"] });
@@ -243,7 +247,7 @@ describe("roles from the database", () => {
 
   it("re-reads roles on every call, so a revocation applies to the next one", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValueOnce(["commercial"]).mockResolvedValueOnce([]);
+    accept.mockResolvedValueOnce(access(["commercial"])).mockResolvedValueOnce(access([]));
 
     await expect(requireCrmUser()).resolves.toMatchObject({ staffRoles: ["commercial"] });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
@@ -299,7 +303,7 @@ describe("roles from the database", () => {
         staffRoles: ["admin"],
       }),
     );
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue(access([]));
 
     await expect(getCurrentUser()).resolves.toEqual({
       id: USER_ID,
@@ -309,6 +313,57 @@ describe("roles from the database", () => {
     });
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
     await expect(requirePermission("staff.manage")).rejects.toBeInstanceOf(ForbiddenError);
+  });
+});
+
+describe("blocked account (disabled or deleted from the CRM)", () => {
+  it("getCurrentUser returns the identity without roles, flagged as blocked", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue(access(["admin", "sponsor"], true));
+
+    await expect(getCurrentUser()).resolves.toEqual({
+      id: USER_ID,
+      email: "ana@example.com",
+      emailVerified: true,
+      staffRoles: [],
+      blocked: true,
+    });
+  });
+
+  it("every guard throws ForbiddenError('account_disabled'), even with stored admin roles", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue(access(["admin", "sponsor"], true));
+    loadSponsor.mockResolvedValue("6f1c2b9e-4a8d-4f3e-9b7a-2c5d8e1f0a3b");
+
+    for (const guard of [
+      requireUser,
+      requireVerifiedEmail,
+      requireCrmUser,
+      () => requirePermission("staff.manage"),
+      requireSponsor,
+    ]) {
+      const error = await guard().catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(ForbiddenError);
+      expect((error as ForbiddenError).reason).toBe("account_disabled");
+    }
+    expect(loadSponsor).not.toHaveBeenCalled();
+  });
+
+  it("also blocks an account whose email is no longer verified", async () => {
+    signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
+    load.mockResolvedValue(access(["commercial"], true));
+
+    await expect(getCurrentUser()).resolves.toMatchObject({ staffRoles: [], blocked: true });
+    await expect(requireUser()).rejects.toMatchObject({ reason: "account_disabled" });
+    expect(accept).not.toHaveBeenCalled();
+  });
+
+  it("an active account carries no blocked flag", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue(access(["commercial"]));
+
+    const user = await requireUser();
+    expect(user).not.toHaveProperty("blocked");
   });
 });
 
@@ -324,7 +379,7 @@ describe("requireSponsor", () => {
 
   it("with an unverified email → ForbiddenError without loading the brand", async () => {
     signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
-    load.mockResolvedValue(["sponsor"]);
+    load.mockResolvedValue(access(["sponsor"]));
 
     await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
     expect(loadSponsor).not.toHaveBeenCalled();
@@ -334,7 +389,7 @@ describe("requireSponsor", () => {
     "roles %j → ForbiddenError without loading the brand",
     async (roles) => {
       signedInAs(clerkUser());
-      accept.mockResolvedValue(roles);
+      accept.mockResolvedValue(access(roles));
 
       await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
       expect(loadSponsor).not.toHaveBeenCalled();
@@ -345,7 +400,7 @@ describe("requireSponsor", () => {
     "roles %j without a brand assignment → ForbiddenError",
     async (roles) => {
       signedInAs(clerkUser());
-      accept.mockResolvedValue(roles);
+      accept.mockResolvedValue(access(roles));
       loadSponsor.mockResolvedValue(null);
 
       await expect(requireSponsor()).rejects.toBeInstanceOf(ForbiddenError);
@@ -355,7 +410,7 @@ describe("requireSponsor", () => {
 
   it("returns the current user with the brand of a sponsor", async () => {
     signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", " Ana@Example.com ", "verified")] }));
-    accept.mockResolvedValue(["sponsor"]);
+    accept.mockResolvedValue(access(["sponsor"]));
     loadSponsor.mockResolvedValue(sponsorId);
 
     await expect(requireSponsor()).resolves.toEqual({
@@ -371,7 +426,7 @@ describe("requireSponsor", () => {
 
   it("maps a brand lookup failure to ForbiddenError without cause or original message", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue(["sponsor"]);
+    accept.mockResolvedValue(access(["sponsor"]));
     loadSponsor.mockRejectedValue(new Error("password authentication failed for user app"));
 
     const error = await requireSponsor().catch((caught: unknown) => caught);
@@ -383,7 +438,7 @@ describe("requireSponsor", () => {
 
   it("keeps sponsor out of the CRM and of every existing permission", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue(["sponsor"]);
+    accept.mockResolvedValue(access(["sponsor"]));
 
     await expect(requireCrmUser()).rejects.toBeInstanceOf(ForbiddenError);
     for (const permission of [

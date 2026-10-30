@@ -43,8 +43,8 @@ function signIn(roles: StaffRole[], emailVerified = true, userId = "staff-1") {
       { id: "idn_primary", emailAddress: "agent@example.com", verification: { status: emailVerified ? "verified" : "unverified" } },
     ],
   });
-  vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue(roles);
-  vi.mocked(loadStaffRoles).mockResolvedValue(roles);
+  vi.mocked(acceptInvitationAndLoadStaffRoles).mockResolvedValue({ staffRoles: roles, blocked: false });
+  vi.mocked(loadStaffRoles).mockResolvedValue({ staffRoles: roles, blocked: false });
 }
 
 beforeEach(() => {

@@ -33,12 +33,15 @@ export function UserTable({ users, truncated, filtered }: UserTableProps) {
           {users.map((user) => (
             <TableRow key={user.userId}>
               <TableCell>
-                <Link
-                  href={`/crm/admin/usuarios/${encodeURIComponent(user.userId)}`}
-                  className="font-medium underline-offset-4 hover:underline"
-                >
-                  {user.name ?? user.email}
-                </Link>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/crm/admin/usuarios/${encodeURIComponent(user.userId)}`}
+                    className="font-medium underline-offset-4 hover:underline"
+                  >
+                    {user.name ?? user.email}
+                  </Link>
+                  {user.status === "disabled" ? <Badge variant="destructive">Desactivada</Badge> : null}
+                </div>
                 {user.name ? <p className="text-sm text-muted-foreground">{user.email}</p> : null}
               </TableCell>
               <TableCell>

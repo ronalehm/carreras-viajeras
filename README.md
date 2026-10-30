@@ -66,7 +66,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local: antes de desplegar Clerk, comprueba además que `/crm/acceso` muestra el `<SignIn>` y que `GET /api/crm/me` sin sesión responde 401, no 500 (paso 5 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). El inicio de sesión completo con la instancia de producción de Clerk solo se valida en el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay quince migraciones (`0000`–`0014`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **la `0013_client_stage_emails` (de `main`) no consta como aplicada en `production`**: sigue su sección. Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay dieciocho migraciones (`0000`–`0017`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **actualización del 2026-10-29 (verificado por el usuario en `production`): también están aplicadas `0016_dusty_venom` y `0017_wild_moonstone`**, que se aplicaron con los números provisionales `0015` y `0016` (tabla `role_requests` con su índice y las cuatro columnas de baja de `profiles` con sus tres restricciones); `0015_client_email_kinds` (de `main`) es otra migración, con su propio procedimiento en dos bloques; **la `0013_client_stage_emails` (de `main`) no consta como aplicada en `production`**: sigue su sección. Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)) y `drizzle/0016_dusty_venom.sql` crea las solicitudes de rol (ya aplicada en `production`; en otras ramas, después de `0015`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 2 de `accounts-role-requests.md`; ver [Solicitudes del rol Admin (`0016`)](#solicitudes-del-rol-admin-0016)) y `drizzle/0017_wild_moonstone.sql` añade a `profiles` las columnas de baja de cuentas (ya aplicada en `production`; en otras ramas, después de `0016`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 3 de `accounts-role-requests.md`; ver [Desactivar y eliminar cuentas (`0017`)](#desactivar-y-eliminar-cuentas-0017)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ### Caché estática en Workers Free
 
@@ -101,16 +101,18 @@ Cada lead y su evento se confirman juntos en Neon: el alta manual del CRM ya esc
 Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md): **Clerk da la identidad y Neon, los roles.**
 
 - **Identidad (Clerk):** `/crm/acceso` y `/cuenta` muestran el `<SignIn>` de Clerk en español, con el alta incluida: crear la cuenta, verificar el correo con código, iniciar sesión y recuperar la contraseña los gestiona Clerk. "Cerrar sesión" es el `SignOutButton` de Clerk. El id estable es el `userId` de Clerk (`user_…`), que `auth()` obtiene verificando el token de sesión. El correo solo cuenta si es el **correo primario** de la cuenta y está verificado; se usa en minúsculas para aceptar invitaciones, mostrarse y vincular reservas, nunca para autorizar.
-- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) se ejecuta en `/crm/:path*`, `/api/crm/:path*` y `/cuenta/perfil/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`** (por ejemplo, `/mis-carreras` cuando llegue); si no, `auth()` falla y la guarda responde 401: falla cerrado.
-- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: no crea filas en `profiles` ni `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). El perfil propio en `/cuenta/perfil` exige su guarda y el correo primario verificado; cada recurso futuro para runners necesitará también su propia guarda en el servidor.
+- **Middleware mínimo:** `middleware.ts` (`clerkMiddleware()`) se ejecuta en `/crm/:path*`, `/api/crm/:path*`, `/cuenta` (exacta, por la Server Action que registra la cuenta), `/cuenta/perfil/:path*` y `/mis-carreras/:path*` y solo hace disponible la sesión: no autoriza, no redirige ni lee la base. Las guardas están en cada página, Route Handler y Server Action. **Toda ruta nueva que llame a las guardas se añade a su `matcher`**; si no, `auth()` falla y la guarda responde 401: falla cerrado.
+- **Runners:** crean su cuenta de Clerk en `/cuenta`, con el mismo flujo que el staff. Es una cuenta sin roles de staff: con el correo primario verificado se registra en `profiles` (ver [Usuarios del CRM](#usuarios-del-crm)), no crea filas `staff_*` y en `/crm` ve la pantalla "sin acceso" (403). El perfil propio en `/cuenta/perfil` exige su guarda y el correo primario verificado; cada recurso futuro para runners necesitará también su propia guarda en el servidor.
 - **Staff** (`commercial`, `organizer`, `admin`, `super_admin`): entra solo por invitación. La invitación no controla quién crea una cuenta (el registro es público); controla los **roles**, que viven en Neon (`staff_assignments`) y se leen en cada petición, así que una revocación se aplica en la siguiente. Se invita desde `/crm/admin/usuarios` y el enlace `<APP_ORIGIN>/crm/acceso` se comparte a mano; la invitación caduca a los 7 días. Quién puede invitar, asignar y revocar cada rol (se comprueba en cada Server Action, no solo en la UI):
 
   | Actor | Roles que gestiona |
   |---|---|
-  | `super_admin` | `commercial`, `organizer` y `admin` |
-  | `admin` | solo `commercial` |
+  | `super_admin` | `commercial`, `organizer`, `sponsor` y `admin` |
+  | `admin` | `commercial`, `organizer` y `sponsor` |
   | `commercial`, `organizer` | ninguno |
   | cualquiera | nunca `super_admin`: solo con los scripts SQL |
+
+  Una cuenta puede tener varios roles a la vez. `sponsor` se concede desde la ficha eligiendo una marca existente (no por invitación desde el formulario del equipo), y a una cuenta desactivada no se le conceden roles (`accounts-role-requests.md` F3–F4).
 
 - **Aceptación automática:** la primera petición autenticada con el correo primario **verificado** que coincide (sin distinguir mayúsculas) con una invitación pendiente y vigente la acepta en una sola sentencia: crea el perfil y la asignación. Después, la autorización usa solo el `user_id` de Clerk, no el correo.
 - **Denegación por defecto:** sin sesión o si falla la lectura de la sesión → 401; si falla la lectura del usuario en Clerk, el correo primario no está verificado, la cuenta no tiene rol, la invitación caducó o se revocó, o falla la base → 403. Ni las respuestas ni los logs incluyen el mensaje original de Clerk o de la base. Body, query, cookies propias y metadatos de Clerk (`publicMetadata`, `unsafeMetadata`) nunca conceden permisos: no se guardan roles en Clerk.
@@ -180,7 +182,7 @@ Primero todo con la instancia de desarrollo de Clerk y una rama de Neon de desar
 - [ ] Super admin tras el bootstrap → `/crm` muestra "Super admin" y los enlaces "Viajes", "Reservas" y "Usuarios".
 - [ ] Cada persona del staff existente, tras crear su cuenta en Clerk y el remapeo → `/crm` muestra su rol ("Admin" o "Comercial") y sus leads y viajes conservan la autoría.
 - [ ] El super admin invita a un `admin` y a un `organizer`; cada uno crea su cuenta con el correo invitado y la verifica con código → ven "Admin" y "Organizador".
-- [ ] Un `admin` solo puede invitar "Comercial" y no ve acciones sobre admins, organizadores ni el super admin.
+- [ ] Un `admin` puede invitar "Comercial" y "Organizador" y conceder o revocar "Comercial", "Organizador" y "Patrocinador" (con marca) desde la ficha, pero no ve acciones sobre admins ni sobre el super admin (`accounts-role-requests.md` F4).
 - [ ] El organizador crea un viaje, lo ve en `/crm/viajes` como borrador y no ve los viajes ajenos: `/crm/viajes/<id de un viaje ajeno>` responde 404. Un comercial o un admin sí ven los dos.
 - [ ] (Cuando exista el organizador al que se asociarán, con autorización) [`seed-trips.sql`](#seed-de-viajes-pendiente-de-ejecutar) devuelve las filas insertadas en borrador con su `organizer_id`, y repetirlo devuelve 0 filas.
 - [ ] (Solo en la rama de desarrollo) `revoke-staff-role.sql -v role=super_admin` sobre el único super admin falla sin cambiar nada.
@@ -1734,12 +1736,247 @@ comercial, organizador y admin; admin solo comercial. La invitación y revocaci�
 de patrocinadores desde esos formularios pertenece a una entrega posterior.
 
 `/crm/admin/usuarios` reúne equipo, patrocinadores y runners, con búsqueda y filtros
-por los cinco roles reales o por la condición derivada de runner. Esta última no
+por los cinco roles reales o por Runner, que es toda cuenta del directorio. Runner no
 es un rol de autorización. La ficha conserva las comprobaciones actuales de
 gestión de roles, y la lista está limitada a 200 resultados con aviso de truncado.
 El portal de eventos de patrocinadores, su promoción pública y las fichas completas
 de corredores permanecen en las fases futuras de sus specs; este PR integra las
 fases de perfiles 1–2, patrocinadores 1–2 y directorio de usuarios 1.
+
+### Usuarios del CRM
+
+Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 1).
+
+**Por qué antes no aparecían los registrados.** El directorio de `/crm/admin/usuarios`
+lista la unión de `profiles`, `runner_profiles` y las reservas vinculadas. Hasta ahora
+solo se escribía en `profiles` al aceptar una invitación, y la aplicación no lee Clerk
+ni `neon_auth`. Una cuenta de Clerk sin invitación, sin perfil de runner y sin reserva
+vinculada no tenía ninguna fila en Neon, así que no aparecía.
+
+**Qué cambia.**
+
+- Cada petición con guarda de una cuenta con correo primario **verificado** la registra
+  en `profiles` (`user_id`, correo en minúsculas) dentro del mismo `db.batch` que lee sus
+  roles, sin viajes de red adicionales. Si el correo primario cambió, lo actualiza. Las
+  cuentas sin correo verificado no se registran. El correo solo sirve de presentación.
+- `/cuenta` sigue siendo estática: con sesión, el panel llama una vez a la Server Action
+  `registerAccountAction()`, que registra la cuenta y muestra "Ingresar al CRM" (→ `/crm`)
+  solo si tiene acceso al CRM (`admin`, `super_admin`, `commercial` u `organizer`). El
+  enlace es solo presentación: el layout de `/crm` sigue siendo la guarda.
+- Toda cuenta del directorio es **Runner** (el filtro "Runner" lista todas). Runner no es
+  un valor de `staff_role` ni concede permisos.
+
+**Backfill de las cuentas existentes (manual).** Las cuentas que no vuelvan a iniciar
+sesión no se registran solas. Para incorporarlas:
+
+1. Exporta las cuentas con la clave secreta de la **misma instancia de Clerk** que usa
+   el entorno de destino (desarrollo para la rama de desarrollo, producción para la de
+   producción). Pásala desde un archivo privado **fuera del repositorio** (que solo
+   contenga `CLERK_SECRET_KEY=…`), para que no quede en el historial de la shell, y
+   escribe el SQL también fuera del repositorio:
+
+   ```sh
+   node --env-file=<archivo privado> scripts/export-clerk-accounts.mjs > ~/accounts-backfill.sql
+   ```
+
+   El script pagina `GET https://api.clerk.com/v1/users` (100 por página) por HTTPS, no
+   imprime la clave, no se conecta a Neon y solo escribe en la salida estándar. Sin
+   `CLERK_SECRET_KEY` termina con código 1. Emite una única sentencia
+   `INSERT INTO profiles (user_id, email) VALUES … ON CONFLICT (user_id) DO NOTHING;` con
+   las cuentas de correo primario verificado, en minúsculas y con los literales escapados
+   (o solo un comentario SQL si no hay ninguna).
+2. Revisa `~/accounts-backfill.sql`: contiene correos de personas, así que no lo subas al
+   repositorio ni lo compartas, y bórralo cuando termines.
+3. Aplícalo a mano, como operación autorizada, en la **rama Neon correcta** (la que usa
+   la instancia de Clerk del paso 1), por ejemplo desde el SQL Editor de Neon. Es
+   idempotente: las cuentas ya registradas no cambian.
+4. Comprueba en `/crm/admin/usuarios` que las cuentas aparecen como Runner y sin roles.
+
+Ningún build, arranque ni workflow ejecuta este backfill.
+
+### Solicitudes del rol Admin (`0016`)
+
+Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 2).
+
+**Estado (2026-10-29):** aplicada y verificada en `production` y en la rama de pruebas de Neon cuando se numeraba `0015_dusty_venom`. Al mergear `main`, la `0015` pasó a ser `0015_client_email_kinds` (`crm-lifecycle-emails`) y esta se renumeró a `0016_dusty_venom` con **el mismo SQL**: no se vuelve a aplicar donde ya existe `role_requests`. La `0015_client_email_kinds` es otra migración y se aplica por su cuenta.
+
+**Qué hace.**
+
+- La pantalla "Tu cuenta no tiene acceso al CRM" (`/crm` sin acceso) muestra, según el caso:
+  - correo sin verificar: "Verifica tu correo para poder solicitar acceso.", sin botón;
+  - solicitud pendiente: "Solicitud enviada el <fecha>. Un super administrador la revisará.";
+  - en otro caso: el botón **Solicitar rol de administrador**.
+
+  Siempre se ve "Cerrar sesión". La solicitud sale de la sesión (cuenta) y es siempre del
+  rol `admin`: el formulario no envía datos. Repetirla no crea otra: como mucho hay una
+  pendiente por cuenta. Una cuenta con acceso al CRM recibe "Tu cuenta ya tiene acceso al
+  CRM. Recarga la página.".
+- En `/crm/admin/usuarios`, la sección **Solicitudes de rol** (correo, rol solicitado,
+  fecha y las acciones "Aprobar" y "Rechazar") solo la ven y la usan los `super_admin`,
+  porque son los únicos que pueden conceder `admin`. Un `admin` no la ve y sus llamadas
+  directas a las acciones responden "forbidden".
+  - **Aprobar** marca la solicitud como `approved` (con fecha y quién decidió) y concede
+    `admin` (`reason` = `role_request:<id>`) en una sola sentencia. Si ya no estaba
+    pendiente, responde "Ya no está pendiente. Recarga la página." sin cambiar nada.
+  - **Rechazar** la marca como `rejected` sin conceder nada. La persona puede volver a
+    solicitarlo.
+- No hay avisos por correo ni n8n de solicitudes nuevas: se revisan en esa sección.
+
+**Migración `drizzle/0016_dusty_venom.sql`** (todo en `public`): crea el enum
+`role_request_status` (`pending`, `approved`, `rejected`) y la tabla `role_requests`
+(`id`, `user_id`, `role`, `status`, `created_at`, `decided_at`, `decided_by`) con:
+
+- las claves foráneas `role_requests_user_id_profiles_user_id_fk` y
+  `role_requests_decided_by_profiles_user_id_fk` hacia `profiles`, `ON DELETE restrict`;
+- el CHECK `role_requests_role_chk` (`role::text = 'admin'`);
+- el CHECK `role_requests_decision_chk`: una solicitud pendiente no tiene `decided_at` ni
+  `decided_by`, y una decidida tiene los dos;
+- el índice único parcial `role_requests_pending_user_uq (user_id) WHERE status = 'pending'`.
+
+No cambia ninguna tabla existente ni toca `neon_auth`. Revisión previa:
+
+- `grep -inE 'neon_auth|create schema|drop |alter type' drizzle/0016_dusty_venom.sql` no
+  devuelve nada;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0016_dusty_venom.sql` devuelve solo
+  `CREATE TYPE "public"."role_request_status"`, `CREATE TABLE "role_requests"`, dos
+  `ALTER TABLE "role_requests" ADD CONSTRAINT …` (las claves foráneas) y
+  `CREATE UNIQUE INDEX "role_requests_pending_user_uq"`.
+
+**Orden de despliegue (obligatorio).** Aplicar `0016` a mano, como operación autorizada,
+en la rama Neon de destino **antes** del merge o del despliegue de este código. Sin la
+tabla, `/crm` sin acceso (la pantalla lee la solicitud pendiente) y `/crm/admin/usuarios`
+para `super_admin` (lee las solicitudes) fallarían. Primero en la rama de desarrollo y,
+en `production`, solo con autorización explícita de la operación remota. Necesita
+`profiles` y `staff_role` (`0000`–`0014` aplicadas). No hay `ALTER TYPE … ADD VALUE`:
+se aplica en **un solo bloque**, con el archivo tal cual:
+
+1. Comprobar que no está aplicada: `SELECT to_regclass('public.role_requests'), to_regtype('public.role_request_status');`
+   devuelve `NULL` y `NULL`. Si no, ya está aplicada: no repetirla.
+2. Guardar el estado de `neon_auth` (como en las demás migraciones):
+   `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;`
+3. Ejecutar `BEGIN;`, el archivo completo y `COMMIT;` en el SQL Editor de Neon, o desde
+   una terminal:
+
+   ```sh
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0016_dusty_venom.sql
+   ```
+
+   Si falla, la transacción se deshace entera.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica.
+5. Comprobar las restricciones:
+   `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'public.role_requests'::regclass AND contype IN ('p','c','f') ORDER BY 1;`
+   devuelve las dos claves foráneas (`f`), los dos CHECK (`c`) y la clave primaria
+   `role_requests_pkey` (`p`), y `SELECT indexdef FROM pg_indexes WHERE indexname = 'role_requests_pending_user_uq';`
+   devuelve el índice único con `WHERE (status = 'pending'::role_request_status)`.
+
+No hace falta GRANT: `DATABASE_URL` usa el rol owner. Ningún build, arranque ni workflow
+aplica esta migración.
+
+### Desactivar y eliminar cuentas (`0017`)
+
+Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 3).
+
+**Estado (2026-10-29):** aplicada y verificada en `production` y en la rama de pruebas de Neon cuando se numeraba `0016_wild_moonstone`; renumerada a `0017_wild_moonstone` con **el mismo SQL** al mergear `main`. No se vuelve a aplicar donde ya existe `profiles.disabled_at`.
+
+**Qué hace.** En la ficha `/crm/admin/usuarios/<id>`, la sección **Cuenta** solo la ve un
+`super_admin`, y nunca en su propia ficha ni en la de otro `super_admin`. Las acciones
+comprueban de nuevo en el servidor `staff.manage` y que el actor es `super_admin`
+(`canRemoveAccounts`, fuera de la matriz: un `admin` recibe "forbidden"), y responden
+"self" o "protected" sobre la propia cuenta o sobre un `super_admin`.
+
+- **Desactivar**: en una sola sentencia fija `disabled_at`/`disabled_by`, revoca todas
+  las asignaciones activas y rechaza sus solicitudes de rol pendientes. Mientras siga
+  desactivada no se le pueden conceder roles ni aprobar solicitudes (la ficha muestra
+  "Reactiva la cuenta para asignar roles."). Respeta "último admin" (no cambia nada y responde "No se puede
+  revocar el rol del último admin activo."). Después bloquea al usuario en Clerk
+  (`banUser`, que cierra sus sesiones). Desde ese momento las guardas fallan cerradas:
+  `getCurrentUser` devuelve la cuenta sin roles y `requireUser` responde 403
+  (`account_disabled`), así que `/crm` muestra "Tu cuenta no tiene acceso al CRM." sin el
+  botón de solicitud, y `/cuenta/perfil`, `/mis-carreras`, la guarda del portal de
+  patrocinador (`requireSponsor`), las Server Actions y los Route Handlers con guarda la
+  rechazan. Con la cuenta bloqueada no se
+  aceptan invitaciones (quedan pendientes). La lista muestra el distintivo "Desactivada".
+- **Reactivar**: limpia `disabled_*` (solo si no está eliminada) y desbloquea en Clerk
+  (`unbanUser`). No devuelve roles: se asignan de nuevo desde la ficha (una invitación que
+  siguiera pendiente sí se acepta al volver a entrar).
+- **Eliminar definitivamente**: el diálogo exige escribir el correo de la cuenta y el
+  servidor lo compara con `profiles.email`. Un solo `db.batch` (una transacción) revoca las
+  asignaciones (con la regla del último admin), rechaza las solicitudes pendientes, borra
+  `runner_profiles` y `referral_codes`, desvincula las reservas
+  (`bookings.runner_user_id = NULL`), anonimiza el correo
+  (`'deleted-' || md5(user_id) || '@invalid'`) y fija `disabled_*` y `deleted_*`. Si el
+  correo no coincide, no cambia nada ("El correo no coincide."). Después borra el usuario
+  en Clerk (`deleteUser`). La fila de `profiles` se conserva como autora del historial;
+  las reservas conservan sus datos de participante, y `reward_*` y `runner_referrals` se
+  conservan por su valor contable. Si el código de referido ya tiene referidos
+  (`runner_referrals` lo referencia con `restrict`), no se puede borrar: se desactiva
+  (`active = false`) para que su enlace deje de acreditar referidos. La cuenta deja de
+  aparecer en la lista y su ficha da 404, salvo a un `super_admin`, que ve "Cuenta
+  eliminada".
+- **Neon primero y Clerk después.** Si Clerk falla, la cuenta queda bloqueada (o
+  eliminada) en la aplicación y la ficha lo indica ("…, pero no se pudo bloquear en
+  Clerk. Reintenta."). **Reintentar en Clerk** repite solo la llamada a Clerk que
+  corresponde al estado en Neon (bloquear, borrar o desbloquear); es idempotente y nunca
+  escribe en Neon. Como Neon no guarda si Clerk quedó pendiente, el botón está siempre
+  disponible en las cuentas desactivadas y eliminadas. El error original de Clerk nunca
+  se registra ni se devuelve: solo un texto fijo (`accounts: clerk ban failed`, etc.).
+
+**Aviso: estas acciones modifican Clerk de verdad.** Usan `clerkClient()` con la
+`CLERK_SECRET_KEY` del entorno: en desarrollo, la instancia de desarrollo; en producción,
+la de producción. Borrar un usuario de Clerk no se puede deshacer. Pruébalas solo con
+cuentas de prueba de la instancia de desarrollo y una rama Neon de desarrollo.
+
+**Migración `drizzle/0017_wild_moonstone.sql`** (todo en `public`): solo hace
+`ALTER TABLE "profiles"`:
+
+- añade `disabled_at` y `deleted_at` (`timestamp with time zone`, nulas) y `disabled_by` y
+  `deleted_by` (`text`, nulas);
+- añade las claves foráneas `profiles_disabled_by_profiles_user_id_fk` y
+  `profiles_deleted_by_profiles_user_id_fk` hacia `profiles(user_id)`, `ON DELETE restrict`;
+- añade el CHECK `profiles_deleted_chk` (`deleted_at IS NULL OR disabled_at IS NOT NULL`:
+  eliminar implica bloquear).
+
+Las filas existentes quedan activas (todo nulo), así que el CHECK se cumple al aplicarla.
+No crea tablas ni tipos ni toca `neon_auth`. Revisión previa:
+
+- `grep -inE 'neon_auth|create |drop |alter type' drizzle/0017_wild_moonstone.sql` no
+  devuelve nada;
+- `grep -E '^(ALTER|CREATE) ' drizzle/0017_wild_moonstone.sql` devuelve solo siete líneas
+  `ALTER TABLE "profiles" …`: cuatro `ADD COLUMN`, dos `ADD CONSTRAINT … FOREIGN KEY` y
+  un `ADD CONSTRAINT "profiles_deleted_chk" CHECK`.
+
+**Orden de despliegue (obligatorio).** Aplicar `0017` a mano, como operación autorizada,
+en la rama Neon de destino **después de `0016`** y **antes** del merge o del despliegue de
+este código. Sin las columnas, todas las guardas (que leen `disabled_at` en cada petición)
+fallarían cerradas con 403 y nadie podría entrar en el CRM. Primero en la rama de
+desarrollo y, en `production`, solo con autorización explícita de la operación remota. Se
+aplica en **un solo bloque**, con el archivo tal cual:
+
+1. Comprobar que `0016` está aplicada y `0017` no:
+   `SELECT to_regclass('public.role_requests'), (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name IN ('disabled_at', 'disabled_by', 'deleted_at', 'deleted_by'));`
+   devuelve `role_requests` y `0`. Si el recuento es `4`, ya está aplicada: no repetirla;
+   cualquier otro valor exige revisar antes de seguir.
+2. Guardar el estado de `neon_auth` (como en las demás migraciones):
+   `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;`
+3. Ejecutar `BEGIN;`, el archivo completo y `COMMIT;` en el SQL Editor de Neon, o desde
+   una terminal:
+
+   ```sh
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0017_wild_moonstone.sql
+   ```
+
+   Si falla, la transacción se deshace entera.
+4. Repetir el paso 2 y comparar: la salida debe ser idéntica.
+5. Comprobar el resultado:
+   - `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name IN ('disabled_at', 'disabled_by', 'deleted_at', 'deleted_by') ORDER BY 1;`
+     devuelve las cuatro columnas, nulas (`YES`);
+   - `SELECT conname, contype FROM pg_constraint WHERE conrelid = 'public.profiles'::regclass AND conname IN ('profiles_disabled_by_profiles_user_id_fk', 'profiles_deleted_by_profiles_user_id_fk', 'profiles_deleted_chk') ORDER BY 1;`
+     devuelve las dos claves foráneas (`f`) y el CHECK (`c`);
+   - `SELECT count(*) FROM profiles WHERE disabled_at IS NOT NULL OR deleted_at IS NOT NULL;`
+     devuelve `0` (ninguna cuenta queda bloqueada al aplicarla).
+
+No hace falta GRANT: `DATABASE_URL` usa el rol owner. Ningún build, arranque ni workflow
+aplica esta migración.
 
 ### Migración incremental de la integración
 
