@@ -124,7 +124,8 @@ export type CrmBookingListItem = {
 };
 
 // ?tipo= of the CRM list: real bookings by default, simulated ones apart.
-export type BookingListFilter = { tripId?: string; simulated: boolean };
+// simulated: undefined lists real and simulated bookings together (CRM default), true/false only one kind.
+export type BookingListFilter = { tripId?: string; simulated?: boolean };
 
 export type CrmBooking = CrmBookingListItem & {
   priceLocked: boolean;

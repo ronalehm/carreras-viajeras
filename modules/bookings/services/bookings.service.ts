@@ -56,17 +56,18 @@ function balanceOf(balances: Map<string, BookingBalance>, id: string, totalUsd: 
   return balances.get(id) ?? { totalUsd, paidUsd: 0, balanceUsd: totalUsd, stripePayments: [], needsReview: [] };
 }
 
-// Real and simulated bookings are never listed together (bookings-stripe-checkout-demo.md, C): the
-// CRM shows real ones by default and simulated ones apart. Paid and balance come from the common
-// balance in one more batch for the whole page (no N+1).
+// The CRM lists real and simulated bookings together by default, each simulated one with its badge
+// (bookings-stripe-checkout-demo-crm-list.md); ?tipo narrows it to one kind. Simulated bookings never
+// count in totals or commercial reports. Paid and balance come from the common balance in one more
+// batch for the whole page (no N+1).
 // ponytail: no pagination; add it when the list passes ~200 rows.
-export async function listBookings(filter: BookingListFilter = { simulated: false }): Promise<CrmBookingListItem[]> {
+export async function listBookings(filter: BookingListFilter = {}): Promise<CrmBookingListItem[]> {
   const rows = await getDb()
     .select(listColumns)
     .from(bookings)
     .innerJoin(trips, eq(trips.id, bookings.tripId))
     .where(and(
-      eq(bookings.isSimulated, filter.simulated),
+      filter.simulated === undefined ? undefined : eq(bookings.isSimulated, filter.simulated),
       filter.tripId === undefined ? undefined : eq(bookings.tripId, filter.tripId),
     ))
     .orderBy(desc(trips.raceDate), asc(bookings.participantName));

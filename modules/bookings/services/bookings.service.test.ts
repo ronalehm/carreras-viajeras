@@ -66,7 +66,7 @@ const SETTLEMENTS = [
 ];
 
 describe("listBookings", () => {
-  it("lists real bookings only, with the common balance read in one batch for the whole page", async () => {
+  it("lists real and simulated bookings together by default, with the common balance read in one batch", async () => {
     const fake = useFakeDb([[LIST_ROW], BALANCE, SETTLEMENTS]);
 
     await expect(listBookings()).resolves.toEqual([{
@@ -91,19 +91,28 @@ describe("listBookings", () => {
     expect(statement).toContain('inner join "trips" on "trips"."id" = "bookings"."trip_id"');
     // No payment join or aggregate in the list itself: paid comes only from getBookingBalance.
     expect(statement).not.toMatch(/booking_payments|booking_stripe_settlements|sum\(/);
-    expect(statement).toMatch(/where "bookings"\."is_simulated" = \$1 order by "trips"\."race_date" desc, "bookings"\."participant_name" asc$/);
-    expect(fake.queries[0].params).toEqual([false]);
+    // No kind filter by default: real and simulated bookings are listed together.
+    expect(statement).not.toContain('"bookings"."is_simulated" =');
+    expect(statement).toMatch(/inner join "trips" on "trips"\."id" = "bookings"\."trip_id" order by "trips"\."race_date" desc, "bookings"\."participant_name" asc$/);
+    expect(fake.queries[0].params).toEqual([]);
     expect(fake.transaction).toHaveBeenCalledOnce();
     expect(fake.queries[1].params).toEqual([BOOKING_ID]);
     // The runner's id never leaves the service: only whether it is set.
     expect(statement).not.toMatch(/select .*"bookings"\."runner_user_id",/);
   });
 
-  it("lists simulated bookings apart, never mixed with real ones", async () => {
+  it("narrows the list to simulated bookings with simulated: true", async () => {
     const fake = useFakeDb([[SIMULATED_ROW], [[SIMULATED_ID, "11000", "0"]], [["set-9", SIMULATED_ID, "300", new Date("2026-10-30T15:00:00Z"), "applied"]]]);
     const [booking] = await listBookings({ simulated: true });
     expect(booking).toMatchObject({ id: SIMULATED_ID, simulated: true, paidUsd: 300, balanceUsd: 10700, paymentInReview: false });
     expect(fake.queries[0].params).toEqual([true]);
+  });
+
+  it("narrows the list to real bookings with simulated: false", async () => {
+    const fake = useFakeDb([[]]);
+    await expect(listBookings({ simulated: false })).resolves.toEqual([]);
+    expect(normalize(fake.queries[0].sql)).toContain('where "bookings"."is_simulated" = $1 order by');
+    expect(fake.queries[0].params).toEqual([false]);
   });
 
   it("filters by trip", async () => {

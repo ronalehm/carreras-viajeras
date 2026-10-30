@@ -25,7 +25,7 @@ Sin cambios:
 
 ## Plan
 
-- [ ] L.1 `listBookings`:
+- [x] L.1 `listBookings`:
   - el filtro admite `simulated` ausente (todas), `false` (reales) o `true` (simuladas);
   - `/crm/reservas` traduce `?tipo` a ese filtro;
   - `BookingFilters` ofrece las tres opciones;

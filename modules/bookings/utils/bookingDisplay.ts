@@ -16,8 +16,9 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
 
 // Distinctive of a demo-checkout booking (bookings-stripe-checkout-demo.md, C) in the portal and the CRM.
 export const SIMULATED_BOOKING_LABEL = "SIMULADA";
-// ?tipo= value of the CRM list that shows simulated bookings apart; anything else shows real ones.
+// ?tipo= values of the CRM list: only simulated or only real bookings. Absent or unknown lists both.
 export const BOOKING_KIND_SIMULATED = "simuladas";
+export const BOOKING_KIND_REAL = "reales";
 // Concept of a Stripe settlement in the portal and CRM payment histories.
 export const STRIPE_PAYMENT_CONCEPT = "Stripe - tarjeta";
 
