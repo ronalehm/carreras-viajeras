@@ -1,7 +1,7 @@
 # Secuencia automática de seguimiento comercial por correo
 
 - Módulos: integrations, crm y landing; datos compartidos en lib.
-- Estado: borrador
+- Estado: aprobado
 - Solicitud: seguimiento comercial automatizado. Si alguien se registra hoy, hoy recibe nuestra propuesta y, si no responde, recibe recordatorios a los 3, 5 y 7 días, con un texto propio para cada etapa del embudo de venta.
 - Referencias: `crm-lifecycle-emails.md` (motor de tipos de correo; se enmienda aquí), `crm-funnel-email-automation.md`, `crm-journey-automation.md`, `trips-commercial-offers.md` (ofertas vigentes) y `docs/SETUP.md`.
 
