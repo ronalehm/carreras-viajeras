@@ -8,7 +8,9 @@ vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/env", async (importOriginal) => ({
   ...await importOriginal<typeof import("@/lib/env")>(),
   getEnv: () => ({ APP_ORIGIN: "http://localhost:3001" }),
-  getStripeCheckoutConfig: () => ({ enabled: true, mode: "test", secretKey: "sk_test_synthetic_test_only",
+  // Real bookings: these cases cover seats and settlements in live mode (the mocked Stripe never
+  // reaches the network). Simulated bookings are covered in simulatedCheckout.postgres.test.ts.
+  getStripeCheckoutConfig: () => ({ enabled: true, mode: "live", secretKey: "sk_live_synthetic_test_only",
     webhookSecret: null, allowDraftContracts: false, disabledReason: null }),
 }));
 vi.mock("stripe", () => ({ default: class StripeMock {
@@ -43,7 +45,7 @@ const balanceHash = checkoutQuoteHash({ bookingId, kind: "balance", offerVersion
   termsVersion: "checkout-session-test-v1", amountUsd: 750, amountPenCents: 281250,
   rateId, rateUsdPen: "3.7500" });
 const canonicalSession = {
-  id: sessionId, object: "checkout.session", livemode: false, mode: "payment",
+  id: sessionId, object: "checkout.session", livemode: true, mode: "payment",
   status: "open", payment_status: "unpaid", amount_total: 93750, currency: "pen",
   client_reference_id: bookingId, metadata: { bookingId, attemptId: "33333333-3333-4333-8333-333333333333", paymentKind: "initial" },
   url: "https://checkout.stripe.test/cs_test_checkout_session",
@@ -102,8 +104,9 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
       requestId: "14141414-1414-4141-8141-141414141414", kind: "balance", quoteHash: balanceHash,
     })).resolves.toBe("balance_not_due");
     expect(stripeMocks.create).toHaveBeenCalledTimes(1);
-    const { rows } = await pool.query("select status,amount_usd,amount_pen_cents,stripe_session_id from booking_checkout_attempts where booking_id=$1",[bookingId]);
-    expect(rows).toEqual([{ status: "created", amount_usd: 250, amount_pen_cents: 93750, stripe_session_id: sessionId }]);
+    const { rows } = await pool.query("select status,amount_usd,amount_pen_cents,stripe_session_id,stripe_mode from booking_checkout_attempts where booking_id=$1",[bookingId]);
+    expect(rows).toEqual([{ status: "created", amount_usd: 250, amount_pen_cents: 93750, stripe_session_id: sessionId, stripe_mode: "live" }]);
+    expect(params.metadata).toEqual({ bookingId, attemptId: createdAttemptId, paymentKind: "initial" });
   });
 
   it("settles one canonical payment under repeated Checkout and PaymentIntent events, delivered after the deadline", async () => {
@@ -115,36 +118,36 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
     };
     const stripe = {
       checkout: { sessions: { retrieve: vi.fn().mockResolvedValue(paidSession), list: vi.fn().mockResolvedValue({ data: [paidSession] }) } },
-      paymentIntents: { retrieve: vi.fn().mockResolvedValue({ id: "pi_test_checkout_f2", object: "payment_intent", status: "succeeded", livemode: false,
+      paymentIntents: { retrieve: vi.fn().mockResolvedValue({ id: "pi_test_checkout_f2", object: "payment_intent", status: "succeeded", livemode: true,
         metadata: { bookingId, attemptId, paymentKind: "initial" } }) },
     } as unknown as Stripe;
     // Paid five minutes ago, before the reservation deadline, but delivered once it has passed.
     const paidAt = Math.floor(Date.now() / 1000) - 300;
     await pool.query("update bookings set reservation_expires_at=to_timestamp($2) where id=$1", [bookingId, paidAt + 60]);
     const makeEvent = (id: string, type: string, object: Record<string, unknown>) => ({
-      id, type, created: paidAt, livemode: false, data: { object },
+      id, type, created: paidAt, livemode: true, data: { object },
     }) as unknown as Stripe.Event;
     const checkoutEvent = makeEvent("evt_checkout_settlement_test", "checkout.session.completed", {
       id: sessionId, metadata: paidSession.metadata,
     });
-    await expect(handleBookingStripeEvent(checkoutEvent, stripe, "test")).resolves.toMatchObject({ outcome: "applied" });
-    await expect(handleBookingStripeEvent(checkoutEvent, stripe, "test")).resolves.toMatchObject({ outcome: "duplicate" });
+    await expect(handleBookingStripeEvent(checkoutEvent, stripe, "live")).resolves.toMatchObject({ outcome: "applied" });
+    await expect(handleBookingStripeEvent(checkoutEvent, stripe, "live")).resolves.toMatchObject({ outcome: "duplicate" });
     const intentEvent = makeEvent("evt_intent_settlement_test", "payment_intent.succeeded", {
       id: "pi_test_checkout_f2", metadata: paidSession.metadata,
     });
-    await expect(handleBookingStripeEvent(intentEvent, stripe, "test")).resolves.toMatchObject({ outcome: "duplicate" });
-    const { rows: settlements } = await pool.query("select status,expected_amount_pen_cents,received_amount_pen_cents,amount_usd from booking_stripe_settlements where booking_id=$1", [bookingId]);
-    expect(settlements).toEqual([{ status: "applied", expected_amount_pen_cents: 93750, received_amount_pen_cents: 93750, amount_usd: 250 }]);
+    await expect(handleBookingStripeEvent(intentEvent, stripe, "live")).resolves.toMatchObject({ outcome: "duplicate" });
+    const { rows: settlements } = await pool.query("select status,expected_amount_pen_cents,received_amount_pen_cents,amount_usd,stripe_mode from booking_stripe_settlements where booking_id=$1", [bookingId]);
+    expect(settlements).toEqual([{ status: "applied", expected_amount_pen_cents: 93750, received_amount_pen_cents: 93750, amount_usd: 250, stripe_mode: "live" }]);
     const { rows: booking } = await pool.query("select status from bookings where id=$1", [bookingId]);
     expect(booking[0].status).toBe("confirmed");
     const { rows: allocation } = await pool.query("select status from offer_capacity_allocations where booking_id=$1", [bookingId]);
     expect(allocation[0].status).toBe("confirmed");
 
     const refundEvent = makeEvent("evt_refund_settlement_test", "charge.refunded", {
-      id: "ch_test_checkout_f2", object: "charge", livemode: false, payment_intent: "pi_test_checkout_f2",
+      id: "ch_test_checkout_f2", object: "charge", livemode: true, payment_intent: "pi_test_checkout_f2",
     });
-    await expect(handleBookingStripeEvent(refundEvent, stripe, "test")).resolves.toMatchObject({ outcome: "needs_review", attemptId, bookingId });
-    await expect(handleBookingStripeEvent(refundEvent, stripe, "test")).resolves.toMatchObject({ outcome: "duplicate" });
+    await expect(handleBookingStripeEvent(refundEvent, stripe, "live")).resolves.toMatchObject({ outcome: "needs_review", attemptId, bookingId });
+    await expect(handleBookingStripeEvent(refundEvent, stripe, "live")).resolves.toMatchObject({ outcome: "duplicate" });
     const { rows: reviewed } = await pool.query("select s.status, b.status as booking_status from booking_stripe_settlements s join bookings b on b.id=s.booking_id where s.booking_id=$1", [bookingId]);
     expect(reviewed).toEqual([{ status: "needs_review", booking_status: "confirmed" }]);
     await pool.query("update booking_stripe_settlements set status='applied' where booking_id=$1", [bookingId]);
@@ -199,7 +202,7 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
     await pool.query("insert into offer_capacity_allocations(booking_id,offer_version_id,status,expires_at) values($1,$2,'held',now()-interval '1 minute')",[heldBookingId,offerId]);
     const heldHash = checkoutQuoteHash({ bookingId: heldBookingId, kind: "initial", offerVersion: 1, termsVersion: "checkout-session-test-v1",
       amountUsd: 250, amountPenCents: 93750, rateId, rateUsdPen: "3.7500" });
-    await pool.query("insert into booking_checkout_attempts(booking_id,request_id,kind,quote_hash,amount_usd,amount_pen_cents,idempotency_key,expires_at) values($1,'17171717-1717-4171-8171-171717171717','initial',$2,250,93750,'cv-checkout-held-stuck',now()-interval '1 minute')",[heldBookingId,heldHash]);
+    await pool.query("insert into booking_checkout_attempts(booking_id,request_id,kind,quote_hash,amount_usd,amount_pen_cents,idempotency_key,expires_at,stripe_mode) values($1,'17171717-1717-4171-8171-171717171717','initial',$2,250,93750,'cv-checkout-held-stuck',now()-interval '1 minute','live')",[heldBookingId,heldHash]);
     const { rows: [counterBefore] } = await pool.query("select allocated_count from offer_capacity_counters where offer_version_id=$1",[offerId]);
     stripeMocks.create.mockReset();
     stripeMocks.retrieve.mockReset();
@@ -254,7 +257,7 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
       await pool.query("delete from booking_checkout_attempts where booking_id=$1",[heldBookingId]);
       await pool.query("update bookings set status=$2,reservation_expires_at=now()+make_interval(mins=>$3),created_at=now()-interval '5 minutes' where id=$1",[heldBookingId,bookingStatus,minutes]);
       await pool.query("update offer_capacity_allocations set status=$2::offer_capacity_allocation_status,released_at=CASE WHEN $2::offer_capacity_allocation_status='released' THEN now() END,expires_at=now()+make_interval(mins=>$3) where booking_id=$1",[heldBookingId,allocationStatus,minutes]);
-      const { rows: [created] } = await pool.query("insert into booking_checkout_attempts(booking_id,request_id,kind,quote_hash,amount_usd,amount_pen_cents,idempotency_key,expires_at,stripe_session_id,checkout_url,status) values($1,gen_random_uuid(),'initial',$2,250,93750,'cv-checkout-guard-'||gen_random_uuid(),now()+make_interval(mins=>$3),$4,$5,$6) returning id",
+      const { rows: [created] } = await pool.query("insert into booking_checkout_attempts(booking_id,request_id,kind,quote_hash,amount_usd,amount_pen_cents,idempotency_key,expires_at,stripe_session_id,checkout_url,status,stripe_mode) values($1,gen_random_uuid(),'initial',$2,250,93750,'cv-checkout-guard-'||gen_random_uuid(),now()+make_interval(mins=>$3),$4,$5,$6,'live') returning id",
         [heldBookingId,heldHash,minutes,sessionIdForAttempt,sessionIdForAttempt && `https://checkout.stripe.test/${sessionIdForAttempt}`,sessionIdForAttempt ? "created" : "pending"]);
       return created.id as string;
     }
@@ -304,9 +307,9 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
         metadata: { bookingId: heldBookingId, attemptId, paymentKind: "initial" },
       };
       const stripe = { checkout: { sessions: { retrieve: vi.fn().mockResolvedValue(expired) } } } as unknown as Stripe;
-      const event = { id: "evt_guard_expired", type: "checkout.session.expired", created: Math.floor(Date.now() / 1000), livemode: false,
+      const event = { id: "evt_guard_expired", type: "checkout.session.expired", created: Math.floor(Date.now() / 1000), livemode: true,
         data: { object: { id: expired.id, metadata: expired.metadata } } } as unknown as Stripe.Event;
-      await expect(handleBookingStripeEvent(event, stripe, "test")).resolves.toMatchObject({ outcome: "expired", attemptId });
+      await expect(handleBookingStripeEvent(event, stripe, "live")).resolves.toMatchObject({ outcome: "expired", attemptId });
       expect(await seatState()).toEqual({ ...before, status: "confirmed", allocation: "held", attempt: "expired" });
       const { rows: receipts } = await pool.query("select outcome from booking_stripe_event_receipts where event_id='evt_guard_expired'");
       expect(receipts).toEqual([{ outcome: "expired" }]);

@@ -2,7 +2,7 @@ import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
 import {
-  bookingRouteParamsSchema, checkoutError, checkoutFailure, checkoutJson, createBookingCheckoutSession,
+  bookingRouteParamsSchema, checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson, createBookingCheckoutSession,
   createCheckoutSessionSchema, hasAppOrigin, isCheckoutEnabled,
 } from "@/modules/booking-checkout";
 
@@ -24,6 +24,8 @@ export async function POST(request: Request, context: RouteContext<"/api/booking
     const params = bookingRouteParamsSchema.safeParse(await context.params);
     if (!params.success) return checkoutError(ROUTE, "not_found", 404);
     const user = await requireVerifiedEmail();
+    // Demo mode: only an active demo participant, read from Neon; others get the same 404 as when off.
+    if (!await checkoutAccessFor(user.id)) return checkoutError(ROUTE, "not_found", 404);
     const body = await readJsonBody(request, createCheckoutSessionSchema);
     if (!body) return checkoutError(ROUTE, "invalid_request", 400);
     const result = await createBookingCheckoutSession(params.data.bookingId, user.id, body);

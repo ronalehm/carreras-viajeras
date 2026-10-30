@@ -6,6 +6,7 @@ export {
 export type { PrepareCheckoutInput, PaymentChoice, ContractAcceptanceInput, CreateCheckoutSessionInput } from "./schemas/checkout.schema";
 export { persistCheckoutReservation } from "./services/bookingCheckout.service";
 export { isCheckoutEnabled } from "./services/bookingCheckout.service";
+export { checkoutAccessFor, checkoutRequiresDemoParticipant, isActiveDemoParticipant } from "./services/checkoutAccess.service";
 export type { CheckoutReservationSnapshot, ReservationResult } from "./services/bookingCheckout.service";
 export { prepareBookingCheckout, getPreparedBookingCheckout } from "./services/prepare.service";
 export type { PreparedCheckout, PreparedCheckoutView, PrepareCheckoutResult } from "./services/prepare.service";

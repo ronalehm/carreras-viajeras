@@ -5,7 +5,7 @@ vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 vi.mock("@/modules/trips", () => ({ getActiveOffer: vi.fn() }));
 vi.mock("@/modules/contracts", () => ({ getCheckoutContractVersion: vi.fn() }));
 vi.mock("./bookingCheckout.service", () => ({
-  findResumableCheckoutBooking: vi.fn(), getCheckoutReservation: vi.fn(), isCheckoutEnabled: vi.fn(),
+  findResumableCheckoutBooking: vi.fn(), getCheckoutReservation: vi.fn(), enabledCheckoutMode: vi.fn(),
   persistCheckoutReservation: vi.fn(),
 }));
 vi.mock("./quote.service", async (importOriginal) => ({
@@ -15,7 +15,7 @@ import { getDb } from "@/lib/db";
 import { getActiveOffer, type ActiveOffer } from "@/modules/trips";
 import { getCheckoutContractVersion } from "@/modules/contracts";
 import {
-  findResumableCheckoutBooking, getCheckoutReservation, isCheckoutEnabled, persistCheckoutReservation,
+  enabledCheckoutMode, findResumableCheckoutBooking, getCheckoutReservation, persistCheckoutReservation,
 } from "./bookingCheckout.service";
 import { getCurrentCheckoutRate } from "./quote.service";
 import { prepareBookingCheckout } from "./prepare.service";
@@ -40,6 +40,7 @@ const reservation = {
   id: bookingId, packageLabel: "Carrera", offerVersion: 1, termsVersion: "terms-v1", conditions: "Condiciones.",
   tripIncludes: ["Hotel"], tripExcludes: ["Vuelos"], expiresAt: new Date(Date.now() + 20 * 60 * 1000),
   quote: { totalUsd: 1000, principalUsd: 250, balanceUsd: 750, rateId, rateUsdPen: "3.7500", amountPenCents: 93750 },
+  simulated: false,
 };
 const storedBooking = {
   id: bookingId, runnerUserId: user.id, packageLabel: "Carrera", offerVersion: 1, termsVersion: "terms-v1",
@@ -63,7 +64,7 @@ function fakeDb(selects: unknown[][]) {
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(isCheckoutEnabled).mockReturnValue(true);
+  vi.mocked(enabledCheckoutMode).mockReturnValue("live");
   vi.mocked(getCheckoutReservation).mockResolvedValue(null);
   vi.mocked(findResumableCheckoutBooking).mockResolvedValue(null);
   vi.mocked(getCheckoutContractVersion).mockResolvedValue(contract);
@@ -73,7 +74,7 @@ beforeEach(() => {
 
 describe("prepareBookingCheckout", () => {
   it("refuses to run while checkout is disabled", async () => {
-    vi.mocked(isCheckoutEnabled).mockReturnValue(false);
+    vi.mocked(enabledCheckoutMode).mockReturnValue(null);
     await expect(prepareBookingCheckout(input, user)).rejects.toThrow("checkout disabled");
     expect(getCheckoutReservation).not.toHaveBeenCalled();
   });
@@ -82,8 +83,8 @@ describe("prepareBookingCheckout", () => {
     vi.mocked(findResumableCheckoutBooking).mockResolvedValue(bookingId);
     fakeDb([[storedBooking]]);
     const result = await prepareBookingCheckout({ ...input, paymentChoice: { kind: "deposit", index: 0 } }, user);
-    expect(findResumableCheckoutBooking).toHaveBeenCalledWith(tripId, user.email, user.id);
-    expect(result).toMatchObject({ bookingId, resumed: true, quote: { principalUsd: 250 } });
+    expect(findResumableCheckoutBooking).toHaveBeenCalledWith(tripId, user.email, user.id, false);
+    expect(result).toMatchObject({ bookingId, resumed: true, simulated: false, quote: { principalUsd: 250 } });
     expect(getActiveOffer).not.toHaveBeenCalled();
     expect(persistCheckoutReservation).not.toHaveBeenCalled();
   });
@@ -94,8 +95,22 @@ describe("prepareBookingCheckout", () => {
     await expect(prepareBookingCheckout(input, user)).resolves.toBe("booking_exists");
     // Looked up twice (before and after the insert race), always scoped to the session's user id.
     expect(findResumableCheckoutBooking).toHaveBeenCalledTimes(2);
-    for (const call of vi.mocked(findResumableCheckoutBooking).mock.calls) expect(call).toEqual([tripId, user.email, user.id]);
+    for (const call of vi.mocked(findResumableCheckoutBooking).mock.calls) expect(call).toEqual([tripId, user.email, user.id, false]);
   });
+
+  it.each([["test", true], ["demo", true], ["live", false]] as const)(
+    "in %s mode creates and resumes only bookings with simulated=%s",
+    async (mode, simulated) => {
+      vi.mocked(enabledCheckoutMode).mockReturnValue(mode);
+      fakeDb([[{ leadId: "77777777-7777-4777-8777-777777777777", participantName: "Runner", tripTitle: "Carrera", includes: ["Hotel"], excludes: ["Vuelos"] }]]);
+      vi.mocked(persistCheckoutReservation).mockResolvedValue({ ...reservation, simulated });
+      const result = await prepareBookingCheckout(input, user);
+      expect(getCheckoutReservation).toHaveBeenCalledWith(input.requestId, user.id, expect.any(String), simulated);
+      expect(findResumableCheckoutBooking).toHaveBeenCalledWith(tripId, user.email, user.id, simulated);
+      expect(persistCheckoutReservation).toHaveBeenCalledWith(expect.objectContaining({ simulated }));
+      expect(result).toMatchObject({ simulated, resumed: false });
+    },
+  );
 
   it("answers invalid_payment_choice for a deposit the offer does not have", async () => {
     fakeDb([]);

@@ -59,11 +59,15 @@ function session(params: Partial<Stripe.Checkout.Session> & { metadata: Record<s
 // `recorded` is what the final compare-and-set update of the attempt returns.
 function fakeDb(selects: unknown[][], extension: unknown[] = [], recorded: unknown[] = [{ id: attemptId }]) {
   const inserted: Record<string, unknown>[] = [];
+  const wheres: SQL[] = [];
   const updateWhere = vi.fn((condition: SQL) => { void condition; return { returning: async () => recorded }; });
   const db = {
     select: vi.fn(() => {
       const result = selects.shift() ?? [];
-      const query = { from: () => query, innerJoin: () => query, leftJoin: () => query, where: () => query, limit: async () => result };
+      const query = {
+        from: () => query, innerJoin: () => query, leftJoin: () => query,
+        where: (condition: SQL) => { wheres.push(condition); return query; }, limit: async () => result,
+      };
       return query;
     }),
     execute: vi.fn().mockResolvedValue({ rows: extension }),
@@ -80,7 +84,7 @@ function fakeDb(selects: unknown[][], extension: unknown[] = [], recorded: unkno
     update: vi.fn(() => ({ set: () => ({ where: updateWhere }) })),
   };
   vi.mocked(getDb).mockReturnValue(db as never);
-  return { db, inserted, updateWhere };
+  return { db, inserted, updateWhere, wheres };
 }
 function stripeWith(create = vi.fn(), retrieve = vi.fn()) {
   vi.mocked(Stripe).mockImplementation(function StripeMock() {
@@ -141,8 +145,49 @@ describe("checkout session service: configuration", () => {
     const statement = new PgDialect().sqlToQuery(db.execute.mock.calls[0][0] as SQL).sql;
     expect(statement).toContain("greatest(reservation_expires_at");
     expect(statement).toContain("created_at +");
-    // Only a booking that still holds its seat is extended.
-    expect(statement).toMatch(/extended_booking AS \([\s\S]*AND EXISTS \(\s*SELECT 1 FROM "offer_capacity_allocations" AS hold\s*WHERE hold\.booking_id = "bookings"\.id AND hold\.status = 'held'\s*\)\s*RETURNING/);
+    // Only a booking that still holds its seat is extended; a simulated one has no seat to hold.
+    expect(statement).toMatch(/extended_booking AS \([\s\S]*AND \("bookings"\."is_simulated" OR EXISTS \(\s*SELECT 1 FROM "offer_capacity_allocations" AS hold\s*WHERE hold\.booking_id = "bookings"\.id AND hold\.status = 'held'\s*\)\)\s*RETURNING/);
+    expect(statement).toMatch(/LEFT JOIN extended_allocation[\s\S]*WHERE extended_booking\.is_simulated OR extended_allocation\.booking_id IS NOT NULL/);
+  });
+
+  it.each([["test", "test"], ["demo", "test"]] as const)(
+    "marks %s-mode sessions and attempts as simulated (stripe_mode %s) and only pays simulated bookings",
+    async (mode, stripeMode) => {
+      vi.mocked(getStripeCheckoutConfig).mockReturnValue({ ...testConfig, mode });
+      const { inserted, wheres } = fakeDb([[booking()], [], []], [{ expires_at: new Date(Date.now() + 33 * MINUTE).toISOString() }]);
+      const { create } = stripeWith(echoCreate());
+      await expect(createBookingCheckoutSession(bookingId, "runner", { requestId, kind: "initial", quoteHash: initialHash }))
+        .resolves.toMatchObject({ state: "created" });
+      const [params, options] = create.mock.calls[0];
+      const metadata = { bookingId, attemptId, paymentKind: "initial", environment: mode, simulated: "true" };
+      expect(params.metadata).toEqual(metadata);
+      expect(params.payment_intent_data.metadata).toEqual(metadata);
+      expect(params.line_items[0].price_data).toEqual({
+        currency: "pen", unit_amount: 37500,
+        product_data: { name: "SIMULACIÓN – sin cargo real · Carrera 10K", description: "SIMULACIÓN – sin cargo real · Pago inicial de reserva" },
+      });
+      expect(params.allowed_payment_method_types).toEqual(["card"]);
+      expect(options).toEqual({ idempotencyKey: `cv-checkout-${bookingId}-initial-${requestId}` });
+      expect(inserted[0]).toMatchObject({ stripeMode });
+      const bookingFilter = new PgDialect().sqlToQuery(wheres[0]);
+      expect(bookingFilter.sql).toMatch(/"bookings"\."is_simulated" = \$\d+/);
+      expect(bookingFilter.params.at(-1)).toBe(true);
+    },
+  );
+
+  it("keeps live sessions unmarked, with stripe_mode live, and only pays real bookings", async () => {
+    vi.mocked(getStripeCheckoutConfig).mockReturnValue({ ...testConfig, mode: "live", secretKey: "sk_live_unit_only" });
+    vi.mocked(getEnv).mockReturnValue({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" } as ReturnType<typeof getEnv>);
+    const { inserted, wheres } = fakeDb([[booking()], [], []], [{ expires_at: new Date(Date.now() + 33 * MINUTE).toISOString() }]);
+    const { create } = stripeWith(echoCreate({ livemode: true }));
+    await expect(createBookingCheckoutSession(bookingId, "runner", { requestId, kind: "initial", quoteHash: initialHash }))
+      .resolves.toMatchObject({ state: "created" });
+    const [params] = create.mock.calls[0];
+    expect(params.metadata).toEqual({ bookingId, attemptId, paymentKind: "initial" });
+    expect(params.payment_intent_data.metadata).toEqual({ bookingId, attemptId, paymentKind: "initial" });
+    expect(params.line_items[0].price_data.product_data).toEqual({ name: "Carrera 10K", description: "Pago inicial de reserva" });
+    expect(inserted[0]).toMatchObject({ stripeMode: "live" });
+    expect(new PgDialect().sqlToQuery(wheres[0]).params.at(-1)).toBe(false);
   });
 
   it("does not hand out a Session when the attempt stopped being pending, and logs its id for reconciliation", async () => {

@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingCheckoutAttempts, bookingStripeEventReceipts } from "@/lib/db-schema";
 import { stripeLivemodeFor, type StripeMode } from "@/lib/env";
+import { stripeModeColumn } from "../utils/simulatedCheckout";
 
 export type BookingWebhookOutcome = "applied" | "needs_review" | "expired" | "failed" | "ignored" | "duplicate";
 export type BookingWebhookResult = { outcome: BookingWebhookOutcome; attemptId: string | null; bookingId: string | null };
@@ -81,7 +82,8 @@ async function findAttempt(attemptId: string, bookingId: string) {
 }
 
 // Same release as retireCheckoutAttempt and the same lock order (attempt, booking, seat): the seat
-// is given back only while the booking is still pending, so a CRM confirmation keeps it.
+// is given back only while the booking is still pending, so a CRM confirmation keeps it. A
+// simulated booking has no seat and is only cancelled.
 async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<ReturnType<typeof findAttempt>>>, session: Stripe.Checkout.Session) {
   const outcome = event.type === "checkout.session.expired" ? "expired" : "async_payment_failed";
   const result = await getDb().execute<{ event_id: string }>(sql`
@@ -102,7 +104,7 @@ async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<R
         updated_at = now()
       FROM local_attempt l, receipt r WHERE a.id = l.id RETURNING a.booking_id
     ), pending_booking AS MATERIALIZED (
-      SELECT b.id FROM bookings b
+      SELECT b.id, b.is_simulated FROM bookings b
       JOIN updated_attempt u ON b.id = u.booking_id
       WHERE b.status = 'pending'
       FOR UPDATE OF b
@@ -110,14 +112,17 @@ async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<R
       UPDATE offer_capacity_allocations allocation SET status = 'released'::offer_capacity_allocation_status,
         released_at = now(), updated_at = now()
       FROM pending_booking p
-      WHERE allocation.booking_id = p.id AND allocation.status = 'held'
+      WHERE allocation.booking_id = p.id AND allocation.status = 'held' AND NOT p.is_simulated
       RETURNING allocation.offer_version_id, allocation.booking_id
     ), decremented AS (
       UPDATE offer_capacity_counters counter SET allocated_count = greatest(0, counter.allocated_count - 1), updated_at = now()
       FROM released r WHERE counter.offer_version_id = r.offer_version_id RETURNING counter.offer_version_id
     ), cancelled AS (
       UPDATE bookings b SET status = 'cancelled', updated_at = now()
-      FROM released r WHERE b.id = r.booking_id AND b.status = 'pending' RETURNING b.id
+      FROM pending_booking p
+      WHERE b.id = p.id AND b.status = 'pending'
+        AND (p.is_simulated OR EXISTS (SELECT 1 FROM released r WHERE r.booking_id = p.id))
+      RETURNING b.id
     )
     SELECT event_id FROM receipt
   `);
@@ -127,7 +132,7 @@ async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<R
 
 async function settlePaidEvent(
   event: Stripe.Event, attempt: NonNullable<Awaited<ReturnType<typeof findAttempt>>>,
-  session: Stripe.Checkout.Session, paymentIntentId: string,
+  session: Stripe.Checkout.Session, paymentIntentId: string, mode: StripeMode,
 ) {
   const amount = Number.isSafeInteger(session.amount_total) && (session.amount_total ?? -1) >= 0 ? session.amount_total! : 0;
   const currency = typeof session.currency === "string" ? session.currency : "unk";
@@ -149,13 +154,13 @@ async function settlePaidEvent(
       RETURNING event_id
     ), settlement AS (
       INSERT INTO booking_stripe_settlements
-        (${sql.raw('"booking_id", "attempt_id", "stripe_session_id", "payment_intent_id", "expected_amount_pen_cents", "received_amount_pen_cents", "amount_usd", "currency", "status", "paid_at"')})
+        (${sql.raw('"booking_id", "attempt_id", "stripe_session_id", "payment_intent_id", "expected_amount_pen_cents", "received_amount_pen_cents", "amount_usd", "currency", "status", "paid_at", "stripe_mode"')})
       SELECT l.booking_id, l.id, ${session.id}, ${paymentIntentId}, l.amount_pen_cents, ${amount}, l.amount_usd,
         ${currency}, CASE WHEN ${currency} = 'pen' AND ${amount} = l.amount_pen_cents
           AND ((l.kind = 'initial' AND l.booking_status = 'pending' AND l.reservation_expires_at > ${paidAt}::timestamptz)
             OR (l.kind = 'balance' AND l.booking_status = 'confirmed'))
           THEN 'applied'::booking_stripe_settlement_status ELSE 'needs_review'::booking_stripe_settlement_status END,
-        ${paidAt}
+        ${paidAt}, ${stripeModeColumn(mode)}::stripe_mode
       FROM local_attempt l JOIN receipt r ON true
       ON CONFLICT ("attempt_id") DO NOTHING
       RETURNING booking_id, attempt_id, stripe_session_id, status
@@ -235,6 +240,9 @@ export async function handleBookingStripeEvent(event: Stripe.Event, stripe: Stri
   if (event.type === "checkout.session.expired" && session.status !== "expired") return webhookResult("ignored");
   if (event.type !== "checkout.session.expired" && session.status !== "complete") return webhookResult("ignored");
   const attempt = await findAttempt(attemptId, bookingId);
+  // An attempt is settled or expired only by events of its own Stripe mode; anything else is a
+  // configuration error and stops before any write (no receipt either), like assertMode.
+  if (attempt && (attempt.stripeMode === "live") !== event.livemode) throw new StripeModeMismatchError();
   if (!attempt || (attempt.stripeSessionId && attempt.stripeSessionId !== session.id)
       || attempt.kind !== metadataValue(session, "paymentKind")) {
     await recordIgnored(event, "no_matching_local_attempt", attempt?.id ?? null, session.id);
@@ -250,5 +258,5 @@ export async function handleBookingStripeEvent(event: Stripe.Event, stripe: Stri
   }
   const paymentIntentId = resourceId(session.payment_intent);
   if (!paymentIntentId) throw new Error("paid Checkout Session has no PaymentIntent");
-  return settlePaidEvent(event, attempt, session, paymentIntentId);
+  return settlePaidEvent(event, attempt, session, paymentIntentId, mode);
 }

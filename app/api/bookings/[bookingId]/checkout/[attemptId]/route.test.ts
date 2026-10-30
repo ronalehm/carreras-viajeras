@@ -6,11 +6,11 @@ vi.mock("@/modules/booking-checkout", async () => ({
   ...await vi.importActual<object>("@/modules/booking-checkout/utils/checkoutResponse"),
   attemptRouteParamsSchema: (await vi.importActual<typeof import("@/modules/booking-checkout/schemas/checkout.schema")>(
     "@/modules/booking-checkout/schemas/checkout.schema")).attemptRouteParamsSchema,
-  isCheckoutEnabled: vi.fn(), getBookingCheckoutState: vi.fn(),
+  isCheckoutEnabled: vi.fn(), checkoutAccessFor: vi.fn(), getBookingCheckoutState: vi.fn(),
 }));
 import { ForbiddenError } from "@/lib/auth/errors";
 import { requireVerifiedEmail } from "@/lib/auth/guards";
-import { isCheckoutEnabled, getBookingCheckoutState } from "@/modules/booking-checkout";
+import { checkoutAccessFor, isCheckoutEnabled, getBookingCheckoutState } from "@/modules/booking-checkout";
 import { GET } from "./route";
 const user = { id: "runner-1", email: "runner@example.invalid", emailVerified: true, staffRoles: [] };
 const bookingId = "11111111-1111-4111-8111-111111111111";
@@ -21,19 +21,30 @@ const context = contextFor({ bookingId, attemptId });
 let warn: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.mocked(isCheckoutEnabled).mockReset().mockReturnValue(true);
+  vi.mocked(checkoutAccessFor).mockReset().mockResolvedValue(true);
   vi.mocked(requireVerifiedEmail).mockReset().mockResolvedValue(user);
   vi.mocked(getBookingCheckoutState).mockReset();
   warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 afterEach(() => warn.mockRestore());
 describe("GET protected checkout state", () => {
+  it("answers a demo non-participant (revoked included) with the same 404 as when off, after authentication", async () => {
+    vi.mocked(checkoutAccessFor).mockResolvedValue(false);
+    const response = await GET(new Request("http://localhost:3001"), context);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ code: "not_found", requestId: expect.any(String) });
+    expect(requireVerifiedEmail).toHaveBeenCalledTimes(1);
+    expect(checkoutAccessFor).toHaveBeenCalledWith(user.id);
+    expect(getBookingCheckoutState).not.toHaveBeenCalled();
+  });
   it("returns the owner-only persisted state without caching", async () => {
-    vi.mocked(getBookingCheckoutState).mockResolvedValue({ status: "paid", amountUsd: 250, amountPenCents: 93750, checkoutUrl: null, balanceQuote: null });
+    vi.mocked(getBookingCheckoutState).mockResolvedValue({ status: "paid", amountUsd: 250, amountPenCents: 93750, checkoutUrl: null, balanceQuote: null, simulated: true });
     const response = await GET(new Request("http://localhost:3001"), context);
     expect(response.status).toBe(200);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
     expect(getBookingCheckoutState).toHaveBeenCalledWith(bookingId, attemptId, user.id);
-    await expect(response.json()).resolves.toMatchObject({ status: "paid" });
+    await expect(response.json()).resolves.toMatchObject({ status: "paid", simulated: true });
   });
   it("hides missing and other users' attempts", async () => {
     vi.mocked(getBookingCheckoutState).mockResolvedValue(null);

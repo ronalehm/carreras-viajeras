@@ -2,7 +2,7 @@ import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
 import {
-  checkoutError, checkoutFailure, checkoutJson, hasAppOrigin, isCheckoutEnabled, prepareBookingCheckout, prepareCheckoutSchema,
+  checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson, hasAppOrigin, isCheckoutEnabled, prepareBookingCheckout, prepareCheckoutSchema,
 } from "@/modules/booking-checkout";
 
 const ROUTE = "prepare";
@@ -17,6 +17,8 @@ export async function POST(request: Request) {
   try {
     if (!hasAppOrigin(request, getEnv().APP_ORIGIN)) return checkoutError(ROUTE, "invalid_origin", 403);
     const user = await requireVerifiedEmail();
+    // Demo mode: only an active demo participant, read from Neon; others get the same 404 as when off.
+    if (!await checkoutAccessFor(user.id)) return checkoutError(ROUTE, "not_found", 404);
     const body = await readJsonBody(request, prepareCheckoutSchema);
     if (!body) return checkoutError(ROUTE, "invalid_request", 400);
 

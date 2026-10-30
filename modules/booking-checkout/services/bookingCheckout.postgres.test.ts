@@ -24,7 +24,7 @@ function snapshot(index:number):CheckoutReservationSnapshot {
   leadId:leadIds[index],tripId,participantName:"Runner "+(index+1),packageLabel:"Carrera de prueba",distance:null,
   totalUsd:1000,initialPaymentUsd:250,balanceDueOn:"2027-01-01",offerVersionId:offerId,offerVersion:1,campaignId:null,
   termsVersion:"checkout-test-v1",conditions:"Condiciones sintéticas de la oferta.",
-  tripIncludes:["Hotel"],tripExcludes:["Vuelos"],rateId,rateUsdPen:"3.7500",amountPenCents:93750,capacityLimit:1,
+  tripIncludes:["Hotel"],tripExcludes:["Vuelos"],rateId,rateUsdPen:"3.7500",amountPenCents:93750,capacityLimit:1,simulated:false,
  };
 }
 describe.skipIf(!enabled)("checkout capacity on isolated PostgreSQL",()=>{

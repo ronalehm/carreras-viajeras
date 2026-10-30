@@ -8,6 +8,7 @@ import { parseUsdPenRate, usdToPenCents } from "@/lib/currency";
 import { checkoutQuoteHash } from "./quote.service";
 import type { CreateCheckoutSessionInput } from "../schemas/checkout.schema";
 import { retireCheckoutAttempt } from "./checkoutAttempts.service";
+import { isSimulatedMode, SIMULATED_PAYMENT_LABEL, stripeModeColumn } from "../utils/simulatedCheckout";
 
 export type CreateSessionResult =
   | { state: "created" | "reused"; attemptId: string; checkoutUrl: string }
@@ -24,6 +25,7 @@ export async function getBookingCheckoutState(bookingId: string, attemptId: stri
     totalUsd: bookings.totalUsd, initialPaymentUsd: bookings.initialPaymentUsd,
     offerVersion: bookings.offerVersion, termsVersion: bookings.offerTermsVersion,
     rateId: bookings.checkoutRateId, rateUsdPen: bookings.checkoutRateUsdPen,
+    simulated: bookings.isSimulated,
   }).from(bookingCheckoutAttempts)
     .innerJoin(bookings, eq(bookings.id, bookingCheckoutAttempts.bookingId))
     .leftJoin(bookingStripeSettlements, eq(bookingStripeSettlements.attemptId, bookingCheckoutAttempts.id))
@@ -45,6 +47,7 @@ export async function getBookingCheckoutState(bookingId: string, attemptId: stri
     amountUsd: row.amountUsd, amountPenCents: row.amountPenCents,
     checkoutUrl: row.status === "created" ? row.checkoutUrl : null,
     balanceQuote,
+    simulated: row.simulated,
   };
 }
 
@@ -127,9 +130,10 @@ async function refreshActiveAttempt(
 
 // Session deadline for an initial payment: the reservation deadline, extended (atomically with the
 // held seat) only when fewer than MIN_SESSION_MS remain, and capped by MAX_RESERVATION_HOLD_MINUTES.
-// Only a pending booking that still holds its seat is extended. Lock order as everywhere else:
-// booking (this UPDATE), then seat. Every statement that releases a seat also locks and cancels its
-// pending booking, so a release that commits first fails the status recheck of this UPDATE.
+// Only a pending booking that still holds its seat is extended; a simulated booking has no seat and
+// is extended alone, with the same cap. Lock order as everywhere else: booking (this UPDATE), then
+// seat. Every statement that releases a seat also locks and cancels its pending booking, so a
+// release that commits first fails the status recheck of this UPDATE.
 async function initialSessionExpiry(bookingId: string, userId: string): Promise<Date | null> {
   const minimum = new Date(Date.now() + MIN_SESSION_MS);
   const held = await getDb().execute<{ expires_at: Date | string }>(sql`
@@ -139,17 +143,19 @@ async function initialSessionExpiry(bookingId: string, userId: string): Promise<
         AND reservation_expires_at > now()
         AND greatest(reservation_expires_at, ${minimum}::timestamptz)
           <= created_at + ${MAX_RESERVATION_HOLD_MINUTES} * interval '1 minute'
-        AND EXISTS (
+        AND (${bookings.isSimulated} OR EXISTS (
           SELECT 1 FROM ${offerCapacityAllocations} AS hold
           WHERE hold.booking_id = ${bookings}.id AND hold.status = 'held'
-        )
-      RETURNING id, reservation_expires_at
+        ))
+      RETURNING id, reservation_expires_at, is_simulated
     ), extended_allocation AS (
       UPDATE ${offerCapacityAllocations} AS allocation SET expires_at = extended_booking.reservation_expires_at, updated_at = now()
       FROM extended_booking WHERE allocation.booking_id = extended_booking.id AND allocation.status = 'held'
+        AND NOT extended_booking.is_simulated
       RETURNING allocation.booking_id
     ) SELECT extended_booking.reservation_expires_at AS expires_at
-    FROM extended_booking JOIN extended_allocation ON extended_allocation.booking_id = extended_booking.id
+    FROM extended_booking LEFT JOIN extended_allocation ON extended_allocation.booking_id = extended_booking.id
+    WHERE extended_booking.is_simulated OR extended_allocation.booking_id IS NOT NULL
   `);
   const row = held.rows[0];
   if (!row) return null;
@@ -172,6 +178,7 @@ export async function createBookingCheckoutSession(
   const client = stripeClient();
   if (!client) return "checkout_unavailable";
   const { stripe, mode } = client;
+  const simulated = isSimulatedMode(mode);
   const db = getDb();
   const [booking] = await db.select({
     id: bookings.id, status: bookings.status, packageLabel: bookings.packageLabel,
@@ -183,7 +190,9 @@ export async function createBookingCheckoutSession(
     acceptedBookingId: bookingContractAcceptances.bookingId,
   }).from(bookings).innerJoin(trips, eq(trips.id, bookings.tripId))
     .leftJoin(bookingContractAcceptances, eq(bookingContractAcceptances.bookingId, bookings.id))
-    .where(and(eq(bookings.id, bookingId), eq(bookings.runnerUserId, userId), isNotNull(bookings.offerVersionId)))
+    // Simulated and real bookings never mix: each is paid only in its own Stripe mode.
+    .where(and(eq(bookings.id, bookingId), eq(bookings.runnerUserId, userId), isNotNull(bookings.offerVersionId),
+      eq(bookings.isSimulated, simulated)))
     .limit(1) as [BookingRow?];
   if (!booking || booking.status === "cancelled") return "booking_not_found";
   if (!booking.acceptedBookingId) return "contract_not_accepted";
@@ -243,7 +252,7 @@ export async function createBookingCheckoutSession(
     const [created] = await db.insert(bookingCheckoutAttempts).values({
       bookingId, requestId: input.requestId, kind: input.kind, quoteHash: expectedHash,
       amountUsd, amountPenCents, idempotencyKey: `cv-checkout-${bookingId}-${input.kind}-${input.requestId}`,
-      expiresAt: sessionExpiresAt,
+      expiresAt: sessionExpiresAt, stripeMode: stripeModeColumn(mode),
     }).onConflictDoNothing().returning();
     attempt = created ?? await findActiveAttempt(bookingId, input.kind);
     if (!attempt || attempt.quoteHash !== expectedHash) return "attempt_conflict";
@@ -263,6 +272,15 @@ export async function createBookingCheckoutSession(
   const checkoutPath = `/viajes/${encodeURIComponent(booking.tripSlug)}/checkout?booking_id=${encodeURIComponent(bookingId)}&attempt_id=${encodeURIComponent(attempt.id)}`;
   const successUrl = new URL(`${checkoutPath}&return=success`, appOrigin).toString();
   const cancelUrl = new URL(`${checkoutPath}&cancelled=1`, appOrigin).toString();
+  const paymentLabel = input.kind === "initial" ? "Pago inicial de reserva" : "Saldo de reserva";
+  // TEST modes say so in the Checkout page and in Stripe's metadata; live keeps its exact parameters.
+  const product = simulated
+    ? { name: `${SIMULATED_PAYMENT_LABEL} · ${booking.packageLabel}`, description: `${SIMULATED_PAYMENT_LABEL} · ${paymentLabel}` }
+    : { name: booking.packageLabel, description: paymentLabel };
+  const metadata = {
+    bookingId, attemptId: attempt.id, paymentKind: input.kind,
+    ...(simulated && { environment: mode, simulated: "true" }),
+  };
   let session: Stripe.Checkout.Session;
   try {
     // Same idempotency key and parameters as the first try (expires_at included), so a retry
@@ -275,13 +293,13 @@ export async function createBookingCheckoutSession(
         price_data: {
           currency: "pen",
           unit_amount: amountPenCents,
-          product_data: { name: booking.packageLabel, description: input.kind === "initial" ? "Pago inicial de reserva" : "Saldo de reserva" },
+          product_data: product,
         },
       }],
       customer_email: booking.participantEmail,
       client_reference_id: bookingId,
-      metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind },
-      payment_intent_data: { metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind } },
+      metadata,
+      payment_intent_data: { metadata },
       success_url: successUrl,
       cancel_url: cancelUrl,
       expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),

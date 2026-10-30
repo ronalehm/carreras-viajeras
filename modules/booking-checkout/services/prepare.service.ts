@@ -9,12 +9,13 @@ import { getCheckoutContractVersion } from "@/modules/contracts";
 import type { CurrentUser } from "@/lib/auth/guards";
 import { checkoutQuoteHash, createCheckoutQuote, getCurrentCheckoutRate } from "./quote.service";
 import {
+  enabledCheckoutMode,
   findResumableCheckoutBooking,
   getCheckoutReservation,
-  isCheckoutEnabled,
   persistCheckoutReservation,
   type ReservationRecord,
 } from "./bookingCheckout.service";
+import { isSimulatedMode } from "../utils/simulatedCheckout";
 import type { PrepareCheckoutInput } from "../schemas/checkout.schema";
 
 type QuoteAmounts = { amountUsd: number; amountPenCents: number; quoteHash: string };
@@ -30,6 +31,8 @@ export type PreparedCheckout = {
   documentSnapshot: string;
   documentHash: string;
   expiresAt: Date;
+  // A booking of a Stripe TEST mode (test or demo): no real charge and no seat.
+  simulated: boolean;
 };
 // What the browser receives: no rate id, no contract fingerprint and a single document body.
 export type PreparedCheckoutView = Omit<PreparedCheckout, "quote" | "contract"> & {
@@ -91,6 +94,7 @@ function prepared(reservation: ReservationRecord, contract: { title: string; bod
     documentSnapshot: snapshot.document,
     documentHash: snapshot.hash,
     expiresAt: reservation.expiresAt,
+    simulated: reservation.simulated,
   };
 }
 
@@ -104,10 +108,12 @@ function view(prepared: PreparedCheckout, resumed: boolean): PreparedCheckoutVie
 
 // A runner's active reservation for this trip is resumed whatever payment choice is sent now: its
 // snapshot (price, rate, contract) is authoritative. Another account's booking stays `booking_exists`.
-async function resumeActiveBooking(tripId: string, user: Pick<CurrentUser, "id" | "email">): Promise<PreparedCheckoutView | null> {
-  const bookingId = await findResumableCheckoutBooking(tripId, user.email, user.id);
+async function resumeActiveBooking(
+  tripId: string, user: Pick<CurrentUser, "id" | "email">, simulated: boolean,
+): Promise<PreparedCheckoutView | null> {
+  const bookingId = await findResumableCheckoutBooking(tripId, user.email, user.id, simulated);
   if (!bookingId) return null;
-  const prepared = await getPreparedBookingCheckout(bookingId, user.id);
+  const prepared = await getPreparedBookingCheckout(bookingId, user.id, simulated);
   return prepared ? view(prepared, true) : null;
 }
 
@@ -115,18 +121,20 @@ export async function prepareBookingCheckout(
   input: PrepareCheckoutInput,
   user: Pick<CurrentUser, "id" | "email">,
 ): Promise<PrepareCheckoutResult> {
-  if (!isCheckoutEnabled()) throw new Error("checkout disabled");
+  const mode = enabledCheckoutMode();
+  if (!mode) throw new Error("checkout disabled");
+  const simulated = isSimulatedMode(mode);
   const inputHash = createHash("sha256").update(JSON.stringify([
     user.id, input.tripId, input.campaignCode ?? null, input.paymentChoice,
   ])).digest("hex");
 
-  const prior = await getCheckoutReservation(input.requestId, user.id, inputHash);
+  const prior = await getCheckoutReservation(input.requestId, user.id, inputHash, simulated);
   if (prior === "request_conflict") return prior;
   if (prior) {
     const contract = await getCheckoutContractVersion(prior.termsVersion);
     return contract ? view(prepared(prior, contract), false) : "contract_unavailable";
   }
-  const resumed = await resumeActiveBooking(input.tripId, user);
+  const resumed = await resumeActiveBooking(input.tripId, user, simulated);
   if (resumed) return resumed;
 
   const db = getDb();
@@ -169,10 +177,10 @@ export async function prepareBookingCheckout(
     campaignId: offer.campaignId, termsVersion: offer.termsVersion, conditions: offer.conditions,
     tripIncludes: registration.includes, tripExcludes: registration.excludes,
     rateId: quote.rateId, rateUsdPen: quote.rateUsdPen, amountPenCents: quote.amountPenCents,
-    capacityLimit: offer.capacityLimit,
+    capacityLimit: offer.capacityLimit, simulated,
   });
   // A concurrent preparation of the same runner may have created the booking in the meantime.
-  if (reservation === "booking_exists") return (await resumeActiveBooking(input.tripId, user)) ?? reservation;
+  if (reservation === "booking_exists") return (await resumeActiveBooking(input.tripId, user, simulated)) ?? reservation;
   if (typeof reservation === "string") return reservation;
 
   // The persisted version is authoritative if an offer changes while a concurrent request is resolving.
@@ -182,7 +190,11 @@ export async function prepareBookingCheckout(
   return savedContract ? view(prepared(reservation, savedContract), false) : "contract_unavailable";
 }
 
-export async function getPreparedBookingCheckout(bookingId: string, userId: string): Promise<PreparedCheckout | null> {
+// Only a booking of the current mode: a simulated booking is never prepared under a live key, nor
+// a real one under a TEST key.
+export async function getPreparedBookingCheckout(
+  bookingId: string, userId: string, simulated: boolean,
+): Promise<PreparedCheckout | null> {
   const db = getDb();
   const [row] = await db.select({
     id: bookings.id, runnerUserId: bookings.runnerUserId, packageLabel: bookings.packageLabel,
@@ -193,7 +205,7 @@ export async function getPreparedBookingCheckout(bookingId: string, userId: stri
     rateUsdPen: bookings.checkoutRateUsdPen, amountPenCents: bookings.checkoutAmountPenCents,
     expiresAt: bookings.reservationExpiresAt,
   }).from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.runnerUserId, userId),
-    eq(bookings.status, "pending"), isNotNull(bookings.offerVersionId))).limit(1);
+    eq(bookings.status, "pending"), isNotNull(bookings.offerVersionId), eq(bookings.isSimulated, simulated))).limit(1);
   if (!row || !row.termsVersion || !row.conditions || !row.tripIncludes || !row.tripExcludes
       || !row.principalUsd || !row.rateId || !row.rateUsdPen || !row.amountPenCents || !row.expiresAt
       || !row.offerVersion || row.expiresAt.getTime() <= Date.now()) return null;
@@ -204,7 +216,7 @@ export async function getPreparedBookingCheckout(bookingId: string, userId: stri
     conditions: row.conditions, tripIncludes: row.tripIncludes, tripExcludes: row.tripExcludes,
     quote: { totalUsd: row.totalUsd, principalUsd: row.principalUsd, balanceUsd: row.totalUsd - row.principalUsd,
       rateId: row.rateId, rateUsdPen: row.rateUsdPen, amountPenCents: row.amountPenCents },
-    expiresAt: row.expiresAt,
+    expiresAt: row.expiresAt, simulated,
   };
   return prepared(reservation, contract);
 }

@@ -8,12 +8,12 @@ vi.mock("@/modules/booking-checkout", async () => ({
   ...await vi.importActual<object>("@/modules/booking-checkout/utils/checkoutResponse"),
   bookingRouteParamsSchema: (await vi.importActual<typeof import("@/modules/booking-checkout/schemas/checkout.schema")>(
     "@/modules/booking-checkout/schemas/checkout.schema")).bookingRouteParamsSchema,
-  isCheckoutEnabled: vi.fn(), createCheckoutSessionSchema: {}, createBookingCheckoutSession: vi.fn(),
+  isCheckoutEnabled: vi.fn(), checkoutAccessFor: vi.fn(), createCheckoutSessionSchema: {}, createBookingCheckoutSession: vi.fn(),
 }));
 import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
-import { isCheckoutEnabled, createBookingCheckoutSession } from "@/modules/booking-checkout";
+import { checkoutAccessFor, isCheckoutEnabled, createBookingCheckoutSession } from "@/modules/booking-checkout";
 import { POST } from "./route";
 
 const user = { id: "runner-1", email: "runner@example.invalid", emailVerified: true, staffRoles: [] };
@@ -30,6 +30,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 let error: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.mocked(isCheckoutEnabled).mockReset().mockReturnValue(true);
+  vi.mocked(checkoutAccessFor).mockReset().mockResolvedValue(true);
   vi.mocked(getEnv).mockReset().mockReturnValue({ APP_ORIGIN: "http://localhost:3001" } as ReturnType<typeof getEnv>);
   vi.mocked(requireVerifiedEmail).mockReset().mockResolvedValue(user);
   vi.mocked(readJsonBody).mockReset().mockResolvedValue(body);
@@ -40,6 +41,16 @@ beforeEach(() => {
 afterEach(() => { warn.mockRestore(); error.mockRestore(); });
 
 describe("POST /api/bookings/[bookingId]/checkout", () => {
+  it("answers a demo non-participant (revoked included) with the same 404 as when off, after authentication", async () => {
+    vi.mocked(checkoutAccessFor).mockResolvedValue(false);
+    const response = await POST(request(), context);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ code: "not_found", requestId: expect.any(String) });
+    expect(requireVerifiedEmail).toHaveBeenCalledTimes(1);
+    expect(checkoutAccessFor).toHaveBeenCalledWith(user.id);
+    expect(createBookingCheckoutSession).not.toHaveBeenCalled();
+  });
   it("does not access auth or Stripe when checkout is disabled", async () => {
     vi.mocked(isCheckoutEnabled).mockReturnValue(false);
     const response = await POST(request(), context);

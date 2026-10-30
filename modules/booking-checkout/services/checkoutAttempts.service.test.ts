@@ -34,9 +34,17 @@ describe("retireCheckoutAttempt", () => {
     const query = fakeExecute([{ booking_id: attempt.bookingId }]);
     await retireCheckoutAttempt(attempt, "expired", true);
     const { sql } = query();
-    expect(sql).toMatch(/pending_booking AS MATERIALIZED \(\s*SELECT b\.id FROM "bookings" AS b\s*JOIN retired r ON b\.id = r\.booking_id[\s\S]*b\.status = 'pending'\s*FOR UPDATE OF b/);
+    expect(sql).toMatch(/pending_booking AS MATERIALIZED \(\s*SELECT b\.id, b\.is_simulated FROM "bookings" AS b\s*JOIN retired r ON b\.id = r\.booking_id[\s\S]*b\.status = 'pending'\s*FOR UPDATE OF b/);
     expect(sql).toMatch(/released AS \([\s\S]*FROM pending_booking p\s*WHERE allocation\.booking_id = p\.id AND allocation\.status = 'held'/);
     expect(sql.indexOf("pending_booking AS")).toBeLessThan(sql.indexOf("released AS"));
+  });
+
+  it("cancels a simulated pending booking without releasing a seat or touching the counter", async () => {
+    const query = fakeExecute([{ booking_id: attempt.bookingId }]);
+    await retireCheckoutAttempt(attempt, "expired", true);
+    const { sql } = query();
+    expect(sql).toMatch(/released AS \([\s\S]*allocation\.status = 'held' AND NOT p\.is_simulated/);
+    expect(sql).toMatch(/cancelled AS \([\s\S]*FROM pending_booking p[\s\S]*\(p\.is_simulated OR EXISTS \(SELECT 1 FROM released r WHERE r\.booking_id = p\.id\)\)/);
   });
 
   it("can retire without releasing the reservation", async () => {

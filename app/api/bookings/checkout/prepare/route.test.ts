@@ -6,13 +6,13 @@ vi.mock("@/lib/env", () => ({ getEnv: vi.fn() }));
 vi.mock("@/modules/integrations", () => ({ readJsonBody: vi.fn() }));
 vi.mock("@/modules/booking-checkout", async () => ({
   ...await vi.importActual<object>("@/modules/booking-checkout/utils/checkoutResponse"),
-  prepareCheckoutSchema: {}, isCheckoutEnabled: vi.fn(), prepareBookingCheckout: vi.fn(),
+  prepareCheckoutSchema: {}, isCheckoutEnabled: vi.fn(), checkoutAccessFor: vi.fn(), prepareBookingCheckout: vi.fn(),
 }));
 import { UnauthorizedError } from "@/lib/auth/errors";
 import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
-import { isCheckoutEnabled, prepareBookingCheckout } from "@/modules/booking-checkout";
+import { checkoutAccessFor, isCheckoutEnabled, prepareBookingCheckout } from "@/modules/booking-checkout";
 import { POST } from "./route";
 
 const user = { id: "runner-1", email: "runner@example.invalid", emailVerified: true, staffRoles: [] };
@@ -27,6 +27,7 @@ let warn: ReturnType<typeof vi.spyOn>;
 let error: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.mocked(isCheckoutEnabled).mockReset().mockReturnValue(true);
+  vi.mocked(checkoutAccessFor).mockReset().mockResolvedValue(true);
   vi.mocked(getEnv).mockReset().mockReturnValue({ APP_ORIGIN: "http://localhost:3001" } as ReturnType<typeof getEnv>);
   vi.mocked(requireVerifiedEmail).mockReset().mockResolvedValue(user);
   vi.mocked(readJsonBody).mockReset().mockResolvedValue(body);
@@ -37,6 +38,16 @@ beforeEach(() => {
 afterEach(() => { warn.mockRestore(); error.mockRestore(); });
 
 describe("POST /api/bookings/checkout/prepare", () => {
+  it("answers a demo non-participant (revoked included) with the same 404 as when off, after authentication", async () => {
+    vi.mocked(checkoutAccessFor).mockResolvedValue(false);
+    const response = await POST(request());
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ code: "not_found", requestId: expect.any(String) });
+    expect(requireVerifiedEmail).toHaveBeenCalledTimes(1);
+    expect(checkoutAccessFor).toHaveBeenCalledWith(user.id);
+    expect(prepareBookingCheckout).not.toHaveBeenCalled();
+  });
   it("fails closed while checkout is disabled", async () => {
     vi.mocked(isCheckoutEnabled).mockReturnValue(false);
     const response = await POST(request());
@@ -64,7 +75,7 @@ describe("POST /api/bookings/checkout/prepare", () => {
       checkoutQuotes: { initial: { amountUsd: 250, amountPenCents: 93750, quoteHash: "c".repeat(64) },
         balance: { amountUsd: 750, amountPenCents: 281250, quoteHash: "d".repeat(64) } },
       contract: { versionKey: "terms-v1", title: "Terms", testDocument: false },
-      documentSnapshot: "snapshot", documentHash: "b".repeat(64), expiresAt: new Date("2026-10-29T20:00:00Z"),
+      documentSnapshot: "snapshot", documentHash: "b".repeat(64), expiresAt: new Date("2026-10-29T20:00:00Z"), simulated: true,
     };
     vi.mocked(prepareBookingCheckout).mockResolvedValue(prepared);
     const response = await POST(request());

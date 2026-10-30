@@ -919,7 +919,7 @@
             }
           ],
           "isUnique": true,
-          "where": "\"bookings\".\"status\" <> 'cancelled'",
+          "where": "\"bookings\".\"status\" <> 'cancelled' AND NOT \"bookings\".\"is_simulated\"",
           "concurrently": false,
           "method": "btree",
           "with": {}

@@ -5,7 +5,7 @@
 -- nuevo y puede usarse en la misma transacción.
 -- Compatible con el código desplegado: crea un enum y una tabla nuevos, añade columnas NOT NULL con DEFAULT (las
 -- filas existentes quedan is_simulated=false y stripe_mode='test'; las tablas de Stripe están vacías en
--- production), recrea bookings_trip_email_active_uq excluyendo solo filas simuladas (ninguna fila existente lo es,
+-- production), recrea bookings_trip_email_active_uq y bookings_lead_active_uq excluyendo solo filas simuladas (ninguna fila existente lo es,
 -- así que no puede fallar por duplicados), añade un índice, renombra dos FK sin revalidarlas y elimina un CHECK
 -- siempre verdadero (created_by es NOT NULL desde la 0003). No toca datos ni neon_auth.
 CREATE TYPE "public"."stripe_mode" AS ENUM('test', 'live');--> statement-breakpoint
@@ -25,6 +25,8 @@ ALTER TABLE "bookings" ADD COLUMN "is_simulated" boolean DEFAULT false NOT NULL;
 -- Las reservas simuladas no bloquean una reserva real con el mismo correo. DROP y CREATE en la misma transacción.
 DROP INDEX "bookings_trip_email_active_uq";--> statement-breakpoint
 CREATE UNIQUE INDEX "bookings_trip_email_active_uq" ON "bookings" USING btree ("trip_id","participant_email") WHERE "bookings"."status" <> 'cancelled' AND NOT "bookings"."is_simulated";--> statement-breakpoint
+DROP INDEX "bookings_lead_active_uq";--> statement-breakpoint
+CREATE UNIQUE INDEX "bookings_lead_active_uq" ON "bookings" USING btree ("lead_id") WHERE "bookings"."status" <> 'cancelled' AND NOT "bookings"."is_simulated";--> statement-breakpoint
 CREATE INDEX "booking_stripe_settlements_booking_idx" ON "booking_stripe_settlements" USING btree ("booking_id");--> statement-breakpoint
 -- PostgreSQL truncó a 63 caracteres los nombres que generó la 0020; se renombran a los que declara lib/db-schema.ts.
 ALTER TABLE "booking_stripe_event_receipts" RENAME CONSTRAINT "booking_stripe_event_receipts_attempt_id_booking_checkout_attem" TO "booking_stripe_event_receipts_attempt_id_fk";--> statement-breakpoint

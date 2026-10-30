@@ -976,7 +976,7 @@ export const bookings = pgTable(
       .where(sql`${table.status} <> 'cancelled' AND NOT ${table.isSimulated}`),
     uniqueIndex("bookings_lead_active_uq")
       .on(table.leadId)
-      .where(sql`${table.status} <> 'cancelled'`),
+      .where(sql`${table.status} <> 'cancelled' AND NOT ${table.isSimulated}`),
     index("bookings_runner_user_idx").on(table.runnerUserId),
     index("bookings_unlinked_email_idx")
       .on(table.participantEmail)

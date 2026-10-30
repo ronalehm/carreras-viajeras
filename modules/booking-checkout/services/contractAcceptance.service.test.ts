@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("./bookingCheckout.service", () => ({ isCheckoutEnabled: vi.fn(() => true) }));
+vi.mock("./bookingCheckout.service", () => ({ enabledCheckoutMode: vi.fn(() => "demo") }));
 vi.mock("./prepare.service", () => ({ getPreparedBookingCheckout: vi.fn() }));
 import { getDb } from "@/lib/db";
 import { getPreparedBookingCheckout } from "./prepare.service";
@@ -24,5 +24,7 @@ describe("booking contract acceptance", () => {
     vi.mocked(getDb).mockReturnValue({ execute } as never);
     await expect(acceptBookingContract(bookingId, userId, prepared.documentHash)).resolves.toBe("accepted");
     expect(execute).toHaveBeenCalledTimes(1);
+    // Demo is a TEST mode: only a simulated booking can be accepted.
+    expect(getPreparedBookingCheckout).toHaveBeenCalledWith(bookingId, userId, true);
   });
 });

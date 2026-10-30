@@ -10,7 +10,8 @@ type ActiveAttempt = { id: string; bookingId: string; status: "pending" | "creat
 // attempt also gives back its held seat and cancels the still-pending booking, in the same
 // statement and with the same rules the webhook applies to `checkout.session.expired`. A balance
 // attempt never touches capacity: its allocation is already confirmed. The seat is released only
-// while the booking is still pending: a booking confirmed by hand in the CRM keeps its seat.
+// while the booking is still pending: a booking confirmed by hand in the CRM keeps its seat. A
+// simulated booking holds no seat: it is cancelled under the same rules, with no capacity change.
 // Lock order, shared by every statement that releases, extends or confirms a hold (this one, the
 // webhook, the expired-hold sweep and the reservation extension): the attempt first when there is
 // one, then the booking (FOR UPDATE, rechecked as pending after any concurrent change), then its
@@ -31,7 +32,7 @@ export async function retireCheckoutAttempt(
         AND a.status IN ('pending', 'created')
       RETURNING a.booking_id, a.kind
     ), pending_booking AS MATERIALIZED (
-      SELECT b.id FROM ${bookings} AS b
+      SELECT b.id, b.is_simulated FROM ${bookings} AS b
       JOIN retired r ON b.id = r.booking_id
       WHERE ${releaseHold}::boolean AND r.kind = 'initial' AND b.status = 'pending'
       FOR UPDATE OF b
@@ -39,7 +40,7 @@ export async function retireCheckoutAttempt(
       UPDATE ${offerCapacityAllocations} AS allocation
       SET status = 'released'::offer_capacity_allocation_status, released_at = now(), updated_at = now()
       FROM pending_booking p
-      WHERE allocation.booking_id = p.id AND allocation.status = 'held'
+      WHERE allocation.booking_id = p.id AND allocation.status = 'held' AND NOT p.is_simulated
       RETURNING allocation.offer_version_id, allocation.booking_id
     ), decremented AS (
       UPDATE ${offerCapacityCounters} AS counter
@@ -48,7 +49,9 @@ export async function retireCheckoutAttempt(
       RETURNING counter.offer_version_id
     ), cancelled AS (
       UPDATE ${bookings} AS b SET status = 'cancelled', updated_at = now()
-      FROM released r WHERE b.id = r.booking_id AND b.status = 'pending'
+      FROM pending_booking p
+      WHERE b.id = p.id AND b.status = 'pending'
+        AND (p.is_simulated OR EXISTS (SELECT 1 FROM released r WHERE r.booking_id = p.id))
       RETURNING b.id
     )
     SELECT booking_id FROM retired
