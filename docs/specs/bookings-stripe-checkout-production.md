@@ -1,6 +1,6 @@
 # Enmienda: Stripe Checkout de reservas en producción
 
-- Estado: borrador
+- Estado: aprobado
 - Specs base: [bookings-stripe-checkout.md](bookings-stripe-checkout.md) y [bookings-stripe-checkout-card-only-amendment.md](bookings-stripe-checkout-card-only-amendment.md).
 - Módulos: booking-checkout, contracts, bookings, trips, landing, accounts (enlace CRM).
 - Rama: `claude/blissful-davinci-pfjo58`, creada desde `feat/stripe-checkout` y rebasada sobre `main`.
