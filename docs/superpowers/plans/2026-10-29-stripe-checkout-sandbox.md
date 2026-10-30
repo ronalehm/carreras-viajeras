@@ -1,4 +1,6 @@
 > ALCANCE SUSTITUIDO (2026-10-29): este documento corresponde a una demo mentec.dev. El usuario aclaró que el checkout es para Carreras Viajeras y pidió Stripe. No ejecutar este plan; consultar docs/specs/bookings-stripe-checkout.md y su plan Carreras. Este aviso no aprueba ninguna spec.
+>
+> Nota histórica (2026-10-30): `modules/stripe-demo`, su ledger `node:sqlite` y `scripts/test-stripe-webhook-replay.mjs` se retiraron de la rama (tarea 1.1 de `docs/specs/bookings-stripe-checkout-production.md`). Siguen en el historial de Git (commit `f56653a` de esta rama y commit `8247662` de `origin/feat/stripe-checkout`).
 
 # Stripe Checkout sandbox — plan de implementación
 

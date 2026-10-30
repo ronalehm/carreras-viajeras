@@ -183,9 +183,9 @@ Cada fase tiene hasta cinco tareas y unos quince archivos. Paquetes, schema, `li
 ### Fase 1: separación y webhook
 
 - [ ] 1.1 Retirar de esta rama el ejemplo Connect, el script de replay de la demo y `modules/stripe-demo`. Cuando corresponda, llevarlos a una rama propia.
-- [ ] 1.2 `getStripeCheckoutConfig()` en `lib/env.ts` con sus tests (modos test/live, producción y fallo cerrado).
-- [ ] 1.3 `stripeWebhook.service.ts` en booking-checkout: firma, modo, eventos de la sección B, `ignored` y log estructurado. Nueva ruta `app/api/webhooks/stripe/route.ts`.
-- [ ] 1.4 Vigencia contra `paid_at` en `bookingWebhook.service.ts` y tests de expired, async_failed, async_succeeded, `payment_intent.succeeded`, mismatch de importe y moneda, y refund/dispute.
+- [x] 1.2 `getStripeCheckoutConfig()` en `lib/env.ts` con sus tests (modos test/live, producción y fallo cerrado).
+- [x] 1.3 `stripeWebhook.service.ts` en booking-checkout: firma, modo, eventos de la sección B, `ignored` y log estructurado. Nueva ruta `app/api/webhooks/stripe/route.ts`.
+- [x] 1.4 Vigencia contra `paid_at` en `bookingWebhook.service.ts` y tests de expired, async_failed, async_succeeded, `payment_intent.succeeded`, mismatch de importe y moneda, y refund/dispute.
 
 ### Fase 2: creación de la sesión y contratos
 

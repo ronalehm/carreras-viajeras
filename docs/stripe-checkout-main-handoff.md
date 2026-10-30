@@ -1,5 +1,7 @@
 ﻿# Handoff: integrar Stripe Checkout a `main`
 
+> Nota histórica (2026-10-30): la tarea 1.1 de `docs/specs/bookings-stripe-checkout-production.md` retiró de la rama `modules/stripe-demo/**`, el ejemplo Connect (scripts y plan) y `scripts/test-stripe-webhook-replay.mjs`. El webhook vive ahora en `modules/booking-checkout` y no usa `node:sqlite` ni `.stripe-sandbox/`; la guía vigente es `docs/stripe-sandbox-webhook.md`. Lo retirado sigue en el historial de Git (commit `f56653a` de esta rama y, sin rebase, commit `8247662` de `origin/feat/stripe-checkout`).
+
 Fecha: 2026-10-30  
 Rama de trabajo: `feat/stripe-checkout-mainline`  
 Checkout: `C:\Users\ronal\carreras-viajeras-stripe`  

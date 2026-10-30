@@ -249,3 +249,128 @@ describe("optional integration environment", () => {
     }
   });
 });
+
+describe("Stripe Checkout configuration", () => {
+  const TEST_KEY = "sk_test_synthetic0stripe0key";
+  const LIVE_KEY = "sk_live_synthetic0stripe0key";
+  const WEBHOOK = "whsec_synthetic0webhook0secret";
+  const production = {
+    NODE_ENV: "production",
+    APP_ORIGIN: "https://carreras-viajeras.mentec.dev",
+    STRIPE_SECRET_KEY: LIVE_KEY,
+    STRIPE_WEBHOOK_SECRET: WEBHOOK,
+    STRIPE_CHECKOUT_ENABLED: "true",
+    STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: undefined,
+  };
+  const development = {
+    NODE_ENV: "development",
+    APP_ORIGIN: "http://localhost:3001",
+    STRIPE_SECRET_KEY: TEST_KEY,
+    STRIPE_WEBHOOK_SECRET: WEBHOOK,
+    STRIPE_CHECKOUT_ENABLED: "true",
+    STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: undefined,
+  };
+
+  async function config(values: Record<string, string | undefined>) {
+    setEnv(values);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { getStripeCheckoutConfig } = await import("./env");
+    const result = getStripeCheckoutConfig();
+    const logged = JSON.stringify(warn.mock.calls);
+    warn.mockRestore();
+    return { result, logged };
+  }
+
+  it("enables live mode in production with every requirement met", async () => {
+    const { result } = await config(production);
+    expect(result).toEqual({
+      enabled: true, mode: "live", secretKey: LIVE_KEY, webhookSecret: WEBHOOK,
+      allowDraftContracts: false, disabledReason: null,
+    });
+  });
+
+  it("enables test mode outside production, with restricted keys too", async () => {
+    expect((await config(development)).result).toMatchObject({ enabled: true, mode: "test", secretKey: TEST_KEY });
+    vi.resetModules();
+    const restricted = await config({ ...development, STRIPE_SECRET_KEY: "rk_test_synthetic0restricted" });
+    expect(restricted.result).toMatchObject({ enabled: true, mode: "test" });
+    vi.resetModules();
+    const live = await config({ ...production, STRIPE_SECRET_KEY: "rk_live_synthetic0restricted" });
+    expect(live.result).toMatchObject({ enabled: true, mode: "live" });
+  });
+
+  it.each([undefined, "", "false"])("is off by default (%j) but keeps the webhook credentials", async (flag) => {
+    const { result, logged } = await config({ ...production, STRIPE_CHECKOUT_ENABLED: flag });
+    expect(result).toEqual({
+      enabled: false, mode: "live", secretKey: LIVE_KEY, webhookSecret: WEBHOOK,
+      allowDraftContracts: false, disabledReason: "not_enabled",
+    });
+    expect(logged).toBe("[]");
+  });
+
+  it.each([
+    ["a test key in production", { STRIPE_SECRET_KEY: TEST_KEY }, "mode_not_allowed"],
+    ["a missing key", { STRIPE_SECRET_KEY: undefined }, "missing_secret_key"],
+    ["a missing webhook secret", { STRIPE_WEBHOOK_SECRET: undefined }, "missing_webhook_secret"],
+    ["a localhost origin", { APP_ORIGIN: "http://localhost:3001" }, "invalid_app_origin"],
+    ["a non-production HTTPS origin", { APP_ORIGIN: "https://preview.example.test" }, "invalid_app_origin"],
+    ["a missing origin", { APP_ORIGIN: undefined }, "invalid_app_origin"],
+    ["the draft contracts bypass", { STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: "true" }, "draft_contracts_bypass"],
+  ])("fails closed in production with %s", async (_label, override, reason) => {
+    const { result, logged } = await config({ ...production, ...override });
+    expect(result.enabled).toBe(false);
+    expect(result.disabledReason).toBe(reason);
+    expect(result.allowDraftContracts).toBe(false);
+    expect(logged).toContain(reason);
+    for (const secret of [LIVE_KEY, TEST_KEY, WEBHOOK]) expect(logged).not.toContain(secret);
+  });
+
+  it("does not expose a test key or its webhook secret in production", async () => {
+    const { result } = await config({ ...production, STRIPE_SECRET_KEY: TEST_KEY });
+    expect(result).toMatchObject({ mode: null, secretKey: null, webhookSecret: null });
+  });
+
+  it("requires test mode outside production", async () => {
+    const { result } = await config({ ...development, STRIPE_SECRET_KEY: LIVE_KEY });
+    expect(result).toEqual({
+      enabled: false, mode: null, secretKey: null, webhookSecret: null,
+      allowDraftContracts: false, disabledReason: "mode_not_allowed",
+    });
+  });
+
+  it("allows draft contracts only in test mode with the explicit flag", async () => {
+    expect((await config({ ...development, STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: "true" })).result)
+      .toMatchObject({ enabled: true, mode: "test", allowDraftContracts: true });
+    vi.resetModules();
+    expect((await config({ ...development, STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: "false" })).result.allowDraftContracts).toBe(false);
+    vi.resetModules();
+    expect((await config({ ...development, STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: undefined })).result.allowDraftContracts).toBe(false);
+  });
+
+  it.each([
+    ["STRIPE_CHECKOUT_ENABLED", "TRUE"],
+    ["STRIPE_CHECKOUT_ENABLED", "1"],
+    ["STRIPE_SECRET_KEY", "pk_live_synthetic0publishable"],
+    ["STRIPE_SECRET_KEY", "sk_prod_synthetic0stripe0key"],
+    ["STRIPE_WEBHOOK_SECRET", "synthetic0webhook0secret"],
+    ["STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS", "yes"],
+  ])("fails closed on an invalid %s, logging the field name only", async (name, value) => {
+    const { result, logged } = await config({ ...production, [name]: value });
+    expect(result).toEqual({
+      enabled: false, mode: null, secretKey: null, webhookSecret: null,
+      allowDraftContracts: false, disabledReason: "invalid_configuration",
+    });
+    expect(logged).toContain(name);
+    expect(logged).not.toContain(value);
+    expect(logged).not.toContain(WEBHOOK);
+  });
+
+  it("is read on each invocation and not validated on import", async () => {
+    setEnv({ ...production, STRIPE_SECRET_KEY: "invalid" });
+    const { getStripeCheckoutConfig } = await import("./env");
+    vi.stubEnv("STRIPE_SECRET_KEY", LIVE_KEY);
+    expect(getStripeCheckoutConfig().enabled).toBe(true);
+    vi.stubEnv("STRIPE_CHECKOUT_ENABLED", "false");
+    expect(getStripeCheckoutConfig().enabled).toBe(false);
+  });
+});

@@ -12,3 +12,4 @@ export { getBookingCheckoutState } from "./services/checkoutSession.service";
 export type { CreateSessionResult } from "./services/checkoutSession.service";
 export { acceptBookingContract } from "./services/contractAcceptance.service";
 export type { ContractAcceptanceResult } from "./services/contractAcceptance.service";
+export { handleStripeWebhook } from "./services/stripeWebhook.service";

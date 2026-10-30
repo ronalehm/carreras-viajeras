@@ -10,14 +10,17 @@ const databaseUrl = z.string().refine((value) => {
   } catch { return false; }
 });
 
+// Production HTTPS origin; exact localhost origins only under `next dev`.
+const appOrigin = z.string().refine((value) =>
+  value === "https://carreras-viajeras.mentec.dev"
+  || (process.env.NODE_ENV === "development"
+    && ["http://localhost:3000", "http://localhost:3001", "http://localhost:8787"].includes(value)));
+
 const environmentSchema = z.object({
   DATABASE_URL: databaseUrl,
   // Server-only Clerk key (Cloudflare Secret). The publishable key is consumed by Clerk itself.
   CLERK_SECRET_KEY: z.string().regex(/^sk_(test|live)_\S+$/),
-  APP_ORIGIN: z.string().refine((value) =>
-    value === "https://carreras-viajeras.mentec.dev"
-    || (process.env.NODE_ENV === "development"
-      && ["http://localhost:3000", "http://localhost:3001", "http://localhost:8787"].includes(value))),
+  APP_ORIGIN: appOrigin,
 });
 
 // Its message carries field names only, so callers may log it. Recognised by name, so modules
@@ -121,5 +124,68 @@ export function getTurnstileEnv(): { TURNSTILE_SECRET_KEY: string; isTestSecret:
   return {
     TURNSTILE_SECRET_KEY: result.data.TURNSTILE_SECRET_KEY,
     isTestSecret: TURNSTILE_TEST_SECRETS.includes(result.data.TURNSTILE_SECRET_KEY),
+  };
+}
+
+export type StripeMode = "test" | "live";
+export type StripeCheckoutDisabledReason =
+  | "not_enabled" | "invalid_configuration" | "missing_secret_key" | "mode_not_allowed"
+  | "missing_webhook_secret" | "invalid_app_origin" | "draft_contracts_bypass";
+export type StripeCheckoutConfig = {
+  enabled: boolean;
+  // Mode of the secret key, set only when this environment allows it: live in production, test elsewhere.
+  mode: StripeMode | null;
+  secretKey: string | null;
+  webhookSecret: string | null;
+  // Draft contracts for sandbox payments: test mode only, with the explicit flag.
+  allowDraftContracts: boolean;
+  // Never carries values, so callers may log it.
+  disabledReason: StripeCheckoutDisabledReason | null;
+};
+
+const stripeFlag = z.enum(["true", "false"]).optional();
+const stripeCheckoutSchema = z.object({
+  STRIPE_SECRET_KEY: z.string().regex(/^(sk|rk)_(test|live)_[A-Za-z0-9_]+$/).optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9_]+$/).optional(),
+  STRIPE_CHECKOUT_ENABLED: stripeFlag,
+  STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: stripeFlag,
+});
+
+// Fails closed: any missing or invalid value leaves Checkout off. The key and webhook secret are
+// still returned when their mode is allowed, so the webhook works while Checkout is switched off.
+export function getStripeCheckoutConfig(): StripeCheckoutConfig {
+  const production = process.env.NODE_ENV === "production";
+  const result = stripeCheckoutSchema.safeParse({
+    STRIPE_SECRET_KEY: readOptional("STRIPE_SECRET_KEY"),
+    STRIPE_WEBHOOK_SECRET: readOptional("STRIPE_WEBHOOK_SECRET"),
+    STRIPE_CHECKOUT_ENABLED: readOptional("STRIPE_CHECKOUT_ENABLED"),
+    STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: readOptional("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS"),
+  });
+  if (!result.success) {
+    console.warn("stripe-checkout: disabled", { reason: "invalid_configuration", fields: invalidEnvironment(result.error).message });
+    return { enabled: false, mode: null, secretKey: null, webhookSecret: null, allowDraftContracts: false, disabledReason: "invalid_configuration" };
+  }
+  const env = result.data;
+  const keyMode: StripeMode | null = env.STRIPE_SECRET_KEY
+    ? (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? "live" : "test") : null;
+  const mode = keyMode === (production ? "live" : "test") ? keyMode : null;
+  const webhookSecret = mode ? env.STRIPE_WEBHOOK_SECRET ?? null : null;
+  const draftBypass = env.STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS === "true";
+  const disabledReason: StripeCheckoutDisabledReason | null =
+    env.STRIPE_CHECKOUT_ENABLED !== "true" ? "not_enabled"
+      : !keyMode ? "missing_secret_key"
+        : !mode ? "mode_not_allowed"
+          : production && !webhookSecret ? "missing_webhook_secret"
+            : production && !appOrigin.safeParse(process.env.APP_ORIGIN).success ? "invalid_app_origin"
+              : production && draftBypass ? "draft_contracts_bypass"
+                : null;
+  if (disabledReason && disabledReason !== "not_enabled") console.warn("stripe-checkout: disabled", { reason: disabledReason });
+  return {
+    enabled: disabledReason === null,
+    mode,
+    secretKey: mode ? env.STRIPE_SECRET_KEY! : null,
+    webhookSecret,
+    allowDraftContracts: mode === "test" && draftBypass,
+    disabledReason,
   };
 }

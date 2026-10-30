@@ -4,12 +4,28 @@ import { and, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingCheckoutAttempts, bookingStripeEventReceipts } from "@/lib/db-schema";
+import type { StripeMode } from "@/lib/env";
 
-export type BookingWebhookResult = "processed" | "duplicate" | "ignored" | "not_applicable";
+export type BookingWebhookOutcome = "applied" | "needs_review" | "expired" | "failed" | "ignored" | "duplicate";
+export type BookingWebhookResult = { outcome: BookingWebhookOutcome; attemptId: string | null; bookingId: string | null };
 const SESSION_EVENTS = new Set([
   "checkout.session.completed", "checkout.session.async_payment_succeeded",
   "checkout.session.async_payment_failed", "checkout.session.expired",
 ]);
+const REVIEW_EVENTS = new Set(["charge.refunded", "charge.dispute.created"]);
+
+// A test resource reaching a live deployment (or the reverse) is a configuration error: stop
+// before touching any data and let Stripe retry once it is fixed.
+export class StripeModeMismatchError extends Error {
+  override name = "StripeModeMismatchError";
+  constructor() { super("Stripe resource mode does not match the configured mode"); }
+}
+function assertMode(resource: { livemode?: unknown }, mode: StripeMode) {
+  if (resource.livemode !== (mode === "live")) throw new StripeModeMismatchError();
+}
+function webhookResult(outcome: BookingWebhookOutcome, attemptId: string | null = null, bookingId: string | null = null): BookingWebhookResult {
+  return { outcome, attemptId, bookingId };
+}
 
 function resourceId(value: unknown): string | null {
   if (typeof value === "string") return value;
@@ -26,7 +42,7 @@ function isSession(value: unknown): value is Stripe.Checkout.Session {
   return Boolean(value && typeof value === "object" && "id" in value && (value as { object?: string }).object === "checkout.session");
 }
 
-async function checkoutSessionForEvent(event: Stripe.Event, stripe: Stripe): Promise<Stripe.Checkout.Session | null> {
+async function checkoutSessionForEvent(event: Stripe.Event, stripe: Stripe, mode: StripeMode): Promise<Stripe.Checkout.Session | null> {
   if (SESSION_EVENTS.has(event.type)) {
     const id = resourceId(event.data.object);
     if (!id) return null;
@@ -36,12 +52,11 @@ async function checkoutSessionForEvent(event: Stripe.Event, stripe: Stripe): Pro
     const id = resourceId(event.data.object);
     if (!id) return null;
     const intent = await stripe.paymentIntents.retrieve(id);
-    if (intent.livemode !== false || intent.status !== "succeeded"
-        || !metadataValue(intent, "bookingId") || !metadataValue(intent, "attemptId")) return null;
+    assertMode(intent, mode);
+    if (intent.status !== "succeeded" || !metadataValue(intent, "bookingId") || !metadataValue(intent, "attemptId")) return null;
     const sessions = await stripe.checkout.sessions.list({ payment_intent: id, limit: 10 });
     return sessions.data.find(session =>
-      session.livemode === false
-      && resourceId(session.payment_intent) === id
+      resourceId(session.payment_intent) === id
       && metadataValue(session, "bookingId") === metadataValue(intent, "bookingId")
       && metadataValue(session, "attemptId") === metadataValue(intent, "attemptId"),
     ) ?? null;
@@ -99,7 +114,8 @@ async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<R
     )
     SELECT event_id FROM receipt
   `);
-  return result.rows.length ? "processed" as const : "duplicate" as const;
+  if (!result.rows.length) return webhookResult("duplicate", attempt.id, attempt.bookingId);
+  return webhookResult(outcome === "expired" ? "expired" : "failed", attempt.id, attempt.bookingId);
 }
 
 async function settlePaidEvent(
@@ -108,6 +124,7 @@ async function settlePaidEvent(
 ) {
   const amount = Number.isSafeInteger(session.amount_total) && (session.amount_total ?? -1) >= 0 ? session.amount_total! : 0;
   const currency = typeof session.currency === "string" ? session.currency : "unk";
+  // Stripe's own timestamp for the payment, so a late delivery or retry keeps a timely payment valid.
   const paidAt = new Date(event.created * 1000);
   const outcome = await getDb().execute<{ event_id: string; settlement_status: "applied" | "needs_review" | null }>(sql`
     WITH local_attempt AS (
@@ -128,7 +145,7 @@ async function settlePaidEvent(
         (${sql.raw('"booking_id", "attempt_id", "stripe_session_id", "payment_intent_id", "expected_amount_pen_cents", "received_amount_pen_cents", "amount_usd", "currency", "status", "paid_at"')})
       SELECT l.booking_id, l.id, ${session.id}, ${paymentIntentId}, l.amount_pen_cents, ${amount}, l.amount_usd,
         ${currency}, CASE WHEN ${currency} = 'pen' AND ${amount} = l.amount_pen_cents
-          AND ((l.kind = 'initial' AND l.booking_status = 'pending' AND l.reservation_expires_at > now())
+          AND ((l.kind = 'initial' AND l.booking_status = 'pending' AND l.reservation_expires_at > ${paidAt}::timestamptz)
             OR (l.kind = 'balance' AND l.booking_status = 'confirmed'))
           THEN 'applied'::booking_stripe_settlement_status ELSE 'needs_review'::booking_stripe_settlement_status END,
         ${paidAt}
@@ -151,32 +168,70 @@ async function settlePaidEvent(
     SELECT r.event_id, s.status::text AS settlement_status
     FROM receipt r LEFT JOIN settlement s ON true
   `);
-  if (outcome.rows[0]?.settlement_status) return "processed";
-  return "duplicate";
+  return webhookResult(outcome.rows[0]?.settlement_status ?? "duplicate", attempt.id, attempt.bookingId);
 }
 
-export async function handleBookingStripeEvent(event: Stripe.Event, stripe: Stripe): Promise<BookingWebhookResult> {
-  if (!SESSION_EVENTS.has(event.type) && event.type !== "payment_intent.succeeded") return "not_applicable";
-  // Stripe CLI fixtures and unrelated account events have no commercial metadata. Leave those
-  // to the existing demo handler without querying or writing the bookings database.
-  if (!metadataValue(event.data.object, "bookingId") || !metadataValue(event.data.object, "attemptId")) return "not_applicable";
-  if (await hasReceipt(event.id)) return "duplicate";
-  const session = await checkoutSessionForEvent(event, stripe);
-  if (!session || !isSession(session) || session.livemode !== false || session.mode !== "payment") return "not_applicable";
+// Refunds and disputes never revert a booking automatically: the settlement is flagged for
+// manual reconciliation in the same statement that records the event.
+async function flagSettlementForReview(event: Stripe.Event, mode: StripeMode): Promise<BookingWebhookResult> {
+  const object = event.data.object as { livemode?: unknown; payment_intent?: unknown };
+  assertMode(object, mode);
+  const paymentIntentId = resourceId(object.payment_intent);
+  if (!paymentIntentId) return webhookResult("ignored");
+  if (await hasReceipt(event.id)) return webhookResult("duplicate");
+  const outcome = event.type === "charge.refunded" ? "refund_review" : "dispute_review";
+  const flagged = await getDb().execute<{ attempt_id: string; booking_id: string; recorded: number }>(sql`
+    WITH target AS (
+      SELECT s.id, s.attempt_id, s.booking_id, s.stripe_session_id
+      FROM booking_stripe_settlements s
+      WHERE s.payment_intent_id = ${paymentIntentId}
+      FOR UPDATE
+    ), receipt AS (
+      INSERT INTO ${bookingStripeEventReceipts}
+        (${sql.raw('"event_id", "event_type", "attempt_id", "stripe_session_id", "outcome"')})
+      SELECT ${event.id}, ${event.type}, t.attempt_id, t.stripe_session_id, ${outcome} FROM target t
+      ON CONFLICT ("event_id") DO NOTHING
+      RETURNING event_id
+    ), flagged AS (
+      UPDATE booking_stripe_settlements s SET status = 'needs_review'::booking_stripe_settlement_status
+      FROM target t, receipt r WHERE s.id = t.id
+      RETURNING s.id
+    )
+    SELECT t.attempt_id::text AS attempt_id, t.booking_id::text AS booking_id,
+      (SELECT count(*) FROM receipt)::int AS recorded
+    FROM target t
+  `);
+  const row = flagged.rows[0];
+  if (!row) return webhookResult("ignored");
+  return webhookResult(Number(row.recorded) > 0 ? "needs_review" : "duplicate", row.attempt_id, row.booking_id);
+}
+
+export async function handleBookingStripeEvent(event: Stripe.Event, stripe: Stripe, mode: StripeMode): Promise<BookingWebhookResult> {
+  assertMode(event, mode);
+  if (REVIEW_EVENTS.has(event.type)) return flagSettlementForReview(event, mode);
+  if (!SESSION_EVENTS.has(event.type) && event.type !== "payment_intent.succeeded") return webhookResult("ignored");
+  // Stripe CLI fixtures and unrelated account events have no commercial metadata. Ignore them
+  // without querying or writing the bookings database.
+  if (!metadataValue(event.data.object, "bookingId") || !metadataValue(event.data.object, "attemptId")) return webhookResult("ignored");
+  if (await hasReceipt(event.id)) return webhookResult("duplicate");
+  const session = await checkoutSessionForEvent(event, stripe, mode);
+  if (!session || !isSession(session)) return webhookResult("ignored");
+  assertMode(session, mode);
+  if (session.mode !== "payment") return webhookResult("ignored");
 
   const bookingId = metadataValue(session, "bookingId");
   const attemptId = metadataValue(session, "attemptId");
   if (!bookingId || !attemptId || session.client_reference_id !== bookingId) {
     await recordIgnored(event, "no_local_booking_metadata", null, session.id);
-    return "ignored";
+    return webhookResult("ignored");
   }
-  if (event.type === "checkout.session.expired" && session.status !== "expired") return "not_applicable";
-  if (event.type !== "checkout.session.expired" && session.status !== "complete") return "not_applicable";
+  if (event.type === "checkout.session.expired" && session.status !== "expired") return webhookResult("ignored");
+  if (event.type !== "checkout.session.expired" && session.status !== "complete") return webhookResult("ignored");
   const attempt = await findAttempt(attemptId, bookingId);
   if (!attempt || (attempt.stripeSessionId && attempt.stripeSessionId !== session.id)
       || attempt.kind !== metadataValue(session, "paymentKind")) {
-    await recordIgnored(event, "no_matching_local_attempt", attemptId, session.id);
-    return "ignored";
+    await recordIgnored(event, "no_matching_local_attempt", attempt?.id ?? null, session.id);
+    return webhookResult("ignored");
   }
   if (event.type === "checkout.session.expired"
       || (event.type === "checkout.session.async_payment_failed" && session.payment_status !== "paid")) {
@@ -184,7 +239,7 @@ export async function handleBookingStripeEvent(event: Stripe.Event, stripe: Stri
   }
   if (session.payment_status !== "paid") {
     await recordIgnored(event, "payment_not_confirmed", attemptId, session.id);
-    return "ignored";
+    return webhookResult("ignored", attempt.id, attempt.bookingId);
   }
   const paymentIntentId = resourceId(session.payment_intent);
   if (!paymentIntentId) throw new Error("paid Checkout Session has no PaymentIntent");
