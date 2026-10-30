@@ -1,4 +1,5 @@
 export { AccessPanel } from "./components/AccessPanel";
+export { AccountMenu } from "./components/AccountMenu";
 export { AccountStatusSection } from "./components/AccountStatusSection";
 export { CrmShell } from "./components/CrmShell";
 export { CrmSettings } from "./components/CrmSettings";

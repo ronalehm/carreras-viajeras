@@ -39,8 +39,8 @@ Funciona con teclado (Enter/Espacio abre, Escape cierra). El menú móvil de enl
 `/mis-carreras` usa su propia cabecera con «Mi cuenta» y «Cerrar sesión». Pasa a usar el mismo `AccountMenu` para ser coherente.
 
 ## Plan
-- [ ] H.1 `AccountMenu` (accounts), con avatar, menú, «Ir a CRM» condicionado a `/api/crm/me` y cierre de sesión; tests con Clerk simulado.
-- [ ] H.2 `SiteHeader` y `PortalHeader` usan `AccountMenu`; `RunnerAccount` con sesión muestra solo la etiqueta y el saludo; tests.
+- [x] H.1 `AccountMenu` (accounts), con avatar, menú, «Ir a CRM» condicionado a `/api/crm/me` y cierre de sesión; tests con Clerk simulado.
+- [x] H.2 `SiteHeader` y `PortalHeader` usan `AccountMenu`; `RunnerAccount` con sesión muestra solo la etiqueta y el saludo; tests.
 
 ## Aceptación
 - Sin sesión, la cabecera muestra Ingresar y Registrarse.

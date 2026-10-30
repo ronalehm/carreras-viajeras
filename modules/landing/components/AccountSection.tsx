@@ -34,10 +34,6 @@ export function AccountSection() {
       <div className="self-center px-[7%] pt-9 pb-14 md:max-w-170 md:px-[8%] md:py-14 lg:px-[12%]">
         <p className="mb-6 text-xs font-bold tracking-[0.2em]">COMUNIDAD CARRERAS VIAJERAS</p>
         <RunnerAccount />
-        <p className="mt-6 text-xs leading-relaxed">
-          Consulta tus carreras y beneficios desde Mi cuenta. Las estrellas por referidos y
-          los canjes dependen de las reglas y los premios vigentes del programa.
-        </p>
       </div>
     </div>
   );

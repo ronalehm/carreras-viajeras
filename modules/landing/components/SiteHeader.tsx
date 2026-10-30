@@ -3,6 +3,9 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+// Direct import, not the accounts barrel: RacePageContent renders this header from a client
+// module, and the barrel also exports server-only services.
+import { AccountMenu } from "@/modules/accounts/components/AccountMenu";
 import { MobileMenu } from "./MobileMenu";
 
 const NAV_LINKS = [
@@ -73,25 +76,33 @@ export function SiteHeader() {
         ))}
       </nav>
       <div className="ml-auto flex items-center justify-end gap-1.5 sm:gap-3">
-        {/* Both open the Clerk panel of /cuenta, which signs in or creates the account. */}
-        <Link
-          href="/cuenta#imagen-login"
-          className={cn(
-            buttonVariants({ variant: "outline" }),
-            "h-auto rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",
-          )}
-        >
-          Ingresar
-        </Link>
-        <Link
-          href="/cuenta#imagen-login"
-          className={cn(
-            buttonVariants(),
-            "h-auto gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold whitespace-nowrap sm:px-4.5 sm:py-3 sm:text-sm",
-          )}
-        >
-          Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
-        </Link>
+        {/* The header stays static: AccountMenu reads the session on the client. Without one, and
+            while Clerk loads (so the header does not jump), it shows the visitor buttons. */}
+        <AccountMenu
+          fallback={
+            <>
+              {/* Both open the Clerk panel of /cuenta, which signs in or creates the account. */}
+              <Link
+                href="/cuenta#imagen-login"
+                className={cn(
+                  buttonVariants({ variant: "outline" }),
+                  "h-auto rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",
+                )}
+              >
+                Ingresar
+              </Link>
+              <Link
+                href="/cuenta#imagen-login"
+                className={cn(
+                  buttonVariants(),
+                  "h-auto gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold whitespace-nowrap sm:px-4.5 sm:py-3 sm:text-sm",
+                )}
+              >
+                Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
+              </Link>
+            </>
+          }
+        />
         <MobileMenu links={NAV_LINKS} />
       </div>
     </header>
