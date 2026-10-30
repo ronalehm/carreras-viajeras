@@ -4,7 +4,10 @@ import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
 import { clientEmails, staffRoleEnum, type leadSourceEnum } from "@/lib/db-schema";
+import { CRM_TIME_ZONE } from "@/lib/dates";
 import { getClientEmailEnv, getEnv, isSalesCadenceEnabled } from "@/lib/env";
+// No import cycle: modules/rewards imports no other module.
+import { getActiveWelcomeDiscount, type ActiveWelcomeDiscount } from "@/modules/rewards";
 // No import cycle: modules/trips imports no other module (unlike modules/landing, which imports crm,
 // which imports this module).
 import { getActiveOffer } from "@/modules/trips";
@@ -24,7 +27,9 @@ import {
   firstName,
   lifecycleEmailTemplate,
   raceLabel,
+  type WelcomeCodeEmailData,
 } from "../utils/lifecycleEmailTemplates";
+import { generateWelcomeCode } from "../utils/welcomeCode";
 
 type Stage = z.infer<typeof emailStageSchema>;
 type LeadSource = (typeof leadSourceEnum.enumValues)[number];
@@ -233,6 +238,9 @@ type Candidate = {
   episodeCurrent: boolean | null;
   responded: boolean | null;
   episodeAfterCutoff: boolean | null;
+  // lead.created of a web_form/google_form lead with email whose email has no account (a profiles
+  // row with that email and deleted_at IS NULL); null for any other event.
+  welcomeCodeEligible: boolean | null;
 };
 
 const isBulk = (event: Candidate) =>
@@ -349,10 +357,103 @@ async function cadenceOffer(event: Candidate): Promise<CadenceOffer | null> {
     : null;
 }
 
+// Welcome discount code (crm-welcome-discount.md, requirement 2). Issued only for a welcome that will
+// be sent (not skipped) to a web_form/google_form lead whose email has no account, while a version is
+// active. Every other welcome (manual entries, runner_account, imports, emails with an account,
+// discount off) keeps its normal text.
+const WELCOME_CODE_ATTEMPTS = 5;
+const isWelcomeWithCode = (kind: ClientEmailKind) =>
+  kind === "welcome_registration" || kind === "welcome_contact";
+
+type IssuedCode = { code: string; amountUsd: number; expiresOn: string; current: boolean };
+
+// One code per lead.created (unique source_event_id) and at most one in force per email: an issued,
+// unexpired code of the same email (or the event's own) is reused, otherwise a new one is inserted.
+// A new code that matches an existing one is not inserted (NOT EXISTS) and is retried; a concurrent
+// preparation of the same event loses ON CONFLICT (source_event_id). Both statements run in one
+// transaction and the second one rereads the stored code, so the email always carries a code that
+// exists. null: the event's own code is no longer in force (normal welcome).
+async function issueWelcomeCode(
+  event: Candidate,
+  email: string,
+  discount: ActiveWelcomeDiscount,
+): Promise<IssuedCode | null> {
+  const db = getDb();
+  for (let attempt = 0; attempt < WELCOME_CODE_ATTEMPTS; attempt++) {
+    const code = generateWelcomeCode();
+    const [, result] = await db.batch([
+      db.execute(sql`
+        INSERT INTO welcome_discount_codes
+          (lead_id, email, code, amount_usd, version_id, source_event_id, expires_at)
+        SELECT ${event.leadId}::uuid, ${email}, ${code}, ${discount.amountUsd}::integer,
+          ${discount.id}::uuid, ${event.eventId}::uuid, now() + make_interval(days => ${discount.validityDays}::integer)
+        WHERE NOT EXISTS (SELECT 1 FROM welcome_discount_codes c WHERE c.code = ${code}
+          OR (c.status = 'issued' AND c.expires_at > now()
+            AND (c.email = ${email} OR c.source_event_id = ${event.eventId}::uuid)))
+        ON CONFLICT (source_event_id) DO NOTHING
+      `),
+      db.execute<IssuedCode>(sql`
+        SELECT code, amount_usd AS "amountUsd",
+          to_char(expires_at AT TIME ZONE ${CRM_TIME_ZONE}, 'YYYY-MM-DD') AS "expiresOn",
+          (status = 'issued' AND expires_at > now()) AS current
+        FROM welcome_discount_codes
+        WHERE source_event_id = ${event.eventId}::uuid
+          OR (email = ${email} AND status = 'issued' AND expires_at > now())
+        ORDER BY (status = 'issued' AND expires_at > now()) DESC,
+          source_event_id = ${event.eventId}::uuid DESC, issued_at DESC, id
+        LIMIT 1
+      `),
+    ]);
+    const stored = result.rows[0];
+    if (stored) return stored.current ? stored : null;
+  }
+  throw new Error("welcome code: issue failed");
+}
+
+// Codes of the welcomes that qualify, by event. No query when none qualifies; the active version is
+// read once. Sequential, so two events of the same email in one batch share the code. Errors are
+// replaced by a fixed message: driver errors may carry the SQL parameters, and the code only goes in
+// the email body and in welcome_discount_codes.
+async function welcomeCodes(
+  drafts: {
+    event: Candidate;
+    kind: ClientEmailKind;
+    recipient: string | null;
+    reason: ClientEmailSkipReason | null;
+  }[],
+  appOrigin: () => string,
+): Promise<Map<string, WelcomeCodeEmailData>> {
+  const codes = new Map<string, WelcomeCodeEmailData>();
+  const qualifying = drafts.flatMap(({ event, kind, recipient, reason }) =>
+    isWelcomeWithCode(kind) && !reason && recipient && event.welcomeCodeEligible === true
+      ? [{ event, email: recipient }]
+      : [],
+  );
+  if (!qualifying.length) return codes;
+  const discount = await getActiveWelcomeDiscount();
+  if (!discount) return codes;
+  try {
+    for (const { event, email } of qualifying) {
+      const issued = await issueWelcomeCode(event, email, discount);
+      if (issued)
+        codes.set(event.eventId, {
+          code: issued.code,
+          amountUsd: issued.amountUsd,
+          expiresOn: issued.expiresOn,
+          accountUrl: `${appOrigin()}/cuenta`,
+        });
+    }
+  } catch {
+    throw new Error("welcome code: issue failed");
+  }
+  return codes;
+}
+
 type ContentContext = {
   appOrigin: () => string;
   cadence: CadenceDuePayload | null;
   offer: CadenceOffer | null;
+  welcomeCode: WelcomeCodeEmailData | null;
 };
 
 function emailContent(
@@ -405,6 +506,13 @@ function emailContent(
         offer: context.offer,
       });
     }
+    // With a welcome code: templateVersion 2 and the «Crea tu cuenta» block.
+    case "welcome_registration":
+    case "welcome_contact":
+      return lifecycleEmailTemplate(
+        kind,
+        context.welcomeCode ? { ...client, welcomeCode: context.welcomeCode } : client,
+      );
     default:
       return lifecycleEmailTemplate(kind, client);
   }
@@ -435,7 +543,10 @@ async function prepareEmails(env: EmailEnv) {
       CASE WHEN t.status = 'published' THEN t.slug END AS "publishedTripSlug",
       CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceEpisodeCurrent} END AS "episodeCurrent",
       CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceResponded} END AS responded,
-      CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceEpisodeAfterCutoff(env)} END AS "episodeAfterCutoff"
+      CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceEpisodeAfterCutoff(env)} END AS "episodeAfterCutoff",
+      CASE WHEN e.type = 'lead.created' AND l.source IN ('web_form', 'google_form') AND l.email IS NOT NULL
+        THEN NOT EXISTS (SELECT 1 FROM profiles p WHERE p.email = l.email AND p.deleted_at IS NULL)
+      END AS "welcomeCodeEligible"
     FROM outbox_events e JOIN leads l ON l.id = e.lead_id LEFT JOIN trips t ON t.id = l.trip_id
     WHERE e.type IN ('lead.created', 'lead.stage_changed', 'lead.cadence_due', 'lead.owner_assigned')
       AND e.payload_version = 1
@@ -471,8 +582,9 @@ async function prepareEmails(env: EmailEnv) {
     ),
   );
   let origin: string | undefined;
-  // Built on the server only, and only when an internal alert or a cadence email needs it.
+  // Built on the server only, and only when an internal alert, a cadence email or a welcome code needs it.
   const appOrigin = () => (origin ??= getEnv().APP_ORIGIN);
+  const codes = await welcomeCodes(drafts, appOrigin);
   const rows = drafts.map(({ event, kind, stage, recipient, reason, cadence }) => ({
     sourceEventId: event.eventId,
     leadId: event.leadId,
@@ -484,17 +596,23 @@ async function prepareEmails(env: EmailEnv) {
       appOrigin,
       cadence,
       offer: offers.get(event.eventId) ?? null,
+      welcomeCode: isWelcomeWithCode(kind) ? (codes.get(event.eventId) ?? null) : null,
     }),
     status: reason ? ("skipped" as const) : ("pending" as const),
     lastErrorCode: reason,
   }));
-  if (rows.length)
+  if (!rows.length) return;
+  try {
     await db
       .insert(clientEmails)
       .values(rows)
       .onConflictDoNothing({
         target: [clientEmails.sourceEventId, clientEmails.kind],
       });
+  } catch {
+    // The bodies (with a welcome code) are parameters of this statement: fixed message only.
+    throw new Error("client emails: preparation failed");
+  }
 }
 
 // Client email settings plus the sales cadence switch, both read lazily per call. null: off.

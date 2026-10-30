@@ -27,10 +27,30 @@ vi.mock("@/modules/trips", async () => ({
     )
   ).getActiveOffer,
 }));
+// The real active version read (getActiveWelcomeDiscount) against the embedded database, without
+// loading the rest of the rewards module (components and actions).
+vi.mock("@/modules/rewards", async () => ({
+  getActiveWelcomeDiscount: (
+    await vi.importActual<typeof import("@/modules/rewards/services/welcomeDiscount.service")>(
+      "@/modules/rewards/services/welcomeDiscount.service",
+    )
+  ).getActiveWelcomeDiscount,
+}));
+// The real generator unless a test forces a value (collision on the unique index of code).
+vi.mock("../utils/welcomeCode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/welcomeCode")>();
+  return { ...actual, generateWelcomeCode: vi.fn(actual.generateWelcomeCode) };
+});
+// The real templates, observed to check what each preparation rendered.
+vi.mock("../utils/lifecycleEmailTemplates", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/lifecycleEmailTemplates")>();
+  return { ...actual, lifecycleEmailTemplate: vi.fn(actual.lifecycleEmailTemplate) };
+});
 import { getDb } from "@/lib/db";
 import { getClientEmailEnv, isSalesCadenceEnabled } from "@/lib/env";
 import { cadenceEmailTemplate, type CadenceOffer } from "../utils/cadenceEmailTemplates";
 import { lifecycleEmailTemplate } from "../utils/lifecycleEmailTemplates";
+import { generateWelcomeCode, WELCOME_CODE_PATTERN } from "../utils/welcomeCode";
 import {
   ackClientEmail,
   authorizeClientEmail,
@@ -733,6 +753,356 @@ describe("email engine against PostgreSQL", () => {
       );
       expect(await retryClientEmail(byKind.welcome_contact, "staff")).toBeNull();
       expect(await retryClientEmail(byKind.team_alert, "staff")).toBe(leadId);
+    });
+  });
+
+  // crm-welcome-discount.md, requirements 2 and 3: code issued while preparing the welcome.
+  describe("welcome discount code", () => {
+    beforeEach(() => {
+      vi.mocked(generateWelcomeCode).mockClear();
+      vi.mocked(lifecycleEmailTemplate).mockClear();
+    });
+    // A new version through the SQL function of migration 0019 (deactivates the previous one).
+    async function createVersion(amountUsd = 50, validityDays = 60, active = true) {
+      const result = await pg.query<{ result: { id: string } }>(
+        "SELECT cv_create_welcome_discount_version('staff',$1,$2,$3) AS result",
+        [amountUsd, validityDays, active],
+      );
+      return result.rows[0].result.id;
+    }
+    type CodeRow = {
+      code: string;
+      email: string;
+      amountUsd: number;
+      status: string;
+      leadId: string;
+      sourceEventId: string;
+      versionId: string;
+      validityDays: number;
+      expiresOn: string;
+    };
+    async function codes() {
+      const result = await pg.query<CodeRow>(
+        `SELECT code,email,amount_usd AS "amountUsd",status,lead_id AS "leadId",
+          source_event_id AS "sourceEventId",version_id AS "versionId",
+          extract(day FROM expires_at - issued_at)::int AS "validityDays",
+          to_char(expires_at AT TIME ZONE 'America/Lima','YYYY-MM-DD') AS "expiresOn"
+        FROM welcome_discount_codes ORDER BY issued_at, code`,
+      );
+      return result.rows;
+    }
+    async function welcomeOf(leadId: string) {
+      const result = await pg.query<{ kind: string; body: string; templateVersion: number }>(
+        `SELECT kind,body,template_version AS "templateVersion" FROM client_emails
+        WHERE lead_id=$1 AND kind IN ('welcome_registration','welcome_contact','welcome_account')`,
+        [leadId],
+      );
+      return result.rows[0];
+    }
+    const eventOf = async (leadId: string) =>
+      (
+        await pg.query<{ id: string }>(
+          "SELECT id FROM outbox_events WHERE lead_id=$1 AND type='lead.created'",
+          [leadId],
+        )
+      ).rows[0].id;
+    // Another lead with its own issued code (status/expiry adjustable afterwards).
+    async function existingCode(code: string, email: string) {
+      const leadId = await seed({ email });
+      const versionId = (await pg.query<{ id: string }>("SELECT id FROM welcome_discount_versions LIMIT 1"))
+        .rows[0].id;
+      await pg.query(
+        `INSERT INTO welcome_discount_codes(lead_id,email,code,amount_usd,version_id,source_event_id,expires_at)
+        VALUES ($1,$2,$3,50,$4,$5,now() + interval '30 days')`,
+        [leadId, email, code, versionId, await eventOf(leadId)],
+      );
+      // Its welcome is already prepared: only the event under test is pending.
+      await pg.query(
+        `INSERT INTO client_emails(source_event_id,lead_id,kind,stage,recipient,sender,subject,body)
+        VALUES ($1,$2,'welcome_contact','new',$3,'sender@example.test','Asunto','Cuerpo')`,
+        [await eventOf(leadId), leadId, email],
+      );
+      return leadId;
+    }
+    const noCodeBody = (kind: "welcome_registration" | "welcome_contact") =>
+      lifecycleEmailTemplate(kind, { fullName: "Ana Vega", race: "Maratón de Lima" }).body;
+
+    it.each([
+      { source: "web_form", extra: { form: "registration" }, kind: "welcome_registration" },
+      { source: "web_form", extra: { form: "contact" }, kind: "welcome_contact" },
+      { source: "google_form", extra: {}, kind: "welcome_registration" },
+    ] as const)(
+      "$source $extra without account: issues a code and sends it in the welcome (templateVersion 2)",
+      async ({ source, extra, kind }) => {
+        const versionId = await createVersion(50, 60);
+        const leadId = await seed({ source, destinationText: "Maratón de Lima" }, extra);
+        const { messages } = await claimAll();
+        expect(messages).toHaveLength(2);
+        const [code] = await codes();
+        expect(code).toMatchObject({
+          email: "ana@example.test",
+          amountUsd: 50,
+          status: "issued",
+          leadId,
+          sourceEventId: await eventOf(leadId),
+          versionId,
+          validityDays: 60,
+        });
+        expect(code.code).toMatch(WELCOME_CODE_PATTERN);
+        const welcome = await welcomeOf(leadId);
+        expect(welcome.kind).toBe(kind);
+        expect(welcome.templateVersion).toBe(2);
+        expect(welcome.body).toBe(
+          lifecycleEmailTemplate(kind, {
+            fullName: "Ana Vega",
+            race: "Maratón de Lima",
+            welcomeCode: {
+              code: code.code,
+              amountUsd: 50,
+              expiresOn: code.expiresOn,
+              accountUrl: `${APP_ORIGIN}/cuenta`,
+            },
+          }).body,
+        );
+        expect(welcome.body).toContain(`Tu código de bienvenida es ${code.code}: US$50 de descuento`);
+        expect(welcome.body).toContain(`${APP_ORIGIN}/cuenta`);
+        // Only the client's welcome carries the code; the internal alert never does.
+        const team = await pg.query<{ body: string }>("SELECT body FROM client_emails WHERE kind='team_alert'");
+        expect(team.rows[0].body).not.toContain(code.code);
+      },
+    );
+
+    it("the expiry date is the America/Lima calendar date of expires_at", async () => {
+      await createVersion(75, 1);
+      const leadId = await seed();
+      const lima = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Lima" });
+      const before = lima.format(new Date(Date.now() + 86_400_000));
+      await claimAll();
+      const after = lima.format(new Date(Date.now() + 86_400_000));
+      const [code] = await codes();
+      expect([before, after]).toContain(code.expiresOn);
+      expect((await welcomeOf(leadId)).body).toContain("US$75 de descuento");
+    });
+
+    it("an email with an account gets the normal welcome without a code", async () => {
+      await createVersion();
+      await pg.query("INSERT INTO profiles(user_id,email) VALUES ('runner','ana@example.test')");
+      const leadId = await seed({}, { form: "registration" });
+      await claimAll();
+      expect(await codes()).toEqual([]);
+      expect(await welcomeOf(leadId)).toEqual({
+        kind: "welcome_registration",
+        templateVersion: 1,
+        body: lifecycleEmailTemplate("welcome_registration", { fullName: "Ana Vega", race: "tu próxima carrera" }).body,
+      });
+    });
+
+    it("a deleted account does not count: the code is issued", async () => {
+      await createVersion();
+      await pg.query(
+        "INSERT INTO profiles(user_id,email,disabled_at,deleted_at) VALUES ('runner','ana@example.test',now(),now())",
+      );
+      const leadId = await seed();
+      await claimAll();
+      expect(await codes()).toHaveLength(1);
+      expect((await welcomeOf(leadId)).templateVersion).toBe(2);
+    });
+
+    it("without an active version (none or inactive) no code is issued", async () => {
+      const first = await seed({ destinationText: "Maratón de Lima" }, { form: "contact" });
+      await claimAll();
+      await createVersion(50, 60, false);
+      const second = await seed({ destinationText: "Maratón de Lima" }, { form: "contact" });
+      await claimAll();
+      expect(await codes()).toEqual([]);
+      for (const leadId of [first, second])
+        expect(await welcomeOf(leadId)).toMatchObject({
+          templateVersion: 1,
+          body: noCodeBody("welcome_contact"),
+        });
+    });
+
+    it.each([
+      { source: "whatsapp", extra: {} },
+      { source: "other", extra: {} },
+      { source: "runner_account", extra: {} },
+      { source: "import", extra: {} },
+      { source: "web_form", extra: { bulk: true } },
+    ])("$source $extra (manual entry, account or import): no code", async ({ source, extra }) => {
+      await createVersion();
+      const leadId = await seed({ source }, extra);
+      await claimAll();
+      expect(await codes()).toEqual([]);
+      const rows = await pg.query<{ templateVersion: number; body: string }>(
+        `SELECT template_version AS "templateVersion",body FROM client_emails WHERE lead_id=$1`,
+        [leadId],
+      );
+      expect(rows.rows.length).toBeGreaterThan(0);
+      for (const row of rows.rows) {
+        expect(row.templateVersion).toBe(1);
+        expect(row.body).not.toMatch(/CV-[23456789A-Z]{6}/);
+      }
+      expect(generateWelcomeCode).not.toHaveBeenCalled();
+    });
+
+    it("a skipped welcome (opt-out, no email) issues no code", async () => {
+      await createVersion();
+      await seed({ optedOut: true });
+      await seed({ email: null });
+      await claimAll();
+      expect(await codes()).toEqual([]);
+    });
+
+    it("the same email reuses its code in force, in the same batch and in a later one", async () => {
+      await createVersion();
+      const first = await seed({}, { form: "registration" });
+      const second = await seed({}, { form: "contact" });
+      await claimAll();
+      const third = await seed({}, { form: "registration" });
+      await claimAll();
+      const rows = await codes();
+      expect(rows).toHaveLength(1);
+      expect(rows[0].leadId).toBe(first);
+      for (const leadId of [first, second, third])
+        expect((await welcomeOf(leadId)).body).toContain(rows[0].code);
+    });
+
+    it("an expired code is not reused: a new one is issued", async () => {
+      await createVersion();
+      const first = await seed();
+      await claimAll();
+      await pg.query(
+        "UPDATE welcome_discount_codes SET issued_at=now() - interval '70 days', expires_at=now() - interval '10 days'",
+      );
+      const second = await seed();
+      await claimAll();
+      const rows = await codes();
+      expect(rows).toHaveLength(2);
+      const fresh = rows.find((row) => row.leadId === second);
+      const expired = rows.find((row) => row.leadId === first);
+      expect(fresh?.code).not.toBe(expired?.code);
+      expect((await welcomeOf(second)).body).toContain(fresh?.code);
+      expect((await welcomeOf(second)).body).not.toContain(expired?.code);
+    });
+
+    it("an applied or void code of the same email is not reused", async () => {
+      await createVersion();
+      await existingCode("CV-ABCDEF", "ana@example.test");
+      await pg.query("UPDATE welcome_discount_codes SET status='void'");
+      const leadId = await seed();
+      await claimAll();
+      expect(await codes()).toHaveLength(2);
+      expect((await welcomeOf(leadId)).body).not.toContain("CV-ABCDEF");
+    });
+
+    it("an event whose own code is no longer in force keeps it and gets the normal welcome", async () => {
+      await createVersion();
+      const leadId = await seed({ destinationText: "Maratón de Lima" }, { form: "contact" });
+      const versionId = (await pg.query<{ id: string }>("SELECT id FROM welcome_discount_versions")).rows[0].id;
+      await pg.query(
+        `INSERT INTO welcome_discount_codes(lead_id,email,code,amount_usd,version_id,source_event_id,expires_at,status)
+        VALUES ($1,'ana@example.test','CV-ABCDEF',50,$2,$3,now() + interval '30 days','void')`,
+        [leadId, versionId, await eventOf(leadId)],
+      );
+      await claimAll();
+      expect((await codes()).map((row) => row.code)).toEqual(["CV-ABCDEF"]);
+      expect(await welcomeOf(leadId)).toMatchObject({
+        templateVersion: 1,
+        body: noCodeBody("welcome_contact"),
+      });
+    });
+
+    it("concurrent preparations of the same event: a single code, and every rendering uses it", async () => {
+      await createVersion();
+      const leadId = await seed({}, { form: "registration" });
+      const results = await Promise.all([claimAll(), claimAll(), claimAll()]);
+      expect(results.flatMap((result) => result.messages)).toHaveLength(2);
+      const rows = await codes();
+      expect(rows).toHaveLength(1);
+      expect((await welcomeOf(leadId)).body).toContain(rows[0].code);
+      const rendered = vi
+        .mocked(lifecycleEmailTemplate)
+        .mock.calls.flatMap(([, data]) =>
+          "welcomeCode" in data && data.welcomeCode ? [data.welcomeCode.code] : [],
+        );
+      expect(rendered.length).toBeGreaterThan(0);
+      expect(new Set(rendered)).toEqual(new Set([rows[0].code]));
+    });
+
+    it("a preparation that loses the event rereads the stored code instead of its own", async () => {
+      await createVersion();
+      const leadId = await seed();
+      const versionId = (await pg.query<{ id: string }>("SELECT id FROM welcome_discount_versions")).rows[0].id;
+      // Another preparation stored the event's code after this one read the pending events.
+      vi.mocked(generateWelcomeCode).mockImplementationOnce(() => {
+        void pg.query(
+          `INSERT INTO welcome_discount_codes(lead_id,email,code,amount_usd,version_id,source_event_id,expires_at)
+          SELECT $1,'ana@example.test','CV-WNNER2',50,$2,id,now() + interval '60 days'
+          FROM outbox_events WHERE lead_id=$1`,
+          [leadId, versionId],
+        );
+        return "CV-LQSER2";
+      });
+      await claimAll();
+      expect((await codes()).map((row) => row.code)).toEqual(["CV-WNNER2"]);
+      expect((await welcomeOf(leadId)).body).toContain("CV-WNNER2");
+    });
+
+    it("retries when the generated code already exists, without reusing another email's code", async () => {
+      await createVersion();
+      await existingCode("CV-ABCDEF", "otra@example.test");
+      vi.mocked(generateWelcomeCode).mockReturnValueOnce("CV-ABCDEF");
+      const leadId = await seed();
+      await claimAll();
+      expect(generateWelcomeCode).toHaveBeenCalledTimes(2);
+      const own = (await codes()).filter((row) => row.leadId === leadId);
+      expect(own).toHaveLength(1);
+      expect(own[0].code).not.toBe("CV-ABCDEF");
+      expect(own[0].email).toBe("ana@example.test");
+      const body = (await welcomeOf(leadId)).body;
+      expect(body).toContain(own[0].code);
+      expect(body).not.toContain("CV-ABCDEF");
+    });
+
+    it("gives up after repeated collisions with a fixed error and prepares nothing", async () => {
+      await createVersion();
+      await existingCode("CV-ABCDEF", "otra@example.test");
+      vi.mocked(generateWelcomeCode).mockReturnValue("CV-ABCDEF");
+      try {
+        const leadId = await seed();
+        const error = await claimAll().catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).message).toBe("welcome code: issue failed");
+        expect(JSON.stringify(error)).not.toContain("CV-ABCDEF");
+        expect(generateWelcomeCode).toHaveBeenCalledTimes(5);
+        expect(await welcomeOf(leadId)).toBeUndefined();
+      } finally {
+        vi.mocked(generateWelcomeCode).mockReset();
+        vi.mocked(generateWelcomeCode).mockImplementation(
+          (await vi.importActual<typeof import("../utils/welcomeCode")>("../utils/welcomeCode"))
+            .generateWelcomeCode,
+        );
+      }
+    });
+
+    it("the code never reaches the outbox nor the logs", async () => {
+      await createVersion();
+      const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
+        vi.spyOn(console, method).mockImplementation(() => undefined),
+      );
+      try {
+        await seed({}, { form: "registration" });
+        const { messages } = await claimAll();
+        await authorizeAll(messages);
+        const [{ code }] = await codes();
+        const outbox = await pg.query<{ row: string }>("SELECT to_jsonb(e)::text AS row FROM outbox_events e");
+        expect(outbox.rows.length).toBeGreaterThan(0);
+        for (const { row } of outbox.rows) expect(row).not.toContain(code);
+        for (const spy of spies)
+          expect(JSON.stringify(spy.mock.calls)).not.toContain(code);
+      } finally {
+        for (const spy of spies) spy.mockRestore();
+      }
     });
   });
 
