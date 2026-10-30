@@ -9,7 +9,7 @@ import { formatTripDate, formatTripDateRange, formatTripPrice } from "@/modules/
 import type { RunnerBookingDetail } from "../types/bookings.types";
 import { formatShortDate } from "../utils/bookingDisplay";
 import { getPaymentSummary, isTripFinished } from "../utils/runnerBookings";
-import { BookingStatusBadge, SimulatedBookingBadge } from "./BookingTable";
+import { BookingStatusBadge } from "./BookingTable";
 
 const SECTION_TITLE = "mb-4 text-xs font-bold tracking-[0.2em] uppercase";
 const LINK = "inline-flex items-center gap-0.5 font-bold underline underline-offset-4";
@@ -45,11 +45,11 @@ export function BookingOverview({
   today,
   className,
 }: {
-  detail: Pick<RunnerBookingDetail, "status" | "trip" | "simulated">;
+  detail: Pick<RunnerBookingDetail, "status" | "trip">;
   today: string;
   className?: string;
 }) {
-  const { trip, status, simulated } = detail;
+  const { trip, status } = detail;
   const cancelled = status === "cancelled";
   const finished = !cancelled && isTripFinished(trip, today);
 
@@ -67,7 +67,6 @@ export function BookingOverview({
           ) : (
             <BookingStatusBadge status={status} />
           )}
-          <SimulatedBookingBadge simulated={simulated} />
         </div>
       </div>
       <div className="space-y-0.5 text-sm">
@@ -80,9 +79,6 @@ export function BookingOverview({
         {trip.startDate && trip.endDate && <p>Viaje: {formatTripDateRange(trip.startDate, trip.endDate)}</p>}
       </div>
 
-      {simulated && (
-        <p className="text-sm">Reserva de demostración con Stripe en modo de prueba: no hubo cargo real.</p>
-      )}
       {status === "pending" && (
         <Alert role="status">
           <AlertDescription>

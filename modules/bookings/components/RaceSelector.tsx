@@ -2,7 +2,6 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { RunnerBookingSummary } from "../types/bookings.types";
 import { formatShortDate } from "../utils/bookingDisplay";
-import { SimulatedBookingBadge } from "./BookingTable";
 import { isTripFinished } from "../utils/runnerBookings";
 
 function statusLabel(booking: RunnerBookingSummary, today: string): string | null {
@@ -48,7 +47,6 @@ export function RaceSelector({
                     {formatShortDate(booking.trip.raceDate)}
                     {label && <> · {label}</>}
                   </span>
-                  <SimulatedBookingBadge simulated={booking.simulated} className="mt-1" />
                 </span>
               </Link>
             </li>

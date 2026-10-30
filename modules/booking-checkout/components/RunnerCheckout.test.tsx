@@ -180,19 +180,19 @@ describe("RunnerCheckout", () => {
     expect(screen.getByText(/Documento de prueba/)).toBeTruthy();
   });
 
-  it("marks a simulated reservation as SIMULADA, with no real charge", async () => {
+  it("shows a simulated reservation to the runner as a real one", async () => {
     vi.mocked(fetch).mockResolvedValue(ok({ ...prepared, simulated: true }) as Response);
     renderStart();
-    expect(screen.queryByText("SIMULADA")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Preparar reserva" }));
-    expect(await screen.findByText("SIMULADA")).toBeTruthy();
-    expect(screen.getByRole("note").textContent).toContain("Pago de prueba: no se realiza ningún cargo real.");
+    await screen.findByText("Documento único");
+    expect(screen.queryByText("SIMULADA")).toBeNull();
+    expect(screen.queryByText(/Pago de prueba/)).toBeNull();
   });
 
-  it("marks a simulated mode as SIMULADA from the first step, before preparing", () => {
+  it("shows the demo mode to the runner as a real checkout from the first step", () => {
     renderStart(true);
-    expect(screen.getByText("SIMULADA")).toBeTruthy();
-    expect(screen.getByRole("note").textContent).toContain("Pago de prueba: no se realiza ningún cargo real.");
+    expect(screen.queryByText("SIMULADA")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
     expect(screen.getByRole("button", { name: "Preparar reserva" })).toBeTruthy();
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -221,11 +221,12 @@ describe("RunnerCheckout after Stripe", () => {
     expect(screen.getByRole("link", { name: "Ver mi reserva" }).getAttribute("href")).toBe("/mis-carreras");
   });
 
-  it("marks a simulated return as SIMULADA", async () => {
+  it("confirms a simulated return as a real payment", async () => {
     vi.mocked(fetch).mockResolvedValue(ok({ ...state, simulated: true }) as Response);
     renderReturn();
-    expect(await screen.findByText("SIMULADA")).toBeTruthy();
-    expect(screen.getByText(/no se realiza ningún cargo real/)).toBeTruthy();
+    expect(await screen.findByText(/Pago confirmado/)).toBeTruthy();
+    expect(screen.queryByText("SIMULADA")).toBeNull();
+    expect(screen.queryByText(/cargo real/)).toBeNull();
   });
 
   it("asks to wait while the payment is processing and can ask again", async () => {

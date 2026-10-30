@@ -1,6 +1,6 @@
 # Enmienda: el corredor ve la reserva demo como una reserva real
 
-- Estado: borrador
+- Estado: aprobado
 - Spec base: [bookings-stripe-checkout-demo.md](bookings-stripe-checkout-demo.md), aprobada (sección C, «Pantallas»).
 - Módulos: booking-checkout (checkout del corredor) y bookings (portal `/mis-carreras`).
 - Pedido del usuario (2026-10-30): «para el runner la reserva o pago de la totalidad debe ser como un pago real para mejorar la experiencia y debe mostrarse en "Reservas" del CRM».
@@ -19,7 +19,7 @@ Sin cambios:
 - **Servidor:** las respuestas del servidor no cambian; solo se deja de pintar el distintivo en las pantallas del corredor.
 
 ## Plan
-- [ ] R.1 `RunnerCheckout`, `RaceSelector` y `BookingOverview` sin distintivo ni nota de simulación para el corredor; los componentes del CRM conservan `SimulatedBookingBadge`. Tests actualizados.
+- [x] R.1 `RunnerCheckout`, `RaceSelector` y `BookingOverview` sin distintivo ni nota de simulación para el corredor; los componentes del CRM conservan `SimulatedBookingBadge`. Tests actualizados.
 
 ## Aceptación
 - Un participante demo completa la reserva total y no ve «SIMULADA» ni «Pago de prueba» en el checkout, en el retorno ni en `/mis-carreras`.
