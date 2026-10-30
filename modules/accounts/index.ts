@@ -1,15 +1,18 @@
 export { AccessPanel } from "./components/AccessPanel";
+export { AccountStatusSection } from "./components/AccountStatusSection";
 export { CrmShell } from "./components/CrmShell";
 export { CrmSettings } from "./components/CrmSettings";
 export { InvitationsTable } from "./components/InvitationsTable";
 export { InviteStaffForm } from "./components/InviteStaffForm";
 export { NoCrmAccess } from "./components/NoCrmAccess";
+export { RoleRequestsTable } from "./components/RoleRequestsTable";
 export { RunnerAccount } from "./components/RunnerAccount";
 export { RunnerProfilePanel } from "./components/RunnerProfilePanel";
 export { StaffTable } from "./components/StaffTable";
 export { UserFilters } from "./components/UserFilters";
 export { UserTable } from "./components/UserTable";
 export { userListFilterSchema } from "./schemas/userDirectory.schema";
+export { listPendingRoleRequests } from "./services/roleRequest.service";
 export { listPendingInvitations } from "./services/staff.service";
 export { getUserDetail, listUsers } from "./services/userDirectory.service";
 export { getCrmAccess } from "./utils/crmAccess";

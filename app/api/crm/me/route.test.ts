@@ -108,7 +108,7 @@ describe("GET /api/crm/me", () => {
         ],
       }),
     );
-    accept.mockResolvedValue(["commercial"]);
+    accept.mockResolvedValue({ staffRoles: ["commercial"], blocked: false });
 
     await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: ["commercial"] });
     expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
@@ -125,7 +125,7 @@ describe("GET /api/crm/me", () => {
     ["no primary email", clerkUser({ primaryEmailAddressId: null })],
   ])("returns 403 for %s without consuming invitations, even for admin", async (_, user) => {
     signedInAs(user);
-    load.mockResolvedValue(["admin"]);
+    load.mockResolvedValue({ staffRoles: ["admin"], blocked: false });
 
     await expectResponse(await GET(), 403, forbidden("email_unverified"));
     expect(load).toHaveBeenCalledWith(USER_ID);
@@ -137,7 +137,7 @@ describe("GET /api/crm/me", () => {
     ["an expired or revoked invitation (acceptance yields no roles)"],
   ])("returns 403 for %s", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue({ staffRoles: [], blocked: false });
 
     await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(accept).toHaveBeenCalledWith(USER_ID, "ana@example.com");
@@ -145,18 +145,27 @@ describe("GET /api/crm/me", () => {
 
   it.each([["commercial"], ["admin"]] as const)("returns 200 for %s", async (role) => {
     signedInAs(clerkUser());
-    accept.mockResolvedValue([role]);
+    accept.mockResolvedValue({ staffRoles: [role], blocked: false });
 
     await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: [role] });
   });
 
   it("returns 403 on the next call after the role is revoked", async () => {
     signedInAs(clerkUser());
-    accept.mockResolvedValueOnce(["commercial"]).mockResolvedValueOnce([]);
+    accept
+      .mockResolvedValueOnce({ staffRoles: ["commercial"], blocked: false })
+      .mockResolvedValueOnce({ staffRoles: [], blocked: false });
 
     await expectResponse(await GET(), 200, { userId: USER_ID, staffRoles: ["commercial"] });
     await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(accept).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns 403 account_disabled for a blocked account, even with stored admin roles", async () => {
+    signedInAs(clerkUser());
+    accept.mockResolvedValue({ staffRoles: ["admin"], blocked: true });
+
+    await expectResponse(await GET(), 403, forbidden("account_disabled"));
   });
 
   it("returns 403 on a database error without leaking the original message", async () => {
@@ -186,7 +195,7 @@ describe("GET /api/crm/me", () => {
     signedInAs(
       clerkUser({ publicMetadata: { role: "admin" }, unsafeMetadata: { staffRoles: ["admin"] } }),
     );
-    accept.mockResolvedValue([]);
+    accept.mockResolvedValue({ staffRoles: [], blocked: false });
 
     await expectResponse(await GET(), 403, forbidden("missing_permission"));
     expect(GET).toHaveLength(0);

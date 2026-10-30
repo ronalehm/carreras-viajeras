@@ -12,7 +12,8 @@ export type ForbiddenReason =
   | "user_lookup_failed"
   | "role_lookup_failed"
   | "email_unverified"
-  | "missing_permission";
+  | "missing_permission"
+  | "account_disabled";
 
 export class ForbiddenError extends Error {
   constructor(readonly reason?: ForbiddenReason) {

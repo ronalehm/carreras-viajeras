@@ -11,6 +11,7 @@ describe("Clerk middleware coverage", () => {
     "/crm",
     "/crm/admin/usuarios/user_123",
     "/api/crm/me",
+    "/cuenta",
     "/cuenta/perfil",
     "/cuenta/perfil/editar",
     "/mis-carreras",
@@ -19,7 +20,7 @@ describe("Clerk middleware coverage", () => {
     expect(unstable_doesMiddlewareMatch({ config, url: `https://example.test${path}` })).toBe(true);
   });
 
-  it.each(["/", "/cuenta", "/contacto", "/api/health", "/cuenta/perfil-otro"])(
+  it.each(["/", "/cuentas", "/contacto", "/api/health", "/cuenta/perfil-otro"])(
     "keeps public liveness, static pages and unrelated segments outside the matcher: %s",
     (path) => {
       expect(unstable_doesMiddlewareMatch({ config, url: `https://example.test${path}` })).toBe(false);

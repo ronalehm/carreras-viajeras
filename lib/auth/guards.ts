@@ -16,6 +16,9 @@ export type CurrentUser = {
   emailVerified: boolean;
   staffRoles: StaffRole[];
   name?: string;
+  // Only present on an account disabled or deleted from the CRM: staffRoles is then always empty
+  // and requireUser (so every guard built on it) throws ForbiddenError("account_disabled").
+  blocked?: true;
 };
 
 export type SponsorUser = CurrentUser & { sponsorId: string };
@@ -93,16 +96,18 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
 }
 
 // cache() only memoizes within one RSC render; route handlers and actions query every call.
+// A blocked account keeps its identity (so pages can explain the denial) but never any role.
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const user = await readSessionUser();
   if (!user) return null;
-  const staffRoles = await loadRoles(user.id, user.email, user.emailVerified);
-  return { ...user, staffRoles };
+  const { staffRoles, blocked } = await loadRoles(user.id, user.email, user.emailVerified);
+  return blocked ? { ...user, staffRoles: [], blocked: true } : { ...user, staffRoles };
 });
 
 export async function requireUser(): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) throw new UnauthorizedError();
+  if (user.blocked) throw new ForbiddenError("account_disabled");
   return user;
 }
 

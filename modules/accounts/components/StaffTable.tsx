@@ -12,18 +12,26 @@ import { grantStaffRoleAction, revokeStaffRoleAction } from "../actions/staff.ac
 import type { StaffMember } from "../types/staff.types";
 import { formatStaffDateTime, STAFF_ROLE_LABELS } from "../utils/staffDisplay";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
+import { GrantSponsorRoleForm } from "./GrantSponsorRoleForm";
 
 type StaffTableProps = {
   staff: StaffMember[];
   // Roles the actor may grant or revoke, computed on the server; the actions still validate each one.
   manageableRoles: readonly StaffRole[];
+  // Brands for granting sponsor; read by the page only when the actor manages sponsor.
+  sponsors: readonly { id: string; name: string }[];
 };
 
-function earliestGrant(roles: StaffMember["roles"]): Date {
+// null for an account without active roles (accounts-role-requests R22): no grant date to show.
+function earliestGrant(roles: StaffMember["roles"]): Date | null {
+  if (roles.length === 0) return null;
   return new Date(Math.min(...roles.map(({ grantedAt }) => grantedAt.getTime())));
 }
 
-export function StaffTable({ staff, manageableRoles }: StaffTableProps) {
+export function StaffTable({ staff, manageableRoles, sponsors }: StaffTableProps) {
+  // Only id and name are passed to the client form.
+  const sponsorOptions = sponsors.map(({ id, name }) => ({ id, name }));
+
   return (
     <Table>
       <TableHeader>
@@ -39,6 +47,7 @@ export function StaffTable({ staff, manageableRoles }: StaffTableProps) {
           const activeRoles = member.roles.map(({ role }) => role);
           const grantableRoles = manageableRoles.filter((role) => !activeRoles.includes(role));
           const revocableRoles = activeRoles.filter((role) => manageableRoles.includes(role));
+          const grantedAt = earliestGrant(member.roles);
 
           return (
             <TableRow key={member.userId}>
@@ -52,10 +61,16 @@ export function StaffTable({ staff, manageableRoles }: StaffTableProps) {
                   ))}
                 </div>
               </TableCell>
-              <TableCell>{formatStaffDateTime(earliestGrant(member.roles))}</TableCell>
+              <TableCell>{grantedAt ? formatStaffDateTime(grantedAt) : "—"}</TableCell>
               <TableCell>
                 <div className="flex flex-wrap gap-2">
                   {grantableRoles.map((role) => {
+                    // Sponsor needs a brand: a form with the brand list instead of the button.
+                    if (role === "sponsor") {
+                      return (
+                        <GrantSponsorRoleForm key="grant-sponsor" userId={member.userId} sponsors={sponsorOptions} />
+                      );
+                    }
                     const label = STAFF_ROLE_LABELS[role];
                     return (
                       <ConfirmActionButton

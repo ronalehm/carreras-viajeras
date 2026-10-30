@@ -77,16 +77,24 @@ export async function revokeInvitation(
   return rows.length > 0;
 }
 
-// false = no_change: the user has no staff profile or the role is already active.
+// false = no_change: the user has no staff profile, is disabled or deleted (deleting implies
+// disabling: profiles_deleted_chk), the role is already active (one active sponsor per account,
+// staff_assignments_active_uq) or, for sponsor, the brand does not exist (the JOIN finds no row).
 export async function grantStaffRole(
   input: StaffRoleChangeInput,
   actorUserId: string,
 ): Promise<boolean> {
+  const assignment =
+    input.role === "sponsor"
+      ? sql`(user_id, role, reason, granted_by, sponsor_id)
+          SELECT profiles.user_id, 'sponsor'::staff_role, 'crm-admin', ${actorUserId}, sponsors.id
+          FROM profiles JOIN sponsors ON sponsors.id = ${input.sponsorId}::uuid`
+      : sql`(user_id, role, reason, granted_by)
+          SELECT profiles.user_id, ${input.role}::staff_role, 'crm-admin', ${actorUserId}
+          FROM profiles`;
   const result = await getDb().execute(sql`
-    INSERT INTO staff_assignments (user_id, role, reason, granted_by)
-    SELECT profiles.user_id, ${input.role}::staff_role, 'crm-admin', ${actorUserId}
-    FROM profiles
-    WHERE profiles.user_id = ${input.userId}
+    INSERT INTO staff_assignments ${assignment}
+    WHERE profiles.user_id = ${input.userId} AND profiles.disabled_at IS NULL
     ON CONFLICT (user_id, role) WHERE revoked_at IS NULL DO NOTHING
     RETURNING id
   `);
@@ -97,7 +105,7 @@ export async function grantStaffRole(
 // the UPDATE checks the count: a concurrent revocation waits, re-reads the rows and sees the
 // remaining admins, so two revocations can never remove the last two admins.
 export async function revokeStaffRole(
-  input: StaffRoleChangeInput,
+  input: Pick<StaffRoleChangeInput, "userId" | "role">,
   actorUserId: string,
 ): Promise<"revoked" | "not_found" | "last_admin"> {
   const result = await getDb().execute<{ revoked: boolean; target_is_active_admin: boolean }>(sql`

@@ -2,12 +2,16 @@
 import { describe, expect, it } from "vitest";
 import { staffRoleEnum } from "@/lib/db-schema";
 import {
+  assignableRoleSchema,
   assignmentRoleSchema,
   invitationIdSchema,
   inviteStaffSchema,
   staffRoleChangeSchema,
+  staffRoleRevokeSchema,
   staffRoleSchema,
 } from "./staff.schema";
+
+const SPONSOR_ID = "8a6b2c1d-4e5f-4a7b-9c8d-1e2f3a4b5c6d";
 
 const issuePaths = (result: { error?: { issues: { path: PropertyKey[] }[] } }) =>
   result.error?.issues.map((issue) => issue.path);
@@ -104,10 +108,70 @@ describe("staffRoleChangeSchema", () => {
     expect(result.data).toEqual({ userId: "user-1", role: "organizer" });
   });
 
-  it.each(["moderator", "super_admin", "sponsor"])("rejects the role %j", (role) => {
+  it.each(["moderator", "super_admin", "", undefined])("rejects the role %j", (role) => {
     const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role });
 
     expect(result.success).toBe(false);
     expect(issuePaths(result)).toEqual([["role"]]);
+  });
+
+  it("reports userId and role errors together", () => {
+    const result = staffRoleChangeSchema.safeParse({ userId: "", role: "moderator" });
+
+    expect(issuePaths(result)).toEqual([["userId"], ["role"]]);
+  });
+
+  it("accepts sponsor with a brand id, dropping extra keys", () => {
+    const result = staffRoleChangeSchema.safeParse({
+      userId: "user-1",
+      role: "sponsor",
+      sponsorId: SPONSOR_ID,
+      grantedBy: "attacker",
+    });
+
+    expect(result.data).toEqual({ userId: "user-1", role: "sponsor", sponsorId: SPONSOR_ID });
+  });
+
+  it.each([undefined, "", "not-a-uuid", "3f1c2a6e8b4d4c1e9f0a2b7d5e6c8a91"])(
+    "requires a valid sponsorId for sponsor (%j)",
+    (sponsorId) => {
+      const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role: "sponsor", sponsorId });
+
+      expect(result.success).toBe(false);
+      expect(issuePaths(result)).toEqual([["sponsorId"]]);
+    },
+  );
+
+  it.each(["commercial", "organizer", "admin"])("ignores sponsorId for %s", (role) => {
+    const result = staffRoleChangeSchema.safeParse({ userId: "user-1", role, sponsorId: "not-a-uuid" });
+
+    expect(result.data).toEqual({ userId: "user-1", role });
+  });
+});
+
+describe("assignableRoleSchema", () => {
+  it("is the team roles plus sponsor, never super_admin", () => {
+    expect(assignableRoleSchema.options).toEqual(["commercial", "organizer", "admin", "sponsor"]);
+  });
+});
+
+describe("staffRoleRevokeSchema", () => {
+  it.each(["commercial", "organizer", "admin", "sponsor"])("accepts %s without a brand", (role) => {
+    const result = staffRoleRevokeSchema.safeParse({ userId: "user-1", role, sponsorId: SPONSOR_ID, revokedBy: "x" });
+
+    expect(result.data).toEqual({ userId: "user-1", role });
+  });
+
+  it.each(["moderator", "super_admin", ""])("rejects the role %j", (role) => {
+    const result = staffRoleRevokeSchema.safeParse({ userId: "user-1", role });
+
+    expect(result.success).toBe(false);
+    expect(issuePaths(result)).toEqual([["role"]]);
+  });
+
+  it.each(["", "x".repeat(256)])("rejects a user id of length %#", (userId) => {
+    const result = staffRoleRevokeSchema.safeParse({ userId, role: "sponsor" });
+
+    expect(issuePaths(result)).toEqual([["userId"]]);
   });
 });

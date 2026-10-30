@@ -33,8 +33,11 @@ export const staffRoleEnum = pgEnum("staff_role", [
   "sponsor",
 ]);
 
-// Accounts with an assigned role (staff or sponsor). user_id is the stable Clerk user id (no cross-schema FK).
+// Known accounts: every Clerk account with a verified primary email that signed in (registered by the
+// guard) or was backfilled, with or without roles. user_id is the stable Clerk user id (no cross-schema FK).
 // email is lowercase and display-only: never used for authorization.
+// Blocked = disabled_at IS NOT NULL (the guards fail closed). Deleted accounts keep their row as
+// author of the history, with the email anonymized; deleting implies blocking (profiles_deleted_chk).
 export const profiles = pgTable(
   "profiles",
   {
@@ -43,9 +46,18 @@ export const profiles = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    disabledAt: timestamp("disabled_at", { withTimezone: true }),
+    disabledBy: text("disabled_by").references((): AnyPgColumn => profiles.userId, {
+      onDelete: "restrict",
+    }),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+    deletedBy: text("deleted_by").references((): AnyPgColumn => profiles.userId, {
+      onDelete: "restrict",
+    }),
   },
   (table) => [
     check("profiles_email_lowercase_chk", sql`${table.email} = lower(${table.email})`),
+    check("profiles_deleted_chk", sql`${table.deletedAt} IS NULL OR ${table.disabledAt} IS NOT NULL`),
   ],
 );
 
@@ -164,6 +176,38 @@ export const staffInvitations = pgTable(
     uniqueIndex("staff_invitations_pending_email_uq")
       .on(table.email)
       .where(sql`${table.acceptedAt} IS NULL AND ${table.revokedAt} IS NULL`),
+  ],
+);
+
+export const roleRequestStatusEnum = pgEnum("role_request_status", ["pending", "approved", "rejected"]);
+
+// Self-service role requests from accounts without CRM access. Only admin can be requested today
+// (role::text keeps the migration single-transaction). A decided request records when and who;
+// at most one pending request per account.
+export const roleRequests = pgTable(
+  "role_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => profiles.userId, { onDelete: "restrict" }),
+    role: staffRoleEnum("role").notNull(),
+    status: roleRequestStatusEnum("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decidedBy: text("decided_by").references(() => profiles.userId, { onDelete: "restrict" }),
+  },
+  (table) => [
+    check("role_requests_role_chk", sql`${table.role}::text = 'admin'`),
+    check(
+      "role_requests_decision_chk",
+      sql`(${table.status} = 'pending') = (${table.decidedAt} IS NULL AND ${table.decidedBy} IS NULL)`,
+    ),
+    uniqueIndex("role_requests_pending_user_uq")
+      .on(table.userId)
+      .where(sql`${table.status} = 'pending'`),
   ],
 );
 

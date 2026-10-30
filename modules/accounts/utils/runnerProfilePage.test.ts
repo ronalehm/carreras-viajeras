@@ -85,6 +85,13 @@ describe("getRunnerProfilePage", () => {
     expect(loadProfile).not.toHaveBeenCalled();
   });
 
+  it("fails closed for a blocked account (disabled from the CRM), without reading the profile", async () => {
+    currentUser.mockResolvedValue({ ...RUNNER, staffRoles: [], blocked: true });
+
+    await expect(getRunnerProfilePage()).resolves.toEqual({ status: "error" });
+    expect(loadProfile).not.toHaveBeenCalled();
+  });
+
   it("maps a ForbiddenError from getCurrentUser (Neon Auth or role lookup) to error", async () => {
     currentUser.mockRejectedValue(new ForbiddenError());
 

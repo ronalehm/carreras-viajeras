@@ -7,6 +7,14 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 // matcher; otherwise auth() throws and the guard fails closed with 401 (accounts-clerk-rbac D3).
 export default clerkMiddleware();
 
+// "/cuenta" is exact: registerAccountAction POSTs to it and its guard needs auth()
+// (accounts-role-requests R2); the page itself stays static.
 export const config = {
-  matcher: ["/crm/:path*", "/api/crm/:path*", "/cuenta/perfil/:path*", "/mis-carreras/:path*"],
+  matcher: [
+    "/crm/:path*",
+    "/api/crm/:path*",
+    "/cuenta",
+    "/cuenta/perfil/:path*",
+    "/mis-carreras/:path*",
+  ],
 };

@@ -19,7 +19,7 @@ const IDLE: RewardActionState = { status: "idle" };
 const CODE = "a_valid_opaque_referral_code_12345";
 function form(fields: Record<string, string>) { const data = new FormData(); Object.entries(fields).forEach(([key, value]) => data.append(key, value)); return data; }
 function session(staffRoles: StaffRole[] = [], verified = true) {
-  auth.mockResolvedValue({ userId: "trusted-clerk-user" }); roles.mockResolvedValue(staffRoles);
+  auth.mockResolvedValue({ userId: "trusted-clerk-user" }); roles.mockResolvedValue({ staffRoles, blocked: false });
   currentUser.mockResolvedValue({ id: "trusted-clerk-user", primaryEmailAddressId: "primary", emailAddresses: [{ id: "primary", emailAddress: "runner@example.com", verification: { status: verified ? "verified" : "unverified" } }] });
 }
 beforeEach(() => { vi.resetAllMocks(); Object.values(services).forEach((service) => service.mockResolvedValue({ status: "success", code: "created", id: ID })); session(["admin"]); });
