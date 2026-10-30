@@ -5,6 +5,12 @@ export {
   fulfillReward, listProgramConfiguration, createRewardRule, createCatalogVersion,
   deactivateRewardRule, deactivateCatalogVersion, getBookingRewardOptions,
 } from "./services/rewards.service";
+export {
+  getActiveWelcomeDiscount, listWelcomeDiscountVersions, createWelcomeDiscountVersion,
+} from "./services/welcomeDiscount.service";
+export type {
+  ActiveWelcomeDiscount, WelcomeDiscountVersion, WelcomeDiscountInput,
+} from "./services/welcomeDiscount.service";
 export type {
   RewardRuleInput, RewardCatalogInput, BookingBenefitInput, RewardOperationResult,
   RewardActionState, RewardRule, RewardCatalogItem, OwnRewardRedemption,

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { applyRewardSchema, bookingBenefitFormSchema, redemptionRequestSchema, referralClaimSchema, rewardCatalogFormSchema, rewardRuleFormSchema } from "./rewards.schema";
+import { applyRewardSchema, bookingBenefitFormSchema, redemptionRequestSchema, referralClaimSchema, rewardCatalogFormSchema, rewardRuleFormSchema, welcomeDiscountSchema } from "./rewards.schema";
 
 const RULE = { pointsPerReferral: "20", maxReferralsPerRunner: "", validFrom: "2026-10-29", validUntil: "", terms: "Una reserva confirmada y su primer pago válido.", active: "on" };
 const CATALOG = { catalogKey: "", kind: "discount", title: "Descuento de viaje", description: "Aplicable a una reserva propia pendiente y sin pagos.", costStars: "100", discountUsd: "25", stock: "10", maxPerRunner: "1", redemptionDays: "30", validFrom: "2026-10-29", validUntil: "2026-12-31", active: "on" };
@@ -62,5 +62,21 @@ describe("runner inputs", () => {
     expect(applyRewardSchema.safeParse({ redemptionId: UUID, bookingId: "invalid" }).success).toBe(false);
     expect(bookingBenefitFormSchema.safeParse({ bookingId: UUID, title: "Hotel", description: "x" }).success).toBe(false);
     expect(bookingBenefitFormSchema.parse({ bookingId: UUID, title: " Hotel ", description: "Alojamiento contratado por tres noches.", createdBy: "attacker" })).not.toHaveProperty("createdBy");
+  });
+});
+
+describe("welcomeDiscountSchema", () => {
+  it("parses integer amounts and days and activates only with the checkbox value", () => {
+    expect(welcomeDiscountSchema.parse({ amountUsd: " 50 ", validityDays: "60", active: "on", createdBy: "attacker" })).toEqual({ amountUsd: 50, validityDays: 60, active: true });
+    expect(welcomeDiscountSchema.parse({ amountUsd: "50", validityDays: "60" }).active).toBe(false);
+    expect(welcomeDiscountSchema.parse({ amountUsd: "50", validityDays: "60", active: "true" }).active).toBe(false);
+  });
+  it("accepts the range limits and rejects values outside them", () => {
+    expect(welcomeDiscountSchema.parse({ amountUsd: "1", validityDays: "1" })).toMatchObject({ amountUsd: 1, validityDays: 1 });
+    expect(welcomeDiscountSchema.parse({ amountUsd: "10000", validityDays: "365" })).toMatchObject({ amountUsd: 10000, validityDays: 365 });
+    for (const amountUsd of ["0", "10001", "-5", "12.5", "", "abc"])
+      expect(welcomeDiscountSchema.safeParse({ amountUsd, validityDays: "30" }).success).toBe(false);
+    for (const validityDays of ["0", "366", "1.5", ""])
+      expect(welcomeDiscountSchema.safeParse({ amountUsd: "50", validityDays }).success).toBe(false);
   });
 });
