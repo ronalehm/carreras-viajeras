@@ -7,7 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -37,13 +36,6 @@ export function MobileMenu({ links }: { links: NavLink[] }) {
             {label}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          render={<Link href="/contacto" />}
-          className="min-h-11 rounded-full bg-highlight px-4 text-base font-semibold text-night no-underline focus:bg-highlight/85 focus:text-night"
-        >
-          Quiero correr
-        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

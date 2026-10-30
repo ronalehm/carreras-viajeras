@@ -73,23 +73,24 @@ export function SiteHeader() {
         ))}
       </nav>
       <div className="ml-auto flex items-center justify-end gap-1.5 sm:gap-3">
+        {/* Both open the Clerk panel of /cuenta, which signs in or creates the account. */}
         <Link
           href="/cuenta#imagen-login"
           className={cn(
             buttonVariants({ variant: "outline" }),
-            "h-auto gap-1.5 rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",
+            "h-auto rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",
           )}
         >
-          Ingresar / Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
+          Ingresar
         </Link>
         <Link
-          href="/contacto"
+          href="/cuenta#imagen-login"
           className={cn(
             buttonVariants(),
-            "h-auto gap-1.5 rounded-full bg-highlight px-5 py-3 text-sm font-semibold text-night hover:bg-highlight/85 max-md:hidden",
+            "h-auto gap-1.5 rounded-full px-3 py-2.5 text-xs font-semibold whitespace-nowrap sm:px-4.5 sm:py-3 sm:text-sm",
           )}
         >
-          Quiero correr <ArrowUpRight aria-hidden />
+          Registrarse <ArrowUpRight aria-hidden className="max-sm:hidden" />
         </Link>
         <MobileMenu links={NAV_LINKS} />
       </div>
