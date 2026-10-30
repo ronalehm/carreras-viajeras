@@ -29,8 +29,8 @@ export function PackageSection() {
       </figure>
 
       <div>
-        <p className="mb-4 text-sm font-semibold text-asphalt">Tu próxima gran historia · preventa</p>
-        <h2 id="package-title" className="mb-8 display-title text-display-section">
+        <p className="mb-4 text-sm font-semibold text-primary-foreground">Tu próxima gran historia · preventa</p>
+        <h2 id="package-title" className="mb-8 display-title text-display-section text-primary">
           Tú corres.
           <br />
           El viaje, juntos.
@@ -50,17 +50,17 @@ export function PackageSection() {
           ))}
         </ul>
         <div className="mt-9 flex flex-wrap items-end gap-x-7 gap-y-3">
-          <strong className="display-title text-[76px] leading-[0.85] font-black lg:text-8xl">
+          <strong className="display-title text-[80px] leading-[0.85] font-black lg:text-9xl text-primary">
             {trip.prices.cash}
           </strong>
-          <p className="pb-1 text-sm leading-relaxed text-asphalt sm:text-base">
+          <p className="pb-1 text-base leading-relaxed text-primary-foreground sm:text-base">
             al contado · por corredor
             <br />
             {trip.prices.installmentsTotal} total en cuotas{" "}
             <span aria-hidden className="mx-1">
               ·
             </span>{" "}
-            Reserva con {trip.prices.reservation}
+            <span className="text-green-600 font-bold text-[24px]">Reserva con {trip.prices.reservation}</span>
           </p>
         </div>
         <div className="mt-8 flex flex-wrap items-center gap-x-7 gap-y-4">
