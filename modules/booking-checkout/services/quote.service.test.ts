@@ -17,7 +17,8 @@ describe("checkout quote",()=>{
   });
   it("resolves only an offered deposit index and retains the remaining USD balance",()=>{
     expect(createCheckoutQuote(offer,{kind:"deposit",index:1},rate)).toMatchObject({principalUsd:500,balanceUsd:500,amountPenCents:187500});
-    expect(()=>createCheckoutQuote(offer,{kind:"deposit",index:2},rate)).toThrow("invalid payment choice");
+    expect(createCheckoutQuote(offer,{kind:"deposit",index:2},rate)).toBe("invalid_payment_choice");
+    expect(createCheckoutQuote({...offer,depositOptionsUsd:[1500]},{kind:"deposit",index:0},rate)).toBe("invalid_payment_choice");
   });
   it("quotes the Santiago USD 300 deposit in PEN at the current USD/PEN rate",()=>{
     const santiago={...offer,totalPriceUsd:11000,discountUsd:0,finalPriceUsd:11000,depositOptionsUsd:[300]};

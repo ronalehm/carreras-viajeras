@@ -2,7 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("./bookingCheckout.service", () => ({ isCheckoutSandboxEnabled: vi.fn(() => true) }));
+vi.mock("./bookingCheckout.service", () => ({ isCheckoutEnabled: vi.fn(() => true) }));
 vi.mock("./prepare.service", () => ({ getPreparedBookingCheckout: vi.fn() }));
 import { getDb } from "@/lib/db";
 import { getPreparedBookingCheckout } from "./prepare.service";

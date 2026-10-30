@@ -38,16 +38,17 @@ export async function getCurrentCheckoutRate(): Promise<(ExchangeRate & { id: st
   return { ...row, usdPen: formatUsdPenRate(rateE4) };
 }
 
+// A deposit index the offer does not have is a client error, not a server failure.
 export function createCheckoutQuote(
   offer: ActiveOffer,
   choice: PaymentChoice,
   rate: (ExchangeRate & { id: string }) | null,
-): CheckoutQuote {
+): CheckoutQuote | "invalid_payment_choice" {
   if (!rate) throw new Error("exchange rate unavailable");
   const principalUsd = choice.kind === "full"
     ? offer.finalPriceUsd
     : offer.depositOptionsUsd[choice.index];
-  if (!principalUsd || principalUsd > offer.finalPriceUsd) throw new Error("invalid payment choice");
+  if (!principalUsd || principalUsd > offer.finalPriceUsd) return "invalid_payment_choice";
   const rateE4 = parseUsdPenRate(rate.usdPen);
   if (rateE4 === null) throw new Error("invalid exchange rate row");
   return {

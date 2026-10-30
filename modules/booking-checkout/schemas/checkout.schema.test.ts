@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { contractAcceptanceSchema, prepareCheckoutSchema } from "./checkout.schema";
+import { attemptRouteParamsSchema, bookingRouteParamsSchema, contractAcceptanceSchema, prepareCheckoutSchema } from "./checkout.schema";
 
 const tripId = "11111111-1111-4111-8111-111111111111";
 const requestId = "22222222-2222-4222-8222-222222222222";
@@ -18,5 +18,13 @@ describe("booking checkout input boundaries", () => {
     expect(contractAcceptanceSchema.safeParse({ accepted: true, documentHash: "a".repeat(64) }).success).toBe(true);
     expect(contractAcceptanceSchema.safeParse({ accepted: false, documentHash: "a".repeat(64) }).success).toBe(false);
     expect(contractAcceptanceSchema.safeParse({ accepted: true, documentHash: "bad", body: "forged" }).success).toBe(false);
+  });
+  it("accepts only UUID route segments for bookings and attempts", () => {
+    expect(bookingRouteParamsSchema.safeParse({ bookingId: tripId }).success).toBe(true);
+    expect(attemptRouteParamsSchema.safeParse({ bookingId: tripId, attemptId: requestId }).success).toBe(true);
+    for (const bad of ["bad", "1", "11111111-1111-4111-8111-11111111111", "../checkout", ""]) {
+      expect(bookingRouteParamsSchema.safeParse({ bookingId: bad }).success).toBe(false);
+      expect(attemptRouteParamsSchema.safeParse({ bookingId: tripId, attemptId: bad }).success).toBe(false);
+    }
   });
 });

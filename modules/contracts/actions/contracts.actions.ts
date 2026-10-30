@@ -9,7 +9,7 @@ import {
   type ContractActionState,
 } from "../schemas/contracts.schema";
 import {
-  isContractSandboxEnabled, createContractDraft, updateContractDraft, approveContractVersion,
+  createContractDraft, updateContractDraft, approveContractVersion,
 } from "../services/contracts.service";
 
 const MESSAGES: Record<string, string> = {
@@ -27,7 +27,6 @@ async function mutate<Input>(
   service: (input: Input, actorId: string) => Promise<{ id: string } | string>,
   success: string,
 ): Promise<ContractActionState> {
-  if (!isContractSandboxEnabled()) return failure("El checkout de pruebas está deshabilitado.");
   let actor;
   try {
     actor = await requirePermission("offers.manage");

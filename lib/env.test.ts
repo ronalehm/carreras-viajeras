@@ -373,4 +373,18 @@ describe("Stripe Checkout configuration", () => {
     vi.stubEnv("STRIPE_CHECKOUT_ENABLED", "false");
     expect(getStripeCheckoutConfig().enabled).toBe(false);
   });
+
+  it("logs each disabled reason once per process, not on every request", async () => {
+    setEnv({ ...production, STRIPE_SECRET_KEY: TEST_KEY });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { getStripeCheckoutConfig } = await import("./env");
+    for (let request = 0; request < 3; request++) expect(getStripeCheckoutConfig().enabled).toBe(false);
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", undefined);
+    vi.stubEnv("STRIPE_SECRET_KEY", LIVE_KEY);
+    getStripeCheckoutConfig();
+    getStripeCheckoutConfig();
+    const reasons = warn.mock.calls.map(([, details]) => (details as { reason: string }).reason);
+    warn.mockRestore();
+    expect(reasons).toEqual(["mode_not_allowed", "missing_webhook_secret"]);
+  });
 });

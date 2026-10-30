@@ -3,15 +3,17 @@ import Stripe from "stripe";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingCheckoutAttempts, bookingContractAcceptances, bookingStripeSettlements, bookings, offerCapacityAllocations, trips } from "@/lib/db-schema";
+import { getEnv, getStripeCheckoutConfig, type StripeMode } from "@/lib/env";
 import { parseUsdPenRate, usdToPenCents } from "@/lib/currency";
 import { checkoutQuoteHash } from "./quote.service";
 import type { CreateCheckoutSessionInput } from "../schemas/checkout.schema";
-import { isCheckoutSandboxEnabled } from "./bookingCheckout.service";
+import { retireCheckoutAttempt } from "./checkoutAttempts.service";
 
 export type CreateSessionResult =
   | { state: "created" | "reused"; attemptId: string; checkoutUrl: string }
   | "checkout_unavailable" | "booking_not_found" | "contract_not_accepted" | "reservation_expired"
-  | "quote_changed" | "attempt_conflict" | "attempt_expired" | "balance_not_due";
+  | "quote_changed" | "attempt_conflict" | "attempt_expired" | "balance_not_due" | "payment_processing"
+  | "stripe_unavailable";
 
 export async function getBookingCheckoutState(bookingId: string, attemptId: string, userId: string) {
   const [row] = await getDb().select({
@@ -54,24 +56,105 @@ type BookingRow = {
   offerTermsVersion: string | null; checkoutRateId: string | null; checkoutRateUsdPen: string | null;
   checkoutAmountPenCents: number | null; reservationExpiresAt: Date | null; acceptedBookingId: string | null;
 };
+type AttemptRow = typeof bookingCheckoutAttempts.$inferSelect;
 
-function stripeClient(): StripeSessionClient | null {
-  const key = process.env.STRIPE_SECRET_KEY;
-  const origin = process.env.STRIPE_CHECKOUT_ORIGIN;
-  if (!isCheckoutSandboxEnabled() || !/^sk_test_[A-Za-z0-9_]+$/.test(key ?? "")
-      || !["http://localhost:3001", "http://127.0.0.1:3001"].includes(origin ?? "")) return null;
-  return new Stripe(key!, { apiVersion: "2026-09-30.endive", timeout: 10000, maxNetworkRetries: 1 });
+const MINUTE_MS = 60 * 1000;
+// Stripe accepts a Checkout Session `expires_at` from 30 minutes to 24 hours after creation.
+const STRIPE_MIN_SESSION_MS = 30 * MINUTE_MS;
+const STRIPE_MAX_SESSION_MS = 24 * 60 * MINUTE_MS;
+// New sessions get two minutes over Stripe's minimum (latency and clock skew)...
+const MIN_SESSION_MS = STRIPE_MIN_SESSION_MS + 2 * MINUTE_MS;
+// ...so a failed creation can be retried with the same idempotency key and parameters for a
+// while; once less than this remains, the attempt is retired and a fresh one is created.
+const MIN_RETRY_MS = STRIPE_MIN_SESSION_MS + MINUTE_MS;
+// A pending reservation is extended only to fit one session, and never past this hold measured
+// from the booking's creation: past it the runner gets `reservation_expired` and prepares again.
+const MAX_RESERVATION_HOLD_MINUTES = 120;
+const BALANCE_SESSION_MS = 60 * MINUTE_MS;
+
+function stripeClient(): { stripe: StripeSessionClient; mode: StripeMode } | null {
+  const config = getStripeCheckoutConfig();
+  if (!config.enabled || !config.mode || !config.secretKey) return null;
+  return {
+    stripe: new Stripe(config.secretKey, { apiVersion: "2026-09-30.endive", timeout: 10000, maxNetworkRetries: 1 }),
+    mode: config.mode,
+  };
 }
 
-function canonicalSession(session: Stripe.Checkout.Session, bookingId: string, attemptId: string, amount: number) {
-  return session.livemode === false
+function ownsSession(session: Stripe.Checkout.Session, bookingId: string, attemptId: string, mode: StripeMode) {
+  return session.livemode === (mode === "live")
     && session.mode === "payment"
     && session.metadata?.bookingId === bookingId
-    && session.metadata?.attemptId === attemptId
+    && session.metadata?.attemptId === attemptId;
+}
+
+function canonicalSession(session: Stripe.Checkout.Session, bookingId: string, attemptId: string, amount: number, mode: StripeMode) {
+  return ownsSession(session, bookingId, attemptId, mode)
     && session.amount_total === amount
     && session.currency === "pen"
     && session.status === "open"
     && typeof session.url === "string";
+}
+
+type ActiveAttemptState =
+  | { state: "open"; session: Stripe.Checkout.Session | null }
+  | { state: "retired" }
+  | "payment_processing" | "attempt_conflict" | "stripe_unavailable";
+
+// Decides whether an active attempt can still be paid. A Session that Stripe already closed, or a
+// creation that never finished before its deadline, is retired so it stops blocking a new attempt;
+// a completed Session is left to the webhook. Nothing is written for a Session of another booking.
+async function refreshActiveAttempt(
+  attempt: AttemptRow, stripe: StripeSessionClient, mode: StripeMode, amountPenCents: number,
+): Promise<ActiveAttemptState> {
+  if (!attempt.stripeSessionId) {
+    if (attempt.expiresAt && attempt.expiresAt.getTime() > Date.now()) return { state: "open", session: null };
+    return await retireCheckoutAttempt(attempt, "failed", true) ? { state: "retired" } : "attempt_conflict";
+  }
+  let session: Stripe.Checkout.Session;
+  try { session = await stripe.checkout.sessions.retrieve(attempt.stripeSessionId); }
+  catch { return "stripe_unavailable"; }
+  if (!ownsSession(session, attempt.bookingId, attempt.id, mode)) return "attempt_conflict";
+  if (session.status === "open") {
+    return canonicalSession(session, attempt.bookingId, attempt.id, amountPenCents, mode)
+      ? { state: "open", session } : "attempt_conflict";
+  }
+  if (session.status === "expired") {
+    return await retireCheckoutAttempt(attempt, "expired", true) ? { state: "retired" } : "attempt_conflict";
+  }
+  return "payment_processing";
+}
+
+// Session deadline for an initial payment: the reservation deadline, extended (atomically with the
+// held seat) only when fewer than MIN_SESSION_MS remain, and capped by MAX_RESERVATION_HOLD_MINUTES.
+async function initialSessionExpiry(bookingId: string, userId: string): Promise<Date | null> {
+  const minimum = new Date(Date.now() + MIN_SESSION_MS);
+  const held = await getDb().execute<{ expires_at: Date | string }>(sql`
+    WITH extended_booking AS (
+      UPDATE ${bookings} SET reservation_expires_at = greatest(reservation_expires_at, ${minimum}::timestamptz), updated_at = now()
+      WHERE id = ${bookingId}::uuid AND runner_user_id = ${userId} AND status = 'pending'
+        AND reservation_expires_at > now()
+        AND greatest(reservation_expires_at, ${minimum}::timestamptz)
+          <= created_at + ${MAX_RESERVATION_HOLD_MINUTES} * interval '1 minute'
+      RETURNING id, reservation_expires_at
+    ), extended_allocation AS (
+      UPDATE ${offerCapacityAllocations} AS allocation SET expires_at = extended_booking.reservation_expires_at, updated_at = now()
+      FROM extended_booking WHERE allocation.booking_id = extended_booking.id AND allocation.status = 'held'
+      RETURNING allocation.booking_id
+    ) SELECT extended_booking.reservation_expires_at AS expires_at
+    FROM extended_booking JOIN extended_allocation ON extended_allocation.booking_id = extended_booking.id
+  `);
+  const row = held.rows[0];
+  if (!row) return null;
+  const expiresAt = new Date(row.expires_at);
+  return new Date(Math.min(expiresAt.getTime(), Date.now() + STRIPE_MAX_SESSION_MS - MINUTE_MS));
+}
+
+async function findActiveAttempt(bookingId: string, kind: "initial" | "balance") {
+  const [active] = await getDb().select().from(bookingCheckoutAttempts)
+    .where(and(eq(bookingCheckoutAttempts.bookingId, bookingId), eq(bookingCheckoutAttempts.kind, kind),
+      sql`${bookingCheckoutAttempts.status} IN ('pending', 'created')`)).limit(1);
+  return active;
 }
 
 export async function createBookingCheckoutSession(
@@ -79,8 +162,9 @@ export async function createBookingCheckoutSession(
   userId: string,
   input: CreateCheckoutSessionInput,
 ): Promise<CreateSessionResult> {
-  const stripe = stripeClient();
-  if (!stripe) return "checkout_unavailable";
+  const client = stripeClient();
+  if (!client) return "checkout_unavailable";
+  const { stripe, mode } = client;
   const db = getDb();
   const [booking] = await db.select({
     id: bookings.id, status: bookings.status, packageLabel: bookings.packageLabel,
@@ -96,7 +180,6 @@ export async function createBookingCheckoutSession(
     .limit(1) as [BookingRow?];
   if (!booking || booking.status === "cancelled") return "booking_not_found";
   if (!booking.acceptedBookingId) return "contract_not_accepted";
-  if (input.kind === "initial" && (!booking.reservationExpiresAt || booking.reservationExpiresAt.getTime() <= Date.now())) return "reservation_expired";
   if (input.kind === "balance") {
     const [initial] = await db.select({ status: bookingStripeSettlements.status })
       .from(bookingStripeSettlements).innerJoin(bookingCheckoutAttempts, eq(bookingCheckoutAttempts.id, bookingStripeSettlements.attemptId))
@@ -127,78 +210,82 @@ export async function createBookingCheckoutSession(
     .where(and(eq(bookingCheckoutAttempts.bookingId, bookingId), eq(bookingCheckoutAttempts.requestId, input.requestId))).limit(1);
   if (priorRequest && (priorRequest.kind !== input.kind || priorRequest.quoteHash !== expectedHash)) return "attempt_conflict";
 
-  let attempt = priorRequest;
-  if (!attempt) {
-    const [active] = await db.select().from(bookingCheckoutAttempts)
-      .where(and(eq(bookingCheckoutAttempts.bookingId, bookingId), eq(bookingCheckoutAttempts.kind, input.kind),
-        sql`${bookingCheckoutAttempts.status} IN ('pending', 'created')`)).limit(1);
-    if (active && active.quoteHash !== expectedHash) return "attempt_conflict";
-    attempt = active;
-  }
-  if (!attempt) {
-    const sessionExpiresAt = new Date(Date.now() + 45 * 60 * 1000);
-    if (input.kind === "initial") {
-      const held = await db.execute<{ booking_id: string }>(sql`
-      WITH extended_booking AS (
-        UPDATE ${bookings} SET reservation_expires_at = ${sessionExpiresAt}, updated_at = now()
-        WHERE id = ${bookingId}::uuid AND runner_user_id = ${userId} AND status = 'pending'
-          AND reservation_expires_at > now()
-        RETURNING id
-      ), extended_allocation AS (
-        UPDATE ${offerCapacityAllocations} AS allocation SET expires_at = ${sessionExpiresAt}, updated_at = now()
-        FROM extended_booking WHERE allocation.booking_id = extended_booking.id AND allocation.status = 'held'
-        RETURNING allocation.booking_id
-      ) SELECT booking_id FROM extended_allocation
-      `);
-      if (!held.rows[0]) return "reservation_expired";
+  let attempt: AttemptRow | undefined = priorRequest ?? await findActiveAttempt(bookingId, input.kind);
+  let openSession: Stripe.Checkout.Session | null = null;
+  if (attempt && (attempt.status === "pending" || attempt.status === "created")) {
+    const state = await refreshActiveAttempt(attempt, stripe, mode, amountPenCents);
+    if (typeof state === "string") return state;
+    if (state.state === "retired") {
+      // A request id names one attempt: once it is retired, a new click sends a new id.
+      if (attempt === priorRequest) return "attempt_expired";
+      attempt = undefined;
+    } else {
+      openSession = state.session;
     }
+  }
+  if (attempt && attempt.status !== "pending" && attempt.status !== "created") return "attempt_expired";
+  if (attempt && attempt.quoteHash !== expectedHash) return "attempt_conflict";
+  if (input.kind === "initial" && (!booking.reservationExpiresAt || booking.reservationExpiresAt.getTime() <= Date.now())) return "reservation_expired";
+  if (openSession && attempt) return { state: "reused", attemptId: attempt.id, checkoutUrl: openSession.url! };
+
+  if (!attempt) {
+    const sessionExpiresAt = input.kind === "initial"
+      ? await initialSessionExpiry(bookingId, userId)
+      : new Date(Date.now() + BALANCE_SESSION_MS);
+    if (!sessionExpiresAt) return "reservation_expired";
     const [created] = await db.insert(bookingCheckoutAttempts).values({
       bookingId, requestId: input.requestId, kind: input.kind, quoteHash: expectedHash,
       amountUsd, amountPenCents, idempotencyKey: `cv-checkout-${bookingId}-${input.kind}-${input.requestId}`,
       expiresAt: sessionExpiresAt,
     }).onConflictDoNothing().returning();
-    attempt = created;
-    if (!attempt) {
-      const [raced] = await db.select().from(bookingCheckoutAttempts)
-        .where(and(eq(bookingCheckoutAttempts.bookingId, bookingId), eq(bookingCheckoutAttempts.kind, input.kind),
-          sql`${bookingCheckoutAttempts.status} IN ('pending', 'created')`)).limit(1);
-      if (!raced || raced.quoteHash !== expectedHash) return "attempt_conflict";
-      attempt = raced;
+    attempt = created ?? await findActiveAttempt(bookingId, input.kind);
+    if (!attempt || attempt.quoteHash !== expectedHash) return "attempt_conflict";
+    // A concurrent request won the race and already has a Session: reuse it.
+    if (attempt.stripeSessionId) {
+      const state = await refreshActiveAttempt(attempt, stripe, mode, amountPenCents);
+      if (typeof state === "string") return state;
+      if (state.state !== "open" || !state.session) return "attempt_expired";
+      return { state: "reused", attemptId: attempt.id, checkoutUrl: state.session.url! };
     }
   }
-  if (attempt.status === "expired" || attempt.status === "failed" || attempt.status === "completed") return "attempt_expired";
+  if (!attempt.expiresAt) return "attempt_expired";
+  const remainingMs = attempt.expiresAt.getTime() - Date.now();
 
-  if (attempt.stripeSessionId) {
-    const session = await stripe.checkout.sessions.retrieve(attempt.stripeSessionId);
-    if (!canonicalSession(session, bookingId, attempt.id, amountPenCents)) return "attempt_expired";
-    return { state: "reused", attemptId: attempt.id, checkoutUrl: session.url! };
-  }
-  if (!attempt.expiresAt || attempt.expiresAt.getTime() <= Date.now()) return "attempt_expired";
-
-  const checkoutOrigin = process.env.STRIPE_CHECKOUT_ORIGIN!;
+  // The return URLs use the same origin that the POST Origin check accepts.
+  const appOrigin = getEnv().APP_ORIGIN;
   const checkoutPath = `/viajes/${encodeURIComponent(booking.tripSlug)}/checkout?booking_id=${encodeURIComponent(bookingId)}&attempt_id=${encodeURIComponent(attempt.id)}`;
-  const successUrl = new URL(`${checkoutPath}&return=success`, checkoutOrigin).toString();
-  const cancelUrl = new URL(`${checkoutPath}&cancelled=1`, checkoutOrigin).toString();
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    allowed_payment_method_types: ["card"],
-    line_items: [{
-      quantity: 1,
-      price_data: {
-        currency: "pen",
-        unit_amount: amountPenCents,
-        product_data: { name: booking.packageLabel, description: input.kind === "initial" ? "Pago inicial de reserva" : "Saldo de reserva" },
-      },
-    }],
-    customer_email: booking.participantEmail,
-    client_reference_id: bookingId,
-    metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind },
-    payment_intent_data: { metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind } },
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    expires_at: Math.floor((attempt.expiresAt.getTime()) / 1000),
-  }, { idempotencyKey: attempt.idempotencyKey });
-  if (!canonicalSession(session, bookingId, attempt.id, amountPenCents)) return "attempt_expired";
+  const successUrl = new URL(`${checkoutPath}&return=success`, appOrigin).toString();
+  const cancelUrl = new URL(`${checkoutPath}&cancelled=1`, appOrigin).toString();
+  let session: Stripe.Checkout.Session;
+  try {
+    // Same idempotency key and parameters as the first try (expires_at included), so a retry
+    // after a lost response returns the Session Stripe already created instead of a second one.
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      allowed_payment_method_types: ["card"],
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: "pen",
+          unit_amount: amountPenCents,
+          product_data: { name: booking.packageLabel, description: input.kind === "initial" ? "Pago inicial de reserva" : "Saldo de reserva" },
+        },
+      }],
+      customer_email: booking.participantEmail,
+      client_reference_id: bookingId,
+      metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind },
+      payment_intent_data: { metadata: { bookingId, attemptId: attempt.id, paymentKind: input.kind } },
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      expires_at: Math.floor(attempt.expiresAt.getTime() / 1000),
+    }, { idempotencyKey: attempt.idempotencyKey });
+  } catch {
+    // Too close to Stripe's minimum to retry with the same parameters: retire it, keeping the
+    // reservation, so the next click creates a fresh attempt with a valid deadline.
+    if (remainingMs < MIN_RETRY_MS) await retireCheckoutAttempt(attempt, "failed", false);
+    return "stripe_unavailable";
+  }
+  if (!canonicalSession(session, bookingId, attempt.id, amountPenCents, mode)) return "stripe_unavailable";
   await db.update(bookingCheckoutAttempts).set({
     status: "created", stripeSessionId: session.id, checkoutUrl: session.url,
     expiresAt: session.expires_at ? new Date(session.expires_at * 1000) : null, updatedAt: sql`now()`,

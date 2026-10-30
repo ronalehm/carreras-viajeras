@@ -9,29 +9,38 @@ import { getCheckoutContractVersion } from "@/modules/contracts";
 import type { CurrentUser } from "@/lib/auth/guards";
 import { checkoutQuoteHash, createCheckoutQuote, getCurrentCheckoutRate } from "./quote.service";
 import {
+  findResumableCheckoutBooking,
   getCheckoutReservation,
+  isCheckoutEnabled,
   persistCheckoutReservation,
   type ReservationRecord,
 } from "./bookingCheckout.service";
-import { isCheckoutSandboxEnabled } from "./bookingCheckout.service";
 import type { PrepareCheckoutInput } from "../schemas/checkout.schema";
 
+type QuoteAmounts = { amountUsd: number; amountPenCents: number; quoteHash: string };
+// Server-side record used to accept the contract: carries the contract version fingerprint.
 export type PreparedCheckout = {
   bookingId: string;
   tripTitle: string;
   offerVersion: number;
   quote: ReservationRecord["quote"];
-  checkoutQuotes: {
-    initial: { amountUsd: number; amountPenCents: number; quoteHash: string };
-    balance: { amountUsd: number; amountPenCents: number; quoteHash: string } | null;
-  };
-  contract: { versionKey: string; title: string; body: string; documentHash: string; sandboxOnly: boolean };
+  checkoutQuotes: { initial: QuoteAmounts; balance: QuoteAmounts | null };
+  contract: { versionKey: string; title: string; documentHash: string; testDocument: boolean };
+  // The full document the runner accepts, contract body included: the only copy of that body.
   documentSnapshot: string;
   documentHash: string;
   expiresAt: Date;
 };
-export type PrepareCheckoutResult = PreparedCheckout | "offer_unavailable" | "rate_unavailable" |
-  "contract_unavailable" | "registration_required" | "sold_out" | "request_conflict" | "booking_exists";
+// What the browser receives: no rate id, no contract fingerprint and a single document body.
+export type PreparedCheckoutView = Omit<PreparedCheckout, "quote" | "contract"> & {
+  quote: Omit<ReservationRecord["quote"], "rateId">;
+  contract: { versionKey: string; title: string; testDocument: boolean };
+  // True when an active reservation of this runner for the trip was resumed instead of created.
+  resumed: boolean;
+};
+export type PrepareCheckoutResult = PreparedCheckoutView | "offer_unavailable" | "rate_unavailable" |
+  "contract_unavailable" | "registration_required" | "sold_out" | "request_conflict" | "booking_exists" |
+  "invalid_payment_choice";
 
 function documentFor(
   reservation: ReservationRecord,
@@ -78,18 +87,35 @@ function prepared(reservation: ReservationRecord, contract: { title: string; bod
           rateId: reservation.quote.rateId, rateUsdPen: reservation.quote.rateUsdPen }),
       } : null,
     },
-    contract: { versionKey: contract.versionKey, title: contract.title, body: contract.body, documentHash: contractHash, sandboxOnly: contract.status === "draft" },
+    contract: { versionKey: contract.versionKey, title: contract.title, documentHash: contractHash, testDocument: contract.status === "draft" },
     documentSnapshot: snapshot.document,
     documentHash: snapshot.hash,
     expiresAt: reservation.expiresAt,
   };
 }
 
+function view(prepared: PreparedCheckout, resumed: boolean): PreparedCheckoutView {
+  const { totalUsd, principalUsd, balanceUsd, rateUsdPen, amountPenCents } = prepared.quote;
+  return {
+    ...prepared, resumed, quote: { totalUsd, principalUsd, balanceUsd, rateUsdPen, amountPenCents },
+    contract: { versionKey: prepared.contract.versionKey, title: prepared.contract.title, testDocument: prepared.contract.testDocument },
+  };
+}
+
+// A runner's active reservation for this trip is resumed whatever payment choice is sent now: its
+// snapshot (price, rate, contract) is authoritative. Another account's booking stays `booking_exists`.
+async function resumeActiveBooking(tripId: string, user: Pick<CurrentUser, "id" | "email">): Promise<PreparedCheckoutView | null> {
+  const bookingId = await findResumableCheckoutBooking(tripId, user.email, user.id);
+  if (!bookingId) return null;
+  const prepared = await getPreparedBookingCheckout(bookingId, user.id);
+  return prepared ? view(prepared, true) : null;
+}
+
 export async function prepareBookingCheckout(
   input: PrepareCheckoutInput,
   user: Pick<CurrentUser, "id" | "email">,
 ): Promise<PrepareCheckoutResult> {
-  if (!isCheckoutSandboxEnabled()) throw new Error("checkout sandbox disabled");
+  if (!isCheckoutEnabled()) throw new Error("checkout disabled");
   const inputHash = createHash("sha256").update(JSON.stringify([
     user.id, input.tripId, input.campaignCode ?? null, input.paymentChoice,
   ])).digest("hex");
@@ -98,8 +124,10 @@ export async function prepareBookingCheckout(
   if (prior === "request_conflict") return prior;
   if (prior) {
     const contract = await getCheckoutContractVersion(prior.termsVersion);
-    return contract ? prepared(prior, contract) : "contract_unavailable";
+    return contract ? view(prepared(prior, contract), false) : "contract_unavailable";
   }
+  const resumed = await resumeActiveBooking(input.tripId, user);
+  if (resumed) return resumed;
 
   const db = getDb();
   const [campaign] = input.campaignCode
@@ -111,9 +139,10 @@ export async function prepareBookingCheckout(
   if (!offer) return "offer_unavailable";
   const rate = await getCurrentCheckoutRate();
   if (!rate) return "rate_unavailable";
+  const quote = createCheckoutQuote(offer, input.paymentChoice, rate);
+  if (quote === "invalid_payment_choice") return quote;
   const contract = await getCheckoutContractVersion(offer.termsVersion);
   if (!contract) return "contract_unavailable";
-  const quote = createCheckoutQuote(offer, input.paymentChoice, rate);
 
   const [registration] = await db.select({
     leadId: leads.id,
@@ -142,13 +171,15 @@ export async function prepareBookingCheckout(
     rateId: quote.rateId, rateUsdPen: quote.rateUsdPen, amountPenCents: quote.amountPenCents,
     capacityLimit: offer.capacityLimit,
   });
+  // A concurrent preparation of the same runner may have created the booking in the meantime.
+  if (reservation === "booking_exists") return (await resumeActiveBooking(input.tripId, user)) ?? reservation;
   if (typeof reservation === "string") return reservation;
 
   // The persisted version is authoritative if an offer changes while a concurrent request is resolving.
   const savedContract = reservation.termsVersion === contract.versionKey
     ? contract
     : await getCheckoutContractVersion(reservation.termsVersion);
-  return savedContract ? prepared(reservation, savedContract) : "contract_unavailable";
+  return savedContract ? view(prepared(reservation, savedContract), false) : "contract_unavailable";
 }
 
 export async function getPreparedBookingCheckout(bookingId: string, userId: string): Promise<PreparedCheckout | null> {
@@ -161,7 +192,8 @@ export async function getPreparedBookingCheckout(bookingId: string, userId: stri
     principalUsd: bookings.initialPaymentUsd, rateId: bookings.checkoutRateId,
     rateUsdPen: bookings.checkoutRateUsdPen, amountPenCents: bookings.checkoutAmountPenCents,
     expiresAt: bookings.reservationExpiresAt,
-  }).from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.runnerUserId, userId), isNotNull(bookings.offerVersionId))).limit(1);
+  }).from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.runnerUserId, userId),
+    eq(bookings.status, "pending"), isNotNull(bookings.offerVersionId))).limit(1);
   if (!row || !row.termsVersion || !row.conditions || !row.tripIncludes || !row.tripExcludes
       || !row.principalUsd || !row.rateId || !row.rateUsdPen || !row.amountPenCents || !row.expiresAt
       || !row.offerVersion || row.expiresAt.getTime() <= Date.now()) return null;

@@ -1,6 +1,7 @@
 import "server-only";
-import { sql } from "drizzle-orm";
+import { and, eq, gt, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
+import { getStripeCheckoutConfig } from "@/lib/env";
 import { bookings, offerCapacityAllocations, offerCapacityCounters } from "@/lib/db-schema";
 
 function textArray(values: string[]) {
@@ -42,8 +43,10 @@ export type ReservationRecord = {
 };
 export type ReservationResult = ReservationRecord | "sold_out" | "request_conflict" | "booking_exists";
 
-export function isCheckoutSandboxEnabled(): boolean {
-  return process.env.NODE_ENV !== "production" && process.env.STRIPE_CHECKOUT_ENABLED === "true";
+// Checkout is on only when the Stripe configuration allows it for this environment (test mode
+// outside production, live mode with every production requirement met). Fails closed.
+export function isCheckoutEnabled(): boolean {
+  return getStripeCheckoutConfig().enabled;
 }
 
 type StoredReservationRow = {
@@ -121,12 +124,14 @@ export async function persistCheckoutReservation(snapshot: CheckoutReservationSn
               ${sql.raw('"updated_at"')} = now()
         RETURNING "offer_version_id"
       ),
+      -- created_by is NOT NULL (FK to profiles): a self-service booking is created by its runner,
+      -- whose profile the verified-email guard registers before preparation runs.
       inserted AS (
         INSERT INTO ${bookings} (${sql.raw('"trip_id", "participant_name", "participant_email", "runner_user_id", "lead_id", "package_label", "distance", "total_usd", "balance_due_on", "created_by", "offer_version_id", "offer_version", "offer_campaign_id", "offer_terms_version", "offer_conditions_snapshot", "trip_includes_snapshot", "trip_excludes_snapshot", "initial_payment_usd", "checkout_rate_id", "checkout_rate_usd_pen", "checkout_amount_pen_cents", "checkout_request_id", "checkout_input_hash", "reservation_expires_at"')})
         SELECT
           ${snapshot.tripId}::uuid, ${snapshot.participantName}, ${snapshot.email}, ${snapshot.userId},
           ${snapshot.leadId}::uuid, ${snapshot.packageLabel}, ${snapshot.distance}, ${snapshot.totalUsd},
-          ${snapshot.balanceDueOn}::date, NULL, ${snapshot.offerVersionId}::uuid, ${snapshot.offerVersion},
+          ${snapshot.balanceDueOn}::date, ${snapshot.userId}, ${snapshot.offerVersionId}::uuid, ${snapshot.offerVersion},
           ${snapshot.campaignId}::uuid, ${snapshot.termsVersion}, ${snapshot.conditions},
           ${textArray(snapshot.tripIncludes)}, ${textArray(snapshot.tripExcludes)}, ${snapshot.initialPaymentUsd},
           ${snapshot.rateId}::uuid, ${snapshot.rateUsdPen}::numeric, ${snapshot.amountPenCents},
@@ -198,4 +203,15 @@ export async function getCheckoutReservation(
   if (!row) return null;
   if (row.runner_user_id !== userId || row.checkout_input_hash !== inputHash) return "request_conflict";
   return reservationRecord(row);
+}
+
+// The active checkout booking of this runner for the trip (the one `bookings_trip_email_active_uq`
+// protects), so preparation resumes it. Scoped by the session's user id: another account's booking
+// with the same email is never returned.
+export async function findResumableCheckoutBooking(tripId: string, email: string, userId: string): Promise<string | null> {
+  const [row] = await getDb().select({ id: bookings.id }).from(bookings).where(and(
+    eq(bookings.tripId, tripId), eq(bookings.participantEmail, email), eq(bookings.runnerUserId, userId),
+    eq(bookings.status, "pending"), isNotNull(bookings.offerVersionId), gt(bookings.reservationExpiresAt, sql`now()`),
+  )).limit(1);
+  return row?.id ?? null;
 }

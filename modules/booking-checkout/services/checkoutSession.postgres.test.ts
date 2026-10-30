@@ -5,7 +5,11 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 const stripeMocks = vi.hoisted(() => ({ create: vi.fn(), retrieve: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getEnv: () => ({ APP_ORIGIN: "http://localhost:3001" }) }));
+vi.mock("@/lib/env", () => ({
+  getEnv: () => ({ APP_ORIGIN: "http://localhost:3001" }),
+  getStripeCheckoutConfig: () => ({ enabled: true, mode: "test", secretKey: "sk_test_synthetic_test_only",
+    webhookSecret: null, allowDraftContracts: false, disabledReason: null }),
+}));
 vi.mock("stripe", () => ({ default: class StripeMock {
   checkout = { sessions: { create: stripeMocks.create, retrieve: stripeMocks.retrieve } };
 } }));
@@ -26,6 +30,8 @@ const rateId = "abababab-abab-4bab-8bab-abababababab";
 const leadId = "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd";
 const bookingId = "dededede-dede-4ede-8ede-dededededede";
 const sessionId = "cs_test_checkout_session";
+const heldBookingId = "fafafafa-fafa-4afa-8afa-fafafafafafa";
+const heldLeadId = "cbcbcbcb-cbcb-4bcb-8bcb-cbcbcbcbcbcb";
 const requestId = "12121212-1212-4121-8121-121212121212";
 const quoteHash = checkoutQuoteHash({
   bookingId, kind: "initial", offerVersion: 1, termsVersion: "checkout-session-test-v1",
@@ -43,10 +49,13 @@ const canonicalSession = {
 
 describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
   beforeAll(async () => {
-    process.env.STRIPE_CHECKOUT_ORIGIN = "http://localhost:3001";
     if (database !== "cv_stripe_checkout_f2_test") throw new Error("unsafe test database");
     const { rows } = await pool.query("select current_database() as name, to_regclass('public.booking_checkout_attempts') as attempts");
     if (rows[0].name !== database || !rows[0].attempts) throw new Error("test DB must have local migrations 0012-0015 applied");
+    await pool.query("delete from offer_capacity_allocations where booking_id=$1",[heldBookingId]);
+    await pool.query("delete from booking_contract_acceptances where booking_id=$1",[heldBookingId]);
+    await pool.query("delete from booking_checkout_attempts where booking_id=$1",[heldBookingId]);
+    await pool.query("delete from bookings where id=$1",[heldBookingId]);
     await pool.query("delete from booking_stripe_settlements where booking_id=$1",[bookingId]);
     await pool.query("delete from booking_stripe_event_receipts where attempt_id in (select id from booking_checkout_attempts where booking_id=$1)",[bookingId]);
     await pool.query("delete from booking_checkout_attempts where booking_id=$1",[bookingId]);
@@ -68,8 +77,6 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
   });
   afterAll(async () => { await pool.end(); });
   it("creates one exact PEN session, persists it, and reuses it on replay", async () => {
-    process.env.STRIPE_CHECKOUT_ENABLED = "true";
-    process.env.STRIPE_SECRET_KEY = "sk_test_synthetic_test_only";
     stripeMocks.create.mockReset().mockImplementation(async (params: { metadata: Record<string, string>; client_reference_id: string }) => ({
       ...canonicalSession, metadata: params.metadata, client_reference_id: params.client_reference_id,
     }));
@@ -153,5 +160,85 @@ describe.skipIf(!enabled)("checkout session PostgreSQL integration", () => {
     if (!balanceCall) throw new Error("Stripe mock was not called for the balance session");
     const [balanceParams] = balanceCall;
     expect(balanceParams.line_items[0].price_data).toMatchObject({ currency: "pen", unit_amount: 281250 });
+  });
+
+  it("retires a balance attempt whose Session expired without a webhook and opens a new one", async () => {
+    const { rows: before } = await pool.query("select id from booking_checkout_attempts where booking_id=$1 and kind='balance' and status='created'", [bookingId]);
+    expect(before).toHaveLength(1);
+    const staleId = before[0].id as string;
+    stripeMocks.retrieve.mockReset().mockResolvedValue({
+      ...canonicalSession, id: "cs_test_checkout_balance", status: "expired", amount_total: 281250,
+      metadata: { bookingId, attemptId: staleId, paymentKind: "balance" },
+    });
+    stripeMocks.create.mockReset().mockImplementation(async (params: { metadata: Record<string, string>; client_reference_id: string; expires_at: number;
+      line_items: { price_data: { unit_amount: number } }[] }) => ({
+      ...canonicalSession, id: "cs_test_checkout_balance_2", amount_total: params.line_items[0].price_data.unit_amount,
+      metadata: params.metadata, client_reference_id: params.client_reference_id, expires_at: params.expires_at,
+      url: "https://checkout.stripe.test/cs_test_checkout_balance_2",
+    }));
+    const result = await createBookingCheckoutSession(bookingId, runnerId, {
+      requestId: "16161616-1616-4161-8161-161616161616", kind: "balance", quoteHash: balanceHash,
+    });
+    expect(result).toMatchObject({ state: "created", checkoutUrl: "https://checkout.stripe.test/cs_test_checkout_balance_2" });
+    const sentExpiry = stripeMocks.create.mock.calls[0][0].expires_at * 1000 - Date.now();
+    expect(sentExpiry).toBeGreaterThan(30 * 60 * 1000);
+    const { rows } = await pool.query("select id,status from booking_checkout_attempts where booking_id=$1 and kind='balance' order by created_at", [bookingId]);
+    expect(rows.map(row => row.status)).toEqual(["expired", "created"]);
+    const { rows: booking } = await pool.query("select b.status, a.status as allocation from bookings b join offer_capacity_allocations a on a.booking_id=b.id where b.id=$1", [bookingId]);
+    expect(booking[0]).toEqual({ status: "confirmed", allocation: "confirmed" });
+  });
+
+  it("fails an initial attempt stuck without a Session past its deadline and releases its seat once", async () => {
+    await pool.query("insert into leads(id,full_name,phone,email,trip_id,source,consent_version) values($1,'Held Runner','+51999999997','held-runner@example.invalid',$2,'web_form','test-v1') on conflict(id) do nothing",[heldLeadId,tripId]);
+    await pool.query("insert into bookings(id,trip_id,participant_name,participant_email,runner_user_id,lead_id,status,offer_version_id,offer_version,offer_terms_version,offer_conditions_snapshot,trip_includes_snapshot,trip_excludes_snapshot,initial_payment_usd,checkout_rate_id,checkout_rate_usd_pen,checkout_amount_pen_cents,checkout_request_id,checkout_input_hash,reservation_expires_at,package_label,total_usd,balance_due_on,created_by) values($1,$2,'Held Runner','held-runner@example.invalid',$3,$4,'pending',$5,1,'checkout-session-test-v1','Test conditions.',ARRAY['Hotel'],ARRAY['Flights'],250,$6,3.7500,93750,'abababab-abab-4bab-8bab-abababababad',$7,now()-interval '1 minute','Checkout offer',1000,'2027-01-01',$3)",[heldBookingId,tripId,runnerId,heldLeadId,offerId,rateId,"d".repeat(64)]);
+    await pool.query("insert into booking_contract_acceptances(booking_id,runner_user_id,contract_version_key,contract_document_hash,document_snapshot,document_hash) values($1,$2,'checkout-session-test-v1',$3,'Synthetic approved contract acceptance snapshot for testing.',$4)",[heldBookingId,runnerId,"a".repeat(64),"b".repeat(64)]);
+    await pool.query("update offer_capacity_counters set allocated_count=allocated_count+1 where offer_version_id=$1",[offerId]);
+    await pool.query("insert into offer_capacity_allocations(booking_id,offer_version_id,status,expires_at) values($1,$2,'held',now()-interval '1 minute')",[heldBookingId,offerId]);
+    const heldHash = checkoutQuoteHash({ bookingId: heldBookingId, kind: "initial", offerVersion: 1, termsVersion: "checkout-session-test-v1",
+      amountUsd: 250, amountPenCents: 93750, rateId, rateUsdPen: "3.7500" });
+    await pool.query("insert into booking_checkout_attempts(booking_id,request_id,kind,quote_hash,amount_usd,amount_pen_cents,idempotency_key,expires_at) values($1,'17171717-1717-4171-8171-171717171717','initial',$2,250,93750,'cv-checkout-held-stuck',now()-interval '1 minute')",[heldBookingId,heldHash]);
+    const { rows: [counterBefore] } = await pool.query("select allocated_count from offer_capacity_counters where offer_version_id=$1",[offerId]);
+    stripeMocks.create.mockReset();
+    stripeMocks.retrieve.mockReset();
+    const input = { requestId: "18181818-1818-4181-8181-181818181818", kind: "initial" as const, quoteHash: heldHash };
+    await expect(createBookingCheckoutSession(heldBookingId, runnerId, input)).resolves.toBe("reservation_expired");
+    await expect(createBookingCheckoutSession(heldBookingId, runnerId, { ...input, requestId: "19191919-1919-4191-8191-191919191919" }))
+      .resolves.toBe("booking_not_found");
+    expect(stripeMocks.create).not.toHaveBeenCalled();
+    const { rows: [state] } = await pool.query("select b.status, a.status as allocation, (select status from booking_checkout_attempts where booking_id=b.id) as attempt from bookings b join offer_capacity_allocations a on a.booking_id=b.id where b.id=$1",[heldBookingId]);
+    expect(state).toEqual({ status: "cancelled", allocation: "released", attempt: "failed" });
+    const { rows: [counterAfter] } = await pool.query("select allocated_count from offer_capacity_counters where offer_version_id=$1",[offerId]);
+    expect(counterAfter.allocated_count).toBe(counterBefore.allocated_count - 1);
+  });
+
+  it("extends a short reservation once to Stripe's minimum and refuses past the maximum hold", async () => {
+    await pool.query("delete from booking_checkout_attempts where booking_id=$1",[heldBookingId]);
+    await pool.query("update bookings set status='pending',reservation_expires_at=now()+interval '10 minutes',created_at=now()-interval '5 minutes' where id=$1",[heldBookingId]);
+    await pool.query("update offer_capacity_allocations set status='held',released_at=NULL,expires_at=now()+interval '10 minutes' where booking_id=$1",[heldBookingId]);
+    const heldHash = checkoutQuoteHash({ bookingId: heldBookingId, kind: "initial", offerVersion: 1, termsVersion: "checkout-session-test-v1",
+      amountUsd: 250, amountPenCents: 93750, rateId, rateUsdPen: "3.7500" });
+    stripeMocks.create.mockReset().mockImplementation(async (params: { metadata: Record<string, string>; client_reference_id: string; expires_at: number }) => ({
+      ...canonicalSession, id: "cs_test_checkout_held", metadata: params.metadata, client_reference_id: params.client_reference_id,
+      expires_at: params.expires_at, url: "https://checkout.stripe.test/cs_test_checkout_held",
+    }));
+    await expect(createBookingCheckoutSession(heldBookingId, runnerId, {
+      requestId: "20202020-2020-4202-8202-202020202020", kind: "initial", quoteHash: heldHash,
+    })).resolves.toMatchObject({ state: "created" });
+    const sent = stripeMocks.create.mock.calls[0][0].expires_at as number;
+    const { rows: [row] } = await pool.query("select floor(extract(epoch from b.reservation_expires_at))::bigint as booking_end, floor(extract(epoch from a.expires_at))::bigint as hold_end from bookings b join offer_capacity_allocations a on a.booking_id=b.id where b.id=$1",[heldBookingId]);
+    expect(Number(row.booking_end)).toBe(sent);
+    expect(Number(row.hold_end)).toBe(sent);
+    expect(sent * 1000 - Date.now()).toBeGreaterThan(30 * 60 * 1000);
+    expect(sent * 1000 - Date.now()).toBeLessThan(33 * 60 * 1000);
+
+    await pool.query("delete from booking_checkout_attempts where booking_id=$1",[heldBookingId]);
+    await pool.query("update bookings set reservation_expires_at=now()+interval '10 minutes',created_at=now()-interval '115 minutes' where id=$1",[heldBookingId]);
+    stripeMocks.create.mockClear();
+    await expect(createBookingCheckoutSession(heldBookingId, runnerId, {
+      requestId: "21212121-2121-4212-8212-212121212121", kind: "initial", quoteHash: heldHash,
+    })).resolves.toBe("reservation_expired");
+    expect(stripeMocks.create).not.toHaveBeenCalled();
+    const { rows: [unchanged] } = await pool.query("select reservation_expires_at - now() < interval '11 minutes' as unchanged from bookings where id=$1",[heldBookingId]);
+    expect(unchanged.unchanged).toBe(true);
   });
 });

@@ -37,6 +37,8 @@ describe.skipIf(!enabled)("checkout capacity on isolated PostgreSQL",()=>{
   await pool.query("delete from bookings where checkout_request_id=any($1::uuid[])",[requests]);
   await pool.query("delete from offer_capacity_counters where offer_version_id=$1",[offerId]);
   await pool.query("insert into profiles(user_id,email) values($1,$2) on conflict do nothing",[adminId,"checkout-admin@example.invalid"]);
+  // The verified-email guard registers every runner's profile; the booking's created_by references it.
+  for(let i=0;i<2;i++) await pool.query("insert into profiles(user_id,email) values($1,$2) on conflict do nothing",[users[i],"runner"+(i+1)+"@example.invalid"]);
   await pool.query("insert into trips(id,slug,title,city,country,race_date,distances,summary,includes,excludes,status) values($1,'checkout-test-trip','Carrera de prueba','Lima','Perú','2027-06-01',ARRAY['21K'],'Trip test',ARRAY['Hotel'],ARRAY['Vuelos'],'published') on conflict(id) do nothing",[tripId]);
   await pool.query("insert into exchange_rates(id,usd_pen,created_by) values($1,3.7500,$2) on conflict(id) do nothing",[rateId,adminId]);
   await pool.query("insert into trip_offers(id,trip_id,version,status,name,total_price_usd,discount_usd,deposit_options_usd,balance_due_on,valid_from,capacity_limit,terms_version,conditions,created_by,approved_by,approved_at,activated_by,activated_at) values($1,$2,1,'active','Oferta test',1000,0,ARRAY[250],'2027-01-01','2026-01-01',1,'checkout-test-v1','Condiciones sintéticas de la oferta.',$3,$3,now(),$3,now()) on conflict(id) do nothing",[offerId,tripId,adminId]);

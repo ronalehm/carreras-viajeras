@@ -1,33 +1,35 @@
-import { authErrorResponse } from "@/lib/auth/errors";
 import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
-import { createCheckoutSessionSchema, isCheckoutSandboxEnabled } from "@/modules/booking-checkout";
-import { createBookingCheckoutSession } from "@/modules/booking-checkout";
+import {
+  bookingRouteParamsSchema, checkoutError, checkoutFailure, checkoutJson, createBookingCheckoutSession,
+  createCheckoutSessionSchema, hasAppOrigin, isCheckoutEnabled,
+} from "@/modules/booking-checkout";
 
-const NO_STORE = { "Cache-Control": "no-store" };
-const ERRORS = new Set(["booking_not_found", "contract_not_accepted", "reservation_expired", "quote_changed", "attempt_conflict", "attempt_expired", "balance_not_due"]);
+const ROUTE = "session";
+const RESULT_STATUS = {
+  checkout_unavailable: 503, booking_not_found: 404, contract_not_accepted: 409, reservation_expired: 409,
+  quote_changed: 409, attempt_conflict: 409, attempt_expired: 409, balance_not_due: 409,
+  payment_processing: 409, stripe_unavailable: 502,
+} as const;
+// A missing booking and another runner's booking answer the same 404.
+const RESULT_CODE: Partial<Record<keyof typeof RESULT_STATUS, string>> = {
+  checkout_unavailable: "stripe_unavailable", booking_not_found: "not_found",
+};
+
 export async function POST(request: Request, context: RouteContext<"/api/bookings/[bookingId]/checkout">) {
-  if (!isCheckoutSandboxEnabled()) return Response.json({ error: "checkout_unavailable" }, { status: 404, headers: NO_STORE });
+  if (!isCheckoutEnabled()) return checkoutError(ROUTE, "not_found", 404);
   try {
-    if (request.headers.get("origin") !== new URL(getEnv().APP_ORIGIN).origin) {
-      return Response.json({ error: "invalid_origin" }, { status: 403, headers: NO_STORE });
-    }
+    if (!hasAppOrigin(request, getEnv().APP_ORIGIN)) return checkoutError(ROUTE, "invalid_origin", 403);
+    const params = bookingRouteParamsSchema.safeParse(await context.params);
+    if (!params.success) return checkoutError(ROUTE, "not_found", 404);
     const user = await requireVerifiedEmail();
-    const { bookingId } = await context.params;
     const body = await readJsonBody(request, createCheckoutSessionSchema);
-    if (!body) return Response.json({ error: "invalid_request" }, { status: 400, headers: NO_STORE });
-    const result = await createBookingCheckoutSession(bookingId, user.id, body);
-    if (typeof result !== "string") return Response.json(result, { headers: NO_STORE });
-    if (result === "checkout_unavailable") return Response.json({ error: result }, { status: 503, headers: NO_STORE });
-    if (ERRORS.has(result)) return Response.json({ error: result }, { status: result === "booking_not_found" ? 404 : 409, headers: NO_STORE });
-    console.error("booking checkout: session creation failed");
-    return Response.json({ error: "checkout_failed" }, { status: 502, headers: NO_STORE });
+    if (!body) return checkoutError(ROUTE, "invalid_request", 400);
+    const result = await createBookingCheckoutSession(params.data.bookingId, user.id, body);
+    if (typeof result !== "string") return checkoutJson(result);
+    return checkoutError(ROUTE, RESULT_CODE[result] ?? result, RESULT_STATUS[result]);
   } catch (error) {
-    try { return authErrorResponse(error); }
-    catch {
-      console.error("booking checkout: session creation failed");
-      return Response.json({ error: "checkout_failed" }, { status: 502, headers: NO_STORE });
-    }
+    return checkoutFailure(ROUTE, error);
   }
 }

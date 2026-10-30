@@ -26,6 +26,10 @@ export const createCheckoutSessionSchema = z.object({
   quoteHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
+// Route segments are validated before any lookup, so a malformed id is a plain 404.
+export const bookingRouteParamsSchema = z.object({ bookingId: uuid });
+export const attemptRouteParamsSchema = z.object({ bookingId: uuid, attemptId: uuid });
+
 export type PrepareCheckoutInput = z.output<typeof prepareCheckoutSchema>;
 export type PaymentChoice = z.output<typeof paymentChoiceSchema>;
 export type ContractAcceptanceInput = z.output<typeof contractAcceptanceSchema>;

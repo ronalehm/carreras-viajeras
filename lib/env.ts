@@ -151,6 +151,15 @@ const stripeCheckoutSchema = z.object({
   STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: stripeFlag,
 });
 
+// Configuration is read on every request; each distinct reason is logged once per process.
+const loggedStripeWarnings = new Set<string>();
+function warnStripeCheckoutDisabled(details: { reason: StripeCheckoutDisabledReason; fields?: string }) {
+  const key = details.reason + (details.fields ?? "");
+  if (loggedStripeWarnings.has(key)) return;
+  loggedStripeWarnings.add(key);
+  console.warn("stripe-checkout: disabled", details);
+}
+
 // Fails closed: any missing or invalid value leaves Checkout off. The key and webhook secret are
 // still returned when their mode is allowed, so the webhook works while Checkout is switched off.
 export function getStripeCheckoutConfig(): StripeCheckoutConfig {
@@ -162,7 +171,7 @@ export function getStripeCheckoutConfig(): StripeCheckoutConfig {
     STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: readOptional("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS"),
   });
   if (!result.success) {
-    console.warn("stripe-checkout: disabled", { reason: "invalid_configuration", fields: invalidEnvironment(result.error).message });
+    warnStripeCheckoutDisabled({ reason: "invalid_configuration", fields: invalidEnvironment(result.error).message });
     return { enabled: false, mode: null, secretKey: null, webhookSecret: null, allowDraftContracts: false, disabledReason: "invalid_configuration" };
   }
   const env = result.data;
@@ -179,7 +188,7 @@ export function getStripeCheckoutConfig(): StripeCheckoutConfig {
             : production && !appOrigin.safeParse(process.env.APP_ORIGIN).success ? "invalid_app_origin"
               : production && draftBypass ? "draft_contracts_bypass"
                 : null;
-  if (disabledReason && disabledReason !== "not_enabled") console.warn("stripe-checkout: disabled", { reason: disabledReason });
+  if (disabledReason && disabledReason !== "not_enabled") warnStripeCheckoutDisabled({ reason: disabledReason });
   return {
     enabled: disabledReason === null,
     mode,

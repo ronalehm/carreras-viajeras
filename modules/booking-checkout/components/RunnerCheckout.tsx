@@ -14,10 +14,13 @@ type Prepared = {
     initial: { amountUsd: number; amountPenCents: number; quoteHash: string };
     balance: { amountUsd: number; amountPenCents: number; quoteHash: string } | null;
   };
-  contract: { title: string; versionKey: string; sandboxOnly?: boolean };
+  contract: { title: string; versionKey: string; testDocument: boolean };
   documentSnapshot: string;
   documentHash: string;
+  resumed: boolean;
 };
+// Every error response of the checkout API is `{ code, requestId }`.
+type ErrorBody = { code?: unknown; requestId?: unknown };
 type Choice = { kind: "full" } | { kind: "deposit"; index: number };
 function isPrepared(value: unknown): value is Prepared {
   if (!value || typeof value !== "object") return false;
@@ -35,7 +38,19 @@ const messages: Record<string, string> = {
   sold_out: "La oferta alcanzó su cupo.",
   document_changed: "El contrato cambió. Vuelve a revisar el documento.",
   reservation_expired: "La reserva venció. Inicia el proceso otra vez.",
+  booking_exists: "Ya tienes una reserva para este viaje. Revísala en Mis carreras.",
+  invalid_payment_choice: "La forma de pago elegida ya no está disponible. Elige otra opción.",
+  attempt_expired: "La sesión de pago anterior venció. Vuelve a intentarlo para abrir una nueva.",
 };
+
+async function readError(response: Response): Promise<ErrorBody> {
+  try { return await response.json() as ErrorBody; } catch { return {}; }
+}
+// The reference lets the team find the server log line of this exact failure.
+function errorMessage(body: ErrorBody, fallback: string): string {
+  const message = (typeof body.code === "string" && messages[body.code]) || fallback;
+  return typeof body.requestId === "string" ? `${message} Referencia: ${body.requestId}.` : message;
+}
 
 export function RunnerCheckout({
   tripId, tripTitle, campaignCode, offer, returned, cancelled, bookingId, attemptId,
@@ -59,12 +74,16 @@ export function RunnerCheckout({
     const controller = new AbortController();
     void fetch(`/api/bookings/${bookingId}/checkout/${attemptId}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("state_unavailable");
+        if (!response.ok) {
+          throw new Error(errorMessage(await readError(response), "Inicia sesión con la cuenta de la reserva para consultar su estado."));
+        }
         return response.json() as Promise<{ status: string; amountUsd: number; amountPenCents: number; checkoutUrl: string | null;
           balanceQuote: { amountUsd: number; amountPenCents: number; quoteHash: string } | null }>;
       })
       .then(setCheckoutState)
-      .catch(() => { if (!controller.signal.aborted) setError("Inicia sesión con la cuenta de la reserva para consultar su estado."); });
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error && cause.message ? cause.message : "Inicia sesión con la cuenta de la reserva para consultar su estado.");
+      });
     return () => controller.abort();
   }, [bookingId, attemptId]);
 
@@ -77,8 +96,8 @@ export function RunnerCheckout({
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ tripId, campaignCode: campaignCode ?? undefined, paymentChoice: choice, requestId: crypto.randomUUID() }),
       });
-      const result = await response.json() as Partial<Prepared> & { error?: string };
-      if (!response.ok) throw new Error((result.error && messages[result.error]) ?? "No se pudo preparar la reserva.");
+      if (!response.ok) throw new Error(errorMessage(await readError(response), "No se pudo preparar la reserva."));
+      const result: unknown = await response.json();
       if (!isPrepared(result)) throw new Error("La respuesta de preparación no es válida.");
       setPrepared(result); setAccepted(false);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo preparar la reserva."); }
@@ -93,18 +112,16 @@ export function RunnerCheckout({
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ accepted: true, documentHash: prepared.documentHash }),
       });
-      const acceptance = await acceptedResponse.json() as { error?: string };
-      if (!acceptedResponse.ok) throw new Error((acceptance.error && messages[acceptance.error]) ?? "No se pudo registrar la aceptación del contrato.");
+      if (!acceptedResponse.ok) throw new Error(errorMessage(await readError(acceptedResponse), "No se pudo registrar la aceptación del contrato."));
 
       const quote = prepared.checkoutQuotes.initial;
       const response = await fetch(`/api/bookings/${prepared.bookingId}/checkout`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ requestId: crypto.randomUUID(), kind: "initial", quoteHash: quote.quoteHash }),
       });
-      const result = await response.json() as { checkoutUrl?: string; error?: string };
-      if (!response.ok || typeof result.checkoutUrl !== "string") {
-        throw new Error((result.error && messages[result.error]) ?? "No se pudo iniciar el pago. Puedes volver a intentarlo.");
-      }
+      if (!response.ok) throw new Error(errorMessage(await readError(response), "No se pudo iniciar el pago. Puedes volver a intentarlo."));
+      const result = await response.json() as { checkoutUrl?: unknown };
+      if (typeof result.checkoutUrl !== "string") throw new Error("No se pudo iniciar el pago. Puedes volver a intentarlo.");
       window.location.assign(result.checkoutUrl);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo iniciar el pago."); setBusy(false); }
   }
@@ -117,10 +134,9 @@ export function RunnerCheckout({
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ requestId: crypto.randomUUID(), kind: "balance", quoteHash: checkoutState.balanceQuote.quoteHash }),
       });
-      const result = await response.json() as { checkoutUrl?: string; error?: string };
-      if (!response.ok || typeof result.checkoutUrl !== "string") {
-        throw new Error((result.error && messages[result.error]) ?? "No se pudo iniciar el pago del saldo.");
-      }
+      if (!response.ok) throw new Error(errorMessage(await readError(response), "No se pudo iniciar el pago del saldo."));
+      const result = await response.json() as { checkoutUrl?: unknown };
+      if (typeof result.checkoutUrl !== "string") throw new Error("No se pudo iniciar el pago del saldo.");
       window.location.assign(result.checkoutUrl);
     } catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo iniciar el pago del saldo."); setBusy(false); }
   }
@@ -179,9 +195,10 @@ export function RunnerCheckout({
       {!returned && !cancelled && prepared && (
         <div className="flex flex-col gap-4 rounded-xl border p-5">
           <h2 className="text-xl font-semibold">Revisa la reserva y el contrato</h2>
+          {prepared.resumed && <p role="status">Retomamos tu reserva pendiente para este viaje, con la forma de pago que elegiste al crearla.</p>}
           <p>Total: US$ {prepared.quote.totalUsd} · Pago inicial: US$ {prepared.quote.principalUsd} · Saldo: US$ {prepared.quote.balanceUsd}</p>
           <p>Conversión confirmada: {prepared.quote.rateUsdPen} PEN/USD. Cobro de hoy: {formatPenCents(prepared.checkoutQuotes.initial.amountPenCents)}.</p>
-          {prepared.contract.sandboxOnly && <p role="status" className="rounded-md border border-amber-500 p-3 text-sm">Documento de prueba sandbox. No tiene aprobación legal ni comercial y no puede usarse en producción.</p>}
+          {prepared.contract.testDocument && <p role="status" className="rounded-md border border-amber-500 p-3 text-sm">Documento de prueba sandbox. No tiene aprobación legal ni comercial y no puede usarse en producción.</p>}
           <details className="max-h-72 overflow-auto rounded-lg border p-4">
             <summary className="cursor-pointer font-semibold">{prepared.contract.title} · {prepared.contract.versionKey}</summary>
             <pre className="mt-4 whitespace-pre-wrap text-sm">{prepared.documentSnapshot}</pre>

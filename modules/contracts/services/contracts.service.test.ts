@@ -1,9 +1,11 @@
 // @vitest-environment node
-import {beforeEach,afterEach,describe,expect,it,vi} from "vitest";
+import {beforeEach,describe,expect,it,vi} from "vitest";
 import {drizzle} from "drizzle-orm/neon-http";
 vi.mock("server-only",()=>({}));
 vi.mock("@/lib/db",()=>({getDb:vi.fn()}));
+vi.mock("@/lib/env",()=>({getStripeCheckoutConfig:vi.fn()}));
 import {getDb} from "@/lib/db";
+import {getStripeCheckoutConfig,type StripeCheckoutConfig} from "@/lib/env";
 import {contractReviewHash,createContractDraft,updateContractDraft,approveContractVersion,getApprovedContractVersion,getCheckoutContractVersion,listContractVersions} from "./contracts.service";
 
 const id="11111111-1111-4111-8111-111111111111";
@@ -15,17 +17,17 @@ function fake(responses:unknown[][]=[]){
  return queries;
 }
 const row=(status="draft",hash:string|null=null)=>[id,input.versionKey,input.title,input.body,status,hash,null];
-beforeEach(()=>{vi.mocked(getDb).mockReset();vi.stubEnv("NODE_ENV","development");vi.stubEnv("STRIPE_CHECKOUT_ENABLED","true");});
-afterEach(()=>vi.unstubAllEnvs());
+const testConfig:StripeCheckoutConfig={enabled:true,mode:"test",secretKey:"sk_test_unit",webhookSecret:null,allowDraftContracts:false,disabledReason:null};
+function stripeConfig(overrides:Partial<StripeCheckoutConfig>={}){vi.mocked(getStripeCheckoutConfig).mockReturnValue({...testConfig,...overrides});}
+beforeEach(()=>{vi.mocked(getDb).mockReset();stripeConfig();});
 
 describe("versioned contracts",()=>{
- it("never touches the database while sandbox is disabled or production",async()=>{
-  vi.stubEnv("STRIPE_CHECKOUT_ENABLED","");
-  await expect(createContractDraft(input,"admin")).rejects.toThrow("checkout sandbox disabled");
-  expect(getDb).not.toHaveBeenCalled();
-  vi.stubEnv("STRIPE_CHECKOUT_ENABLED","true");vi.stubEnv("NODE_ENV","production");
-  await expect(listContractVersions()).rejects.toThrow("checkout sandbox disabled");
-  expect(getDb).not.toHaveBeenCalled();
+ it("manages contracts with Checkout switched off, so live terms can be approved before go-live",async()=>{
+  stripeConfig({enabled:false,mode:"live",disabledReason:"not_enabled"});
+  const queries=fake([[[id]],[]]);
+  await expect(createContractDraft(input,"admin")).resolves.toEqual({id});
+  await expect(listContractVersions()).resolves.toEqual([]);
+  expect(queries).toHaveLength(2);
  });
  it("binds a review fingerprint to version, title and text",()=>{
   const hashes=[input,{...input,versionKey:"viaje-2027-v2"},{...input,title:"Otro título"},{...input,body:input.body+" Cambio."}].map(contractReviewHash);
@@ -82,21 +84,33 @@ describe("versioned contracts",()=>{
 });
 
 
-describe("sandbox draft Checkout",()=>{
- it("does not expose a draft with a live key",async()=>{
-  const queries=fake([[]]);vi.stubEnv("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS","true");vi.stubEnv("STRIPE_SECRET_KEY","sk_live_fake");
+describe("draft contracts in Checkout",()=>{
+ const testBody="BORRADOR DE PRUEBA SANDBOX — SIN APROBACIÓN LEGAL NI COMERCIAL\nOferta de prueba.";
+ it("never serves a draft in live mode, even with a draft row present",async()=>{
+  stripeConfig({mode:"live",allowDraftContracts:false});
+  const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
   await expect(getCheckoutContractVersion(input.versionKey)).resolves.toBeNull();expect(queries).toHaveLength(1);
  });
- it("serves a marked draft only with the explicit flag and a test key",async()=>{
-  const body="BORRADOR DE PRUEBA SANDBOX — SIN APROBACIÓN LEGAL NI COMERCIAL\nOferta de prueba.";
-  const queries=fake([[],[[id,input.versionKey,input.title,body,"draft",null,null]]]);
-  vi.stubEnv("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS","true");vi.stubEnv("STRIPE_SECRET_KEY","sk_test_unit");
-  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toMatchObject({status:"draft",documentHash:null,body,reviewHash:contractReviewHash({...input,body})});
+ it("never serves a draft while Checkout is disabled",async()=>{
+  stripeConfig({enabled:false,allowDraftContracts:true,disabledReason:"not_enabled"});
+  const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
+  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toBeNull();expect(queries).toHaveLength(1);
+ });
+ it("serves a marked draft only when the configuration allows drafts (test mode and explicit flag)",async()=>{
+  stripeConfig({allowDraftContracts:true});
+  const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
+  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toMatchObject({status:"draft",documentHash:null,body:testBody,reviewHash:contractReviewHash({...input,body:testBody})});
   expect(queries).toHaveLength(2);
  });
- it("never serves a draft without the sandbox marker",async()=>{
+ it("never serves a draft without the test-document marker",async()=>{
+  stripeConfig({allowDraftContracts:true});
   fake([[],[[id,input.versionKey,input.title,input.body,"draft",null,null]]]);
-  vi.stubEnv("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS","true");vi.stubEnv("STRIPE_SECRET_KEY","sk_test_unit");
   await expect(getCheckoutContractVersion(input.versionKey)).resolves.toBeNull();
+ });
+ it("prefers the approved version over any draft",async()=>{
+  stripeConfig({allowDraftContracts:true});
+  const hash=contractReviewHash(input);const queries=fake([[row("approved",hash)]]);
+  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toMatchObject({status:"approved"});
+  expect(queries).toHaveLength(1);
  });
 });

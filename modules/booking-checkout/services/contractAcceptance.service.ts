@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingContractAcceptances } from "@/lib/db-schema";
-import { isCheckoutSandboxEnabled } from "./bookingCheckout.service";
+import { isCheckoutEnabled } from "./bookingCheckout.service";
 import { getPreparedBookingCheckout } from "./prepare.service";
 
 export type ContractAcceptanceResult = "accepted" | "already_accepted" | "checkout_unavailable"
@@ -13,7 +13,7 @@ export async function acceptBookingContract(
   userId: string,
   documentHash: string,
 ): Promise<ContractAcceptanceResult> {
-  if (!isCheckoutSandboxEnabled()) return "checkout_unavailable";
+  if (!isCheckoutEnabled()) return "checkout_unavailable";
   const prepared = await getPreparedBookingCheckout(bookingId, userId);
   if (!prepared) return "reservation_unavailable";
   if (prepared.documentHash !== documentHash) return "document_changed";

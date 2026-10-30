@@ -4,12 +4,12 @@ vi.mock("server-only",()=>({}));
 vi.mock("next/cache",()=>({revalidatePath:vi.fn()}));
 vi.mock("@/lib/auth/guards",()=>({requirePermission:vi.fn()}));
 vi.mock("../services/contracts.service",()=>({
- isContractSandboxEnabled:vi.fn(),createContractDraft:vi.fn(),updateContractDraft:vi.fn(),approveContractVersion:vi.fn(),
+ createContractDraft:vi.fn(),updateContractDraft:vi.fn(),approveContractVersion:vi.fn(),
 }));
 import {revalidatePath} from "next/cache";
 import {requirePermission} from "@/lib/auth/guards";
 import {ForbiddenError,UnauthorizedError} from "@/lib/auth/errors";
-import {isContractSandboxEnabled,createContractDraft,updateContractDraft,approveContractVersion} from "../services/contracts.service";
+import {createContractDraft,updateContractDraft,approveContractVersion} from "../services/contracts.service";
 import {createContractAction,updateContractAction,approveContractAction} from "./contracts.actions";
 
 const idle={status:"idle"} as const;
@@ -18,7 +18,6 @@ const input={versionKey:"VIAJE-2027-V1",title:"Contrato de prueba",body:"Condici
 function form(fields:Record<string,string>){const data=new FormData();for(const [name,value] of Object.entries(fields))data.set(name,value);return data;}
 beforeEach(()=>{
  vi.resetAllMocks();
- vi.mocked(isContractSandboxEnabled).mockReturnValue(true);
  vi.mocked(requirePermission).mockResolvedValue({id:"trusted-admin",email:"admin@example.test",emailVerified:true,staffRoles:["admin"]});
  vi.mocked(createContractDraft).mockResolvedValue({id});
  vi.mocked(updateContractDraft).mockResolvedValue("updated");
@@ -26,11 +25,6 @@ beforeEach(()=>{
 });
 
 describe("contract server actions",()=>{
- it("does not initialize auth or persistence when sandbox is disabled",async()=>{
-  vi.mocked(isContractSandboxEnabled).mockReturnValue(false);
-  expect(await createContractAction(idle,form(input))).toMatchObject({status:"error"});
-  expect(requirePermission).not.toHaveBeenCalled();expect(createContractDraft).not.toHaveBeenCalled();
- });
  it.each([new UnauthorizedError(),new ForbiddenError()])("rechecks the existing admin permission for every call",async(error)=>{
   vi.mocked(requirePermission).mockRejectedValue(error);
   expect(await createContractAction(idle,form(input))).toMatchObject({status:"error"});

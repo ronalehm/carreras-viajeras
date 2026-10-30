@@ -189,9 +189,9 @@ Cada fase tiene hasta cinco tareas y unos quince archivos. Paquetes, schema, `li
 
 ### Fase 2: creación de la sesión y contratos
 
-- [ ] 2.1 Sustituir las puertas `NODE_ENV`/sandbox por `getStripeCheckoutConfig()` en booking-checkout, contracts y páginas, con la puerta antes de cualquier consulta. Usar `APP_ORIGIN` en lugar de `STRIPE_CHECKOUT_ORIGIN`.
-- [ ] 2.2 Intentos vencidos o sin sesión, `expires_at` recalculado y retomar `booking_exists`.
-- [ ] 2.3 Validación de UUID, `invalid_payment_choice`, respuesta de `prepare` reducida y `{ code, requestId }`.
+- [x] 2.1 Sustituir las puertas `NODE_ENV`/sandbox por `getStripeCheckoutConfig()` en booking-checkout, contracts y páginas, con la puerta antes de cualquier consulta. Usar `APP_ORIGIN` en lugar de `STRIPE_CHECKOUT_ORIGIN`.
+- [x] 2.2 Intentos vencidos o sin sesión, `expires_at` recalculado y retomar `booking_exists`.
+- [x] 2.3 Validación de UUID, `invalid_payment_choice`, respuesta de `prepare` reducida y `{ code, requestId }`.
 
 ### Fase 3: pantallas y saldos
 
