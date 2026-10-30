@@ -24,7 +24,7 @@ const DESTINATIONS = [
     active: true,
   },
   {
-    href: "/viajes/maraton-rio-2027",
+    href: "/viajes/maraton-rio-2027#destino-no-encontrado",
     image: "/images/destino-rio.webp",
     alt: "Vista aérea de Río de Janeiro con el Cristo Redentor",
     flag: "🇧🇷",
@@ -40,7 +40,7 @@ const DESTINATIONS = [
     active: false,
   },
   {
-    href: "/viajes/maraton-roma-2027",
+    href: "/viajes/maraton-roma-2027#destino-no-encontrado",
     image: "/images/destino-roma.webp",
     alt: "El Coliseo de Roma al atardecer",
     flag: "🇮🇹",
