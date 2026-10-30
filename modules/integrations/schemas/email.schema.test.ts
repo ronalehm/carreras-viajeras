@@ -55,6 +55,8 @@ describe("email integration contracts", () => {
       "booking_confirmed",
       "team_alert",
       "owner_alert",
+      "cadence_proposal",
+      "cadence_reminder",
     ]);
     expect(internalEmailKindSchema.options).toEqual(["team_alert", "owner_alert"]);
     for (const kind of clientEmailKindSchema.options.filter(

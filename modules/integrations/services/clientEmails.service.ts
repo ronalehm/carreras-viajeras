@@ -283,6 +283,11 @@ function emailContent(
         stageLabel: STAGE_LABELS[stage],
         leadUrl: leadUrl(),
       });
+    // Sales cadence (crm-sales-cadence.md): emailKinds does not produce these kinds yet; their
+    // templates and eligibility arrive with F1-T4.
+    case "cadence_proposal":
+    case "cadence_reminder":
+      throw new Error(`Unsupported email kind: ${kind}`);
     default:
       return lifecycleEmailTemplate(kind, client);
   }

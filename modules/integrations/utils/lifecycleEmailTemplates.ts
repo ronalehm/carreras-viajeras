@@ -1,8 +1,12 @@
 import type { clientEmailKindEnum } from "@/lib/db-schema";
 
 // Fixed, reviewed texts of docs/specs/crm-lifecycle-emails.md («Textos para revisión»). Pure
-// functions: recipients, sender and eligibility are resolved by clientEmails.service.ts.
-export type LifecycleEmailKind = Exclude<(typeof clientEmailKindEnum.enumValues)[number], "stage">;
+// functions: recipients, sender and eligibility are resolved by clientEmails.service.ts. The sales
+// cadence kinds have their own templates (crm-sales-cadence.md).
+export type LifecycleEmailKind = Exclude<
+  (typeof clientEmailKindEnum.enumValues)[number],
+  "stage" | "cadence_proposal" | "cadence_reminder"
+>;
 
 type ClientEmailData = { fullName: string; race: string };
 // Internal alerts only carry name, race, entry channel/stage, the current owner's address (team

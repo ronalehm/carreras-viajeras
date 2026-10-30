@@ -88,6 +88,7 @@ export const LEAD_ACTIVITY_LABELS: Record<LeadActivityType, string> = {
   channel_changed: "Origen",
   opted_out: "Pidió no seguir",
   re_registered: "Volvió a registrarse",
+  responded: "Respondió",
 };
 
 // Authors of the system activities that have none and are not tied to the lead's entry path: n8n
