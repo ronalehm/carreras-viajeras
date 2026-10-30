@@ -1,7 +1,7 @@
 # Invitación a crear cuenta con código de descuento de bienvenida
 
 - Módulos: integrations, rewards, bookings y crm; datos compartidos en lib.
-- Estado: borrador
+- Estado: aprobado
 - Solicitud: cuando un potencial cliente deja sus datos en el formulario y **no tiene cuenta de runner**, el sistema lo invita a registrarse. El correo le muestra los beneficios de la plataforma y le da un **código de descuento por ser nuevo cliente**.
 - Referencias: `crm-lifecycle-emails.md` (bienvenidas), `crm-sales-cadence.md`, `accounts-runner-hub-rewards.md` (recompensas y `booking_benefits`), `accounts-role-requests.md` (toda cuenta que inicia sesión tiene `profiles`) y `docs/SETUP.md`.
 
