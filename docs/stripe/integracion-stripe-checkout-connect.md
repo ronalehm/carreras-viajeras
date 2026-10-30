@@ -224,7 +224,13 @@ Ese mensaje se refiere al **recurso consultado**, no al endpoint: dice que la cl
    - completar *Configuración → Connect → Configuración de plataforma* (`dashboard.stripe.com/<acct>/settings/connect/platform-setup`) en ese mismo sandbox, con el modelo de la sección 4: marketplace, la plataforma como comerciante registrado y responsable de comisiones y pérdidas, dashboard Express y onboarding alojado por Stripe;
    - alternativa equivalente: la herramienta `EnableConnect` del MCP de Stripe (búsqueda con `stripe_api_search`) o `stripe tools search enable_connect` en el CLI;
    - no usar la vía *«Use Accounts as customers»* que también sugiere el error: habilita Accounts v2 solo para la configuración `customer` y no convierte la cuenta en plataforma Connect.
-6. **Comprobación final.** No crees cuentas conectadas hasta que el paso 3 dé `200`. El país de la cuenta de prueba se elige de forma explícita: `US` sirve para la demo, mientras que el caso real con organizadores en Perú es `PE` con la configuración `recipient` (sección 3.2).
+6. **Comprobación final.** No crees cuentas conectadas hasta que el paso 3 dé `200`.
+7. **Estado tras la configuración (2026-10-30, sandbox):**
+   - El asistente de Connect creó por su cuenta dos cuentas de prueba de EE. UU. con las configuraciones `customer` y `merchant`, y **sin `recipient`**:
+     - `…REzA3e`: dashboard `full`, comisiones y pérdidas a cargo de Stripe (equivale a Standard). No corresponde al modelo de este documento.
+     - `…FnDoRF`: dashboard `express`, comisiones y pérdidas a cargo de la plataforma.
+   - A `…FnDoRF` se le añadió la configuración `recipient` con `accounts.update` (`stripe_balance.stripe_transfers.requested: true`). Quedó con `stripe_transfers` en estado `active` y sin requisitos pendientes. Es la cuenta de destino de las pruebas de Checkout.
+   - El caso real de organizadores en Perú (solo `recipient`, país `PE`) sigue pendiente de probar y requiere habilitar los pagos transfronterizos en la configuración de Connect. El país de la cuenta de prueba se elige de forma explícita: `US` sirve para la demo, mientras que el caso real con organizadores en Perú es `PE` con la configuración `recipient` (sección 3.2).
 
 ### Fase 1: base técnica
 
