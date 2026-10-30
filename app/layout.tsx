@@ -2,20 +2,27 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { esMX } from "@clerk/localizations";
 import "./globals.css";
-import { Archivo, Plus_Jakarta_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+// Fonts are served from the repository (latin subset, variable woff2 from Google Fonts, SIL OFL)
+// so the build never depends on fonts.googleapis.com being reachable.
+const jakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin-wght.woff2",
+  weight: "400 800",
+  style: "normal",
+  display: "swap",
   variable: "--font-sans",
 });
 
 // Variable display face for home headlines; the wdth axis enables the condensed bib style.
-const archivo = Archivo({
-  subsets: ["latin"],
-  axes: ["wdth"],
+const archivo = localFont({
+  src: "./fonts/archivo-latin-wdth-wght.woff2",
+  weight: "100 900",
+  style: "normal",
+  display: "swap",
+  declarations: [{ prop: "font-stretch", value: "62% 125%" }],
   variable: "--font-archivo",
 });
 
