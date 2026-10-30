@@ -252,8 +252,16 @@ export function LeadCaptureForm({
             </label>
           </div>
 
-          {turnstileSiteKey && (
+          {turnstileSiteKey ? (
             <TurnstileWidget siteKey={turnstileSiteKey} action="lead_submit" resetSignal={turnstileResetSignal} />
+          ) : (
+            process.env.NODE_ENV === "production" && (
+              // Without the site key at build time the server rejects every submission: say so instead of failing silently.
+              <p role="alert" className="text-sm font-medium text-destructive">
+                La verificación antispam no está configurada en este sitio (falta NEXT_PUBLIC_TURNSTILE_SITE_KEY al
+                compilar), así que no podremos recibir tus datos. Escríbenos por WhatsApp mientras lo solucionamos.
+              </p>
+            )
           )}
 
           <Button

@@ -165,6 +165,12 @@ describe("verifyTurnstileToken", () => {
     expect(getTurnstileEnv).not.toHaveBeenCalled();
   });
 
+  it("an empty token logs that the widget did not render (missing build-time site key)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await expect(verifyTurnstileToken({ ...INPUT, token: "" })).resolves.toBe("invalid");
+    expect(warnSpy).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("NEXT_PUBLIC_TURNSTILE_SITE_KEY"));
+  });
+
   it("sends remoteip only when it receives one", async () => {
     fetchMock.mockResolvedValueOnce(passed());
     await verifyTurnstileToken({ ...INPUT, remoteIp: null });
