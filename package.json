@@ -12,7 +12,7 @@
     "deploy": "npm run build:worker && node scripts/check-clerk-key.mjs --require-live && opennextjs-cloudflare deploy",
     "cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
     "db:generate": "drizzle-kit generate",
-    "build:worker": "opennextjs-cloudflare build && node scripts/strip-env-secrets.mjs && node scripts/check-clerk-key.mjs"
+    "build:worker": "opennextjs-cloudflare build && opennextjs-cloudflare populateCache local && node scripts/strip-env-secrets.mjs && node scripts/check-clerk-key.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

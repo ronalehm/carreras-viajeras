@@ -1,6 +1,6 @@
 {
-  "id": "8f8aa6b3-88ec-4975-b6af-9ce97c216aad",
-  "prevId": "b2228430-274e-4826-afc9-016742300454",
+  "id": "2c9979e8-48ea-432c-8fb1-a593106817fe",
+  "prevId": "fc5e8923-532d-4908-9bfd-581b9239cbc8",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -687,6 +687,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "client_email_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'stage'"
+        },
         "stage": {
           "name": "stage",
           "type": "lead_stage",
@@ -804,11 +812,17 @@
         }
       },
       "indexes": {
-        "client_emails_event_uq": {
-          "name": "client_emails_event_uq",
+        "client_emails_event_kind_uq": {
+          "name": "client_emails_event_kind_uq",
           "columns": [
             {
               "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1830,7 +1844,7 @@
         },
         "leads_created_by_chk": {
           "name": "leads_created_by_chk",
-          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import')"
+          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import', 'runner_account')"
         },
         "leads_origin_detail_chk": {
           "name": "leads_origin_detail_chk",
@@ -2108,61 +2122,10 @@
           "primaryKey": false,
           "notNull": true,
           "default": "now()"
-        },
-        "disabled_at": {
-          "name": "disabled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "disabled_by": {
-          "name": "disabled_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "deleted_by": {
-          "name": "deleted_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
         }
       },
       "indexes": {},
-      "foreignKeys": {
-        "profiles_disabled_by_profiles_user_id_fk": {
-          "name": "profiles_disabled_by_profiles_user_id_fk",
-          "tableFrom": "profiles",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "disabled_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "profiles_deleted_by_profiles_user_id_fk": {
-          "name": "profiles_deleted_by_profiles_user_id_fk",
-          "tableFrom": "profiles",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "deleted_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
+      "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
@@ -2170,10 +2133,6 @@
         "profiles_email_lowercase_chk": {
           "name": "profiles_email_lowercase_chk",
           "value": "\"profiles\".\"email\" = lower(\"profiles\".\"email\")"
-        },
-        "profiles_deleted_chk": {
-          "name": "profiles_deleted_chk",
-          "value": "\"profiles\".\"deleted_at\" IS NULL OR \"profiles\".\"disabled_at\" IS NOT NULL"
         }
       },
       "isRLSEnabled": false
@@ -5321,6 +5280,20 @@
         "closed"
       ]
     },
+    "public.client_email_kind": {
+      "name": "client_email_kind",
+      "schema": "public",
+      "values": [
+        "stage",
+        "welcome_registration",
+        "welcome_contact",
+        "welcome_account",
+        "follow_up",
+        "booking_confirmed",
+        "team_alert",
+        "owner_alert"
+      ]
+    },
     "public.client_email_status": {
       "name": "client_email_status",
       "schema": "public",
@@ -5413,7 +5386,8 @@
         "web_form",
         "other",
         "google_form",
-        "import"
+        "import",
+        "runner_account"
       ]
     },
     "public.lead_stage": {
@@ -5435,7 +5409,8 @@
         "lead.created",
         "lead.stage_changed",
         "lead.follow_up_due",
-        "lead.opted_out"
+        "lead.opted_out",
+        "lead.owner_assigned"
       ]
     },
     "public.outbox_status": {

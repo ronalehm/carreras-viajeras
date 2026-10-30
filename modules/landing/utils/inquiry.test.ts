@@ -9,8 +9,30 @@ import {
   GENERAL_INQUIRY_MESSAGE,
   registrationHref,
   resolveDestination,
+  searchParamsToRecord,
   WHATSAPP_NUMBER,
 } from "./inquiry";
+
+describe("searchParamsToRecord", () => {
+  it("da un string por clave con un valor y un array, en orden, por clave repetida", () => {
+    expect(searchParamsToRecord(new URLSearchParams("c=abc&utm_source=x&utm_source=y&modo=stand"))).toEqual({
+      c: "abc",
+      utm_source: ["x", "y"],
+      modo: "stand",
+    });
+  });
+
+  it("conserva los valores vacíos y devuelve {} sin parámetros", () => {
+    expect(searchParamsToRecord(new URLSearchParams("c="))).toEqual({ c: "" });
+    expect(searchParamsToRecord(new URLSearchParams())).toEqual({});
+  });
+
+  it("mantiene la regla del primer valor de firstParam y attributionParams", () => {
+    const record = searchParamsToRecord(new URLSearchParams("ref=amigo&ref=otro&c=a&c=b"));
+    expect(firstParam(record.c)).toBe("a");
+    expect(attributionParams(record)).toEqual({ c: "a", ref: "amigo" });
+  });
+});
 
 describe("GENERAL_INQUIRY_MESSAGE", () => {
   it("es el texto fijo, sin datos personales", () => {

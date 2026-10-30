@@ -65,9 +65,10 @@ export function toOfferView({ offer, exchangeRate }: PublicOfferRead): OfferView
   };
 }
 
-// React cache: one Neon query per request for the page. Only the slug and the ?c= code reach the
-// service, which validates both and decides the offer (Requirement 5); no amount comes from the URL.
-// Database errors propagate on purpose, like getCatalogTrip.
+// Read by GET /api/viajes/[slug] (React cache dedupes repeated calls within one request). Only the
+// slug and the ?c= code reach the service, which validates both and decides the offer
+// (Requirement 5); no amount comes from the URL. Database errors propagate on purpose, like
+// getCatalogTrip: the endpoint turns them into 503 trip_unavailable.
 export const getCatalogOffer = cache(
   async (slug: string, campaignCode: string | null): Promise<OfferView | null> => {
     const read = await getPublicOffer(slug, campaignCode);

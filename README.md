@@ -10,7 +10,7 @@ Aplicación de Carreras Viajeras: sitio público, captación omnicanal y CRM de 
 |---|---|
 | Aplicación | Next.js + React + TypeScript strict |
 | Interfaz | Tailwind CSS + shadcn/ui sobre Base UI |
-| Ejecución prevista | Cloudflare Workers Free mediante OpenNext |
+| Ejecución prevista | Cloudflare Workers Free mediante OpenNext; las páginas estáticas se sirven desde la caché de assets (ver [Caché estática en Workers Free](#caché-estática-en-workers-free)) |
 | Datos | Neon PostgreSQL Free + Drizzle con driver HTTPS `neon-http` |
 | Identidad | Clerk (`@clerk/nextjs`); un solo proveedor. Roles y permisos en Neon |
 | Validación | Zod; Turnstile opcional en la captura pública |
@@ -66,7 +66,23 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local: antes de desplegar Clerk, comprueba además que `/crm/acceso` muestra el `<SignIn>` y que `GET /api/crm/me` sin sesión responde 401, no 500 (paso 5 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). El inicio de sesión completo con la instancia de producción de Clerk solo se valida en el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay diecisiete migraciones (`0000`–`0016`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **actualización del 2026-10-29 (verificado por el usuario en `production`): también están aplicadas `0015` y `0016`** (tabla `role_requests` con su índice y las cuatro columnas de baja de `profiles` con sus tres restricciones); **la `0013_client_stage_emails` (de `main`) no consta como aplicada en `production`**: sigue su sección. Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)) y `drizzle/0015_dusty_venom.sql` crea las solicitudes de rol (ya aplicada en `production`; en otras ramas, después de `0014`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 2 de `accounts-role-requests.md`; ver [Solicitudes del rol Admin (`0015`)](#solicitudes-del-rol-admin-0015)) y `drizzle/0016_wild_moonstone.sql` añade a `profiles` las columnas de baja de cuentas (ya aplicada en `production`; en otras ramas, después de `0015`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 3 de `accounts-role-requests.md`; ver [Desactivar y eliminar cuentas (`0016`)](#desactivar-y-eliminar-cuentas-0016)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay dieciocho migraciones (`0000`–`0017`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **actualización del 2026-10-29 (verificado por el usuario en `production`): también están aplicadas `0016_dusty_venom` y `0017_wild_moonstone`**, que se aplicaron con los números provisionales `0015` y `0016` (tabla `role_requests` con su índice y las cuatro columnas de baja de `profiles` con sus tres restricciones); `0015_client_email_kinds` (de `main`) es otra migración, con su propio procedimiento en dos bloques; **la `0013_client_stage_emails` (de `main`) no consta como aplicada en `production`**: sigue su sección. Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)) y `drizzle/0016_dusty_venom.sql` crea las solicitudes de rol (ya aplicada en `production`; en otras ramas, después de `0015`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 2 de `accounts-role-requests.md`; ver [Solicitudes del rol Admin (`0016`)](#solicitudes-del-rol-admin-0016)) y `drizzle/0017_wild_moonstone.sql` añade a `profiles` las columnas de baja de cuentas (ya aplicada en `production`; en otras ramas, después de `0016`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 3 de `accounts-role-requests.md`; ver [Desactivar y eliminar cuentas (`0017`)](#desactivar-y-eliminar-cuentas-0017)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+
+### Caché estática en Workers Free
+
+Workers Free limita cada petición a 10 ms de CPU, y renderizar una página en el Worker los supera (error 1102). Por eso `open-next.config.ts` usa la caché de assets estáticos de OpenNext con intercepción ([`platform-workers-free-cache.md`](docs/specs/platform-workers-free-cache.md)):
+
+- Las páginas que el build marca `○` (entre ellas `/` y `/cuenta`) se generan al compilar y el Worker las devuelve desde los assets, sin cargar el servidor Next. La caché es de solo lectura: no hay ISR, revalidación ni R2.
+- La portada `/` no contiene noticias en su HTML: el navegador las pide a `GET /api/noticias/portada`, que es público, responde `Cache-Control: no-store` y devuelve `503 {"error":"news_unavailable"}` si Neon falla. Publicar o despublicar se ve al recargar, sin redesplegar.
+- `/contacto` también es estática: su HTML solo trae un aviso breve de carga. En el navegador lee `?destino=` y la atribución (`c`, UTM y `ref`) de la URL con las mismas reglas de antes, y pide los viajes publicados a `GET /api/viajes`, que es público, responde `Cache-Control: no-store`, devuelve solo `{"trips":[{"slug","title"}]}` en el orden del catálogo y `503 {"error":"trips_unavailable"}` si Neon falla. Si falla, reintenta una vez y el formulario aparece con los destinos sin catálogo (Río y Roma). El envío sigue siendo la Server Action, que se ejecuta por petición.
+- `/viajes/<slug>` y `/viajes/<slug>/registro` también son estáticas: una regla `rewrites` de `next.config.ts` las sirve desde una ficha común prerenderizada (`/viajes/ficha_viaje` y `/viajes/ficha_viaje/registro`, `○`), cuyo segmento lleva un guion bajo que ningún slug del catálogo admite. La URL visible y su query (`?c=`, `?modo=stand`, UTM) no cambian, y la regla solo afecta a `/viajes/*`: nunca a `/api/*`, `/_next/*` ni a los archivos públicos. En el navegador, la ficha toma el slug de la URL y pide el viaje y la oferta a `GET /api/viajes/[slug]`, que es público, solo acepta `?c=` (su primer valor; el servidor decide la oferta y ningún importe sale de la URL), responde `Cache-Control: no-store` y devuelve `200 {"trip","offer"}` (`offer` puede ser `null`), `404 {"error":"trip_not_found"}` para un slug inexistente, no publicado o no canónico, o `503 {"error":"trip_unavailable"}` si Neon falla. Mientras carga muestra un aviso breve, sin formulario ni importes; ante un 404 muestra "Viaje no encontrado" con enlace a la portada, con HTTP 200 (404 suave), y ante un error, tras un reintento, un aviso fijo con el WhatsApp general. El modo stand se ve sin cabecera, pie ni bloque de precio, como antes. El título del documento se fija en el navegador; el HTML lleva un título y una descripción genéricos y **no hay título ni imagen Open Graph por viaje** al compartir el enlace. El envío del registro sigue siendo la Server Action, por petición.
+- `npm run build:worker` ejecuta `opennextjs-cloudflare populateCache local` justo después de `opennextjs-cloudflare build`: copia `.open-next/cache` a `.open-next/assets/cdn-cgi/_next_cache/` (solo accesible desde el Worker). Después siguen `strip-env-secrets` y `check-clerk-key`, que también recorre esa carpeta. Así la caché viaja con un `wrangler deploy` simple. No usar `opennextjs-cloudflare build` suelto para desplegar.
+
+**Límite conocido:** el CRM, `/cuenta/perfil`, `/mis-carreras`, `/noticias`, `/api/noticias/portada`, `/api/viajes`, `/api/viajes/[slug]` y el envío de los formularios de `/contacto` y de `/viajes/<slug>/registro` (Server Action) siguen ejecutándose por petición y **pueden seguir dando 1102 en Workers Free**, sobre todo en isolates fríos. Si falla `/api/noticias/portada`, la portada no se rompe: reintenta una vez y muestra el aviso fijo de Noticias; si falla `/api/viajes`, `/contacto` muestra el formulario con los destinos sin catálogo; si falla `/api/viajes/[slug]`, la página de viaje muestra el aviso fijo con el WhatsApp general.
+
+**Validado en local (2026-10-29), Fase 1:** `npm run build` (`○ /`, `○ /cuenta`), `npm run build:worker` (caché copiada) y la preview con `wrangler dev`: la primera petición a `/` en un isolate frío responde `x-opennext-cache: HIT`, y `/api/noticias/portada` sin `DATABASE_URL` responde `503 news_unavailable`. **Pendiente:** la carga con publicaciones reales de Neon y, tras un despliegue autorizado, comprobar que Workers Logs ya no muestra `exceededCpu` en `/`. **Fase 2 (`/contacto`), validado en local (2026-10-29):** `npm run build` (`○ /contacto`, `ƒ /api/viajes`), `npm run build:worker` (entrada `…/$/contacto.cache`) y la preview con `wrangler dev`: la primera petición de un isolate frío a `/contacto?destino=rio&utm_source=x` responde `200` con `x-opennext-cache: HIT`; `/api/viajes` sin `DATABASE_URL` responde `503 trips_unavailable` con `no-store`; un POST de Server Action a `/contacto` llega al servidor (con una acción desconocida, `400` con `x-nextjs-action-not-found`), no se sirve desde la caché. En Chromium, la página pide `/api/viajes` con un reintento y muestra el aviso de registro cerrado (producción). **Pendiente:** la preselección de `?destino=`, la UTM en los campos ocultos y el formulario con los destinos sin catálogo ante un `503` solo están cubiertos por unit tests (en producción el registro está cerrado por el texto legal provisional); y el HTML estático de `/contacto` no incluye el `h1` hasta hidratar.
+
+**Fase 3 (páginas de viaje), validado en local (2026-10-29):** `npm run build` (`○ /viajes/ficha_viaje`, `○ /viajes/ficha_viaje/registro`, `ƒ /api/viajes/[slug]`, sin `ƒ /viajes/[slug]`), `npm run build:worker` (entradas de caché de las dos fichas) y la preview con `wrangler dev`: la primera petición de un isolate frío a `/viajes/maraton-santiago-2027?c=abc` responde `200` con `x-opennext-cache: HIT` sin redirección, igual que `/viajes/maraton-santiago-2027/registro?modo=stand`, `/`, `/contacto` y `/cuenta`; `/api/viajes/maraton-santiago-2027?c=abc` sin `DATABASE_URL` responde `503 trip_unavailable` con `no-store`. **Pendiente:** la carga en un navegador con datos reales de Neon (viaje, oferta de `?c=`, "Viaje no encontrado" y el modo stand) y, tras un despliegue autorizado, comprobar en Workers Logs que `/viajes/*` ya no termina en `exceededCpu`.
 
 ## Continuar desde Neon y Cloudflare
 
@@ -420,7 +436,7 @@ Especificado en [`accounts-clerk-rbac.md`](docs/specs/accounts-clerk-rbac.md) (F
    - la salida lista cada fila insertada (`id`, `slug`, `title`, `status = draft`, `organizer_id` = el `user_id` del paso 2);
    - `SELECT slug, status, organizer_id FROM trips WHERE organizer_id = '<user_id del paso 2>' ORDER BY slug;` devuelve esos viajes;
    - el organizador los ve en `/crm/viajes` como borradores y puede editarlos; un comercial o un admin también los ve;
-   - `/viajes/<slug>` responde 404 hasta que se publique;
+   - `/viajes/<slug>` muestra «Viaje no encontrado» (404 suave: `GET /api/viajes/<slug>` responde 404) hasta que se publique;
    - ejecutarlo otra vez devuelve 0 filas.
 5. **En `production`**, solo con autorización explícita: repetir los pasos 2–4 con el organizador de la instancia de producción de Clerk. Los `user_id` de desarrollo y de producción son distintos; el script los resuelve por el correo.
 
@@ -612,20 +628,20 @@ import {
 
 - **Solo en Server Components.** `@/modules/trips` reexporta código `server-only`: un componente de cliente recibe los datos ya formateados por props.
 - `listPublishedTrips()` devuelve los viajes publicados (`PublicTrip[]`), ordenados por fecha de carrera y slug.
-- `getPublishedTripBySlug(slug)` devuelve el viaje publicado o `null` si el slug no existe, no es válido, o el viaje está en borrador o archivado. **`null` → `notFound()` (404).**
-- Ambas consultan Neon en cada petición (`connection()`): la página nunca se prerenderiza con datos de la base. No usar `generateStaticParams` sobre el catálogo ni `revalidatePath`; un viaje publicado aparece en la siguiente carga.
+- `getPublishedTripBySlug(slug)` devuelve el viaje publicado o `null` si el slug no existe, no es válido, o el viaje está en borrador o archivado. **`null` → «Viaje no encontrado» (`GET /api/viajes/[slug]` responde 404).**
+- Ambas consultan Neon en cada petición (`connection()`): ninguna página se prerenderiza con datos de la base. La ficha de `/viajes/<slug>` es estática y sin datos; es el endpoint `GET /api/viajes/[slug]` el que consulta Neon en cada petición (y `GET /api/viajes`, para `/contacto`). No usar `generateStaticParams` sobre el catálogo ni `revalidatePath`; un viaje publicado aparece en la siguiente carga.
 - `PublicTrip` solo tiene campos públicos: `slug`, `title`, `city`, `country`, `raceDate`, `startDate`, `endDate`, `distances`, `summary`, `includes`, `capacity` e `imageUrl`, más `officialUrl`, `excludes` y `notes` (sin `id`, `status`, fechas de auditoría ni precios: el precio público es la oferta vigente, que se lee con `getPublicOffer`). Las fechas son `YYYY-MM-DD`; `startDate` y `endDate` vienen las dos o ninguna.
 - Campos opcionales de la migración `0004`: `officialUrl` es la web oficial de la carrera (URL `https://` externa o `null`); `notes` (detalles por confirmar) es texto de hasta 1000 caracteres con saltos de línea, o `null`; `excludes` (qué no incluye) es una lista de hasta 20 elementos, `[]` si está vacía, como `includes`.
 - Formato: `formatTripDate("2027-04-25")` → "25 de abril de 2027"; `formatTripDateRange(startDate, endDate)` → "23–27 de abril de 2027" (solo si ambas no son `null`); `formatTripPrice(1990)` → "US$ 1,990" (formatea los importes de las ofertas; su rama `null`, "Precio a consultar", ya no se usa en la web). Destino: "Ciudad, País". La imagen es una URL `https://` externa: `<img>` o `next/image` con `unoptimized`.
 #### Qué usa hoy la landing
 
-Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 2), que sustituye en `/viajes/[slug]` lo descrito en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4). El bloque de precio lo enmienda [`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md) (Fase 3).
+Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fase 2), que sustituye en `/viajes/[slug]` lo descrito en [`landing-public-site.md`](docs/specs/landing-public-site.md) (Fase 4). El bloque de precio lo enmienda [`trips-commercial-offers.md`](docs/specs/trips-commercial-offers.md) (Fase 3). La Fase 3 de [`platform-workers-free-cache.md`](docs/specs/platform-workers-free-cache.md) cambia cómo se sirve: ficha estática y datos desde `GET /api/viajes/[slug]` en el navegador (ver [Caché estática en Workers Free](#caché-estática-en-workers-free)); el contenido no cambia.
 
 - **Una landing por carrera publicada:** cada viaje publicado en `/crm/viajes` tiene su página en `/viajes/<slug>`, sin tocar código ni redesplegar. Para difundir una carrera nueva se comparte esa URL (no hay listado `/viajes` ni enlaces desde `/` a carreras distintas de Santiago).
 - **El contenido sale del catálogo:** `getCatalogTrip(slug)` (`modules/landing/utils/catalogTrip.ts`) llama a `getPublishedTripBySlug` y convierte el `PublicTrip` en la vista que pinta la plantilla (fechas y cupos formateados; `notes` dividido en un párrafo por línea no vacía). No lee `TRIPS`.
 - **El precio sale de las ofertas, no de `trips`:** los campos de precio de `trips` (`price_usd`, `deposit_usd`, `installments_price_usd`, `companion_price_usd` y `payment_terms`) **ya no se publican**, aunque tengan valor: `TripLanding` ya no los tiene. El precio de la página es la oferta comercial vigente que el admin aprobó y activó en `/crm/ofertas` (ver [Ofertas comerciales](#migración-de-ofertas-comerciales-0008)).
-- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, Server Component): en el móvil, una columna con cabecera ("Ciudad, País · distancias", título y resumen), imagen si hay `imageUrl`, datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), la sección de precio (bloque financiero o aviso sin oferta, ver abajo) y después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos (con o sin oferta). Ningún bloque aparece vacío. En PC (≥ 1024 px) la ficha usa todo el ancho de la pantalla, con los mismos márgenes laterales que la cabecera del sitio. El encabezado ocupa todo el ancho y debajo hay dos columnas: a la izquierda la imagen, los datos clave y las secciones de detalle, y a la derecha la tarjeta de precio y registro, que baja con la página como el resto del contenido. En la tarjeta, los botones van arriba y el precio debajo, completo y sin scroll propio.
-- **Bloque financiero** (`OfferSummary`, Server Component presentacional): `getCatalogOffer(slug, código)` (`modules/landing/utils/catalogOffer.ts`, con `cache` de React) llama a `getPublicOffer` de `@/modules/trips` (una sola consulta: oferta vigente y último tipo de cambio) y la convierte con la función pura `toOfferView`. Muestra «Precio y condiciones»:
+- **Plantilla única y minimalista** (`modules/landing/components/TripDetail.tsx`, pintado en el navegador por `TripPageContent`): en el móvil, una columna con cabecera ("Ciudad, País · distancias", título y resumen), imagen si hay `imageUrl`, datos clave (carrera, viaje o "Fechas por confirmar", distancias, cupos o "Cupos por confirmar", web oficial si hay), la sección de precio (bloque financiero o aviso sin oferta, ver abajo) y después "Qué incluye", "No incluye" y "Detalles por confirmar", cada uno solo si tiene datos (con o sin oferta). Ningún bloque aparece vacío. En PC (≥ 1024 px) la ficha usa todo el ancho de la pantalla, con los mismos márgenes laterales que la cabecera del sitio. El encabezado ocupa todo el ancho y debajo hay dos columnas: a la izquierda la imagen, los datos clave y las secciones de detalle, y a la derecha la tarjeta de precio y registro, que baja con la página como el resto del contenido. En la tarjeta, los botones van arriba y el precio debajo, completo y sin scroll propio.
+- **Bloque financiero** (`OfferSummary`, componente presentacional): en el servidor, `getCatalogOffer(slug, código)` (`modules/landing/utils/catalogOffer.ts`, con `cache` de React) llama a `getPublicOffer` de `@/modules/trips` (una sola consulta: oferta vigente y último tipo de cambio) y la convierte con la función pura `toOfferView`. Muestra «Precio y condiciones»:
   - precio total, descuento (solo si es mayor que 0) y precio final, en USD con su importe en soles entre paréntesis;
   - cada anticipo permitido con su saldo (precio final − anticipo) y la fecha límite del saldo, y «El anticipo se descuenta del precio final.»; sin anticipos, «Pago único del precio final.»;
   - el beneficio, si hay: «Beneficio incluido: <texto>. No es un descuento ni se canjea por dinero.»;
@@ -638,19 +654,19 @@ Especificado en [`landing-race-pages.md`](docs/specs/landing-race-pages.md) (Fas
 - **Sin oferta aplicable** (sin ofertas, solo borradores o aprobadas, todas cerradas o la activa vencida): la sección de precio muestra solo «Todavía no publicamos el precio de este viaje.», sin importes, «Desde», «Reserva con», anticipos ni beneficios.
 - **Registro de la carrera** (`/viajes/<slug>/registro`): el mismo bloque aparece entre el encabezado y el formulario, con la misma oferta (también según `?c=`); sin oferta no hay bloque, y con `?modo=stand` nunca. «Ver el paquete completo» conserva `?c=`, así que lleva a la misma oferta.
 - **Consulta por WhatsApp:** el botón "Consultar por WhatsApp" abre `https://wa.me/51938127170?text=…` en una pestaña nueva con el mensaje de `buildTripInquiryMessage` (`modules/landing/utils/inquiry.ts`): título, fecha de la carrera y lugar, **sin precio** (así no queda desfasado si el equipo lo cambia). La página no enlaza a `/contacto`. Con el registro abierto, «Registrarme» lleva al registro de la carrera (un solo botón, encima de WhatsApp, que pasa a ser el botón secundario); mientras siga el texto legal provisional no aparece (ver [Campañas, QR y modo stand](#campañas-qr-y-modo-stand)).
-- **Metadatos:** `<title>` es el título del viaje, la meta description es el resumen y `og:image` es `imageUrl` solo si existe.
-- **404:** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `notFound()` responde con estado `404`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. No hay `loading.tsx`, para que el estado no quede en `200`.
-- **Una consulta por petición:** `getCatalogTrip` va envuelta en `cache` de React; `generateMetadata` y la página comparten el resultado. La página lee además la oferta (`getCatalogOffer`) en paralelo.
-- **Errores de la base:** se propagan sin capturar y muestran la página de error por defecto de Next (sin el mensaje original en producción). No hay `error.tsx` en `app/viajes/`.
+- **Metadatos:** el HTML estático lleva un título y una descripción genéricos y no hay `og:image` por viaje; el navegador fija el título del documento («<título> | Carreras Viajeras» y «Registro · <título> | Carreras Viajeras»). `robots` sigue en `noindex`.
+- **Viaje no encontrado (404 suave):** si el slug no es válido, el viaje no existe o está en borrador o archivado, `getPublishedTripBySlug` devuelve `null` y `GET /api/viajes/[slug]` responde `404 trip_not_found`; la página muestra «Viaje no encontrado» con enlace a la portada, con HTTP `200`. Un slug mal formado no consulta Neon; uno bien formado pero inexistente sí. Una URL de `/viajes/` con un segmento fuera del formato del slug (por ejemplo, con mayúsculas) no se reescribe y recibe el 404 de Next.
+- **Lectura por petición del endpoint:** `GET /api/viajes/[slug]` lee el viaje (`getCatalogTrip`) y la oferta (`getCatalogOffer`) en paralelo.
+- **Errores de la base:** el endpoint responde `503 trip_unavailable`, sin el mensaje original, y registra un mensaje fijo; la página reintenta una vez y muestra un aviso fijo con el WhatsApp general.
 - **`/` no consulta Neon:** sigue estática y `TRIPS` (`modules/landing/utils/trips.ts`) solo la alimenta a ella, con su propia copia de fecha, precio y cupos de Santiago, igual que los literales "US$1,499" de `MobileCta` y `HeroCarousel`. **Si el equipo cambia la fecha o los cupos de Santiago en `/crm/viajes`, o su precio en `/crm/ofertas`, hay que editar a mano esa copia de la portada**; la página del viaje sí cambia en la siguiente carga, sin redesplegar.
-- `npm run build` no necesita `DATABASE_URL`: `/viajes/[slug]` y `/viajes/[slug]/registro` aparecen como dinámicas (`ƒ`).
+- `npm run build` no necesita `DATABASE_URL`: la ficha (`/viajes/ficha_viaje` y `/viajes/ficha_viaje/registro`) aparece como estática (`○`) y `/api/viajes/[slug]` como dinámica (`ƒ`).
 
 #### Precondición operativa (antes de mergear)
 
 Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a leer `production`; si el despliegue es manual, se comprueba antes de `npm run deploy`. En la rama `production` de Neon:
 
-1. **Migración `0001` aplicada** (ver "Migración de la tabla de viajes"). Comprobación: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, la página responde **500**.
-2. **Migración `0004` aplicada** (ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)). Comprobación: `SELECT column_name FROM information_schema.columns WHERE table_name = 'trips' AND column_name = 'official_url';` devuelve una fila. Si falta, la página responde **500**.
+1. **Migración `0001` aplicada** (ver "Migración de la tabla de viajes"). Comprobación: `SELECT to_regclass('public.trips');` no devuelve `NULL`. Si falta, `GET /api/viajes/<slug>` responde **503** y la página muestra el aviso fijo.
+2. **Migración `0004` aplicada** (ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)). Comprobación: `SELECT column_name FROM information_schema.columns WHERE table_name = 'trips' AND column_name = 'official_url';` devuelve una fila. Si falta, `GET /api/viajes/<slug>` responde **503** y la página muestra el aviso fijo.
 3. **Viaje creado en `/crm/viajes/nuevo` y publicado**, con:
    - slug `maraton-santiago-2027` (exacto);
    - título "Maratón de Santiago 42K 2027";
@@ -660,9 +676,9 @@ Si `main` se despliega con Workers Builds, en cuanto se mergea la página pasa a
    - cupos 100 (el precio desde, el precio en cuotas, la reserva, el acompañante y las condiciones de pago ya no se publican: el precio es la oferta activa de `/crm/ofertas`);
    - para no perder información respecto a la página anterior (precondición F2 de `landing-race-pages.md`): web oficial `https://maratondesantiago.cl/`, imagen con una URL `https://` (p. ej. `https://carreras-viajeras.mentec.dev/images/cover-santiago.webp`), y los textos de qué incluye, qué no incluye y detalles por confirmar que antes estaban fijos en el código (`included`, `excluded`, `prices.paymentNote` y `pendingDetails`; se recuperan con `git show dfa5d8a:modules/landing/utils/trips.ts`).
 
-   Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página responde **404** y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a un 404.
-4. **Migración `0008` aplicada** (ver [Migración de ofertas comerciales](#migración-de-ofertas-comerciales-0008)). Comprobación: `SELECT to_regclass('public.trip_offers'), to_regclass('public.exchange_rates');` no devuelve `NULL`. Si falta, `/viajes/<slug>` y su registro responden **500** (leen la oferta en cada petición). Sin ninguna oferta activa, la página muestra «Todavía no publicamos el precio de este viaje.».
-5. **Despublicar o archivar el viaje en el CRM da 404 al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/`. Es el comportamiento previsto. Un viaje despublicado vuelve a responder `200` al publicarlo de nuevo; el archivado es final.
+   Comprobación: `SELECT slug, status, title, race_date, price_usd, capacity FROM trips WHERE slug = 'maraton-santiago-2027';` devuelve una fila con `status = 'published'`. Si no está publicado, la página muestra «Viaje no encontrado» y los enlaces de `/` ("Quiero correr Santiago", "Ver más: paquete completo", "Descubre el viaje", tarjeta de Santiago) llevan a esa página.
+4. **Migración `0008` aplicada** (ver [Migración de ofertas comerciales](#migración-de-ofertas-comerciales-0008)). Comprobación: `SELECT to_regclass('public.trip_offers'), to_regclass('public.exchange_rates');` no devuelve `NULL`. Si falta, `GET /api/viajes/<slug>` responde **503** (lee la oferta en cada petición) y `/viajes/<slug>` y su registro muestran el aviso fijo. Sin ninguna oferta activa, la página muestra «Todavía no publicamos el precio de este viaje.».
+5. **Despublicar o archivar el viaje en el CRM muestra «Viaje no encontrado» al instante** en `/viajes/maraton-santiago-2027` y en esos enlaces de `/` (el endpoint responde 404). Es el comportamiento previsto. Un viaje despublicado vuelve a mostrarse al publicarlo de nuevo; el archivado es final.
 6. `DATABASE_URL` ya es un Secret del Worker (lo usa el CRM); no hay variables nuevas.
 
 ## Leads (CRM comercial)
@@ -1071,7 +1087,7 @@ En **Campañas** (`/crm/campanas`) y en la ficha de cada campaña, después de "
 
 El QR lleva siempre al registro de su carrera. **Cerrar la campaña no rompe el QR:** sigue abriendo la página y el registro funciona, pero los nuevos leads ya no se atribuyen a esa campaña (quedan como "Web"). Los leads que ya trajo conservan su campaña. Una campaña cerrada no se reabre ni se borra; para una tirada nueva, crea otra campaña con otro código.
 
-Si la carrera se despublica o se archiva, el QR lleva a una página 404 hasta que se vuelva a publicar.
+Si la carrera se despublica o se archiva, el QR lleva a «Viaje no encontrado» (404 suave) hasta que se vuelva a publicar.
 
 #### Modo stand (tableta del equipo)
 
@@ -1087,16 +1103,11 @@ Si el servidor rechaza el envío (datos incompletos, verificación fallida o ser
 
 #### Texto legal y apertura del registro (puerta P-L)
 
-El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. Hoy son un **marcador provisional** ("[TEXTO PROVISIONAL – PENDIENTE DE APROBACIÓN LEGAL (P-L)]…", versión `registro-web-pendiente-pl`) a la espera de que el área legal apruebe el definitivo.
+El texto que acepta el corredor, el de la casilla de promociones y su versión viven en `lib/registrationConsent.ts`. **El usuario aprobó el texto el 2026-10-29** (versión `registro-web-v1`, `isPlaceholder: false`): la puerta P-L está cerrada y el registro queda abierto también en producción. Se mantiene la casilla obligatoria "Acepto…" (decisión del usuario en [`landing-registration-visits.md`](docs/specs/landing-registration-visits.md)).
 
-**Mientras siga el marcador, el registro en producción está cerrado por código:** `/viajes/<slug>/registro` y `/contacto` muestran "El registro en línea abrirá pronto. Mientras tanto, escríbenos por WhatsApp." con el enlace, en lugar del formulario, y el servidor rechaza cualquier envío sin verificar ni guardar nada. Pasa también con `npm run preview`, que compila en modo producción. Con `npm run dev` el formulario funciona y se ve el marcador. Los QR se pueden crear e imprimir ya: hasta la apertura, quien los escanee verá ese aviso (y su visita sí se cuenta). Mientras tanto, la ficha `/viajes/<slug>` tampoco muestra «Registrarme»: el botón aparece automáticamente al abrir el registro, sin tocar la ficha.
-
-Para abrir el registro, cuando el área legal entregue el texto (un cambio de un solo archivo, en modo build):
-
-1. En `lib/registrationConsent.ts`, sustituir `privacyText` y `marketingText` por los textos aprobados, cambiar `version` a `registro-web-v1` y poner `isPlaceholder: false`.
-2. El texto definitivo debe cubrir también a quienes ya tratan los datos: n8n en tu computadora, tu proveedor de correo y Gemini (que solo recibe el nombre de pila y el viaje).
-3. Una vez publicado, **cualquier cambio del texto exige una versión nueva** (`registro-web-v2`…): cada lead guarda la versión que aceptó.
-4. Pendiente de confirmar con el área legal: si basta un aviso informativo en lugar de la casilla obligatoria "Acepto…" (pregunta abierta 1 de la spec).
+- **Qué se ve:** `/viajes/<slug>/registro` y `/contacto` muestran el formulario, y la ficha `/viajes/<slug>` muestra «Registrarme». Para que los envíos funcionen hace falta [Turnstile](#activar-la-protección-antispam-turnstile) configurado; sin sus claves, el formulario se ve pero cada envío responde "no pudimos verificar" y ofrece WhatsApp.
+- **Cambios del texto:** cualquier cambio exige una **versión nueva** (`registro-web-v2`…), porque cada lead guarda la versión que aceptó. El mecanismo de cierre sigue en el código: con `isPlaceholder: true`, producción vuelve a cerrar el registro.
+- **Pendiente de revisar:** el texto actual no menciona a quienes también tratan los datos (n8n, el proveedor de correo y Gemini, que solo recibe el nombre de pila y el viaje). Si se decide incluirlos, va en una versión nueva.
 
 ### Activar la protección antispam (Turnstile)
 
@@ -1783,11 +1794,11 @@ sesión no se registran solas. Para incorporarlas:
 
 Ningún build, arranque ni workflow ejecuta este backfill.
 
-### Solicitudes del rol Admin (`0015`)
+### Solicitudes del rol Admin (`0016`)
 
 Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 2).
 
-**Estado (2026-10-29):** `0015` aplicada y verificada en `production`. En la rama de pruebas de Neon, comprobar con la comprobación previa de esta sección antes de aplicarla.
+**Estado (2026-10-29):** aplicada y verificada en `production` y en la rama de pruebas de Neon cuando se numeraba `0015_dusty_venom`. Al mergear `main`, la `0015` pasó a ser `0015_client_email_kinds` (`crm-lifecycle-emails`) y esta se renumeró a `0016_dusty_venom` con **el mismo SQL**: no se vuelve a aplicar donde ya existe `role_requests`. La `0015_client_email_kinds` es otra migración y se aplica por su cuenta.
 
 **Qué hace.**
 
@@ -1811,7 +1822,7 @@ Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.
     solicitarlo.
 - No hay avisos por correo ni n8n de solicitudes nuevas: se revisan en esa sección.
 
-**Migración `drizzle/0015_dusty_venom.sql`** (todo en `public`): crea el enum
+**Migración `drizzle/0016_dusty_venom.sql`** (todo en `public`): crea el enum
 `role_request_status` (`pending`, `approved`, `rejected`) y la tabla `role_requests`
 (`id`, `user_id`, `role`, `status`, `created_at`, `decided_at`, `decided_by`) con:
 
@@ -1824,14 +1835,14 @@ Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.
 
 No cambia ninguna tabla existente ni toca `neon_auth`. Revisión previa:
 
-- `grep -inE 'neon_auth|create schema|drop |alter type' drizzle/0015_dusty_venom.sql` no
+- `grep -inE 'neon_auth|create schema|drop |alter type' drizzle/0016_dusty_venom.sql` no
   devuelve nada;
-- `grep -E '^(ALTER|CREATE) ' drizzle/0015_dusty_venom.sql` devuelve solo
+- `grep -E '^(ALTER|CREATE) ' drizzle/0016_dusty_venom.sql` devuelve solo
   `CREATE TYPE "public"."role_request_status"`, `CREATE TABLE "role_requests"`, dos
   `ALTER TABLE "role_requests" ADD CONSTRAINT …` (las claves foráneas) y
   `CREATE UNIQUE INDEX "role_requests_pending_user_uq"`.
 
-**Orden de despliegue (obligatorio).** Aplicar `0015` a mano, como operación autorizada,
+**Orden de despliegue (obligatorio).** Aplicar `0016` a mano, como operación autorizada,
 en la rama Neon de destino **antes** del merge o del despliegue de este código. Sin la
 tabla, `/crm` sin acceso (la pantalla lee la solicitud pendiente) y `/crm/admin/usuarios`
 para `super_admin` (lee las solicitudes) fallarían. Primero en la rama de desarrollo y,
@@ -1847,7 +1858,7 @@ se aplica en **un solo bloque**, con el archivo tal cual:
    una terminal:
 
    ```sh
-   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0015_dusty_venom.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0016_dusty_venom.sql
    ```
 
    Si falla, la transacción se deshace entera.
@@ -1861,11 +1872,11 @@ se aplica en **un solo bloque**, con el archivo tal cual:
 No hace falta GRANT: `DATABASE_URL` usa el rol owner. Ningún build, arranque ni workflow
 aplica esta migración.
 
-### Desactivar y eliminar cuentas (`0016`)
+### Desactivar y eliminar cuentas (`0017`)
 
 Especificado en [`accounts-role-requests.md`](docs/specs/accounts-role-requests.md) (Fase 3).
 
-**Estado (2026-10-29):** `0016` aplicada y verificada en `production`. En la rama de pruebas de Neon, comprobar con la comprobación previa de esta sección antes de aplicarla.
+**Estado (2026-10-29):** aplicada y verificada en `production` y en la rama de pruebas de Neon cuando se numeraba `0016_wild_moonstone`; renumerada a `0017_wild_moonstone` con **el mismo SQL** al mergear `main`. No se vuelve a aplicar donde ya existe `profiles.disabled_at`.
 
 **Qué hace.** En la ficha `/crm/admin/usuarios/<id>`, la sección **Cuenta** solo la ve un
 `super_admin`, y nunca en su propia ficha ni en la de otro `super_admin`. Las acciones
@@ -1915,7 +1926,7 @@ comprueban de nuevo en el servidor `staff.manage` y que el actor es `super_admin
 la de producción. Borrar un usuario de Clerk no se puede deshacer. Pruébalas solo con
 cuentas de prueba de la instancia de desarrollo y una rama Neon de desarrollo.
 
-**Migración `drizzle/0016_wild_moonstone.sql`** (todo en `public`): solo hace
+**Migración `drizzle/0017_wild_moonstone.sql`** (todo en `public`): solo hace
 `ALTER TABLE "profiles"`:
 
 - añade `disabled_at` y `deleted_at` (`timestamp with time zone`, nulas) y `disabled_by` y
@@ -1928,20 +1939,20 @@ cuentas de prueba de la instancia de desarrollo y una rama Neon de desarrollo.
 Las filas existentes quedan activas (todo nulo), así que el CHECK se cumple al aplicarla.
 No crea tablas ni tipos ni toca `neon_auth`. Revisión previa:
 
-- `grep -inE 'neon_auth|create |drop |alter type' drizzle/0016_wild_moonstone.sql` no
+- `grep -inE 'neon_auth|create |drop |alter type' drizzle/0017_wild_moonstone.sql` no
   devuelve nada;
-- `grep -E '^(ALTER|CREATE) ' drizzle/0016_wild_moonstone.sql` devuelve solo siete líneas
+- `grep -E '^(ALTER|CREATE) ' drizzle/0017_wild_moonstone.sql` devuelve solo siete líneas
   `ALTER TABLE "profiles" …`: cuatro `ADD COLUMN`, dos `ADD CONSTRAINT … FOREIGN KEY` y
   un `ADD CONSTRAINT "profiles_deleted_chk" CHECK`.
 
-**Orden de despliegue (obligatorio).** Aplicar `0016` a mano, como operación autorizada,
-en la rama Neon de destino **después de `0015`** y **antes** del merge o del despliegue de
+**Orden de despliegue (obligatorio).** Aplicar `0017` a mano, como operación autorizada,
+en la rama Neon de destino **después de `0016`** y **antes** del merge o del despliegue de
 este código. Sin las columnas, todas las guardas (que leen `disabled_at` en cada petición)
 fallarían cerradas con 403 y nadie podría entrar en el CRM. Primero en la rama de
 desarrollo y, en `production`, solo con autorización explícita de la operación remota. Se
 aplica en **un solo bloque**, con el archivo tal cual:
 
-1. Comprobar que `0015` está aplicada y `0016` no:
+1. Comprobar que `0016` está aplicada y `0017` no:
    `SELECT to_regclass('public.role_requests'), (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name IN ('disabled_at', 'disabled_by', 'deleted_at', 'deleted_by'));`
    devuelve `role_requests` y `0`. Si el recuento es `4`, ya está aplicada: no repetirla;
    cualquier otro valor exige revisar antes de seguir.
@@ -1951,7 +1962,7 @@ aplica en **un solo bloque**, con el archivo tal cual:
    una terminal:
 
    ```sh
-   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0016_wild_moonstone.sql
+   psql "$DATABASE_MIGRATION_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0017_wild_moonstone.sql
    ```
 
    Si falla, la transacción se deshace entera.

@@ -12,5 +12,7 @@ N8N_API_TOKEN=
 CRM_EMAIL_AUTOMATION_ENABLED=false
 CRM_EMAIL_FROM=
 CRM_EMAIL_AUTOMATION_START_AT=
+# Optional team inbox that receives an alert for every new lead; leave blank to skip the alert.
+CRM_TEAM_ALERT_EMAIL=
 # Turnstile Secret Key (Cloudflare Secret). Real key only: npm run preview runs in production mode and rejects test keys.
 TURNSTILE_SECRET_KEY=

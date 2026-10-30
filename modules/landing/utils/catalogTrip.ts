@@ -54,8 +54,8 @@ function toTripLanding(trip: PublicTrip): TripLanding {
   };
 }
 
-// React cache: generateMetadata and the page share one Neon query per request.
-// Database errors propagate on purpose (default Next error page, message hidden in production).
+// Read by GET /api/viajes/[slug] (React cache dedupes repeated calls within one request).
+// Database errors propagate on purpose: the endpoint turns them into 503 trip_unavailable.
 export const getCatalogTrip = cache(async (slug: string): Promise<TripLanding | null> => {
   const published = await getPublishedTripBySlug(slug);
   return published ? toTripLanding(published) : null;

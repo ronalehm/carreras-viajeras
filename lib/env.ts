@@ -64,19 +64,26 @@ export function getIntegrationEnv(): { N8N_API_TOKEN: string } | null {
 const clientEmailEnvSchema = z.object({
   CRM_EMAIL_FROM: z.email().max(254),
   CRM_EMAIL_AUTOMATION_START_AT: z.iso.datetime({ offset: true }),
+  // Team inbox notified of every new lead. Optional: without it the team alert is skipped.
+  CRM_TEAM_ALERT_EMAIL: z.email().max(254).optional(),
 });
 
 // Deliberately off unless explicitly enabled. SMTP credentials live only in n8n.
-export function getClientEmailEnv(): { from: string; startAt: Date } | null {
+export function getClientEmailEnv(): { from: string; startAt: Date; teamAlertEmail: string | null } | null {
   const enabled = readOptional("CRM_EMAIL_AUTOMATION_ENABLED");
   if (enabled === undefined || enabled === "false") return null;
   if (enabled !== "true") throw new Error("Invalid environment fields: CRM_EMAIL_AUTOMATION_ENABLED");
   const result = clientEmailEnvSchema.safeParse({
     CRM_EMAIL_FROM: readOptional("CRM_EMAIL_FROM"),
     CRM_EMAIL_AUTOMATION_START_AT: readOptional("CRM_EMAIL_AUTOMATION_START_AT"),
+    CRM_TEAM_ALERT_EMAIL: readOptional("CRM_TEAM_ALERT_EMAIL"),
   });
   if (!result.success) throw invalidEnvironment(result.error);
-  return { from: result.data.CRM_EMAIL_FROM, startAt: new Date(result.data.CRM_EMAIL_AUTOMATION_START_AT) };
+  return {
+    from: result.data.CRM_EMAIL_FROM,
+    startAt: new Date(result.data.CRM_EMAIL_AUTOMATION_START_AT),
+    teamAlertEmail: result.data.CRM_TEAM_ALERT_EMAIL?.toLowerCase() ?? null,
+  };
 }
 
 // Test secrets documented by Cloudflare (always pass, always fail, already spent).

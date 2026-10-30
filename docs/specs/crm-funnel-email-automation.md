@@ -1,7 +1,7 @@
 # Embudo visual y correos automáticos por contacto
 
 - Módulos: crm e integrations; datos compartidos en lib.
-- Estado: borrador
+- Estado: aprobado
 - Solicitud: ver el paso real de cada contacto por las etapas y sus avisos; el usuario confirmó envíos automáticos al cliente por **correo electrónico**.
 - Referencias: `crm-leads-pipeline.md`, `crm-journey-automation.md`, `crm-leads-capture.md`, `crm-admin-panel.md`, `docs/SETUP.md` y la habilidad instalada `apple-design`.
 

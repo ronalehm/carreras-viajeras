@@ -1,5 +1,5 @@
 {
-  "id": "b2228430-274e-4826-afc9-016742300454",
+  "id": "fc5e8923-532d-4908-9bfd-581b9239cbc8",
   "prevId": "b685e721-9270-439e-90fe-7cc3c982d9b2",
   "version": "7",
   "dialect": "postgresql",
@@ -687,6 +687,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "client_email_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'stage'"
+        },
         "stage": {
           "name": "stage",
           "type": "lead_stage",
@@ -804,11 +812,17 @@
         }
       },
       "indexes": {
-        "client_emails_event_uq": {
-          "name": "client_emails_event_uq",
+        "client_emails_event_kind_uq": {
+          "name": "client_emails_event_kind_uq",
           "columns": [
             {
               "expression": "source_event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "kind",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1830,7 +1844,7 @@
         },
         "leads_created_by_chk": {
           "name": "leads_created_by_chk",
-          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import')"
+          "value": "\"leads\".\"created_by\" IS NOT NULL OR \"leads\".\"source\" IN ('web_form', 'google_form', 'import', 'runner_account')"
         },
         "leads_origin_detail_chk": {
           "name": "leads_origin_detail_chk",
@@ -2119,119 +2133,6 @@
         "profiles_email_lowercase_chk": {
           "name": "profiles_email_lowercase_chk",
           "value": "\"profiles\".\"email\" = lower(\"profiles\".\"email\")"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.role_requests": {
-      "name": "role_requests",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role": {
-          "name": "role",
-          "type": "staff_role",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "role_request_status",
-          "typeSchema": "public",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'pending'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "decided_at": {
-          "name": "decided_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "decided_by": {
-          "name": "decided_by",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "role_requests_pending_user_uq": {
-          "name": "role_requests_pending_user_uq",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"role_requests\".\"status\" = 'pending'",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "role_requests_user_id_profiles_user_id_fk": {
-          "name": "role_requests_user_id_profiles_user_id_fk",
-          "tableFrom": "role_requests",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        },
-        "role_requests_decided_by_profiles_user_id_fk": {
-          "name": "role_requests_decided_by_profiles_user_id_fk",
-          "tableFrom": "role_requests",
-          "tableTo": "profiles",
-          "columnsFrom": [
-            "decided_by"
-          ],
-          "columnsTo": [
-            "user_id"
-          ],
-          "onDelete": "restrict",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "role_requests_role_chk": {
-          "name": "role_requests_role_chk",
-          "value": "\"role_requests\".\"role\"::text = 'admin'"
-        },
-        "role_requests_decision_chk": {
-          "name": "role_requests_decision_chk",
-          "value": "(\"role_requests\".\"status\" = 'pending') = (\"role_requests\".\"decided_at\" IS NULL AND \"role_requests\".\"decided_by\" IS NULL)"
         }
       },
       "isRLSEnabled": false
@@ -5266,6 +5167,20 @@
         "closed"
       ]
     },
+    "public.client_email_kind": {
+      "name": "client_email_kind",
+      "schema": "public",
+      "values": [
+        "stage",
+        "welcome_registration",
+        "welcome_contact",
+        "welcome_account",
+        "follow_up",
+        "booking_confirmed",
+        "team_alert",
+        "owner_alert"
+      ]
+    },
     "public.client_email_status": {
       "name": "client_email_status",
       "schema": "public",
@@ -5358,7 +5273,8 @@
         "web_form",
         "other",
         "google_form",
-        "import"
+        "import",
+        "runner_account"
       ]
     },
     "public.lead_stage": {
@@ -5380,7 +5296,8 @@
         "lead.created",
         "lead.stage_changed",
         "lead.follow_up_due",
-        "lead.opted_out"
+        "lead.opted_out",
+        "lead.owner_assigned"
       ]
     },
     "public.outbox_status": {
@@ -5402,15 +5319,6 @@
         "21k",
         "42k",
         "ultra"
-      ]
-    },
-    "public.role_request_status": {
-      "name": "role_request_status",
-      "schema": "public",
-      "values": [
-        "pending",
-        "approved",
-        "rejected"
       ]
     },
     "public.shirt_size": {
