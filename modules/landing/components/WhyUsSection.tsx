@@ -82,7 +82,7 @@ export function WhyUsSection() {
           {KEY_POINTS.map(({ glyph, title, text }) => (
             <li
               key={title}
-              className="flex items-baseline gap-4 border-t border-primary/15 py-4 sm:block sm:pt-5"
+              className="flex items-baseline gap-4 border rounded-lg border-primary py-4 sm:block sm:pt-5 hover:border-primary/80 transition-colors"
             >
               <span aria-hidden className="block w-6 shrink-0 text-2xl text-highlight sm:mb-3">
                 {glyph}
@@ -105,8 +105,8 @@ export function WhyUsSection() {
         </summary>
         <ul className="grid gap-x-10 md:grid-cols-2 lg:grid-cols-3">
           {CARDS.map(({ icon: Icon, title, summary, detail }) => (
-            <li key={title} className="border-t border-primary/15 py-6">
-              <article>
+            <li key={title} className="border rounded-lg border-primary/20 py-6 group-hover:border-primary/35 transition-colors">
+              <article className="group-hover:pb-6 transition-colors">
                 <Icon aria-hidden className="mb-4 size-7 stroke-[1.5] text-highlight" />
                 <h3 className="mb-2 display-title text-3xl leading-none">{title}</h3>
                 <p className="max-w-[45ch] text-sm leading-relaxed text-asphalt">{summary}</p>
