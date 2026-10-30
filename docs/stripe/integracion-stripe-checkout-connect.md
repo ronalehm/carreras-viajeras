@@ -220,7 +220,11 @@ Ese mensaje se refiere al **recurso consultado**, no al endpoint: dice que la cl
    - Un error que menciona Connect, la plataforma o Accounts v2: completa *Connect → Comenzar* y el perfil de plataforma en ese mismo sandbox y repite.
    - `403` en el listado con una `sk_test_` del sandbox correcto: es un problema de habilitación de la cuenta, y se consulta con el soporte de Stripe citando el *request id* del registro.
 4. **`Stripe-Context`** solo hace falta para actuar *dentro* de una cuenta conectada (por ejemplo, leer sus objetos). No se envía para listar ni para crear cuentas conectadas desde la plataforma.
-5. **Comprobación final.** No crees cuentas conectadas hasta que el paso 3 dé `200`. El país de la cuenta de prueba se elige de forma explícita: `US` sirve para la demo, mientras que el caso real con organizadores en Perú es `PE` con la configuración `recipient` (sección 3.2).
+5. **Resultado del caso observado.** El listado del paso 3 devolvió `400 non_connect_platform_accounts_v2_access_blocked`: *«Accounts v2 is not enabled for your sandbox merchant»*. La causa era que **la cuenta del sandbox no estaba registrada como plataforma Connect**; el `403` de la lectura individual solo lo ocultaba. Solución:
+   - completar *Configuración → Connect → Configuración de plataforma* (`dashboard.stripe.com/<acct>/settings/connect/platform-setup`) en ese mismo sandbox, con el modelo de la sección 4: marketplace, la plataforma como comerciante registrado y responsable de comisiones y pérdidas, dashboard Express y onboarding alojado por Stripe;
+   - alternativa equivalente: la herramienta `EnableConnect` del MCP de Stripe (búsqueda con `stripe_api_search`) o `stripe tools search enable_connect` en el CLI;
+   - no usar la vía *«Use Accounts as customers»* que también sugiere el error: habilita Accounts v2 solo para la configuración `customer` y no convierte la cuenta en plataforma Connect.
+6. **Comprobación final.** No crees cuentas conectadas hasta que el paso 3 dé `200`. El país de la cuenta de prueba se elige de forma explícita: `US` sirve para la demo, mientras que el caso real con organizadores en Perú es `PE` con la configuración `recipient` (sección 3.2).
 
 ### Fase 1: base técnica
 
