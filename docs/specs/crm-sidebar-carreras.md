@@ -1,6 +1,6 @@
 # CRM: menú lateral, "Carreras" y menú de cuenta
 
-- Estado: borrador
+- Estado: aprobado
 - Módulos: accounts (barra lateral del CRM) y trips (vistas del CRM de viajes).
 - Pedido del usuario (2026-10-30):
   - «en el sidebar: eliminar Mis pendientes»;

@@ -1,6 +1,6 @@
 # Cuenta: menú del avatar en la cabecera pública
 
-- Estado: borrador
+- Estado: aprobado
 - Módulos: accounts (cuenta del corredor), landing (cabecera) y bookings (cabecera del portal).
 - Pedido del usuario (2026-10-30): al lado del botón Registrarse debe estar la foto de perfil. Al pulsarla aparece:
   - **Mi perfil**, antes «Mi cuenta»;
