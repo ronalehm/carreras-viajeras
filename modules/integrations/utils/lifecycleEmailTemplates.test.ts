@@ -76,19 +76,36 @@ describe("lifecycleEmailTemplate", () => {
     });
   });
 
-  it("builds team_alert with one field per line", () => {
-    expect(lifecycleEmailTemplate("team_alert", { ...client, sourceLabel: "Formulario web", leadUrl })).toEqual({
+  it("builds team_alert with one field per line and the current owner's address", () => {
+    expect(
+      lifecycleEmailTemplate("team_alert", {
+        ...client,
+        sourceLabel: "WhatsApp",
+        ownerEmail: "comercial@example.test",
+        leadUrl,
+      }),
+    ).toEqual({
       subject: "Nuevo registro: Ana · Maratón de Lima",
       body: [
         "Entró un registro nuevo al embudo.",
         "Nombre: Ana   María Pérez",
         "Carrera: Maratón de Lima",
-        "Vía de entrada: Formulario web",
-        "Responsable: sin asignar",
+        "Vía de entrada: WhatsApp",
+        "Responsable: comercial@example.test",
         `Ficha: ${leadUrl}`,
       ].join("\n") + SIGNATURE,
       templateVersion: 1,
     });
+  });
+
+  it.each([null, "", "   "])("shows «sin asignar» in team_alert without an owner (%j)", (ownerEmail) => {
+    const { body } = lifecycleEmailTemplate("team_alert", {
+      ...client,
+      sourceLabel: "Formulario web",
+      ownerEmail,
+      leadUrl,
+    });
+    expect(body.split("\n")).toContain("Responsable: sin asignar");
   });
 
   it("builds owner_alert with one field per line", () => {
@@ -125,9 +142,45 @@ describe("lifecycleEmailTemplate", () => {
       expect(email.body.endsWith(SIGNATURE)).toBe(true);
     }
 
-    const alert = lifecycleEmailTemplate("team_alert", { fullName: longName, race: longRace, sourceLabel: "Cuenta web", leadUrl });
+    const alert = lifecycleEmailTemplate("team_alert", {
+      fullName: longName,
+      race: longRace,
+      sourceLabel: "Cuenta web",
+      ownerEmail: null,
+      leadUrl,
+    });
     expect(Array.from(alert.subject)).toHaveLength(200);
     expect(alert.subject.startsWith(`Nuevo registro: ${"Á".repeat(120)} · Ultra`)).toBe(true);
+  });
+
+  it("normalizes every subject to a single line before the 200-character limit", () => {
+    const race = raceLabel({ destinationText: " Maratón\r\nde\t  Lima \n" });
+    const data = { fullName: "Ana", race, sourceLabel: "Formulario web", ownerEmail: null, stageLabel: "Nuevo", leadUrl };
+    const kinds = [
+      "welcome_registration",
+      "welcome_contact",
+      "welcome_account",
+      "follow_up",
+      "booking_confirmed",
+      "team_alert",
+      "owner_alert",
+    ] as const;
+
+    for (const kind of kinds) {
+      const { subject } = lifecycleEmailTemplate(kind, data);
+      expect(subject).not.toMatch(/[\r\n\t]|\s{2}/);
+      expect(subject).toBe(subject.trim());
+    }
+    expect(lifecycleEmailTemplate("welcome_registration", data).subject).toBe(
+      "Recibimos tu registro para Maratón de Lima",
+    );
+    expect(lifecycleEmailTemplate("team_alert", data).subject).toBe("Nuevo registro: Ana · Maratón de Lima");
+
+    // Collapsing happens first, so a long race made of line breaks is not cut early.
+    const spaced = `${"Lima\n\n\n".repeat(60)}`.trim();
+    const subject = lifecycleEmailTemplate("follow_up", { fullName: "Ana", race: spaced }).subject;
+    expect(Array.from(subject)).toHaveLength(200);
+    expect(subject.startsWith("¿Seguimos con tu viaje a Lima Lima Lima")).toBe(true);
   });
 
   it("does not truncate a subject within the limit", () => {
@@ -138,12 +191,14 @@ describe("lifecycleEmailTemplate", () => {
   });
 
   it("requires the fields of each kind at type level (checked by tsc)", () => {
-    // @ts-expect-error team_alert needs sourceLabel and leadUrl.
+    // @ts-expect-error team_alert needs sourceLabel, ownerEmail and leadUrl.
     lifecycleEmailTemplate("team_alert", client);
+    // @ts-expect-error team_alert needs ownerEmail (null when the lead has no owner).
+    lifecycleEmailTemplate("team_alert", { ...client, sourceLabel: "Formulario web", leadUrl });
     // @ts-expect-error owner_alert needs stageLabel, not sourceLabel.
     lifecycleEmailTemplate("owner_alert", { ...client, sourceLabel: "Formulario web", leadUrl });
     // @ts-expect-error internal alert data has no phone field.
-    lifecycleEmailTemplate("team_alert", { ...client, sourceLabel: "Formulario web", leadUrl, phone: "+51 987 654 321" });
+    lifecycleEmailTemplate("team_alert", { ...client, sourceLabel: "Formulario web", ownerEmail: null, leadUrl, phone: "+51 987 654 321" });
   });
 
   it("never shows phone, documents or notes in internal alerts, even if the caller passes a full lead", () => {
@@ -155,6 +210,7 @@ describe("lifecycleEmailTemplate", () => {
       medicalNotes: "Asma controlada",
       internalNotes: "Pidió descuento",
       sourceLabel: "Formulario web",
+      ownerEmail: "comercial@example.test",
       stageLabel: "Nuevo",
       leadUrl,
     };

@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/neon-http";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 
 import { getDb } from "@/lib/db";
+import { createEmbeddedDb } from "@/lib/testing/embeddedDb";
 import type { RunnerProfileInput } from "../types/runnerProfile.types";
 import { RUNNER_PROFILE_CONSENT } from "../utils/runnerProfileDisplay";
 import { getRunnerProfile, saveRunnerProfile } from "./runnerProfile.service";
@@ -56,26 +57,6 @@ const ROW = [
   RUNNER_PROFILE_CONSENT.version, "2026-10-20 15:00:00+00", "2026-10-25 15:00:00+00",
 ];
 
-// Column list of the INSERT, the SET clause of the ON CONFLICT, and both parameter lists.
-function splitUpsert({ sql, params }: Query) {
-  const statement = normalize(sql);
-  const match = statement.match(
-    /^insert into "runner_profiles" \((.+?)\) values \((.+?)\) on conflict \("user_id"\) do update set (.+)$/,
-  );
-  expect(match).not.toBeNull();
-  const [, columns, values, set] = match!;
-  const insertColumns = columns.split(", ").map((column) => column.replaceAll('"', ""));
-  const insertValues = values.split(", ");
-  const setPairs = Object.fromEntries(
-    set.split(", ").map((pair) => {
-      const [column, value] = pair.split(" = ");
-      return [column.replaceAll('"', ""), value];
-    }),
-  );
-  const param = (placeholder: string) => params[Number(placeholder.slice(1)) - 1];
-  return { insertColumns, insertValues, setPairs, param };
-}
-
 beforeEach(() => vi.mocked(getDb).mockReset());
 afterEach(() => vi.restoreAllMocks());
 
@@ -109,109 +90,29 @@ describe("getRunnerProfile", () => {
 });
 
 describe("saveRunnerProfile", () => {
-  it("runs a single upsert keyed by the user_id parameter", async () => {
+  it("runs a single statement, never an interactive transaction", async () => {
     const fake = useFakeDb();
     await saveRunnerProfile(USER, EMAIL, input);
 
     expect(fake.queries).toHaveLength(1);
     expect(fake.transaction).not.toHaveBeenCalled();
-    const { insertColumns, insertValues, param } = splitUpsert(fake.queries[0]);
-    expect(insertColumns[0]).toBe("user_id");
-    expect(param(insertValues[0])).toBe(USER);
-    expect(param(insertValues[insertColumns.indexOf("email")])).toBe(EMAIL);
+    const statement = normalize(fake.queries[0].sql);
+    expect(statement).toMatch(/^WITH saved AS \( INSERT INTO runner_profiles /);
+    expect(statement).toContain("ON CONFLICT (user_id) DO UPDATE SET");
+    expect(statement).toContain("(xmax = 0) AS inserted");
+    expect(fake.queries[0].params[0]).toBe(USER);
   });
 
-  it("inserts every field, the consent version and consented_at = now()", async () => {
+  it("never copies documents, birth date, emergency contact or medical notes into the lead", async () => {
     const fake = useFakeDb();
     await saveRunnerProfile(USER, EMAIL, input);
 
-    const { insertColumns, insertValues, param } = splitUpsert(fake.queries[0]);
-    const inserted = Object.fromEntries(
-      insertColumns.map((column, index) => {
-        const value = insertValues[index];
-        return [column, value.startsWith("$") ? param(value) : value];
-      }),
-    );
-    expect(inserted).toEqual({
-      user_id: USER,
-      email: EMAIL,
-      full_name: "Ana Pérez",
-      phone: "+51938127170",
-      country: "Perú",
-      city: "Lima",
-      birth_date: "1990-04-12",
-      document_type: "passport",
-      document_number: "AB123456",
-      document_expires_on: "2030-01-31",
-      shirt_size: "m",
-      preferred_distance: "42k",
-      personal_best: "42K en 3:45:10",
-      club: "Lima Runners",
-      emergency_contact_name: "Luis Pérez",
-      emergency_contact_phone: "+51999888777",
-      medical_notes: "Alergia a la penicilina.",
-      consent_version: RUNNER_PROFILE_CONSENT.version,
-      consented_at: "now()",
-      created_at: "default",
-      updated_at: "default",
-    });
-  });
-
-  it("updates the fields, email, consent and timestamps but never user_id or created_at", async () => {
-    const fake = useFakeDb();
-    await saveRunnerProfile(USER, EMAIL, input);
-
-    const { setPairs, param } = splitUpsert(fake.queries[0]);
-    expect(setPairs).not.toHaveProperty("user_id");
-    expect(setPairs).not.toHaveProperty("created_at");
-    expect(setPairs.consented_at).toBe("now()");
-    expect(setPairs.updated_at).toBe("now()");
-    expect(param(setPairs.email)).toBe(EMAIL);
-    expect(param(setPairs.consent_version)).toBe(RUNNER_PROFILE_CONSENT.version);
-    expect(param(setPairs.document_number)).toBe("AB123456");
-    expect(Object.keys(setPairs).sort()).toEqual(
-      [
-        "email", "full_name", "phone", "country", "city", "birth_date", "document_type", "document_number",
-        "document_expires_on", "shirt_size", "preferred_distance", "personal_best", "club",
-        "emergency_contact_name", "emergency_contact_phone", "medical_notes", "consent_version",
-        "consented_at", "updated_at",
-      ].sort(),
-    );
-  });
-
-  it("writes nulls for the empty optional fields", async () => {
-    const fake = useFakeDb();
-    const minimal: RunnerProfileInput = {
-      ...input,
-      country: null, city: null, birthDate: null, documentType: null, documentNumber: null,
-      documentExpiresOn: null, shirtSize: null, preferredDistance: null, personalBest: null, club: null,
-      emergencyContactName: null, emergencyContactPhone: null, medicalNotes: null,
-    };
-    await saveRunnerProfile(USER, EMAIL, minimal);
-
-    const { setPairs, param } = splitUpsert(fake.queries[0]);
-    expect(param(setPairs.medical_notes)).toBeNull();
-    expect(param(setPairs.document_type)).toBeNull();
-  });
-
-  it("ignores extra keys of the input such as userId, email or consentVersion", async () => {
-    const fake = useFakeDb();
-    const tampered = {
-      ...input,
-      userId: "user-b",
-      email: "other@example.com",
-      consentVersion: "forged",
-      createdAt: new Date("2020-01-01T00:00:00Z"),
-    } as RunnerProfileInput;
-    await saveRunnerProfile(USER, EMAIL, tampered);
-
-    const [upsert] = fake.queries;
-    expect(upsert.params).not.toContain("user-b");
-    expect(upsert.params).not.toContain("other@example.com");
-    expect(upsert.params).not.toContain("forged");
-    const { insertColumns, insertValues, param } = splitUpsert(upsert);
-    expect(param(insertValues[insertColumns.indexOf("user_id")])).toBe(USER);
-    expect(insertValues[insertColumns.indexOf("created_at")]).toBe("default");
+    const statement = normalize(fake.queries[0].sql);
+    const leadInsert = statement.match(/INSERT INTO leads \(([^)]+)\) SELECT (.+?) FROM first_save/);
+    expect(leadInsert).not.toBeNull();
+    expect(leadInsert![1].split(", ")).toEqual(["full_name", "phone", "email", "source", "channel", "consent_version"]);
+    const firstSave = statement.match(/first_save AS \( SELECT (.+?) FROM saved WHERE inserted \)/);
+    expect(firstSave![1]).toBe("full_name, phone, lower(email) AS email, consent_version");
   });
 
   it("propagates database errors without wrapping them in its own error and without logging", async () => {
@@ -231,5 +132,200 @@ describe("saveRunnerProfile", () => {
     for (const spy of consoleSpies) {
       expect(spy).not.toHaveBeenCalled();
     }
+  });
+});
+
+describe("saveRunnerProfile against PostgreSQL", () => {
+  let embedded: Awaited<ReturnType<typeof createEmbeddedDb>>;
+  const ADMIN = "user-admin";
+
+  beforeAll(async () => {
+    embedded = await createEmbeddedDb();
+  }, 30000);
+  afterAll(async () => {
+    await embedded?.pg.close();
+  });
+  beforeEach(async () => {
+    await embedded.pg.exec("TRUNCATE leads, runner_profiles, profiles RESTART IDENTITY CASCADE");
+    await embedded.pg.exec(`INSERT INTO profiles (user_id, email) VALUES ('${ADMIN}', 'admin@example.com')`);
+    vi.mocked(getDb).mockReturnValue(embedded.db as ReturnType<typeof getDb>);
+  });
+
+  async function rows<T>(text: string, params: unknown[] = []): Promise<T[]> {
+    return (await embedded.pg.query<T>(text, params)).rows;
+  }
+
+  async function seedLead(email: string, { archived = false, createdAt = "2026-10-01T00:00:00Z" } = {}) {
+    const [lead] = await rows<{ id: string }>(
+      `INSERT INTO leads (full_name, phone, email, source, consent_version, created_by, created_at, archived_at, archived_by)
+       VALUES ('Ana P.', '+51911111111', $1, 'whatsapp', 'test-v1', $2, $3, $4, $5) RETURNING id`,
+      [email, ADMIN, createdAt, archived ? "2026-10-02T00:00:00Z" : null, archived ? ADMIN : null],
+    );
+    return lead.id;
+  }
+
+  const activities = () =>
+    rows<{ lead_id: string; type: string; body: string | null; actor_user_id: string | null }>(
+      "SELECT lead_id, type, body, actor_user_id FROM lead_activities ORDER BY created_at, id",
+    );
+  const events = () =>
+    rows<{ lead_id: string; type: string; payload: unknown }>("SELECT lead_id, type, payload FROM outbox_events");
+
+  it("stores the profile as before: every field, the consent version and the session's ids", async () => {
+    const tampered = {
+      ...input,
+      userId: "user-b",
+      email: "other@example.com",
+      consentVersion: "forged",
+    } as RunnerProfileInput;
+    await saveRunnerProfile(USER, EMAIL, tampered);
+
+    const profile = await getRunnerProfile(USER);
+    expect(profile).toMatchObject({ email: EMAIL, ...input, consentVersion: RUNNER_PROFILE_CONSENT.version });
+    expect(await getRunnerProfile("user-b")).toBeNull();
+  });
+
+  it("updates every field on a later save but never user_id or created_at", async () => {
+    await saveRunnerProfile(USER, EMAIL, input);
+    const [before] = await rows<{ created_at: string; consented_at: string }>(
+      "SELECT created_at::text, consented_at::text FROM runner_profiles WHERE user_id = $1",
+      [USER],
+    );
+    const changed: RunnerProfileInput = {
+      ...input,
+      fullName: "Ana María Pérez",
+      phone: "+51900000001",
+      country: null, city: null, birthDate: null, documentType: null, documentNumber: null,
+      documentExpiresOn: null, shirtSize: null, preferredDistance: null, personalBest: null, club: null,
+      emergencyContactName: null, emergencyContactPhone: null, medicalNotes: null,
+    };
+    await saveRunnerProfile(USER, "ana.maria@example.com", changed);
+
+    expect(await getRunnerProfile(USER)).toMatchObject({
+      email: "ana.maria@example.com",
+      ...changed,
+      consentVersion: RUNNER_PROFILE_CONSENT.version,
+    });
+    const after = await rows<{ user_id: string; created_at: string; consented_at: string; updated_at: string }>(
+      "SELECT user_id, created_at::text, consented_at::text, updated_at::text FROM runner_profiles",
+    );
+    expect(after).toHaveLength(1);
+    expect(after[0].user_id).toBe(USER);
+    expect(after[0].created_at).toBe(before.created_at);
+    expect(after[0].consented_at >= before.consented_at).toBe(true);
+    expect(after[0].updated_at >= before.created_at).toBe(true);
+  });
+
+  it("first save without a lead creates a runner_account lead, its created activity and its event", async () => {
+    await saveRunnerProfile(USER, EMAIL, input);
+
+    const leads = await rows<Record<string, unknown>>("SELECT * FROM leads");
+    expect(leads).toHaveLength(1);
+    const [lead] = leads;
+    expect(lead).toMatchObject({
+      full_name: "Ana Pérez",
+      phone: "+51938127170",
+      email: EMAIL,
+      source: "runner_account",
+      channel: "web",
+      stage: "new",
+      consent_version: RUNNER_PROFILE_CONSENT.version,
+      owner_user_id: null,
+      created_by: null,
+      archived_at: null,
+      trip_id: null,
+      destination_text: null,
+      location: null,
+      next_action_note: null,
+      idempotency_key: null,
+    });
+
+    expect(await activities()).toEqual([{ lead_id: lead.id, type: "created", body: null, actor_user_id: null }]);
+    expect(await events()).toEqual([{ lead_id: lead.id, type: "lead.created", payload: { source: "runner_account" } }]);
+  });
+
+  it("copies no document, birth date, emergency contact or medical note into the lead, activity or event", async () => {
+    await saveRunnerProfile(USER, EMAIL, input);
+
+    const [{ dump }] = await rows<{ dump: string }>(`
+      SELECT (SELECT json_agg(leads)::text FROM leads) || (SELECT json_agg(lead_activities)::text FROM lead_activities)
+        || (SELECT json_agg(outbox_events)::text FROM outbox_events) AS dump`);
+    for (const sensitive of ["AB123456", "passport", "2030-01-31", "1990-04-12", "Luis Pérez", "+51999888777", "penicilina", "Lima Runners", "3:45:10"]) {
+      expect(dump).not.toContain(sensitive);
+    }
+  });
+
+  it("a second save creates no lead, activity or event", async () => {
+    await saveRunnerProfile(USER, EMAIL, input);
+    await saveRunnerProfile(USER, EMAIL, { ...input, fullName: "Ana María Pérez" });
+
+    expect(await rows("SELECT id FROM leads")).toHaveLength(1);
+    expect(await activities()).toHaveLength(1);
+    expect(await events()).toHaveLength(1);
+    const [lead] = await rows<{ full_name: string }>("SELECT full_name FROM leads");
+    expect(lead.full_name).toBe("Ana Pérez");
+  });
+
+  it("a later save touches no lead even when the first save found none to create", async () => {
+    const existing = await seedLead(EMAIL);
+    await saveRunnerProfile(USER, EMAIL, input);
+    await saveRunnerProfile(USER, EMAIL, input);
+
+    expect(await activities()).toEqual([
+      { lead_id: existing, type: "re_registered", body: "Completó su perfil en la web", actor_user_id: null },
+    ]);
+  });
+
+  it("first save with a non-archived lead of the same email only adds an activity to the most recent one", async () => {
+    const older = await seedLead(EMAIL, { createdAt: "2026-09-01T00:00:00Z" });
+    const newest = await seedLead(EMAIL, { createdAt: "2026-10-01T00:00:00Z" });
+    await seedLead(EMAIL, { createdAt: "2026-10-15T00:00:00Z", archived: true });
+    await seedLead("someone@example.com", { createdAt: "2026-10-20T00:00:00Z" });
+
+    await saveRunnerProfile(USER, EMAIL, input);
+
+    expect(await rows("SELECT id FROM leads")).toHaveLength(4);
+    expect(await rows("SELECT id FROM leads WHERE source = 'runner_account'")).toHaveLength(0);
+    expect(await activities()).toEqual([
+      { lead_id: newest, type: "re_registered", body: "Completó su perfil en la web", actor_user_id: null },
+    ]);
+    expect(older).not.toBe(newest);
+    expect(await events()).toEqual([]);
+  });
+
+  it("matches the lead by lowercase email; a mixed-case email never reaches the leads", async () => {
+    // Both tables force lowercase emails (CHECK) and the session email is already lowercased, so a
+    // lead with another capitalization cannot exist: a mixed-case profile email fails as a whole.
+    await seedLead(EMAIL);
+    await expect(saveRunnerProfile(USER, "Ana@Example.com", input)).rejects.toThrow();
+    expect(await rows("SELECT user_id FROM runner_profiles")).toEqual([]);
+    expect(await activities()).toEqual([]);
+
+    await saveRunnerProfile(USER, EMAIL, input);
+    expect(await activities()).toHaveLength(1);
+    expect(await events()).toEqual([]);
+  });
+
+  it("first save with only an archived lead of the same email creates a new lead", async () => {
+    const archived = await seedLead(EMAIL, { archived: true });
+    await saveRunnerProfile(USER, EMAIL, input);
+
+    const created = await rows<{ id: string }>("SELECT id FROM leads WHERE source = 'runner_account'");
+    expect(created).toHaveLength(1);
+    expect(created[0].id).not.toBe(archived);
+    expect(await activities()).toEqual([
+      { lead_id: created[0].id, type: "created", body: null, actor_user_id: null },
+    ]);
+    expect(await events()).toEqual([
+      { lead_id: created[0].id, type: "lead.created", payload: { source: "runner_account" } },
+    ]);
+  });
+
+  it("a failed profile save writes no lead, activity or event", async () => {
+    await expect(saveRunnerProfile(USER, EMAIL, { ...input, documentNumber: "bad number!" })).rejects.toThrow();
+
+    expect(await rows("SELECT user_id FROM runner_profiles")).toEqual([]);
+    expect(await rows("SELECT id FROM leads")).toEqual([]);
+    expect(await events()).toEqual([]);
   });
 });

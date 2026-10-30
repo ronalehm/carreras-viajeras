@@ -239,7 +239,10 @@ export async function getLeadFormOptions(): Promise<{
 
 // One statement: the lead is inserted only if the owner is active and the trip (if any) is not
 // archived; its 'created' activity and its 'lead.created' outbox event (payload { source }, for
-// n8n) are inserted from the same RETURNING. stage takes the column default ('new'); the author
+// n8n) are inserted from the same RETURNING. When the chosen owner is not the author, a
+// 'lead.owner_assigned' event (payload {}) is inserted too, so the owner gets an alert; it reads
+// the event CTE's RETURNING, so 'lead.created' always takes the lower sequence. Assigning the lead
+// to oneself emits nothing. stage takes the column default ('new'); the author
 // and the consent version never come from the input. The origin fields come from the form; the
 // UTM fields (web capture only) and contact_opt_out_at are never written here.
 export async function createLead(
@@ -278,6 +281,12 @@ export async function createLead(
     event AS (
       INSERT INTO outbox_events (type, lead_id, payload)
       SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted
+      RETURNING lead_id
+    ),
+    owner_event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.owner_assigned', lead_id, '{}'::jsonb FROM event
+      WHERE ${input.ownerUserId}::text IS NOT NULL AND ${input.ownerUserId}::text <> ${actorUserId}::text
     )
     SELECT (SELECT id FROM inserted) AS id, owner_ok, trip_ok FROM checks
   `);
@@ -434,7 +443,9 @@ export async function changeLeadStage(
 
 // One statement, same locking as changeLeadStage. IS DISTINCT FROM: a lead without owner (web
 // form) gets its first owner, and the activity records owner_from = NULL. The new owner must
-// have an active role with leads.manage.
+// have an active role with leads.manage. The 'lead.owner_assigned' event (payload {}, the owner
+// alert) is inserted from the same RETURNING only when the new owner is not the session user:
+// taking a lead oneself, "no_change" and "not_found" emit nothing.
 export async function changeLeadOwner(
   input: LeadOwnerChangeInput,
   actorUserId: string,
@@ -461,6 +472,11 @@ export async function changeLeadOwner(
       INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id)
       SELECT id, 'owner_changed', owner_from, ${input.ownerUserId}, ${actorUserId}
       FROM updated
+    ),
+    owner_event AS (
+      INSERT INTO outbox_events (type, lead_id, payload)
+      SELECT 'lead.owner_assigned', id, '{}'::jsonb FROM updated
+      WHERE ${input.ownerUserId}::text IS NOT NULL AND ${input.ownerUserId}::text <> ${actorUserId}::text
     )
     SELECT
       EXISTS (SELECT 1 FROM target) AS found,

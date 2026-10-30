@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { drizzle } from "drizzle-orm/neon-http";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 
 import { getDb } from "@/lib/db";
+import { createEmbeddedDb } from "@/lib/testing/embeddedDb";
 import type { CreateLeadInput, UpdateLeadInput } from "../types/leads.types";
 import {
   archiveLead,
@@ -439,7 +440,11 @@ describe("createLead", () => {
     // status, attempts and available_at take their defaults (pending, 0, now()); payload { source }
     // is built from the inserted lead (no personal data).
     expect(statement).toContain(
-      "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted )",
+      "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source) FROM inserted RETURNING lead_id )",
+    );
+    // The owner alert only when the chosen owner is not the author (parameters, not form data).
+    expect(statement).toContain(
+      "owner_event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.owner_assigned', lead_id, '{}'::jsonb FROM event WHERE $24::text IS NOT NULL AND $25::text <> $26::text )",
     );
     expect(statement).toMatch(/SELECT \(SELECT id FROM inserted\) AS id, owner_ok, trip_ok FROM checks$/);
     expect(fake.queries[0].params).toEqual([
@@ -463,6 +468,9 @@ describe("createLead", () => {
       true,
       "call",
       "Quiere la 21K.",
+      "user-1",
+      "user-2",
+      "user-2",
       "user-1",
     ]);
   });
@@ -912,11 +920,17 @@ describe("changeLeadOwner", () => {
     expect(statement).toContain(
       "activity AS ( INSERT INTO lead_activities (lead_id, type, owner_from, owner_to, actor_user_id) SELECT id, 'owner_changed', owner_from, $8, $9 FROM updated )",
     );
+    // The owner alert comes from the UPDATE's RETURNING (no row for no_change or not_found) and only
+    // when the new owner is not the session user.
+    expect(statement).toContain(
+      "owner_event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.owner_assigned', id, '{}'::jsonb FROM updated WHERE $10::text IS NOT NULL AND $11::text <> $12::text )",
+    );
+    expect(statement.match(/INSERT INTO outbox_events/g)).toHaveLength(1);
     expect(statement).toMatch(
       /SELECT EXISTS \(SELECT 1 FROM target\) AS found, EXISTS \(SELECT 1 FROM updated\) AS changed, owner_ok FROM checks$/,
     );
     expect(fake.queries[0].params).toEqual([
-      "user-2", ...LEAD_OWNER_ROLES, LEAD_ID, "user-2", "user-2", "user-2", "user-1",
+      "user-2", ...LEAD_OWNER_ROLES, LEAD_ID, "user-2", "user-2", "user-2", "user-1", "user-2", "user-2", "user-1",
     ]);
   });
 
@@ -1114,5 +1128,122 @@ describe("writes on an archived lead", () => {
 
     await expect(write()).resolves.toBe("not_found");
     for (const query of fake.queries) expect(query.sql.toLowerCase()).toMatch(/"?archived_at"? is null/);
+  });
+});
+
+// Real PostgreSQL (in-memory PGlite with every migration): which writes emit the owner alert.
+describe("lead.owner_assigned against PostgreSQL", () => {
+  let embedded: Awaited<ReturnType<typeof createEmbeddedDb>>;
+  beforeAll(async () => {
+    embedded = await createEmbeddedDb();
+  }, 30000);
+  afterAll(async () => {
+    await embedded?.pg.close();
+  });
+
+  beforeEach(async () => {
+    // Only this isolated, in-memory database. Never Neon or a network connection.
+    const { pg } = embedded;
+    await pg.exec("TRUNCATE leads, profiles, trips RESTART IDENTITY CASCADE");
+    await pg.query(
+      "INSERT INTO profiles(user_id,email) VALUES ('user-1','one@example.test'),('user-2','two@example.test')",
+    );
+    await pg.query(
+      "INSERT INTO staff_assignments(user_id,role,reason) VALUES ('user-1','commercial','test'),('user-2','commercial','test')",
+    );
+    vi.mocked(getDb).mockReturnValue(embedded.db as ReturnType<typeof getDb>);
+  });
+
+  const manualLead: CreateLeadInput = {
+    fullName: "Ana Pérez",
+    phone: "+51938127170",
+    email: "ana@example.test",
+    location: null,
+    tripId: null,
+    destinationText: "Panamá",
+    source: "whatsapp",
+    ownerUserId: "user-2",
+    note: null,
+    consent: "on",
+    channel: "unknown",
+    originDetail: null,
+    referredBy: null,
+    referralPermission: false,
+    contactPreference: null,
+  };
+
+  async function events(leadId: string) {
+    const result = await embedded.pg.query<{ type: string; payload: unknown }>(
+      "SELECT type, payload FROM outbox_events WHERE lead_id = $1 ORDER BY sequence",
+      [leadId],
+    );
+    return result.rows;
+  }
+
+  async function createOwnedBy(ownerUserId: string) {
+    const created = await createLead({ ...manualLead, ownerUserId }, ownerUserId);
+    if (typeof created === "string") throw new Error(created);
+    return created.id;
+  }
+
+  it("createLead with an owner other than the author emits lead.created and lead.owner_assigned", async () => {
+    const created = await createLead(manualLead, "user-1");
+    if (typeof created === "string") throw new Error(created);
+
+    expect(await events(created.id)).toEqual([
+      { type: "lead.created", payload: { source: "whatsapp" } },
+      { type: "lead.owner_assigned", payload: {} },
+    ]);
+  });
+
+  it("createLead with the author as owner emits only lead.created", async () => {
+    const leadId = await createOwnedBy("user-1");
+
+    expect(await events(leadId)).toEqual([{ type: "lead.created", payload: { source: "whatsapp" } }]);
+  });
+
+  it("createLead with an invalid owner inserts no lead and no event", async () => {
+    await expect(createLead({ ...manualLead, ownerUserId: "nobody" }, "user-1")).resolves.toBe("invalid_owner");
+
+    const result = await embedded.pg.query("SELECT 1 FROM outbox_events");
+    expect(result.rows).toHaveLength(0);
+  });
+
+  it("changeLeadOwner to another user emits one lead.owner_assigned with an empty payload", async () => {
+    const leadId = await createOwnedBy("user-1");
+
+    await expect(changeLeadOwner({ leadId, ownerUserId: "user-2" }, "user-1")).resolves.toBe("changed");
+
+    expect((await events(leadId)).slice(1)).toEqual([{ type: "lead.owner_assigned", payload: {} }]);
+  });
+
+  it("changeLeadOwner to oneself changes the owner but emits nothing", async () => {
+    const leadId = await createOwnedBy("user-1");
+
+    await expect(changeLeadOwner({ leadId, ownerUserId: "user-2" }, "user-2")).resolves.toBe("changed");
+
+    expect((await events(leadId)).slice(1)).toEqual([]);
+    const owner = await embedded.pg.query<{ owner_user_id: string }>(
+      "SELECT owner_user_id FROM leads WHERE id = $1",
+      [leadId],
+    );
+    expect(owner.rows[0].owner_user_id).toBe("user-2");
+  });
+
+  it("changeLeadOwner to the same owner is no_change and emits nothing", async () => {
+    const leadId = await createOwnedBy("user-2");
+
+    await expect(changeLeadOwner({ leadId, ownerUserId: "user-2" }, "user-1")).resolves.toBe("no_change");
+
+    expect((await events(leadId)).slice(1)).toEqual([]);
+  });
+
+  it("changeLeadOwner on an archived lead is not_found and emits nothing", async () => {
+    const leadId = await createOwnedBy("user-1");
+    await archiveLead(leadId, "user-1");
+
+    await expect(changeLeadOwner({ leadId, ownerUserId: "user-2" }, "user-1")).resolves.toBe("not_found");
+
+    expect((await events(leadId)).slice(1)).toEqual([]);
   });
 });

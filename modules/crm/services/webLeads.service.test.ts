@@ -38,6 +38,7 @@ const INPUT: Submission = {
   phone: "+51938127170",
   destination: "maraton-santiago-2027",
   marketingOptIn: false,
+  form: "contact",
   submissionId: SUBMISSION_ID,
   campaignCode: null,
   utmSource: null,
@@ -90,8 +91,9 @@ const P = {
   marketingOptIn: 16,
   idempotencyKey: 17,
   submissionHash: 18,
-  note: 19,
-  activityKey: 20,
+  eventForm: 19,
+  note: 20,
+  activityKey: 21,
 } as const;
 
 async function capture(input: Submission = INPUT, rows: unknown[] = [row({ created: true })]) {
@@ -122,12 +124,12 @@ describe("createWebLead", () => {
     expect(statement).toContain(
       "new_lead AS ( INSERT INTO leads ( full_name, phone, email, trip_id, destination_text, source, channel, origin_detail, campaign_id, utm_source, utm_medium, utm_campaign, referred_by, consent_version, marketing_opt_in_at, idempotency_key, submission_hash ) SELECT $7, $8, $9, (SELECT id FROM trip), $10::text, $11::lead_source, coalesce((SELECT channel FROM campaign), 'web'::lead_channel), (SELECT detail FROM campaign), (SELECT id FROM campaign), $12::text, $13::text, $14::text, $15::text, $16, CASE WHEN $17::boolean THEN now() END, $18::uuid, $19 FROM fresh WHERE NOT EXISTS (SELECT 1 FROM same_person) ON CONFLICT (idempotency_key) DO NOTHING RETURNING id, source )",
     );
-    // No note and no author on the activity; the event payload is { source } only (no personal data).
+    // No note and no author on the activity; the event payload is { source, form } only (no personal data).
     expect(statement).toContain(
       "activity AS ( INSERT INTO lead_activities (lead_id, type) SELECT id, 'created' FROM new_lead )",
     );
     expect(statement).toContain(
-      "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source) FROM new_lead )",
+      "event AS ( INSERT INTO outbox_events (type, lead_id, payload) SELECT 'lead.created', id, jsonb_build_object('source', source, 'form', $20::text) FROM new_lead )",
     );
     expect(statement).toMatch(
       /SELECT EXISTS \(SELECT 1 FROM new_lead\) AS created, \(SELECT submission_hash FROM existing\) AS existing_hash, EXISTS \(SELECT 1 FROM repeated_before\) AS repeated_before, EXISTS \(SELECT 1 FROM repeat\) AS repeated, \(SELECT trip_ok FROM checks\) AS trip_ok$/,
@@ -152,10 +154,23 @@ describe("createWebLead", () => {
       false,
       SUBMISSION_ID,
       expectedHash(INPUT),
+      "contact",
       `Texto legal ${REGISTRATION_CONSENT.version} · Promociones: no`,
       SUBMISSION_ID,
     ]);
   });
+
+  it.each(["registration", "contact"] as const)(
+    "adds form %s to the lead.created payload as a SQL parameter, outside the submission hash",
+    async (form) => {
+      const { statement, params } = await capture({ ...INPUT, form });
+
+      expect(params[P.eventForm]).toBe(form);
+      expect(statement).toContain("jsonb_build_object('source', source, 'form', $20::text)");
+      expect(statement).not.toContain(`'${form}'`);
+      expect(params[P.submissionHash]).toBe(expectedHash(INPUT));
+    },
+  );
 
   it("stores the versioned legal text, never the old web-form-v1", async () => {
     const { params } = await capture();
@@ -221,7 +236,7 @@ describe("createWebLead", () => {
 
     expect(result).toBe("existing");
     expect(statement).toContain(
-      "repeat AS ( INSERT INTO lead_activities (lead_id, type, body, submission_id) SELECT same_person.id, 're_registered', left(concat_ws(' · ', 'Volvió a registrarse desde la web', 'Campaña: ' || (SELECT name || ' (' || code || ')' FROM campaign), $20::text), 500), $21::uuid FROM same_person, fresh ON CONFLICT (submission_id) DO NOTHING RETURNING lead_id )",
+      "repeat AS ( INSERT INTO lead_activities (lead_id, type, body, submission_id) SELECT same_person.id, 're_registered', left(concat_ws(' · ', 'Volvió a registrarse desde la web', 'Campaña: ' || (SELECT name || ' (' || code || ')' FROM campaign), $21::text), 500), $22::uuid FROM same_person, fresh ON CONFLICT (submission_id) DO NOTHING RETURNING lead_id )",
     );
     expect(params[P.note]).toBe(
       `UTM: instagram / social / preventa · Ref: club-lima · Texto legal ${REGISTRATION_CONSENT.version} · Promociones: sí`,
@@ -230,7 +245,9 @@ describe("createWebLead", () => {
     // The existing lead is never updated and the repeated registration emits no outbox event.
     expect(statement).not.toMatch(/UPDATE/);
     expect(statement.match(/INSERT INTO outbox_events/g)).toHaveLength(1);
-    expect(statement).toContain("SELECT 'lead.created', id, jsonb_build_object('source', source) FROM new_lead");
+    expect(statement).toContain(
+      "SELECT 'lead.created', id, jsonb_build_object('source', source, 'form', $20::text) FROM new_lead",
+    );
   });
 
   it.each([

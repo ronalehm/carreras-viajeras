@@ -16,6 +16,7 @@ const OUTPUT_KEYS = [
   "campaignCode",
   "destination",
   "email",
+  "form",
   "fullName",
   "marketingOptIn",
   "phone",
@@ -41,6 +42,7 @@ describe("webLeadFormSchema", () => {
       phone: "+51938127170",
       destination: "maraton-santiago-2027",
       marketingOptIn: false,
+      form: "contact",
       submissionId: SUBMISSION_ID,
       turnstileToken: "token-123",
       campaignCode: null,
@@ -104,6 +106,20 @@ describe("webLeadFormSchema", () => {
   ])("maps the promotions checkbox %s to %s without an error", (_case, marketing, expected) => {
     const input = marketing === undefined ? VALID : { ...VALID, marketing };
     expect(webLeadFormSchema.parse(input).marketingOptIn).toBe(expected);
+  });
+
+  it.each([
+    ["registration", "registration", "registration"],
+    ["contact", "contact", "contact"],
+    ["missing", undefined, "contact"],
+    ["empty", "", "contact"],
+    ["unknown", "admin", "contact"],
+    ["uppercase", "REGISTRATION", "contact"],
+  ])("maps the form field %s to %s without an error", (_case, form, expected) => {
+    const input = form === undefined ? VALID : { ...VALID, form };
+    const result = webLeadFormSchema.safeParse(input);
+    expect(result.success).toBe(true);
+    expect(result.data?.form).toBe(expected);
   });
 
   it("drops extra keys such as source, stage, channel, campaignId, ownerUserId, consentVersion or price", () => {
