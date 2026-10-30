@@ -17,8 +17,9 @@ import { firstName } from "./lifecycleEmailTemplates";
 export type CadenceStage = "new" | "contacted" | "quoted";
 export type CadenceStep = "proposal" | "r3" | "r5" | "r7"; // proposal only exists for "new"
 
-// Subset of ActiveOffer (modules/trips/types/offers.types.ts), declared here so integrations does not
-// import trips. Amounts in USD; dates are calendar dates (YYYY-MM-DD).
+// Only the fields of ActiveOffer (modules/trips/types/offers.types.ts) that the proposal shows. Kept
+// here so these pure templates do not depend on trips; clientEmails.service.ts maps the offer from the
+// public API of trips (getActiveOffer). Amounts in USD; dates are calendar dates (YYYY-MM-DD).
 export type CadenceOffer = {
   finalPriceUsd: number;
   depositOptionsUsd: number[];

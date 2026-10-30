@@ -4,9 +4,9 @@ import type { PGlite } from "@electric-sql/pglite";
 import { createEmbeddedDb } from "@/lib/testing/embeddedDb";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getClientEmailEnv: vi.fn() }));
+vi.mock("@/lib/env", () => ({ getClientEmailEnv: vi.fn(), isSalesCadenceEnabled: vi.fn() }));
 import { getDb } from "@/lib/db";
-import { getClientEmailEnv } from "@/lib/env";
+import { getClientEmailEnv, isSalesCadenceEnabled } from "@/lib/env";
 import { enqueueCadence } from "./cadence.service";
 
 const HOUR = 60 * 60 * 1000;
@@ -45,6 +45,8 @@ describe("enqueueCadence against PostgreSQL", () => {
     env.startAt = new Date("2000-01-01T00:00:00Z");
     vi.mocked(getClientEmailEnv).mockReset();
     vi.mocked(getClientEmailEnv).mockImplementation(() => ({ ...env }));
+    vi.mocked(isSalesCadenceEnabled).mockReset();
+    vi.mocked(isSalesCadenceEnabled).mockReturnValue(true);
     vi.mocked(getDb).mockReset();
     vi.mocked(getDb).mockReturnValue(embedded.db as ReturnType<typeof getDb>);
   });
@@ -286,6 +288,16 @@ describe("enqueueCadence against PostgreSQL", () => {
     expect(await events()).toEqual([]);
   });
 
+  it("does nothing, without querying, while the sales cadence switch is off (until Phase 2)", async () => {
+    await insertLead();
+    vi.mocked(isSalesCadenceEnabled).mockReturnValue(false);
+    vi.mocked(getDb).mockClear();
+    expect(await enqueueCadence(after(2 * HOUR), 20)).toEqual({ enqueued: 0 });
+    expect(await enqueueCadence(after(3 * DAY), 20)).toEqual({ enqueued: 0 });
+    expect(getDb).not.toHaveBeenCalled();
+    expect(await events()).toEqual([]);
+  });
+
   it("queues at most `limit` episodes per call, oldest episode first; superseded steps do not count", async () => {
     const oldest = await insertLead({ createdAt: after(-6 * DAY) });
     const middle = await insertLead({ createdAt: after(-HOUR) });
@@ -299,5 +311,45 @@ describe("enqueueCadence against PostgreSQL", () => {
 
     expect(await enqueueCadence(now, 2)).toEqual({ enqueued: 1 });
     expect((await events()).at(-1)?.leadId).toBe(newest);
+  });
+
+  // Migration 0018 (crm-sales-cadence.md, requirement 5): an authorless opted_out is only the
+  // unsubscribe confirmed from the email link, with its fixed note.
+  describe("lead_activities CHECKs for the unsubscribe from the email link", () => {
+    const NOTE = "Baja desde el enlace del correo";
+    const insertOptedOut = async (leadId: string, actor: string | null, body: string | null) =>
+      pg.query("INSERT INTO lead_activities(lead_id,type,actor_user_id,body) VALUES ($1,'opted_out',$2,$3)", [
+        leadId,
+        actor,
+        body,
+      ]);
+
+    it("accepts an authorless opted_out with the exact note", async () => {
+      const leadId = await insertLead();
+      await expect(insertOptedOut(leadId, null, NOTE)).resolves.toBeDefined();
+    });
+
+    it("rejects an authorless opted_out without the note", async () => {
+      const leadId = await insertLead();
+      await expect(insertOptedOut(leadId, null, null)).rejects.toThrow(/lead_activities_actor_chk/);
+    });
+
+    it.each(["Baja desde el enlace", "baja desde el enlace del correo", `${NOTE}.`])(
+      "rejects an authorless opted_out with another note (%j)",
+      async (body) => {
+        const leadId = await insertLead();
+        await expect(insertOptedOut(leadId, null, body)).rejects.toThrow(/lead_activities_(actor|body)_chk/);
+      },
+    );
+
+    it("keeps the CRM opt-out: with an author and no body", async () => {
+      const leadId = await insertLead();
+      await expect(insertOptedOut(leadId, "staff", null)).resolves.toBeDefined();
+    });
+
+    it("rejects the link note on an opted_out with an author", async () => {
+      const leadId = await insertLead();
+      await expect(insertOptedOut(leadId, "staff", NOTE)).rejects.toThrow(/lead_activities_body_chk/);
+    });
   });
 });

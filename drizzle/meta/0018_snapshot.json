@@ -1,5 +1,5 @@
 {
-  "id": "47b5dbdb-2a1e-46b3-9abc-4e88b7c4f31f",
+  "id": "7ec0eb5f-f17f-492b-b871-3f77d93ae4cc",
   "prevId": "2b09ebb2-c698-48ef-b4a7-d86b15ee93f7",
   "version": "7",
   "dialect": "postgresql",
@@ -1459,7 +1459,7 @@
       "checkConstraints": {
         "lead_activities_body_chk": {
           "name": "lead_activities_body_chk",
-          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" IN ('automation', 're_registered') THEN \"lead_activities\".\"body\" IS NOT NULL AND char_length(\"lead_activities\".\"body\") <= 500 WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true ELSE \"lead_activities\".\"body\" IS NULL END"
+          "value": "(\"lead_activities\".\"body\" IS NULL OR char_length(\"lead_activities\".\"body\") BETWEEN 1 AND 2000) AND CASE WHEN \"lead_activities\".\"type\" IN ('note', 'call', 'message') THEN \"lead_activities\".\"body\" IS NOT NULL WHEN \"lead_activities\".\"type\" IN ('automation', 're_registered') THEN \"lead_activities\".\"body\" IS NOT NULL AND char_length(\"lead_activities\".\"body\") <= 500 WHEN \"lead_activities\".\"type\" IN ('created', 'stage_changed') THEN true WHEN \"lead_activities\".\"type\" = 'opted_out' THEN \"lead_activities\".\"body\" IS NULL OR (\"lead_activities\".\"actor_user_id\" IS NULL AND \"lead_activities\".\"body\" = 'Baja desde el enlace del correo') ELSE \"lead_activities\".\"body\" IS NULL END"
         },
         "lead_activities_stage_chk": {
           "name": "lead_activities_stage_chk",
@@ -1475,7 +1475,7 @@
         },
         "lead_activities_actor_chk": {
           "name": "lead_activities_actor_chk",
-          "value": "\"lead_activities\".\"actor_user_id\" IS NOT NULL OR \"lead_activities\".\"type\" IN ('created', 'automation', 're_registered', 'opted_out')"
+          "value": "\"lead_activities\".\"actor_user_id\" IS NOT NULL OR \"lead_activities\".\"type\" IN ('created', 'automation', 're_registered') OR (\"lead_activities\".\"type\" = 'opted_out' AND \"lead_activities\".\"body\" IS NOT DISTINCT FROM 'Baja desde el enlace del correo')"
         },
         "lead_activities_event_chk": {
           "name": "lead_activities_event_chk",

@@ -15,6 +15,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/env", () => ({
   getClientEmailEnv: vi.fn(),
+  isSalesCadenceEnabled: vi.fn(),
   getEnv: vi.fn(() => ({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" })),
 }));
 // The real offer resolution (getActiveOffer) against the embedded database, without loading the rest
@@ -27,7 +28,7 @@ vi.mock("@/modules/trips", async () => ({
   ).getActiveOffer,
 }));
 import { getDb } from "@/lib/db";
-import { getClientEmailEnv } from "@/lib/env";
+import { getClientEmailEnv, isSalesCadenceEnabled } from "@/lib/env";
 import { cadenceEmailTemplate, type CadenceOffer } from "../utils/cadenceEmailTemplates";
 import { lifecycleEmailTemplate } from "../utils/lifecycleEmailTemplates";
 import {
@@ -62,6 +63,9 @@ const token = "b0000000-0000-4000-8000-000000000001";
 const APP_ORIGIN = "https://carreras-viajeras.mentec.dev";
 beforeEach(() => {
   vi.mocked(getDb).mockReset();
+  // Sales cadence switch on by default: the current behavior. Tests that need it off override it.
+  vi.mocked(isSalesCadenceEnabled).mockReset();
+  vi.mocked(isSalesCadenceEnabled).mockReturnValue(true);
   vi.mocked(getClientEmailEnv).mockReturnValue({
     from: "sender@example.test",
     startAt: new Date("2026-10-29T00:00:00Z"),
@@ -1065,6 +1069,50 @@ describe("email engine against PostgreSQL", () => {
         { kind: "cadence_reminder", status: "skipped", lastErrorCode: "missing_email" },
         { kind: "cadence_reminder", status: "skipped", lastErrorCode: "ineligible" },
       ]);
+    });
+
+    describe("with the sales cadence switch off (CRM_SALES_CADENCE_ENABLED, until Phase 2)", () => {
+      it("records the cadence emails as skipped at preparation, while the welcome is still sent", async () => {
+        const tripId = await insertTrip();
+        await insertOffer(tripId, 1600);
+        const { leadId, episodeId } = await cadenceLead("new", { tripId });
+        await addEvent("lead.created", leadId, { source: "web_form" });
+        await due(leadId, { stage: "new", step: "proposal", episodeId });
+        await due(leadId, { stage: "new", step: "r3", episodeId });
+        vi.mocked(isSalesCadenceEnabled).mockReturnValue(false);
+        const { messages } = await claimAll();
+        expect(await authorizeAll(messages)).toEqual({
+          welcome_contact: "authorized",
+          team_alert: "authorized",
+        });
+        expect((await summary()).filter((row) => row.kind.startsWith("cadence_"))).toEqual([
+          { kind: "cadence_proposal", status: "skipped", lastErrorCode: "ineligible" },
+          { kind: "cadence_reminder", status: "skipped", lastErrorCode: "ineligible" },
+        ]);
+      });
+
+      it("rejects a claimed cadence email just before SMTP when the switch is turned off", async () => {
+        const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+        await due(leadId, { stage: "contacted", step: "r3", episodeId });
+        const { messages } = await claimAll();
+        expect(messages).toHaveLength(1);
+        vi.mocked(isSalesCadenceEnabled).mockReturnValue(false);
+        expect(await authorizeAll(messages)).toEqual({ cadence_reminder: "skipped" });
+        expect(await summary()).toEqual([
+          { kind: "cadence_reminder", status: "skipped", lastErrorCode: "ineligible" },
+        ]);
+      });
+
+      it("rejects the retry of a cadence email", async () => {
+        const { leadId, episodeId } = await cadenceLead("quoted", { stage: "quoted" });
+        await due(leadId, { stage: "quoted", step: "r5", episodeId });
+        const [message] = (await claimAll()).messages;
+        await failClientEmail(message.id, message.attemptToken, "before_send");
+        vi.mocked(isSalesCadenceEnabled).mockReturnValue(false);
+        expect(await retryClientEmail(message.id, "staff")).toBeNull();
+        vi.mocked(isSalesCadenceEnabled).mockReturnValue(true);
+        expect(await retryClientEmail(message.id, "staff")).toBe(leadId);
+      });
     });
 
     it("a retry rechecks the cadence eligibility", async () => {

@@ -86,6 +86,16 @@ export function getClientEmailEnv(): { from: string; startAt: Date; teamAlertEma
   };
 }
 
+// Sales cadence switch (crm-sales-cadence.md, open question 3). Off unless exactly "true": the
+// cadence emails need the unsubscribe link of Phase 2, so it is turned on only once Phase 2 is
+// deployed. It only adds to CRM_EMAIL_AUTOMATION_ENABLED, which must also be on to send anything.
+export function isSalesCadenceEnabled(): boolean {
+  const enabled = readOptional("CRM_SALES_CADENCE_ENABLED");
+  if (enabled === undefined || enabled === "false") return false;
+  if (enabled !== "true") throw new InvalidEnvironmentError("Invalid environment fields: CRM_SALES_CADENCE_ENABLED");
+  return true;
+}
+
 // Test secrets documented by Cloudflare (always pass, always fail, already spent).
 // Their responses carry no real hostname or action, so they are allowed only in development.
 const TURNSTILE_TEST_SECRETS: readonly string[] = [

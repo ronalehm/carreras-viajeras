@@ -81,6 +81,24 @@ describe("client email environment", () => {
   });
 });
 
+describe("sales cadence switch", () => {
+  it.each([undefined, "", "false"])("defaults off with %j", async (enabled) => {
+    setEnv({ CRM_SALES_CADENCE_ENABLED: enabled });
+    const { isSalesCadenceEnabled } = await import("./env");
+    expect(isSalesCadenceEnabled()).toBe(false);
+  });
+  it("turns on only with the exact value true", async () => {
+    setEnv({ CRM_SALES_CADENCE_ENABLED: "true" });
+    const { isSalesCadenceEnabled } = await import("./env");
+    expect(isSalesCadenceEnabled()).toBe(true);
+  });
+  it.each(["TRUE", "1", "yes", " true"])("rejects %j naming only the field", async (enabled) => {
+    setEnv({ CRM_SALES_CADENCE_ENABLED: enabled });
+    const { isSalesCadenceEnabled } = await import("./env");
+    expect(() => isSalesCadenceEnabled()).toThrow(/^Invalid environment fields: CRM_SALES_CADENCE_ENABLED$/);
+  });
+});
+
 describe("runtime environment", () => {
   it("imports without runtime secrets, then rejects incomplete configuration", async () => {
     setEnv(Object.fromEntries(Object.keys(valid).map((key) => [key, undefined])));

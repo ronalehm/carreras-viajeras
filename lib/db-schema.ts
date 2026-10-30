@@ -846,7 +846,8 @@ export const leadActivities = pgTable(
     channelFrom: leadChannelEnum("channel_from"),
     channelTo: leadChannelEnum("channel_to"),
     // NULL only for system activities: created and re_registered (web form), automation (n8n) and
-    // opted_out confirmed by the client from the email unsubscribe link (no author).
+    // opted_out confirmed by the client from the email unsubscribe link (no author), which must carry
+    // the fixed note 'Baja desde el enlace del correo'.
     actorUserId: text("actor_user_id").references(() => profiles.userId, { onDelete: "restrict" }),
     // The outbox event an automation activity comes from (one activity per event).
     sourceEventId: uuid("source_event_id").references(() => outboxEvents.id, { onDelete: "restrict" }),
@@ -858,10 +859,12 @@ export const leadActivities = pgTable(
   },
   (table) => [
     // body: required for manual follow-up, required (≤ 500) for automation and re_registered,
-    // optional on created/stage_changed, forbidden otherwise (opted_out, responded and the rest).
+    // optional on created/stage_changed. opted_out has no body, except the fixed note of the
+    // authorless unsubscribe from the email link (crm-sales-cadence.md). Forbidden otherwise
+    // (responded and the rest).
     check(
       "lead_activities_body_chk",
-      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} IN ('automation', 're_registered') THEN ${table.body} IS NOT NULL AND char_length(${table.body}) <= 500 WHEN ${table.type} IN ('created', 'stage_changed') THEN true ELSE ${table.body} IS NULL END`,
+      sql`(${table.body} IS NULL OR char_length(${table.body}) BETWEEN 1 AND 2000) AND CASE WHEN ${table.type} IN ('note', 'call', 'message') THEN ${table.body} IS NOT NULL WHEN ${table.type} IN ('automation', 're_registered') THEN ${table.body} IS NOT NULL AND char_length(${table.body}) <= 500 WHEN ${table.type} IN ('created', 'stage_changed') THEN true WHEN ${table.type} = 'opted_out' THEN ${table.body} IS NULL OR (${table.actorUserId} IS NULL AND ${table.body} = 'Baja desde el enlace del correo') ELSE ${table.body} IS NULL END`,
     ),
     check(
       "lead_activities_stage_chk",
@@ -876,9 +879,10 @@ export const leadActivities = pgTable(
       "lead_activities_channel_chk",
       sql`CASE WHEN ${table.type} = 'channel_changed' THEN ${table.channelFrom} IS NOT NULL AND ${table.channelTo} IS NOT NULL AND ${table.channelFrom} <> ${table.channelTo} ELSE ${table.channelFrom} IS NULL AND ${table.channelTo} IS NULL END`,
     ),
+    // IS NOT DISTINCT FROM: with "=" a NULL body would make the expression NULL, which a CHECK accepts.
     check(
       "lead_activities_actor_chk",
-      sql`${table.actorUserId} IS NOT NULL OR ${table.type} IN ('created', 'automation', 're_registered', 'opted_out')`,
+      sql`${table.actorUserId} IS NOT NULL OR ${table.type} IN ('created', 'automation', 're_registered') OR (${table.type} = 'opted_out' AND ${table.body} IS NOT DISTINCT FROM 'Baja desde el enlace del correo')`,
     ),
     check(
       "lead_activities_event_chk",

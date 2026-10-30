@@ -4,7 +4,7 @@ import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
 import { getDb } from "@/lib/db";
 import { clientEmails, staffRoleEnum, type leadSourceEnum } from "@/lib/db-schema";
-import { getClientEmailEnv, getEnv } from "@/lib/env";
+import { getClientEmailEnv, getEnv, isSalesCadenceEnabled } from "@/lib/env";
 // No import cycle: modules/trips imports no other module (unlike modules/landing, which imports crm,
 // which imports this module).
 import { getActiveOffer } from "@/modules/trips";
@@ -28,7 +28,9 @@ import {
 
 type Stage = z.infer<typeof emailStageSchema>;
 type LeadSource = (typeof leadSourceEnum.enumValues)[number];
-type EmailEnv = NonNullable<ReturnType<typeof getClientEmailEnv>>;
+// salesCadence: CRM_SALES_CADENCE_ENABLED (crm-sales-cadence.md, open question 3). The cadence emails
+// carry the unsubscribe link of Phase 2, so the switch is turned on only once Phase 2 is deployed.
+type EmailEnv = NonNullable<ReturnType<typeof getClientEmailEnv>> & { salesCadence: boolean };
 const TEXTS: Record<Stage, string> = {
   new: "gracias por tu interés en Carreras Viajeras. ¿Qué te gustaría conocer sobre tu próximo viaje? Puedes responder este correo.",
   contacted:
@@ -143,8 +145,9 @@ const validCadencePayload = sql`COALESCE(
 //   lead.created event; booking_confirmed and stage keep the original rules (current event, same
 //   stage). follow_up is never sent any more (crm-sales-cadence.md replaces it): rows prepared before
 //   that change end skipped (ineligible) at authorization and a retry is rejected.
-// - Sales cadence (cadence_proposal, cadence_reminder): a lead.cadence_due not superseded, the same
-//   stage, its episode still in force and started after the cutoff, and no «Respondió» since then.
+// - Sales cadence (cadence_proposal, cadence_reminder): the sales cadence switch on, a lead.cadence_due
+//   not superseded, the same stage, its episode still in force and started after the cutoff, and no
+//   «Respondió» since then. Fails closed while the switch is off: never authorized nor retried.
 function eligible(env: EmailEnv) {
   const teamRecipient = env.teamAlertEmail
     ? sql`m.recipient = ${env.teamAlertEmail}`
@@ -174,13 +177,15 @@ function eligible(env: EmailEnv) {
 }
 
 function cadenceEligible(env: EmailEnv) {
+  if (!env.salesCadence) return sql`FALSE`;
   return sql`e.type = 'lead.cadence_due' AND COALESCE(e.payload->>'superseded', 'false') <> 'true'
     AND l.stage = m.stage AND ${cadenceEpisodeCurrent} AND NOT ${cadenceResponded}
     AND ${cadenceEpisodeAfterCutoff(env)}`;
 }
 
 // Reason stored when the recheck before SMTP fails: the specific internal-alert and sales cadence
-// codes when they apply (same order as skipReason), otherwise the generic "ineligible".
+// codes when they apply (same order as skipReason), otherwise the generic "ineligible" (also a
+// cadence email while the sales cadence switch is off).
 function ineligibleCode(env: EmailEnv) {
   const teamMissing = env.teamAlertEmail ? sql`FALSE` : sql`TRUE`;
   return sql`CASE
@@ -302,6 +307,7 @@ function skipReason(
   event: Candidate,
   stage: Stage,
   recipient: string | null,
+  env: EmailEnv,
 ): ClientEmailSkipReason | null {
   if (isInternal(kind)) {
     if (event.archived) return "archived";
@@ -318,7 +324,8 @@ function skipReason(
   if (isCadence(kind)) {
     if (!(event.episodeCurrent && event.currentStage === stage)) return "obsolete_event";
     if (event.responded) return "responded";
-    if (!event.episodeAfterCutoff) return "ineligible";
+    // Sales cadence switch off: the row is recorded skipped and never sent.
+    if (!event.episodeAfterCutoff || !env.salesCadence) return "ineligible";
   }
   return recipient ? null : "missing_email";
 }
@@ -451,7 +458,7 @@ async function prepareEmails(env: EmailEnv) {
     const stage = parsedStage.data;
     return emailKinds(event).map((kind) => {
       const recipient = recipientFor(kind, event, env);
-      const reason = skipReason(kind, event, stage, recipient);
+      const reason = skipReason(kind, event, stage, recipient, env);
       return { event, kind, stage, recipient, reason, cadence: cadence?.data ?? null };
     });
   });
@@ -490,12 +497,18 @@ async function prepareEmails(env: EmailEnv) {
       });
 }
 
+// Client email settings plus the sales cadence switch, both read lazily per call. null: off.
+function getEmailEnv(): EmailEnv | null {
+  const env = getClientEmailEnv();
+  return env ? { ...env, salesCadence: isSalesCadenceEnabled() } : null;
+}
+
 export type EmailClaim = { id: string; attemptToken: string };
 export async function claimClientEmails(input: {
   limit: number;
   executionId: string;
 }): Promise<{ enabled: boolean; messages: EmailClaim[] }> {
-  const env = getClientEmailEnv();
+  const env = getEmailEnv();
   if (!env) return { enabled: false, messages: [] };
   await prepareEmails(env);
   const db = getDb();
@@ -541,7 +554,7 @@ type Authorized = {
   text: string;
 };
 export async function authorizeClientEmail(id: string, attemptToken: string) {
-  const env = getClientEmailEnv();
+  const env = getEmailEnv();
   if (!env) return { status: "disabled" as const };
   const db = getDb();
   const [, result] = await db.batch([
@@ -625,7 +638,7 @@ export async function retryClientEmail(
   id: string,
   actorUserId: string,
 ): Promise<string | null> {
-  const env = getClientEmailEnv();
+  const env = getEmailEnv();
   if (!env) return null;
   const db = getDb();
   const [, result] = await db.batch([
