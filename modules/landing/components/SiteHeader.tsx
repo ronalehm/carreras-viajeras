@@ -74,7 +74,7 @@ export function SiteHeader() {
       </nav>
       <div className="ml-auto flex items-center justify-end gap-1.5 sm:gap-3">
         <Link
-          href="/cuenta"
+          href="/cuenta#imagen-login"
           className={cn(
             buttonVariants({ variant: "outline" }),
             "h-auto gap-1.5 rounded-full border-primary px-3 py-2.5 text-xs font-semibold whitespace-nowrap text-primary hover:bg-primary hover:text-primary-foreground sm:px-4.5 sm:py-3 sm:text-sm",

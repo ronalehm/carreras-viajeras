@@ -36,7 +36,7 @@ export function TripPageLoading() {
 export function TripPageState({ notFound, failed }: { notFound: boolean; failed: boolean }) {
   if (notFound) {
     return (
-      <section className={stateClass}>
+      <section id="destino-no-encontrado" className={stateClass}>
         <h1 className="font-heading text-3xl font-bold tracking-tight">Viaje no encontrado</h1>
         <p className="text-base leading-relaxed">El viaje que buscas no existe o ya no está publicado.</p>
         <Link href="/" className={cn(buttonVariants(), "h-auto rounded-full px-6 py-3 text-base font-semibold")}>

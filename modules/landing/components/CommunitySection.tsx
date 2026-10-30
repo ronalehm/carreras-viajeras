@@ -51,7 +51,7 @@ export function CommunitySection() {
         </div>
         <div className="relative aspect-video overflow-hidden rounded-2xl md:aspect-4/3">
           <Image
-            id="imagen-login"
+            id="community-image"
             src="/images/running-team.webp"
             alt="Corredores juntos, imagen ilustrativa de la comunidad"
             fill
