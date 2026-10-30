@@ -21,4 +21,4 @@ export { getCatalogTrip } from "./utils/catalogTrip";
 export { getCatalogOffer } from "./utils/catalogOffer";
 export { TRIPS } from "./utils/trips";
 
-export { buildWhatsAppUrl, WHATSAPP_NUMBER } from "./utils/inquiry";
+export { buildWhatsAppUrl, firstParam, WHATSAPP_NUMBER } from "./utils/inquiry";

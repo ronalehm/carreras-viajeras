@@ -50,6 +50,13 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
       icon: "offers",
       group: "sales",
     });
+  if (can(roles, "offers.manage"))
+    items.push({
+      label: "Contratos",
+      href: "/crm/contratos",
+      icon: "contracts",
+      group: "sales",
+    });
   if (can(roles, "bookings.manage"))
     items.push({
       label: "Reservas",

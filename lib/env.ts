@@ -17,7 +17,7 @@ const environmentSchema = z.object({
   APP_ORIGIN: z.string().refine((value) =>
     value === "https://carreras-viajeras.mentec.dev"
     || (process.env.NODE_ENV === "development"
-      && ["http://localhost:3000", "http://localhost:8787"].includes(value))),
+      && ["http://localhost:3000", "http://localhost:3001", "http://localhost:8787"].includes(value))),
 });
 
 // Its message carries field names only, so callers may log it. Recognised by name, so modules

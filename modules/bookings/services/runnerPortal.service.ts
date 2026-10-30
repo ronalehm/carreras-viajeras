@@ -1,9 +1,10 @@
 import "server-only";
 import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
-import { bookingPayments, bookings, itineraryItems, trips, tripUpdates } from "@/lib/db-schema";
+import { bookingPayments, bookingStripeSettlements, bookings, itineraryItems, trips, tripUpdates } from "@/lib/db-schema";
 import type { RunnerBookingDetail, RunnerPortalData, ScheduleEdge } from "../types/bookings.types";
 import { orderRunnerBookings } from "../utils/runnerBookings";
+import { limaDate } from "../utils/bookingDisplay";
 
 // Columns that may leave the database for the runner. Never participant_email, participant_name,
 // internal_note, created_by, recorded_by or voided_by.
@@ -59,7 +60,7 @@ export async function loadRunnerPortal(
   const chosen = ordered.find((b) => b.id === bookingParam) ?? ordered[0];
   const owned = and(eq(bookings.id, chosen.id), eq(bookings.runnerUserId, userId));
 
-  const [details, payments, items, updates] = await db.batch([
+  const [details, manualPayments, stripeSettlements, items, updates] = await db.batch([
     db
       .select({
         packageLabel: bookings.packageLabel,
@@ -81,6 +82,12 @@ export async function loadRunnerPortal(
       .innerJoin(bookings, eq(bookings.id, bookingPayments.bookingId))
       .where(and(owned, isNull(bookingPayments.voidedAt)))
       .orderBy(asc(bookingPayments.paidOn), asc(bookingPayments.createdAt)),
+    db
+      .select({ id: bookingStripeSettlements.id, amountUsd: bookingStripeSettlements.amountUsd, paidAt: bookingStripeSettlements.paidAt })
+      .from(bookingStripeSettlements)
+      .innerJoin(bookings, eq(bookings.id, bookingStripeSettlements.bookingId))
+      .where(and(owned, eq(bookingStripeSettlements.status, "applied")))
+      .orderBy(asc(bookingStripeSettlements.paidAt), asc(bookingStripeSettlements.recordedAt)),
     // Trip-wide items plus this booking's own items, only those visible to the runner.
     db
       .select({
@@ -122,6 +129,13 @@ export async function loadRunnerPortal(
   const [detail] = details;
   // Unlinked between the two batches (manual SQL): show the list without a detail.
   if (!detail) return { bookings: ordered, selected: null };
+
+  const payments = [...manualPayments, ...stripeSettlements.map((settlement) => ({
+    id: settlement.id,
+    amountUsd: settlement.amountUsd,
+    paidOn: limaDate(settlement.paidAt),
+    concept: "Stripe - tarjeta",
+  }))].sort((a, b) => a.paidOn.localeCompare(b.paidOn));
 
   const selected: RunnerBookingDetail = {
     ...chosen,

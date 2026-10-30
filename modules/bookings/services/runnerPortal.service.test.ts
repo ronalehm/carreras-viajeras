@@ -39,10 +39,11 @@ const LIST = [
   [FINISHED, "confirmed", "Maratón de Lima 2026", "Lima", "Perú", "2026-05-17", null, null, []],
   [ACTIVE, "confirmed", "Maratón de Santiago 2027", "Santiago", "Chile", "2027-05-16", "2027-05-14", "2027-05-18", ["Hotel"]],
 ];
-// Detail batch: booking, payments, items, updates. Postgres sends integers and times as text.
+// Detail batch: booking, manual payments, applied Stripe settlements, items, updates.
 const DETAIL = [
   [["Paquete corredor", "42K", "1499", "2027-04-01", "2026-03-03 15:00:00+00"]],
   [["pay-1", "300", "2026-03-03", "Reserva"]],
+  [["stripe-settlement-1", "200", new Date("2026-03-06T03:00:00Z")]],
   [
     ["item-1", "flight", "confirmed", "Vuelo de ida", null, "LIM", "2027-05-14", "01:30:00", "America/Lima", "2027-05-14", "06:55:00", "America/Santiago"],
     ["item-2", "hotel", "pending", "Hotel", null, null, null, null, null, null, null, null],
@@ -87,13 +88,15 @@ describe("loadRunnerPortal", () => {
     const fake = useFakeDb([[], LIST, ...DETAIL]);
     await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
 
-    const [booking, payments, items, updates] = fake.queries.slice(2);
+    const [booking, payments, stripePayments, items, updates] = fake.queries.slice(2);
     const OWNED = '"bookings"."id" = $1 and "bookings"."runner_user_id" = $2';
-    for (const query of [booking, payments, items, updates]) {
+    for (const query of [booking, payments, stripePayments, items, updates]) {
       expect(normalize(query.sql)).toContain(OWNED);
       expect(query.params.slice(0, 2)).toEqual([ACTIVE, USER]);
     }
     expect(normalize(payments.sql)).toContain('"booking_payments"."voided_at" is null');
+    expect(normalize(stripePayments.sql)).toContain('"booking_stripe_settlements"."status" = $3');
+    expect(stripePayments.params).toEqual([ACTIVE, USER, "applied"]);
     expect(normalize(items.sql)).toContain('inner join "bookings" on "bookings"."trip_id" = "itinerary_items"."trip_id"');
     expect(normalize(items.sql)).toContain('"itinerary_items"."runner_visible" = $3');
     expect(items.params[2]).toBe(true);
@@ -102,6 +105,16 @@ describe("loadRunnerPortal", () => {
     );
     expect(normalize(updates.sql)).toContain('inner join "bookings" on "bookings"."trip_id" = "trip_updates"."trip_id"');
     expect(normalize(updates.sql)).toMatch(/order by "trip_updates"\."published_at" desc$/);
+  });
+
+  it("reads applied Stripe settlements only for the runner's booking", async () => {
+    const fake = useFakeDb([[], LIST, ...DETAIL]);
+    await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
+
+    const settlement = fake.queries.find(({ sql }) => normalize(sql).includes('from "booking_stripe_settlements"'));
+    expect(settlement).toBeDefined();
+    expect(normalize(settlement!.sql)).toContain('"bookings"."id" = $1 and "bookings"."runner_user_id" = $2');
+    expect(settlement!.params.slice(0, 2)).toEqual([ACTIVE, USER]);
   });
 
   it("selects the first booking by Requirement 7 and maps times to HH:MM and amounts to integers", async () => {
@@ -126,7 +139,10 @@ describe("loadRunnerPortal", () => {
       totalUsd: 1499,
       balanceDueOn: "2027-04-01",
       createdAt: new Date("2026-03-03T15:00:00Z"),
-      payments: [{ id: "pay-1", amountUsd: 300, paidOn: "2026-03-03", concept: "Reserva" }],
+      payments: [
+        { id: "pay-1", amountUsd: 300, paidOn: "2026-03-03", concept: "Reserva" },
+        { id: "stripe-settlement-1", amountUsd: 200, paidOn: "2026-03-05", concept: "Stripe - tarjeta" },
+      ],
       items: [
         {
           id: "item-1",
