@@ -1,6 +1,6 @@
 # Enmienda: reservas simuladas visibles en la lista del CRM
 
-- Estado: borrador
+- Estado: aprobado
 - Spec base: [bookings-stripe-checkout-demo.md](bookings-stripe-checkout-demo.md), aprobada (sección C, "Pantallas").
 - Módulo: bookings (CRM de reservas).
 - Pedido del usuario (2026-10-30), tras la primera reserva demo confirmada: «la opción B. debe mostrarse». La opción B consiste en ver las reservas simuladas en la lista principal de `/crm/reservas` con el distintivo SIMULADA, sin que cuenten en totales.
