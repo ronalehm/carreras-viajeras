@@ -170,11 +170,11 @@ Si un dato de la oferta no existe (separación, saldo, bono o fecha de validez),
 
 ### Fase 1 — Datos, encolado y correos (5 tareas)
 
-- [ ] T1 — Migración y schema · archivos: `lib/db-schema.ts`, `drizzle/00NN_*.sql`, snapshot y journal · depende de: aprobación · secuencial (base)
-- [ ] T2 — Encolado · archivos: `modules/integrations/services/cadence.service.ts` y su test, `app/api/integrations/n8n/cadence/enqueue/route.ts` y su test, `modules/integrations/index.ts` · depende de: T1
-- [ ] T3 — Plantillas · archivos: `modules/integrations/utils/cadenceEmailTemplates.ts` y su test · depende de: T1 · paralelo con T2
-- [ ] T4 — Motor y oferta · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T2 y T3
-- [ ] T5 — Retirar el `follow_up` al cliente · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T4
+- [x] T1 — Migración y schema · archivos: `lib/db-schema.ts`, `drizzle/00NN_*.sql`, snapshot y journal · depende de: aprobación · secuencial (base)
+- [x] T2 — Encolado · archivos: `modules/integrations/services/cadence.service.ts` y su test, `app/api/integrations/n8n/cadence/enqueue/route.ts` y su test, `modules/integrations/index.ts` · depende de: T1
+- [x] T3 — Plantillas · archivos: `modules/integrations/utils/cadenceEmailTemplates.ts` y su test · depende de: T1 · paralelo con T2
+- [x] T4 — Motor y oferta · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T2 y T3
+- [x] T5 — Retirar el `follow_up` al cliente · archivos: `modules/integrations/services/clientEmails.service.ts` y su test · depende de: T4
 
 ### Fase 2 — Baja, «Respondió» y ficha (5 tareas)
 
