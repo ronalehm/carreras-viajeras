@@ -10,6 +10,7 @@ import {
   PackageSection,
   SiteFooter,
   SiteHeader,
+  ScrollToHero,
   StorySection,
   TRIPS,
   TripFacts,
@@ -25,6 +26,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <>
+      <ScrollToHero />
       <SiteHeader />
       <main>
         <HeroCarousel>

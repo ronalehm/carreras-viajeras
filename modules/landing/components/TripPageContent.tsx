@@ -16,6 +16,7 @@ import {
   buildWhatsAppUrl,
 } from "../utils/inquiry";
 import { WhatsAppLink } from "./LeadCaptureForm";
+import { ScrollToHero } from "./ScrollToHero";
 import { TripDetail } from "./TripDetail";
 
 const stateClass = "mx-auto flex max-w-2xl flex-col items-start gap-4 px-4 py-12 text-primary sm:py-16";
@@ -74,5 +75,11 @@ export function TripPageContent() {
   if (!data) return <TripPageState notFound={data === null} failed={status === "error"} />;
   // ?c=, UTM and ref are carried to «Registrarme», hidden while the registration is closed (gate P-L).
   const registration = isRegistrationOpen() ? registrationHref(slug, attributionParams(query)) : null;
-  return <TripDetail trip={data.trip} offer={data.offer} registrationHref={registration} />;
+  return (
+    <>
+      {/* Once the trip is mounted: the page opens at its hero, not where the previous one was. */}
+      <ScrollToHero />
+      <TripDetail trip={data.trip} offer={data.offer} registrationHref={registration} />
+    </>
+  );
 }
