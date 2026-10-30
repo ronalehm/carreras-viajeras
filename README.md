@@ -1674,9 +1674,9 @@ La demostración académica usa el sitio publicado con Stripe **solo en modo TES
   - el fallo de Workers Builds en las ramas, que necesita el log de Cloudflare (bloqueo 2 de la spec demo);
   - todos los pasos del [procedimiento](#procedimiento-de-la-demo).
 - **Operaciones remotas:**
-  - **`0020` aplicada en `production` el 2026-10-30**, desde el SQL Editor de Neon. Se ejecutó en la rama principal ("Primary") durante lo que debía ser el ensayo, sin la autorización previa del paso 4. Verificado por el usuario con una consulta de solo lectura: 7 tablas nuevas, las 14 columnas de `bookings`, 3 restricciones, el índice `booking_checkout_attempts_active_uq` y 0 filas en las tablas nuevas. Es aditiva y compatible con el código de `main`: no hay que revertirla.
-  - **`0021`: pendiente.** Antes se ensaya en una rama creada desde `production` (ya con la `0020`) y después se aplica con su «Sí, apruebo».
-  - **SQL Editor de Neon:** pegar cada archivo tal cual, **sin** `BEGIN;`/`COMMIT;`. Antes de cada *Run*, comprobar en el selector que la rama es la correcta y que no hay texto seleccionado (si lo hay, solo se ejecuta la selección).
+  - **`0020` y `0021`: pendientes en `production`** (comprobado el 2026-10-30 en una rama recién copiada de `production`: no existen `booking_checkout_attempts`, `stripe_mode` ni `checkout_demo_participants`). Un intento previo de ensayo se aplicó en una rama de ensayo, no en `production`.
+  - Se ensayan en una rama creada desde `production` y después se aplican con su «Sí, apruebo».
+  - **SQL Editor de Neon:** la rama se elige en el **primer** selector de la barra superior; "Primary" es el *compute*, no la rama. Antes de cada *Run*, comprobar la rama y que no haya texto seleccionado (si lo hay, solo se ejecuta la selección). Sin `BEGIN;`/`COMMIT;`, el editor ejecuta las instrucciones una a una y un fallo deja la migración a medias: en `production` hay que usar una transacción.
   - No consta que haya secretos de Stripe cargados en Cloudflare ni un endpoint registrado en Stripe. Cada operación productiva necesita su propio «Sí, apruebo».
 - **Fuera de la demo:** las puertas del go-live live de la spec base (elegibilidad de la cuenta Stripe, contrato aprobado por legal y comercial, obligaciones fiscales) siguen abiertas. La demo no las resuelve.
 
@@ -1749,7 +1749,7 @@ El orden es obligatorio. Cada «Sí, apruebo» es una autorización independient
       psql "$REHEARSAL_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0021_stripe_checkout_demo.sql
       ```
 
-      Alternativa: en el SQL Editor de Neon, con la rama correcta seleccionada en el selector (comprobarlo antes de cada *Run*) y sin texto seleccionado, pegar cada archivo tal cual, sin `BEGIN;`/`COMMIT;` (el editor no los admite así). Las líneas `--> statement-breakpoint` son comentarios. No usar `drizzle-kit migrate` ni insertar historial ficticio.
+      Alternativa: en el SQL Editor de Neon, con la rama correcta en el **primer** selector ("Primary" es el *compute*, no la rama) y sin texto seleccionado, pegar cada archivo entre `BEGIN;` y `COMMIT;`. Sin la transacción, un fallo deja la migración a medias. Las líneas `--> statement-breakpoint` son comentarios. No usar `drizzle-kit migrate` ni insertar historial ficticio.
    4. Consultas de verificación, todas de solo lectura:
 
       ```sql
