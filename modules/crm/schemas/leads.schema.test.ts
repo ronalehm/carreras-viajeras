@@ -105,9 +105,9 @@ describe("lead enums", () => {
     expect(leadActivityTypeEnum.enumValues).toContain("automation");
   });
 
-  it("include the re_registered activity type (web form), last as in the database", () => {
-    expect(leadActivityTypeSchema.options.at(-1)).toBe("re_registered");
-    expect(leadActivityTypeEnum.enumValues.at(-1)).toBe("re_registered");
+  it("include re_registered (web form) and responded (sales cadence) last, as in the database", () => {
+    expect(leadActivityTypeSchema.options.slice(-2)).toEqual(["re_registered", "responded"]);
+    expect(leadActivityTypeEnum.enumValues.slice(-2)).toEqual(["re_registered", "responded"]);
   });
 });
 

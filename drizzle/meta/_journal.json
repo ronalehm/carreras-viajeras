@@ -127,6 +127,20 @@
       "when": 1793318421383,
       "tag": "0017_wild_moonstone",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793323998136,
+      "tag": "0018_sales_cadence",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793324475699,
+      "tag": "0019_welcome_discount",
+      "breakpoints": true
     }
   ]
 }

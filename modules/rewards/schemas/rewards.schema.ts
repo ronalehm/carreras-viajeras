@@ -41,3 +41,10 @@ export const rewardIdSchema = z.object({ id: z.uuid() });
 export const redemptionRequestSchema = z.object({ catalogVersionId: z.uuid(), requestKey: z.uuid() });
 export const applyRewardSchema = z.object({ redemptionId: z.uuid(), bookingId: z.uuid() });
 export const bookingBenefitFormSchema = z.object({ bookingId: z.uuid(), title: text(2, 120), description: text(10, 4000) });
+
+// Welcome discount configuration. Only the form fields; the actor comes from the session.
+export const welcomeDiscountSchema = z.object({
+  amountUsd: integerText(1, 10000),
+  validityDays: integerText(1, 365),
+  active,
+});

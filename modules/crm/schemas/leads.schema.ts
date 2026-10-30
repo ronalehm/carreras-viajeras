@@ -48,6 +48,7 @@ export const leadActivityTypeSchema = z.enum([
   "channel_changed",
   "opted_out",
   "re_registered",
+  "responded",
 ]);
 
 // web_form, google_form, import and runner_account are system entry paths (web capture, n8n and

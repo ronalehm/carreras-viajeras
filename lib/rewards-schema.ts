@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
 import { type AnyPgColumn, bigint, boolean, check, date, index, integer, pgEnum, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { bookings, profiles } from "@/lib/db-schema";
+import { bookings, leads, outboxEvents, profiles } from "@/lib/db-schema";
 
 export const rewardKindEnum = pgEnum("reward_kind", ["discount", "benefit"]);
 export const rewardRedemptionStatusEnum = pgEnum("reward_redemption_status", ["available", "applied", "cancelled", "expired"]);
 export const rewardLedgerKindEnum = pgEnum("reward_ledger_kind", ["referral_credit", "referral_reversal", "redemption", "redemption_refund"]);
 export const bookingBenefitKindEnum = pgEnum("booking_benefit_kind", ["contractual", "discount"]);
+export const welcomeCodeStatusEnum = pgEnum("welcome_code_status", ["issued", "applied", "void"]);
 
 export const referralCodes = pgTable("referral_codes", {
   userId: text("user_id").primaryKey(),
@@ -128,6 +129,48 @@ export const rewardLedger = pgTable("reward_ledger", {
   check("reward_ledger_cause_chk", sql`(${t.referralUserId} IS NOT NULL) <> (${t.redemptionId} IS NOT NULL)`),
 ]);
 
+// Welcome discount configuration. Each change is a new immutable version; at most one is active.
+export const welcomeDiscountVersions = pgTable("welcome_discount_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  amountUsd: integer("amount_usd").notNull(),
+  validityDays: integer("validity_days").notNull(),
+  active: boolean("active").notNull().default(false),
+  createdBy: text("created_by").notNull().references((): AnyPgColumn => profiles.userId, { onDelete: "restrict" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("welcome_discount_versions_active_uq").on(t.active).where(sql`${t.active}`),
+  check("welcome_discount_versions_values_chk", sql`${t.amountUsd} BETWEEN 1 AND 10000 AND ${t.validityDays} BETWEEN 1 AND 365`),
+]);
+
+// One single-use code per lead.created event. The amount is copied from its version.
+// "Expired" is derived: status 'issued' with expires_at in the past.
+export const welcomeDiscountCodes = pgTable("welcome_discount_codes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  leadId: uuid("lead_id").notNull().references((): AnyPgColumn => leads.id, { onDelete: "restrict" }),
+  email: text("email").notNull(),
+  code: text("code").notNull(),
+  amountUsd: integer("amount_usd").notNull(),
+  versionId: uuid("version_id").notNull().references(() => welcomeDiscountVersions.id, { onDelete: "restrict" }),
+  sourceEventId: uuid("source_event_id").notNull().references((): AnyPgColumn => outboxEvents.id, { onDelete: "restrict" }),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  status: welcomeCodeStatusEnum("status").notNull().default("issued"),
+  bookingId: uuid("booking_id").references((): AnyPgColumn => bookings.id, { onDelete: "restrict" }),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  appliedBy: text("applied_by").references((): AnyPgColumn => profiles.userId, { onDelete: "restrict" }),
+}, (t) => [
+  uniqueIndex("welcome_discount_codes_code_uq").on(t.code),
+  uniqueIndex("welcome_discount_codes_source_event_uq").on(t.sourceEventId),
+  index("welcome_discount_codes_email_status_idx").on(t.email, t.status),
+  index("welcome_discount_codes_lead_idx").on(t.leadId),
+  check("welcome_discount_codes_email_chk", sql`${t.email} = lower(${t.email}) AND char_length(${t.email}) <= 254`),
+  check("welcome_discount_codes_code_chk", sql`${t.code} ~ '^CV-[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{6}$'`),
+  check("welcome_discount_codes_amount_chk", sql`${t.amountUsd} BETWEEN 1 AND 10000`),
+  check("welcome_discount_codes_expiry_chk", sql`${t.expiresAt} > ${t.issuedAt}`),
+  // Applied iff booking, date and actor are all present; otherwise none of them is.
+  check("welcome_discount_codes_applied_chk", sql`(${t.status} = 'applied') = (${t.bookingId} IS NOT NULL AND ${t.appliedAt} IS NOT NULL AND ${t.appliedBy} IS NOT NULL) AND (${t.bookingId} IS NULL) = (${t.appliedAt} IS NULL) AND (${t.appliedAt} IS NULL) = (${t.appliedBy} IS NULL)`),
+]);
+
 export const bookingBenefits = pgTable("booking_benefits", {
   id: uuid("id").primaryKey().defaultRandom(),
   bookingId: uuid("booking_id").notNull().references((): AnyPgColumn => bookings.id, { onDelete: "restrict" }),
@@ -139,12 +182,14 @@ export const bookingBenefits = pgTable("booking_benefits", {
   discountUsd: integer("discount_usd"),
   finalTotalUsd: integer("final_total_usd"),
   redemptionId: uuid("redemption_id").references(() => rewardRedemptions.id, { onDelete: "restrict" }),
+  welcomeCodeId: uuid("welcome_code_id").references(() => welcomeDiscountCodes.id, { onDelete: "restrict" }),
   createdBy: text("created_by").notNull().references((): AnyPgColumn => profiles.userId, { onDelete: "restrict" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex("booking_benefits_redemption_uq").on(t.redemptionId),
+  uniqueIndex("booking_benefits_welcome_code_uq").on(t.welcomeCodeId),
   uniqueIndex("booking_benefits_discount_booking_uq").on(t.bookingId).where(sql`${t.kind} = 'discount'`),
   index("booking_benefits_runner_idx").on(t.runnerUserId),
   check("booking_benefits_content_chk", sql`char_length(${t.title}) BETWEEN 2 AND 120 AND char_length(${t.description}) BETWEEN 10 AND 4000`),
-  check("booking_benefits_price_chk", sql`(${t.kind} = 'contractual' AND ${t.originalTotalUsd} IS NULL AND ${t.discountUsd} IS NULL AND ${t.finalTotalUsd} IS NULL AND ${t.redemptionId} IS NULL) OR (${t.kind} = 'discount' AND ${t.originalTotalUsd} IS NOT NULL AND ${t.discountUsd} IS NOT NULL AND ${t.finalTotalUsd} IS NOT NULL AND ${t.originalTotalUsd} > 0 AND ${t.discountUsd} > 0 AND ${t.finalTotalUsd} > 0 AND ${t.originalTotalUsd} - ${t.discountUsd} = ${t.finalTotalUsd} AND ${t.redemptionId} IS NOT NULL)`),
+  check("booking_benefits_price_chk", sql`(${t.kind} = 'contractual' AND ${t.originalTotalUsd} IS NULL AND ${t.discountUsd} IS NULL AND ${t.finalTotalUsd} IS NULL AND ${t.redemptionId} IS NULL AND ${t.welcomeCodeId} IS NULL) OR (${t.kind} = 'discount' AND ${t.originalTotalUsd} IS NOT NULL AND ${t.discountUsd} IS NOT NULL AND ${t.finalTotalUsd} IS NOT NULL AND ${t.originalTotalUsd} > 0 AND ${t.discountUsd} > 0 AND ${t.finalTotalUsd} > 0 AND ${t.originalTotalUsd} - ${t.discountUsd} = ${t.finalTotalUsd} AND (${t.redemptionId} IS NULL) <> (${t.welcomeCodeId} IS NULL))`),
 ]);
