@@ -16,9 +16,11 @@ vi.mock("@/lib/env", async (importOriginal) => ({
     webhookSecret: null, allowDraftContracts: false, disabledReason: null,
   }),
 }));
-vi.mock("@/lib/auth/guards", () => ({
-  requireVerifiedEmail: async () => ({ id: state.userId, email: "checkout-sim-runner@example.invalid", emailVerified: true, staffRoles: [] }),
-}));
+vi.mock("@/lib/auth/guards", () => {
+  const sessionUser = async () => ({ id: state.userId, email: "checkout-sim-runner@example.invalid", emailVerified: true, staffRoles: [] });
+  // getCurrentUser feeds the demo pre-gate; requireVerifiedEmail the usual route checks.
+  return { getCurrentUser: sessionUser, requireVerifiedEmail: sessionUser };
+});
 vi.mock("@/modules/integrations", () => ({ readJsonBody: vi.fn() }));
 vi.mock("stripe", () => ({ default: class StripeMock {
   checkout = { sessions: { create: state.create, retrieve: state.retrieve } };

@@ -34,15 +34,15 @@ const ACTIVE = "11111111-1111-4111-8111-111111111111";
 const FINISHED = "22222222-2222-4222-8222-222222222222";
 const FOREIGN = "33333333-3333-4333-8333-333333333333";
 
-// List rows in select order: id, status, trip (title, city, country, raceDate, startDate, endDate, includes).
+// List rows in select order: id, status, simulated, trip (title, city, country, raceDate, startDate, endDate, includes).
 const LIST = [
-  [FINISHED, "confirmed", "Maratón de Lima 2026", "Lima", "Perú", "2026-05-17", null, null, []],
-  [ACTIVE, "confirmed", "Maratón de Santiago 2027", "Santiago", "Chile", "2027-05-16", "2027-05-14", "2027-05-18", ["Hotel"]],
+  [FINISHED, "confirmed", false, "Maratón de Lima 2026", "Lima", "Perú", "2026-05-17", null, null, []],
+  [ACTIVE, "confirmed", false, "Maratón de Santiago 2027", "Santiago", "Chile", "2027-05-16", "2027-05-14", "2027-05-18", ["Hotel"]],
 ];
 // Detail batch: booking, manual payments, items, updates; then the common balance batch
 // (getBookingBalance): totals (id, total, manual paid), settlements (id, booking, amount, paid at, status).
 const DETAIL = [
-  [["Paquete corredor", "42K", "1499", false, "2027-04-01", "2026-03-03 15:00:00+00"]],
+  [["Paquete corredor", "42K", "1499", "2027-04-01", "2026-03-03 15:00:00+00"]],
   [["pay-1", "300", "2026-03-03", "Reserva"]],
   [
     ["item-1", "flight", "confirmed", "Vuelo de ida", null, "LIM", "2027-05-14", "01:30:00", "America/Lima", "2027-05-14", "06:55:00", "America/Santiago"],
@@ -140,10 +140,13 @@ describe("loadRunnerPortal", () => {
     expect(selected?.payments.map((p) => p.id)).toEqual(["pay-1", "stripe-settlement-1"]);
   });
 
-  it("flags a simulated booking", async () => {
-    useFakeDb([[], LIST, [["Paquete corredor", "42K", "11000", true, null, "2026-10-30 15:00:00+00"]], ...DETAIL.slice(1)]);
-    const { selected } = await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
-    expect(selected?.simulated).toBe(true);
+  it("flags a simulated booking in the list (race selector) and in the selected detail", async () => {
+    const list = [LIST[0], [ACTIVE, "pending", true, ...LIST[1].slice(3)]];
+    const fake = useFakeDb([[], list, ...DETAIL]);
+    const data = await loadRunnerPortal(USER, EMAIL, undefined, TODAY);
+    expect(data.bookings.map((b) => [b.id, b.simulated])).toEqual([[ACTIVE, true], [FINISHED, false]]);
+    expect(data.selected?.simulated).toBe(true);
+    expect(normalize(fake.queries[1].sql)).toMatch(/^select "bookings"\."id", "bookings"\."status", "bookings"\."is_simulated", /);
   });
 
   it("selects the first booking by Requirement 7 and maps times to HH:MM and amounts to integers", async () => {

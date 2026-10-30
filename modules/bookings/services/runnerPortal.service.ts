@@ -19,6 +19,8 @@ const abandonedCheckout = sql`(${bookings.status} = 'cancelled' and ${bookings.o
 const summaryColumns = {
   id: bookings.id,
   status: bookings.status,
+  // The race selector marks a demo-checkout booking, not only the selected one.
+  simulated: bookings.isSimulated,
   trip: {
     title: trips.title,
     city: trips.city,
@@ -76,7 +78,6 @@ export async function loadRunnerPortal(
         packageLabel: bookings.packageLabel,
         distance: bookings.distance,
         totalUsd: bookings.totalUsd,
-        simulated: bookings.isSimulated,
         balanceDueOn: bookings.balanceDueOn,
         createdAt: bookings.createdAt,
       })

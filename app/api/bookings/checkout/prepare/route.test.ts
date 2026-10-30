@@ -6,13 +6,13 @@ vi.mock("@/lib/env", () => ({ getEnv: vi.fn() }));
 vi.mock("@/modules/integrations", () => ({ readJsonBody: vi.fn() }));
 vi.mock("@/modules/booking-checkout", async () => ({
   ...await vi.importActual<object>("@/modules/booking-checkout/utils/checkoutResponse"),
-  prepareCheckoutSchema: {}, isCheckoutEnabled: vi.fn(), checkoutAccessFor: vi.fn(), prepareBookingCheckout: vi.fn(),
+  prepareCheckoutSchema: {}, isCheckoutEnabled: vi.fn(), isHiddenByDemoCheckout: vi.fn(), checkoutAccessFor: vi.fn(), prepareBookingCheckout: vi.fn(),
 }));
 import { UnauthorizedError } from "@/lib/auth/errors";
 import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
-import { checkoutAccessFor, isCheckoutEnabled, prepareBookingCheckout } from "@/modules/booking-checkout";
+import { checkoutAccessFor, isCheckoutEnabled, isHiddenByDemoCheckout, prepareBookingCheckout } from "@/modules/booking-checkout";
 import { POST } from "./route";
 
 const user = { id: "runner-1", email: "runner@example.invalid", emailVerified: true, staffRoles: [] };
@@ -28,6 +28,7 @@ let error: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   vi.mocked(isCheckoutEnabled).mockReset().mockReturnValue(true);
   vi.mocked(checkoutAccessFor).mockReset().mockResolvedValue(true);
+  vi.mocked(isHiddenByDemoCheckout).mockReset().mockResolvedValue(false);
   vi.mocked(getEnv).mockReset().mockReturnValue({ APP_ORIGIN: "http://localhost:3001" } as ReturnType<typeof getEnv>);
   vi.mocked(requireVerifiedEmail).mockReset().mockResolvedValue(user);
   vi.mocked(readJsonBody).mockReset().mockResolvedValue(body);
@@ -38,6 +39,33 @@ beforeEach(() => {
 afterEach(() => { warn.mockRestore(); error.mockRestore(); });
 
 describe("POST /api/bookings/checkout/prepare", () => {
+  describe("demo pre-gate", () => {
+    const noOrigin = () => new Request("http://localhost:3001/api/bookings/checkout/prepare", { method: "POST", body: "{}" });
+    it("answers an anonymous or non-participant caller with the 404 of a closed checkout, before Origin and session", async () => {
+      vi.mocked(isHiddenByDemoCheckout).mockResolvedValue(true);
+      for (const response of [await POST(noOrigin()), await POST(request("https://attacker.example"))]) {
+        expect(response.status).toBe(404);
+        expect(response.headers.get("Cache-Control")).toBe("no-store");
+        await expect(response.json()).resolves.toEqual({ code: "not_found", requestId: expect.any(String) });
+      }
+      expect(requireVerifiedEmail).not.toHaveBeenCalled();
+      expect(checkoutAccessFor).not.toHaveBeenCalled();
+      expect(prepareBookingCheckout).not.toHaveBeenCalled();
+    });
+    it("keeps an active participant (and test/live) behind the Origin check", async () => {
+      const response = await POST(noOrigin());
+      expect(response.status).toBe(403);
+      await expect(response.json()).resolves.toEqual({ code: "invalid_origin", requestId: expect.any(String) });
+      expect(isHiddenByDemoCheckout).toHaveBeenCalledTimes(1);
+      expect(requireVerifiedEmail).not.toHaveBeenCalled();
+      expect(prepareBookingCheckout).not.toHaveBeenCalled();
+    });
+    it("is not consulted while checkout is off", async () => {
+      vi.mocked(isCheckoutEnabled).mockReturnValue(false);
+      expect((await POST(noOrigin())).status).toBe(404);
+      expect(isHiddenByDemoCheckout).not.toHaveBeenCalled();
+    });
+  });
   it("answers a demo non-participant (revoked included) with the same 404 as when off, after authentication", async () => {
     vi.mocked(checkoutAccessFor).mockResolvedValue(false);
     const response = await POST(request());

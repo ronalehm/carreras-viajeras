@@ -32,6 +32,7 @@ function summary(id: string): RunnerBookingSummary {
   return {
     id,
     status: "confirmed",
+    simulated: false,
     trip: {
       title: "Maratón de Santiago 42K 2027",
       city: "Santiago",

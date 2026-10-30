@@ -41,11 +41,12 @@ export async function reconcileReferredRunner(referredUserId: string): Promise<v
   });
 }
 // Use only after the booking/payment transaction has committed, to avoid a lock-order cycle.
+// A simulated (demo checkout) booking reconciles nothing: it never earns or moves stars.
 export async function reconcileBookingRewards(bookingId: string): Promise<void> {
   await safe(async () => {
     await getDb().execute(sql`
       SELECT cv_reconcile_rewards(r.referrer_user_id) FROM runner_referrals r JOIN bookings b ON b.runner_user_id=r.referred_user_id
-      WHERE b.id=${bookingId}::uuid
+      WHERE b.id=${bookingId}::uuid AND NOT b.is_simulated
     `);
   });
 }
@@ -59,14 +60,26 @@ export function requestRedemption(userId: string, catalogVersionId: string, requ
 export function cancelOwnRedemption(userId: string, redemptionId: string): Promise<RewardOperationResult> {
   return operation(sql`SELECT cv_cancel_reward(${userId},${redemptionId}::uuid) AS result`);
 }
+// A simulated (demo checkout) booking never takes a redemption or a benefit: the call answers
+// booking_not_eligible without running the function. is_simulated is set when the booking is
+// inserted and never updated, so checking it in the same statement leaves no window between check
+// and call; no extra booking lock is taken, which keeps the function's own lock order (reward
+// account first, then booking) and avoids a cycle with cv_reconcile_rewards.
+function onRealBooking(bookingId: string, call: SQL): Promise<RewardOperationResult> {
+  return operation(sql`
+    SELECT CASE WHEN EXISTS (SELECT 1 FROM bookings WHERE id=${bookingId}::uuid AND is_simulated)
+      THEN '{"status":"error","code":"booking_not_eligible"}'::jsonb
+      ELSE ${call} END AS result
+  `);
+}
 export function applyRewardToBooking(actorId: string, redemptionId: string, bookingId: string): Promise<RewardOperationResult> {
-  return operation(sql`SELECT cv_apply_booking_reward(${actorId},${redemptionId}::uuid,${bookingId}::uuid) AS result`);
+  return onRealBooking(bookingId, sql`cv_apply_booking_reward(${actorId},${redemptionId}::uuid,${bookingId}::uuid)`);
 }
 export function fulfillReward(actorId: string, redemptionId: string): Promise<RewardOperationResult> {
   return operation(sql`SELECT cv_fulfill_reward(${actorId},${redemptionId}::uuid) AS result`);
 }
 export function assignBookingBenefit(actorId: string, input: BookingBenefitInput): Promise<RewardOperationResult> {
-  return operation(sql`SELECT cv_assign_booking_benefit(${actorId},${input.bookingId}::uuid,${input.title},${input.description}) AS result`);
+  return onRealBooking(input.bookingId, sql`cv_assign_booking_benefit(${actorId},${input.bookingId}::uuid,${input.title},${input.description})`);
 }
 
 export function createRewardRule(actorId: string, input: RewardRuleInput): Promise<RewardOperationResult> {

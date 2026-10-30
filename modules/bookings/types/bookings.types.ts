@@ -23,7 +23,8 @@ export type RunnerTrip = {
   includes: string[];
 };
 
-export type RunnerBookingSummary = { id: string; status: BookingStatus; trip: RunnerTrip };
+// simulated: a demo-checkout booking (Stripe test mode), never a real sale.
+export type RunnerBookingSummary = { id: string; status: BookingStatus; simulated: boolean; trip: RunnerTrip };
 
 // Only non-voided payments reach the runner. Amounts are integer USD.
 export type RunnerPayment = { id: string; amountUsd: number; paidOn: string; concept: string };
@@ -64,7 +65,6 @@ export type RunnerBookingDetail = RunnerBookingSummary & {
   totalUsd: number;
   paidUsd: number;
   paymentInReview: boolean; // a Stripe settlement needs_review: not counted as paid
-  simulated: boolean;
   balanceDueOn: string | null;
   createdAt: Date;
   payments: RunnerPayment[];

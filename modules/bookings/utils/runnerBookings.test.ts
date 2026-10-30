@@ -22,7 +22,7 @@ function trip(overrides: Partial<RunnerTrip> = {}): RunnerTrip {
 }
 
 function summary(id: string, status: RunnerBookingSummary["status"], tripOverrides: Partial<RunnerTrip>) {
-  return { id, status, trip: trip(tripOverrides) };
+  return { id, status, simulated: false, trip: trip(tripOverrides) };
 }
 
 function item(overrides: Partial<RunnerItineraryItem> & Pick<RunnerItineraryItem, "id" | "kind">): RunnerItineraryItem {

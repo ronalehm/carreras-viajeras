@@ -2,7 +2,8 @@ import { requireVerifiedEmail } from "@/lib/auth/guards";
 import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
 import {
-  checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson, hasAppOrigin, isCheckoutEnabled, prepareBookingCheckout, prepareCheckoutSchema,
+  checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson, hasAppOrigin, isCheckoutEnabled, isHiddenByDemoCheckout,
+  prepareBookingCheckout, prepareCheckoutSchema,
 } from "@/modules/booking-checkout";
 
 const ROUTE = "prepare";
@@ -14,6 +15,8 @@ const RESULT_STATUS = {
 
 export async function POST(request: Request) {
   if (!isCheckoutEnabled()) return checkoutError(ROUTE, "not_found", 404);
+  // Demo: a caller outside the demo gets this 404 before the Origin and session checks reveal it.
+  if (await isHiddenByDemoCheckout()) return checkoutError(ROUTE, "not_found", 404);
   try {
     if (!hasAppOrigin(request, getEnv().APP_ORIGIN)) return checkoutError(ROUTE, "invalid_origin", 403);
     const user = await requireVerifiedEmail();

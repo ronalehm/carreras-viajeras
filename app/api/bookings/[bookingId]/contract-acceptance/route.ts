@@ -3,7 +3,7 @@ import { getEnv } from "@/lib/env";
 import { readJsonBody } from "@/modules/integrations";
 import {
   acceptBookingContract, bookingRouteParamsSchema, checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson,
-  contractAcceptanceSchema, hasAppOrigin, isCheckoutEnabled,
+  contractAcceptanceSchema, hasAppOrigin, isCheckoutEnabled, isHiddenByDemoCheckout,
 } from "@/modules/booking-checkout";
 
 const ROUTE = "contract_acceptance";
@@ -13,6 +13,8 @@ const RESULT_STATUS = {
 
 export async function POST(request: Request, context: RouteContext<"/api/bookings/[bookingId]/contract-acceptance">) {
   if (!isCheckoutEnabled()) return checkoutError(ROUTE, "not_found", 404);
+  // Demo: a caller outside the demo gets this 404 before the Origin and session checks reveal it.
+  if (await isHiddenByDemoCheckout()) return checkoutError(ROUTE, "not_found", 404);
   try {
     if (!hasAppOrigin(request, getEnv().APP_ORIGIN)) return checkoutError(ROUTE, "invalid_origin", 403);
     const params = bookingRouteParamsSchema.safeParse(await context.params);

@@ -27,13 +27,13 @@ const state = { status: "paid", amountUsd: 300, amountPenCents: 103500, checkout
 function ok(body: unknown) { return { ok: true, json: async () => body }; }
 function failure(code: string, requestId = "req-123") { return { ok: false, json: async () => ({ code, requestId }) }; }
 
-function renderStart() {
+function renderStart(simulated = false) {
   return render(<RunnerCheckout tripId="trip" tripTitle="Maratón" campaignCode={null} offer={offer}
-    returned={false} cancelled={false} bookingId={null} attemptId={null} />);
+    returned={false} cancelled={false} bookingId={null} attemptId={null} simulated={simulated} />);
 }
 function renderReturn(props: { cancelled?: boolean } = {}) {
   return render(<RunnerCheckout tripId="trip" tripTitle="Maratón" campaignCode="abc" offer={null}
-    returned={!props.cancelled} cancelled={Boolean(props.cancelled)} bookingId="booking" attemptId="attempt" />);
+    returned={!props.cancelled} cancelled={Boolean(props.cancelled)} bookingId="booking" attemptId="attempt" simulated={false} />);
 }
 async function prepareAndFailCheckout(code: string) {
   vi.mocked(fetch).mockResolvedValueOnce(ok(prepared) as Response)
@@ -189,6 +189,14 @@ describe("RunnerCheckout", () => {
     expect(screen.getByRole("note").textContent).toContain("Pago de prueba: no se realiza ningún cargo real.");
   });
 
+  it("marks a simulated mode as SIMULADA from the first step, before preparing", () => {
+    renderStart(true);
+    expect(screen.getByText("SIMULADA")).toBeTruthy();
+    expect(screen.getByRole("note").textContent).toContain("Pago de prueba: no se realiza ningún cargo real.");
+    expect(screen.getByRole("button", { name: "Preparar reserva" })).toBeTruthy();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it("shows no simulated badge for a real reservation", async () => {
     vi.mocked(fetch).mockResolvedValue(ok(prepared) as Response);
     renderStart();
@@ -200,7 +208,7 @@ describe("RunnerCheckout", () => {
 
   it("makes card-only payment clear to the runner", () => {
     render(<RunnerCheckout tripId="trip" tripTitle="Maratón" campaignCode={null} offer={null}
-      returned={false} cancelled={false} bookingId={null} attemptId={null} />);
+      returned={false} cancelled={false} bookingId={null} attemptId={null} simulated={false} />);
 
     expect(screen.getByText(/Solo aceptamos tarjetas/)).toBeTruthy();
   });

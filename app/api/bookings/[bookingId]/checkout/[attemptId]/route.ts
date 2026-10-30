@@ -1,12 +1,15 @@
 import { requireVerifiedEmail } from "@/lib/auth/guards";
 import {
   attemptRouteParamsSchema, checkoutAccessFor, checkoutError, checkoutFailure, checkoutJson, getBookingCheckoutState, isCheckoutEnabled,
+  isHiddenByDemoCheckout,
 } from "@/modules/booking-checkout";
 
 const ROUTE = "state";
 
 export async function GET(_request: Request, context: RouteContext<"/api/bookings/[bookingId]/checkout/[attemptId]">) {
   if (!isCheckoutEnabled()) return checkoutError(ROUTE, "not_found", 404);
+  // Demo: a caller outside the demo gets this 404 before the Origin and session checks reveal it.
+  if (await isHiddenByDemoCheckout()) return checkoutError(ROUTE, "not_found", 404);
   try {
     const params = attemptRouteParamsSchema.safeParse(await context.params);
     if (!params.success) return checkoutError(ROUTE, "not_found", 404);

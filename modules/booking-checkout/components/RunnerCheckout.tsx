@@ -122,10 +122,12 @@ function returnNotice(state: CheckoutState, cancelled: boolean): { message: stri
 }
 
 export function RunnerCheckout({
-  tripId, tripTitle, campaignCode, offer, returned, cancelled, bookingId, attemptId,
+  tripId, tripTitle, campaignCode, offer, returned, cancelled, bookingId, attemptId, simulated: simulatedMode,
 }: {
   tripId: string; tripTitle: string; campaignCode: string | null; offer: OfferView | null;
   returned: boolean; cancelled: boolean; bookingId: string | null; attemptId: string | null;
+  // The configured mode (test or demo) creates simulated bookings: shown from the first step.
+  simulated: boolean;
 }) {
   const { isLoaded, isSignedIn, user } = useUser();
   const router = useRouter();
@@ -153,7 +155,7 @@ export function RunnerCheckout({
   }, [bookingId, attemptId, stateRequest]);
 
   const emailVerified = user?.primaryEmailAddress?.verification?.status === "verified";
-  const simulated = prepared?.simulated === true || checkoutState?.simulated === true;
+  const simulated = simulatedMode || prepared?.simulated === true || checkoutState?.simulated === true;
 
   async function prepare() {
     const fallback = "No se pudo preparar la reserva.";

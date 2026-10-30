@@ -109,9 +109,16 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
       <section className="grid gap-4" aria-labelledby="payments-heading">
         <h2 id="payments-heading" className="text-lg font-semibold">Pagos</h2>
         <PaymentTable payments={payments} balance={booking} editable={!cancelled} />
-        {!cancelled && <PaymentForm bookingId={booking.id} />}
+        {/* A simulated booking never takes manual payments or rewards; the services reject them too. */}
+        {booking.simulated ? (
+          <p className="text-sm text-muted-foreground">Reserva simulada: sin pagos manuales ni recompensas.</p>
+        ) : (
+          !cancelled && <PaymentForm bookingId={booking.id} />
+        )}
       </section>
-      <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
+      {!booking.simulated && (
+        <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
+      )}
     </section>
   );
 }

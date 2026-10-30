@@ -28,11 +28,13 @@ export async function listBookingPayments(bookingId: string): Promise<CrmPayment
 
 // Lock the booking before writing: discounts, cancellation and payment registration
 // serialize on this same row. A receipt's stable request key makes retries idempotent.
+// A simulated (demo checkout) booking never takes manual payments: it answers not_found, like a
+// cancelled one, so it can never become referral evidence (cv_reconcile_rewards).
 export async function addPayment(input: PaymentInput, actorUserId: string): Promise<"added" | "not_found" | "payment_conflict"> {
   const result = await getDb().execute<{ added: boolean; booking_ok: boolean }>(sql`
     WITH target AS MATERIALIZED (
       SELECT id FROM bookings
-      WHERE id = ${input.bookingId}::uuid AND status <> 'cancelled'
+      WHERE id = ${input.bookingId}::uuid AND status <> 'cancelled' AND NOT is_simulated
       FOR UPDATE
     ), inserted AS (
       INSERT INTO booking_payments (booking_id, amount_usd, paid_on, concept, recorded_by, request_key)

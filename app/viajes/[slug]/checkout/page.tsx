@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { SiteFooter, SiteHeader, firstParam, getCatalogOffer, getCatalogTrip } from "@/modules/landing";
 import { getPublishedTripIdBySlug } from "@/modules/trips";
 import { getCurrentUser } from "@/lib/auth/guards";
-import { checkoutAccessFor, checkoutRequiresDemoParticipant, isCheckoutEnabled } from "@/modules/booking-checkout";
+import {
+  checkoutAccessFor, checkoutRequiresDemoParticipant, isCheckoutEnabled, isCheckoutSimulated,
+} from "@/modules/booking-checkout";
 import { RunnerCheckout } from "@/modules/booking-checkout/components/RunnerCheckout";
 
 export const metadata: Metadata = { title: "Checkout de viaje" };
@@ -30,7 +32,7 @@ export default async function BookingCheckoutPage({
     <>
       <SiteHeader />
       <main>
-        <RunnerCheckout tripId={tripId} tripTitle={trip.title} campaignCode={campaignCode}
+        <RunnerCheckout tripId={tripId} tripTitle={trip.title} campaignCode={campaignCode} simulated={isCheckoutSimulated()}
           offer={offer} returned={firstParam(query.return) === "success"} cancelled={firstParam(query.cancelled) === "1"}
           bookingId={firstParam(query.booking_id) ?? null} attemptId={firstParam(query.attempt_id) ?? null} />
       </main>
