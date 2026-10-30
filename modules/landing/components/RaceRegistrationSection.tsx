@@ -22,6 +22,7 @@ type RaceRegistrationSectionProps = {
   attribution: LeadAttributionParams;
   standMode: boolean;
   offer: OfferView | null; // resolved by the server from the slug and ?c= only
+  checkoutHref?: string;
 };
 
 /**
@@ -35,6 +36,7 @@ export function RaceRegistrationSection({
   attribution,
   standMode,
   offer,
+  checkoutHref,
 }: RaceRegistrationSectionProps) {
   const whatsAppUrl = buildWhatsAppUrl(WHATSAPP_NUMBER, GENERAL_INQUIRY_MESSAGE);
   // Gate P-L: in production with the placeholder legal text the form is not shown.
@@ -60,6 +62,15 @@ export function RaceRegistrationSection({
             {trip.title}
           </h1>
           {form}
+          {checkoutHref && offer && (
+            <div className="rounded-xl border border-night/15 bg-background p-5">
+              <p className="font-semibold">¿Ya registraste tus datos y tienes una cuenta verificada?</p>
+              <p className="mt-1 text-sm">Continúa con la oferta que estás viendo y confirma tu reserva en el checkout sandbox.</p>
+              <Link href={checkoutHref} className={cn(buttonVariants(), "mt-4 inline-flex rounded-full px-5 py-3")}>
+                Continuar al checkout <ArrowUpRight aria-hidden />
+              </Link>
+            </div>
+          )}
         </div>
       </section>
     );
@@ -144,6 +155,15 @@ export function RaceRegistrationSection({
               </p>
             </div>
             <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:bg-background lg:p-6">
+              {checkoutHref && offer && (
+                <div className="mb-6 rounded-xl border border-primary/15 bg-background p-5">
+                  <p className="font-semibold">¿Ya registraste tus datos y tienes una cuenta verificada?</p>
+                  <p className="mt-1 text-sm">Confirma tu reserva con la oferta vigente en el checkout sandbox.</p>
+                  <Link href={checkoutHref} className={cn(buttonVariants(), "mt-4 inline-flex rounded-full px-5 py-3")}>
+                    Continuar al checkout <ArrowUpRight aria-hidden />
+                  </Link>
+                </div>
+              )}
               {form}
             </div>
           </div>

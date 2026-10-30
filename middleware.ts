@@ -13,6 +13,7 @@ export const config = {
   matcher: [
     "/crm/:path*",
     "/api/crm/:path*",
+    "/api/bookings/:path*",
     "/cuenta",
     "/cuenta/perfil/:path*",
     "/mis-carreras/:path*",

@@ -86,6 +86,7 @@ describe("CRM navigation", () => {
     ["/crm/leads", "responsable=mios&seguimiento=vencidos", "Leads"],
     ["/crm/viajes/un-viaje", "", "Viajes"],
     ["/crm/ofertas/nueva", "", "Ofertas"],
+    ["/crm/contratos", "", "Contratos"],
     ["/crm/contenidos/nuevo", "", "Contenidos"],
     ["/crm/recompensas", "", "Recompensas"],
     ["/crm/admin/usuarios", "", "Usuarios"],
@@ -111,6 +112,7 @@ describe("CRM navigation", () => {
     shell();
     expect(screen.getByRole("link", { name: "Contenidos" }).getAttribute("href")).toBe("/crm/contenidos");
     expect(screen.getByRole("link", { name: "Recompensas" }).getAttribute("href")).toBe("/crm/recompensas");
+    expect(screen.getByRole("link", { name: "Contratos" }).getAttribute("href")).toBe("/crm/contratos");
     expect(
       screen.getByRole("link", { name: "Usuarios" }).getAttribute("href"),
     ).toBe("/crm/admin/usuarios");
@@ -131,6 +133,7 @@ describe("CRM navigation", () => {
     shell(["commercial"]);
     expect(screen.queryByRole("link", { name: "Contenidos" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Recompensas" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Contratos" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Configuraciones" })).toBeNull();

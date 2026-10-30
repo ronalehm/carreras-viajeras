@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { submitWebLeadAction } from "@/modules/crm";
+import { isCheckoutSandboxEnabled } from "@/modules/booking-checkout";
 import { RacePageContent, TripPageLoading } from "@/modules/landing";
 
 // Generic: the trip title is set in the browser. Indexing stays off (root layout robots).
@@ -17,7 +18,7 @@ export default function RaceRegistrationShellPage() {
     // useSearchParams in RacePageContent: the prerendered HTML carries this fallback.
     <Suspense fallback={<main><TripPageLoading /></main>}>
       {/* The action comes from crm and is passed as a prop: landing never imports crm at runtime. */}
-      <RacePageContent action={submitWebLeadAction} />
+      <RacePageContent action={submitWebLeadAction} checkoutEnabled={isCheckoutSandboxEnabled()} />
     </Suspense>
   );
 }

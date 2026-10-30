@@ -46,13 +46,13 @@ const offer = {
 };
 const action = vi.fn();
 
-function renderContent(url: string) {
+function renderContent(url: string, checkoutEnabled = false) {
   const parsed = new URL(url, "https://carreras-viajeras.mentec.dev");
   location.pathname = parsed.pathname;
   location.params = parsed.searchParams;
   // Test client: no delay between the single retry and the error state.
   const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
-  return { client, ...render(<QueryClientProvider client={client}><RacePageContent action={action} /></QueryClientProvider>) };
+  return { client, ...render(<QueryClientProvider client={client}><RacePageContent action={action} checkoutEnabled={checkoutEnabled} /></QueryClientProvider>) };
 }
 
 function hiddenValue(container: HTMLElement, name: string) {
@@ -90,7 +90,16 @@ it("renders the registration with the offer of ?c=, the attribution, header and 
   expect(screen.getAllByText(/US\$ 1,799/).length).toBeGreaterThan(0);
   expect(container.querySelector("header")).not.toBeNull();
   expect(container.querySelector("footer")).not.toBeNull();
+  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
   await waitFor(() => expect(document.title).toBe("Registro · Maratón de Santiago | Carreras Viajeras"));
+});
+
+it("offers the sandbox checkout on the current registration shell and preserves the campaign", async () => {
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  renderContent("/viajes/maraton-santiago-2027/registro?c=abc&c=ignored", true);
+
+  const checkoutLink = await screen.findByRole("link", { name: /Continuar al checkout/ });
+  expect(checkoutLink.getAttribute("href")).toBe("/viajes/maraton-santiago-2027/checkout?c=abc");
 });
 
 it("stand mode shows no header, footer or price block and asks for no campaign offer", async () => {

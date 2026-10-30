@@ -141,6 +141,13 @@
       "when": 1793324475699,
       "tag": "0019_welcome_discount",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793370917204,
+      "tag": "0020_stripe_booking_checkout",
+      "breakpoints": true
     }
   ]
 }

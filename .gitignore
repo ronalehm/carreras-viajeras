@@ -49,3 +49,5 @@ next-env.d.ts
 # Safe templates only
 !.env.example
 !.dev.vars.example
+
+/.stripe-sandbox/

@@ -12,6 +12,7 @@ import type { TripInput, TripScope } from "../types/trips.types";
 import {
   createTrip,
   getPublishedTripBySlug,
+  getPublishedTripIdBySlug,
   getTripById,
   listPublishedTrips,
   listTrips,
@@ -219,6 +220,22 @@ describe("getPublishedTripBySlug", () => {
   it("returns null when no published trip matches (missing, draft or archived)", async () => {
     useFakeDb();
     await expect(getPublishedTripBySlug("maraton-santiago-2027")).resolves.toBeNull();
+  });
+});
+
+describe("getPublishedTripIdBySlug", () => {
+  it("returns only the internal id of a published slug for the server checkout page", async () => {
+    const fake = useFakeDb({ responses: [[[TRIP_ID]]] });
+    await expect(getPublishedTripIdBySlug("maraton-santiago-2027")).resolves.toBe(TRIP_ID);
+    expect(normalize(fake.queries[0].sql)).toBe(
+      `select "id" from "trips" where ("trips"."slug" = $1 and "trips"."status" = $2) limit $3`,
+    );
+  });
+
+  it("rejects invalid slugs without a database query", async () => {
+    const fake = useFakeDb();
+    await expect(getPublishedTripIdBySlug("Invalid Slug")).resolves.toBeNull();
+    expect(fake.queries).toHaveLength(0);
   });
 });
 
