@@ -17,6 +17,7 @@ export {
   recordAutomationActivity,
 } from "./services/integrationLeads.service";
 export { enqueueFollowUps } from "./services/followUps.service";
+export { enqueueCadence } from "./services/cadence.service";
 export type {
   ClaimedEvent,
   ClientEmailKind,
