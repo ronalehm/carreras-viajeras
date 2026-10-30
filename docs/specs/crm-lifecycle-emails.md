@@ -231,11 +231,11 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 ### Fase 2 — Entradas al embudo (5 tareas, ~14 archivos)
 
-- [ ] T1 — Marca de formulario · archivos: `modules/landing/components/LeadCaptureForm.tsx`, `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/ContactSection.tsx`, `modules/crm/schemas/webLeads.schema.ts` y su test · depende de: F1 · paralelo
-- [ ] T2 — Payload del registro web · archivos: `modules/crm/services/webLeads.service.ts` y su test · depende de: F2 T1
-- [ ] T3 — Lead desde el perfil del runner · archivos: `modules/accounts/services/runnerProfile.service.ts` y su test · depende de: F1 · paralelo con T1
-- [ ] T4 — Evento de responsable · archivos: `modules/crm/services/leads.service.ts` y su test · depende de: F1 · paralelo con T1 y T3
-- [ ] T5 — Ajustes del motor · depende de: F1 · paralelo con T1–T4. Archivos y cambios:
+- [x] T1 — Marca de formulario · archivos: `modules/landing/components/LeadCaptureForm.tsx`, `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/ContactSection.tsx`, `modules/crm/schemas/webLeads.schema.ts` y su test · depende de: F1 · paralelo
+- [x] T2 — Payload del registro web · archivos: `modules/crm/services/webLeads.service.ts` y su test · depende de: F2 T1
+- [x] T3 — Lead desde el perfil del runner · archivos: `modules/accounts/services/runnerProfile.service.ts` y su test · depende de: F1 · paralelo con T1
+- [x] T4 — Evento de responsable · archivos: `modules/crm/services/leads.service.ts` y su test · depende de: F1 · paralelo con T1 y T3
+- [x] T5 — Ajustes del motor · depende de: F1 · paralelo con T1–T4. Archivos y cambios:
   - `modules/integrations/services/clientEmails.service.ts` y su test: responsable real en `team_alert`, y `owner_alert` omitido si hay un `lead.owner_assigned` posterior.
   - `modules/integrations/utils/lifecycleEmailTemplates.ts` y su test: campo «Responsable» y asunto normalizado.
   - La etiqueta «Cuenta web» ya se hizo en F1-T5.
