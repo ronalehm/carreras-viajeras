@@ -40,7 +40,7 @@ export function CommunitySection() {
             Conecta con runners y comparte tu próxima historia.
           </p>
           <Link
-            href="/cuenta"
+            href="/cuenta#imagen-login"
             className={cn(
               buttonVariants(),
               "h-auto gap-2 rounded-full bg-highlight px-6 py-3.5 text-base font-semibold text-night hover:bg-background",
