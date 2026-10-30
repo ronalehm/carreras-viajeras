@@ -104,6 +104,10 @@ describe("booking Stripe webhook processor", () => {
     expect(query.params).toEqual(expect.arrayContaining(["evt_test_1", "checkout.session.expired", "expired"]));
     expect(query.sql).toContain("UPDATE offer_capacity_allocations");
     expect(query.sql).toContain("UPDATE bookings b SET status = 'cancelled'");
+    // The seat is released only for a booking still pending, locked before its seat (as everywhere).
+    expect(query.sql).toMatch(/pending_booking AS MATERIALIZED \(\s*SELECT b\.id FROM bookings b[\s\S]*WHERE b\.status = 'pending'\s*FOR UPDATE OF b/);
+    expect(query.sql).toMatch(/released AS \([\s\S]*FROM pending_booking p\s*WHERE allocation\.booking_id = p\.id/);
+    expect(query.sql.indexOf("pending_booking AS")).toBeLessThan(query.sql.indexOf("released AS"));
   });
   it("ignores an expired event whose session is not expired at Stripe", async () => {
     const db = dbMock({ attempt: localAttempt });
@@ -180,6 +184,29 @@ describe("booking Stripe webhook processor", () => {
     await expect(handleBookingStripeEvent(live, provider, mode)).rejects.toBeInstanceOf(StripeModeMismatchError);
     expect(db.execute).not.toHaveBeenCalled();
     expect(db.insert).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["a live event", true, false],
+    ["a live session", false, true],
+  ])("stops on %s in demo mode without touching data", async (_label, eventLive, sessionLive) => {
+    const db = dbMock({ attempt: localAttempt, rows: [applied] });
+    const provider = stripe({ ...baseSession, livemode: sessionLive });
+    const incoming = event("checkout.session.completed", { id: "cs_test_1", metadata: baseSession.metadata }, "evt_test_1", eventLive);
+    await expect(handleBookingStripeEvent(incoming, provider, "demo")).rejects.toBeInstanceOf(StripeModeMismatchError);
+    expect(db.execute).not.toHaveBeenCalled();
+    expect(db.insert).not.toHaveBeenCalled();
+  });
+  it("stops on a live PaymentIntent in demo mode", async () => {
+    const db = dbMock({ attempt: localAttempt });
+    const provider = stripe(baseSession, { id: "pi_test_1", livemode: true, status: "succeeded", metadata: baseSession.metadata });
+    const incoming = event("payment_intent.succeeded", { id: "pi_test_1", metadata: baseSession.metadata }, "evt_test_1", false);
+    await expect(handleBookingStripeEvent(incoming, provider, "demo")).rejects.toBeInstanceOf(StripeModeMismatchError);
+    expect(db.execute).not.toHaveBeenCalled();
+  });
+  it("settles test events in demo mode", async () => {
+    dbMock({ attempt: localAttempt, rows: [applied] });
+    await expect(handleBookingStripeEvent(sessionEvent("checkout.session.completed"), stripe(), "demo"))
+      .resolves.toMatchObject({ outcome: "applied" });
   });
   it("stops on a test PaymentIntent in live mode", async () => {
     const db = dbMock({ attempt: localAttempt });

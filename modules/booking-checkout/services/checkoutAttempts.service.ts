@@ -9,7 +9,12 @@ type ActiveAttempt = { id: string; bookingId: string; status: "pending" | "creat
 // `booking_checkout_attempts_active_uq` for its booking and kind. With `releaseHold`, an initial
 // attempt also gives back its held seat and cancels the still-pending booking, in the same
 // statement and with the same rules the webhook applies to `checkout.session.expired`. A balance
-// attempt never touches capacity: its allocation is already confirmed.
+// attempt never touches capacity: its allocation is already confirmed. The seat is released only
+// while the booking is still pending: a booking confirmed by hand in the CRM keeps its seat.
+// Lock order, shared by every statement that releases, extends or confirms a hold (this one, the
+// webhook, the expired-hold sweep and the reservation extension): the attempt first when there is
+// one, then the booking (FOR UPDATE, rechecked as pending after any concurrent change), then its
+// seat, then the capacity counter.
 // Compare-and-set on the observed status: returns false if another request or the webhook
 // changed the attempt first, and then nothing is written.
 export async function retireCheckoutAttempt(
@@ -25,12 +30,16 @@ export async function retireCheckoutAttempt(
         AND a.status = ${attempt.status}::booking_checkout_attempt_status
         AND a.status IN ('pending', 'created')
       RETURNING a.booking_id, a.kind
+    ), pending_booking AS MATERIALIZED (
+      SELECT b.id FROM ${bookings} AS b
+      JOIN retired r ON b.id = r.booking_id
+      WHERE ${releaseHold}::boolean AND r.kind = 'initial' AND b.status = 'pending'
+      FOR UPDATE OF b
     ), released AS (
       UPDATE ${offerCapacityAllocations} AS allocation
       SET status = 'released'::offer_capacity_allocation_status, released_at = now(), updated_at = now()
-      FROM retired r
-      WHERE ${releaseHold}::boolean AND r.kind = 'initial'
-        AND allocation.booking_id = r.booking_id AND allocation.status = 'held'
+      FROM pending_booking p
+      WHERE allocation.booking_id = p.id AND allocation.status = 'held'
       RETURNING allocation.offer_version_id, allocation.booking_id
     ), decremented AS (
       UPDATE ${offerCapacityCounters} AS counter

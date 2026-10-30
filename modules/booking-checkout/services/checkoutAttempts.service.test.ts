@@ -30,6 +30,15 @@ describe("retireCheckoutAttempt", () => {
     expect(params).toEqual(expect.arrayContaining(["expired", attempt.id, attempt.bookingId, "created", true]));
   });
 
+  it("releases the seat only while the booking is pending, locking the booking before its seat", async () => {
+    const query = fakeExecute([{ booking_id: attempt.bookingId }]);
+    await retireCheckoutAttempt(attempt, "expired", true);
+    const { sql } = query();
+    expect(sql).toMatch(/pending_booking AS MATERIALIZED \(\s*SELECT b\.id FROM "bookings" AS b\s*JOIN retired r ON b\.id = r\.booking_id[\s\S]*b\.status = 'pending'\s*FOR UPDATE OF b/);
+    expect(sql).toMatch(/released AS \([\s\S]*FROM pending_booking p\s*WHERE allocation\.booking_id = p\.id AND allocation\.status = 'held'/);
+    expect(sql.indexOf("pending_booking AS")).toBeLessThan(sql.indexOf("released AS"));
+  });
+
   it("can retire without releasing the reservation", async () => {
     const query = fakeExecute([{ booking_id: attempt.bookingId }]);
     await retireCheckoutAttempt({ ...attempt, status: "pending" }, "failed", false);

@@ -124,7 +124,7 @@ Cada «Sí, apruebo» es independiente.
 
 ## Plan de tareas: Fase D (tras la Fase 2 de la spec base)
 
-- [ ] D.1 `lib/env.ts`: modo `demo` y sus tests, incluido el rechazo de live con demo.
+- [x] D.1 `lib/env.ts`: modo `demo` y sus tests, incluido el rechazo de live con demo.
 - [x] D.2 0021 y `lib/db-schema.ts`: tabla de participantes, `is_simulated`, `stripe_mode`, índice parcial y los puntos previstos de la spec base. Aplicar 0000–0021 en PostgreSQL desechable y comprobar que no hay diferencias en `db:generate`.
 - [ ] D.3 booking-checkout:
   - autorización de participante en las tres rutas y en la página;

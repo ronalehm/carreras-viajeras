@@ -44,7 +44,8 @@ export type ReservationRecord = {
 export type ReservationResult = ReservationRecord | "sold_out" | "request_conflict" | "booking_exists";
 
 // Checkout is on only when the Stripe configuration allows it for this environment (test mode
-// outside production, live mode with every production requirement met). Fails closed.
+// outside production; live, or demo with STRIPE_DEMO_MODE, with every production requirement met).
+// Fails closed.
 export function isCheckoutEnabled(): boolean {
   return getStripeCheckoutConfig().enabled;
 }
@@ -86,13 +87,21 @@ export async function persistCheckoutReservation(snapshot: CheckoutReservationSn
   try {
     // Preparation can be abandoned before a Stripe Session exists, so Stripe cannot emit an
     // expiration webhook for that hold. Reclaim only elapsed pending reservations, once.
+    // Same lock order as the other release paths: the pending bookings first (in id order, so two
+    // sweeps never wait on each other in a cycle), then their seats, rechecked as still expired.
     await db.execute(sql`
-      WITH expired AS (
+      WITH expired_booking AS MATERIALIZED (
+        SELECT booking.id FROM ${bookings} booking
+        JOIN ${offerCapacityAllocations} allocation ON allocation.booking_id = booking.id
+        WHERE allocation.status = 'held' AND allocation.expires_at <= now() AND booking.status = 'pending'
+        ORDER BY booking.id
+        FOR UPDATE OF booking
+      ), expired AS (
         UPDATE ${offerCapacityAllocations} allocation
         SET status = 'released'::offer_capacity_allocation_status, released_at = now(), updated_at = now()
-        FROM ${bookings} booking
+        FROM expired_booking booking
         WHERE booking.id = allocation.booking_id AND allocation.status = 'held'
-          AND allocation.expires_at <= now() AND booking.status = 'pending'
+          AND allocation.expires_at <= now()
         RETURNING allocation.booking_id, allocation.offer_version_id
       ), decremented AS (
         UPDATE ${offerCapacityCounters} counter

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Stripe from "stripe";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getStripeCheckoutConfig: vi.fn() }));
+vi.mock("@/lib/env", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/env")>(), getStripeCheckoutConfig: vi.fn() }));
 import { getDb } from "@/lib/db";
 import { getStripeCheckoutConfig, type StripeCheckoutConfig } from "@/lib/env";
 import { createStripeWebhookHandler, handleStripeWebhook } from "./stripeWebhook.service";
@@ -127,6 +127,7 @@ describe("Stripe webhook dispatcher", () => {
   it.each([
     ["a live event on a test deployment", "test" as const, true],
     ["a test event on a live deployment", "live" as const, false],
+    ["a live event on a demo deployment", "demo" as const, true],
   ])("rejects %s without touching data", async (_label, mode, livemode) => {
     const log = logs();
     const processEvent = processor();
@@ -143,6 +144,25 @@ describe("Stripe webhook dispatcher", () => {
     const response = await createStripeWebhookHandler({ stripe, webhookSecret, mode: "live", processEvent })(signedRequest(payload({ livemode: true })));
     expect(response.status).toBe(200);
     expect(processEvent).toHaveBeenCalledWith(expect.anything(), stripe, "live");
+  });
+
+  it("accepts test events on a demo deployment and delegates them in demo mode", async () => {
+    logs();
+    const processEvent = processor();
+    const response = await createStripeWebhookHandler({ stripe, webhookSecret, mode: "demo", processEvent })(signedRequest(payload({ livemode: false })));
+    expect(response.status).toBe(200);
+    expect(processEvent).toHaveBeenCalledWith(expect.anything(), stripe, "demo");
+  });
+
+  it.each([
+    ["a live key under the demo flag", { mode: null, secretKey: null, webhookSecret: null, disabledReason: "demo_requires_test_key" as const }],
+  ])("answers 503 with %s", async (_label, overrides) => {
+    const log = logs();
+    vi.mocked(getStripeCheckoutConfig).mockReturnValue(config(overrides));
+    const response = await handleStripeWebhook(signedRequest(payload()));
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain("sk_");
+    expect(getDb).not.toHaveBeenCalled();
   });
 
   it("ignores connected-account events", async () => {

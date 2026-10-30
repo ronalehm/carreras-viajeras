@@ -127,21 +127,29 @@ export function getTurnstileEnv(): { TURNSTILE_SECRET_KEY: string; isTestSecret:
   };
 }
 
-export type StripeMode = "test" | "live";
+// "demo" is production with a Stripe TEST key, allowed only with STRIPE_DEMO_MODE="true"
+// (bookings-stripe-checkout-demo.md). Stripe sees it as test mode: see stripeLivemodeFor.
+export type StripeMode = "test" | "live" | "demo";
 export type StripeCheckoutDisabledReason =
   | "not_enabled" | "invalid_configuration" | "missing_secret_key" | "mode_not_allowed"
-  | "missing_webhook_secret" | "invalid_app_origin" | "draft_contracts_bypass";
+  | "missing_webhook_secret" | "invalid_app_origin" | "draft_contracts_bypass" | "demo_requires_test_key";
 export type StripeCheckoutConfig = {
   enabled: boolean;
-  // Mode of the secret key, set only when this environment allows it: live in production, test elsewhere.
+  // Set only when this environment allows the key's mode: test outside production; in production,
+  // live, or demo (test key) with STRIPE_DEMO_MODE="true".
   mode: StripeMode | null;
   secretKey: string | null;
   webhookSecret: string | null;
-  // Draft contracts for sandbox payments: test mode only, with the explicit flag.
+  // Draft contracts for sandbox payments: test or demo mode only, with the explicit flag. Never live.
   allowDraftContracts: boolean;
   // Never carries values, so callers may log it.
   disabledReason: StripeCheckoutDisabledReason | null;
 };
+
+// The `livemode` that Stripe events, Sessions and PaymentIntents must carry in each mode.
+export function stripeLivemodeFor(mode: StripeMode): boolean {
+  return mode === "live";
+}
 
 const stripeFlag = z.enum(["true", "false"]).optional();
 const stripeCheckoutSchema = z.object({
@@ -149,6 +157,7 @@ const stripeCheckoutSchema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().regex(/^whsec_[A-Za-z0-9_]+$/).optional(),
   STRIPE_CHECKOUT_ENABLED: stripeFlag,
   STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: stripeFlag,
+  STRIPE_DEMO_MODE: stripeFlag,
 });
 
 // Configuration is read on every request; each distinct reason is logged once per process.
@@ -160,6 +169,14 @@ function warnStripeCheckoutDisabled(details: { reason: StripeCheckoutDisabledRea
   console.warn("stripe-checkout: disabled", details);
 }
 
+// Mode allowed for this environment and key, or null. Demo never accepts a live key.
+function allowedStripeMode(production: boolean, demo: boolean, keyMode: "test" | "live" | null): StripeMode | null {
+  if (!keyMode) return null;
+  if (!production) return keyMode === "test" ? "test" : null;
+  if (demo) return keyMode === "test" ? "demo" : null;
+  return keyMode === "live" ? "live" : null;
+}
+
 // Fails closed: any missing or invalid value leaves Checkout off. The key and webhook secret are
 // still returned when their mode is allowed, so the webhook works while Checkout is switched off.
 export function getStripeCheckoutConfig(): StripeCheckoutConfig {
@@ -169,32 +186,38 @@ export function getStripeCheckoutConfig(): StripeCheckoutConfig {
     STRIPE_WEBHOOK_SECRET: readOptional("STRIPE_WEBHOOK_SECRET"),
     STRIPE_CHECKOUT_ENABLED: readOptional("STRIPE_CHECKOUT_ENABLED"),
     STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: readOptional("STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS"),
+    STRIPE_DEMO_MODE: readOptional("STRIPE_DEMO_MODE"),
   });
   if (!result.success) {
     warnStripeCheckoutDisabled({ reason: "invalid_configuration", fields: invalidEnvironment(result.error).message });
     return { enabled: false, mode: null, secretKey: null, webhookSecret: null, allowDraftContracts: false, disabledReason: "invalid_configuration" };
   }
   const env = result.data;
-  const keyMode: StripeMode | null = env.STRIPE_SECRET_KEY
-    ? (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? "live" : "test") : null;
-  const mode = keyMode === (production ? "live" : "test") ? keyMode : null;
+  // The demo flag only means something in production; outside it, a test key is test mode as before.
+  const demo = production && env.STRIPE_DEMO_MODE === "true";
+  const keyMode = env.STRIPE_SECRET_KEY
+    ? (/^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? "live" as const : "test" as const) : null;
+  const mode = allowedStripeMode(production, demo, keyMode);
   const webhookSecret = mode ? env.STRIPE_WEBHOOK_SECRET ?? null : null;
   const draftBypass = env.STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS === "true";
+  // A live key under the demo flag is reported first, whatever the Checkout flag: it also keeps
+  // the webhook off, since no mode is returned.
   const disabledReason: StripeCheckoutDisabledReason | null =
-    env.STRIPE_CHECKOUT_ENABLED !== "true" ? "not_enabled"
-      : !keyMode ? "missing_secret_key"
-        : !mode ? "mode_not_allowed"
-          : production && !webhookSecret ? "missing_webhook_secret"
-            : production && !appOrigin.safeParse(process.env.APP_ORIGIN).success ? "invalid_app_origin"
-              : production && draftBypass ? "draft_contracts_bypass"
-                : null;
+    demo && keyMode === "live" ? "demo_requires_test_key"
+      : env.STRIPE_CHECKOUT_ENABLED !== "true" ? "not_enabled"
+        : !keyMode ? "missing_secret_key"
+          : !mode ? "mode_not_allowed"
+            : production && !webhookSecret ? "missing_webhook_secret"
+              : production && !appOrigin.safeParse(process.env.APP_ORIGIN).success ? "invalid_app_origin"
+                : mode === "live" && draftBypass ? "draft_contracts_bypass"
+                  : null;
   if (disabledReason && disabledReason !== "not_enabled") warnStripeCheckoutDisabled({ reason: disabledReason });
   return {
     enabled: disabledReason === null,
     mode,
     secretKey: mode ? env.STRIPE_SECRET_KEY! : null,
     webhookSecret,
-    allowDraftContracts: mode === "test" && draftBypass,
+    allowDraftContracts: (mode === "test" || mode === "demo") && draftBypass,
     disabledReason,
   };
 }

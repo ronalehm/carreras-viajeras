@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingCheckoutAttempts, bookingStripeEventReceipts } from "@/lib/db-schema";
-import type { StripeMode } from "@/lib/env";
+import { stripeLivemodeFor, type StripeMode } from "@/lib/env";
 
 export type BookingWebhookOutcome = "applied" | "needs_review" | "expired" | "failed" | "ignored" | "duplicate";
 export type BookingWebhookResult = { outcome: BookingWebhookOutcome; attemptId: string | null; bookingId: string | null };
@@ -21,7 +21,7 @@ export class StripeModeMismatchError extends Error {
   constructor() { super("Stripe resource mode does not match the configured mode"); }
 }
 function assertMode(resource: { livemode?: unknown }, mode: StripeMode) {
-  if (resource.livemode !== (mode === "live")) throw new StripeModeMismatchError();
+  if (resource.livemode !== stripeLivemodeFor(mode)) throw new StripeModeMismatchError();
 }
 function webhookResult(outcome: BookingWebhookOutcome, attemptId: string | null = null, bookingId: string | null = null): BookingWebhookResult {
   return { outcome, attemptId, bookingId };
@@ -80,6 +80,8 @@ async function findAttempt(attemptId: string, bookingId: string) {
   return attempt ?? null;
 }
 
+// Same release as retireCheckoutAttempt and the same lock order (attempt, booking, seat): the seat
+// is given back only while the booking is still pending, so a CRM confirmation keeps it.
 async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<ReturnType<typeof findAttempt>>>, session: Stripe.Checkout.Session) {
   const outcome = event.type === "checkout.session.expired" ? "expired" : "async_payment_failed";
   const result = await getDb().execute<{ event_id: string }>(sql`
@@ -99,11 +101,16 @@ async function expireAttempt(event: Stripe.Event, attempt: NonNullable<Awaited<R
         stripe_session_id = COALESCE(a.stripe_session_id, ${session.id}),
         updated_at = now()
       FROM local_attempt l, receipt r WHERE a.id = l.id RETURNING a.booking_id
+    ), pending_booking AS MATERIALIZED (
+      SELECT b.id FROM bookings b
+      JOIN updated_attempt u ON b.id = u.booking_id
+      WHERE b.status = 'pending'
+      FOR UPDATE OF b
     ), released AS (
       UPDATE offer_capacity_allocations allocation SET status = 'released'::offer_capacity_allocation_status,
         released_at = now(), updated_at = now()
-      FROM updated_attempt u
-      WHERE allocation.booking_id = u.booking_id AND allocation.status = 'held'
+      FROM pending_booking p
+      WHERE allocation.booking_id = p.id AND allocation.status = 'held'
       RETURNING allocation.offer_version_id, allocation.booking_id
     ), decremented AS (
       UPDATE offer_capacity_counters counter SET allocated_count = greatest(0, counter.allocated_count - 1), updated_at = now()

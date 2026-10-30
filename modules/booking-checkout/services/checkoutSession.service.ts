@@ -3,7 +3,7 @@ import Stripe from "stripe";
 import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bookingCheckoutAttempts, bookingContractAcceptances, bookingStripeSettlements, bookings, offerCapacityAllocations, trips } from "@/lib/db-schema";
-import { getEnv, getStripeCheckoutConfig, type StripeMode } from "@/lib/env";
+import { getEnv, getStripeCheckoutConfig, stripeLivemodeFor, type StripeMode } from "@/lib/env";
 import { parseUsdPenRate, usdToPenCents } from "@/lib/currency";
 import { checkoutQuoteHash } from "./quote.service";
 import type { CreateCheckoutSessionInput } from "../schemas/checkout.schema";
@@ -82,7 +82,7 @@ function stripeClient(): { stripe: StripeSessionClient; mode: StripeMode } | nul
 }
 
 function ownsSession(session: Stripe.Checkout.Session, bookingId: string, attemptId: string, mode: StripeMode) {
-  return session.livemode === (mode === "live")
+  return session.livemode === stripeLivemodeFor(mode)
     && session.mode === "payment"
     && session.metadata?.bookingId === bookingId
     && session.metadata?.attemptId === attemptId;
@@ -127,6 +127,9 @@ async function refreshActiveAttempt(
 
 // Session deadline for an initial payment: the reservation deadline, extended (atomically with the
 // held seat) only when fewer than MIN_SESSION_MS remain, and capped by MAX_RESERVATION_HOLD_MINUTES.
+// Only a pending booking that still holds its seat is extended. Lock order as everywhere else:
+// booking (this UPDATE), then seat. Every statement that releases a seat also locks and cancels its
+// pending booking, so a release that commits first fails the status recheck of this UPDATE.
 async function initialSessionExpiry(bookingId: string, userId: string): Promise<Date | null> {
   const minimum = new Date(Date.now() + MIN_SESSION_MS);
   const held = await getDb().execute<{ expires_at: Date | string }>(sql`
@@ -136,6 +139,10 @@ async function initialSessionExpiry(bookingId: string, userId: string): Promise<
         AND reservation_expires_at > now()
         AND greatest(reservation_expires_at, ${minimum}::timestamptz)
           <= created_at + ${MAX_RESERVATION_HOLD_MINUTES} * interval '1 minute'
+        AND EXISTS (
+          SELECT 1 FROM ${offerCapacityAllocations} AS hold
+          WHERE hold.booking_id = ${bookings}.id AND hold.status = 'held'
+        )
       RETURNING id, reservation_expires_at
     ), extended_allocation AS (
       UPDATE ${offerCapacityAllocations} AS allocation SET expires_at = extended_booking.reservation_expires_at, updated_at = now()
@@ -286,9 +293,18 @@ export async function createBookingCheckoutSession(
     return "stripe_unavailable";
   }
   if (!canonicalSession(session, bookingId, attempt.id, amountPenCents, mode)) return "stripe_unavailable";
-  await db.update(bookingCheckoutAttempts).set({
+  // Compare-and-set: only a still-pending attempt takes the Session. If the webhook or a retirement
+  // changed it meanwhile, the Session is not handed out; its id is logged for reconciliation.
+  const [recorded] = await db.update(bookingCheckoutAttempts).set({
     status: "created", stripeSessionId: session.id, checkoutUrl: session.url,
     expiresAt: session.expires_at ? new Date(session.expires_at * 1000) : null, updatedAt: sql`now()`,
-  }).where(eq(bookingCheckoutAttempts.id, attempt.id));
+  }).where(and(eq(bookingCheckoutAttempts.id, attempt.id), eq(bookingCheckoutAttempts.status, "pending")))
+    .returning({ id: bookingCheckoutAttempts.id });
+  if (!recorded) {
+    console.warn("booking checkout: session not recorded", {
+      bookingId, attemptId: attempt.id, stripeSessionId: session.id, alert: true,
+    });
+    return "attempt_conflict";
+  }
   return { state: "created", attemptId: attempt.id, checkoutUrl: session.url! };
 }

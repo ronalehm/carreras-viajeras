@@ -1,5 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 vi.mock("server-only",()=>({}));
 vi.mock("@/lib/db",()=>({getDb:vi.fn()}));
 import { getDb } from "@/lib/db";
@@ -23,6 +25,10 @@ describe("checkout reservation persistence",()=>{
   expect(execute).toHaveBeenCalledTimes(2);
   expect(execute.mock.calls[0]?.[0]).toHaveProperty("queryChunks");
   expect(execute.mock.calls[1]?.[0]).toHaveProperty("queryChunks");
+  // The sweep locks the pending bookings first, in id order, then releases their still-expired seats.
+  const sweep=new PgDialect().sqlToQuery(execute.mock.calls[0]?.[0] as SQL).sql;
+  expect(sweep).toMatch(/expired_booking AS MATERIALIZED \([\s\S]*booking\.status = 'pending'\s*ORDER BY booking\.id\s*FOR UPDATE OF booking/);
+  expect(sweep).toMatch(/expired AS \(\s*UPDATE "offer_capacity_allocations" allocation[\s\S]*FROM expired_booking booking[\s\S]*allocation\.expires_at <= now\(\)/);
  });
  it("maps capacity constraint failures without leaving a reservation",async()=>{
   const execute=vi.fn(async(query:unknown)=>{void query; return {rows:[]};});

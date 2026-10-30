@@ -91,6 +91,17 @@ describe("draft contracts in Checkout",()=>{
   const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
   await expect(getCheckoutContractVersion(input.versionKey)).resolves.toBeNull();expect(queries).toHaveLength(1);
  });
+ it("never serves a draft in live mode, even if the configuration claimed drafts were allowed",async()=>{
+  stripeConfig({mode:"live",allowDraftContracts:true});
+  const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
+  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toBeNull();expect(queries).toHaveLength(1);
+ });
+ it("serves a marked draft in demo mode (production with a test key) when drafts are allowed",async()=>{
+  stripeConfig({mode:"demo",allowDraftContracts:true});
+  const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);
+  await expect(getCheckoutContractVersion(input.versionKey)).resolves.toMatchObject({status:"draft",body:testBody});
+  expect(queries).toHaveLength(2);
+ });
  it("never serves a draft while Checkout is disabled",async()=>{
   stripeConfig({enabled:false,allowDraftContracts:true,disabledReason:"not_enabled"});
   const queries=fake([[],[[id,input.versionKey,input.title,testBody,"draft",null,null]]]);

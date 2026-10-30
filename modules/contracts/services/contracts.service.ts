@@ -9,12 +9,13 @@ import {
  type ContractInput,type ContractEdit,type ContractApproval,type ContractVersion,
 } from "../schemas/contracts.schema";
 
-// Draft contracts serve Checkout only in Stripe test mode with the explicit bypass flag, and only
-// drafts that carry the test-document prefix. Live mode always uses approved versions.
+// Draft contracts serve Checkout only in Stripe test or demo mode (both use a test key) with the
+// explicit bypass flag, and only drafts that carry the test-document prefix. Live mode always uses
+// approved versions, whatever the flags say.
 const TEST_CONTRACT_PREFIX="BORRADOR DE PRUEBA SANDBOX";
 export function isContractDraftAllowed():boolean {
  const config=getStripeCheckoutConfig();
- return config.enabled&&config.allowDraftContracts;
+ return config.enabled&&config.allowDraftContracts&&config.mode!=="live";
 }
 export function contractReviewHash(input:ContractInput):string {
  return createHash("sha256").update(JSON.stringify([input.versionKey,input.title,input.body])).digest("hex");

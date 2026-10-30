@@ -16,7 +16,7 @@ const offerId="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const rateId="dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const leadIds=["cccccccc-cccc-4ccc-8ccc-cccccccccccc","eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"];
 const users=["checkout-f2-runner-1","checkout-f2-runner-2"];
-const requests=["11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333"];
+const requests=["11111111-1111-4111-8111-111111111111","22222222-2222-4222-8222-222222222222","33333333-3333-4333-8333-333333333333","44444444-4444-4444-8444-444444444444"];
 
 function snapshot(index:number):CheckoutReservationSnapshot {
  return {
@@ -70,6 +70,34 @@ describe.skipIf(!enabled)("checkout capacity on isolated PostgreSQL",()=>{
   expect(typeof admitted).not.toBe("string");
   const old=await pool.query("select booking.status,allocation.status as allocation_status from bookings booking join offer_capacity_allocations allocation on allocation.booking_id=booking.id where booking.id=$1",[held[0].booking_id]);
   expect(old.rows[0]).toEqual({status:"cancelled",allocation_status:"released"});
+  const counter=await pool.query("select allocated_count from offer_capacity_counters where offer_version_id=$1",[offerId]);
+  expect(counter.rows[0].allocated_count).toBe(1);
+ });
+ it("locks the booking before its seat, so a concurrent extension of the same hold keeps it",async()=>{
+  const {rows:held}=await pool.query("select booking_id from offer_capacity_allocations where offer_version_id=$1 and status='held'",[offerId]);
+  expect(held).toHaveLength(1);
+  const heldId=held[0].booking_id as string;
+  await pool.query("update bookings set status='pending',reservation_expires_at=now()-interval '1 minute' where id=$1",[heldId]);
+  await pool.query("update offer_capacity_allocations set expires_at=now()-interval '1 minute' where booking_id=$1",[heldId]);
+  const extension=await pool.connect();
+  try{
+   // Same order as the reservation extension: the booking row first, then its seat.
+   await extension.query("begin");
+   await extension.query("update bookings set reservation_expires_at=now()+interval '30 minutes' where id=$1",[heldId]);
+   const sweeping=persistCheckoutReservation({...snapshot(0),requestId:requests[3],inputHash:"d".repeat(64)});
+   const deadline=Date.now()+10_000;
+   for(;;){
+    const {rows:[waiting]}=await pool.query("select count(*)::int as n from pg_stat_activity where datname=$1 and wait_event_type='Lock' and query like '%expired_booking AS MATERIALIZED%'",[database]);
+    if(waiting.n>0) break;
+    if(Date.now()>deadline) throw new Error("the sweep did not wait for the booking lock");
+    await new Promise(resolve=>setTimeout(resolve,25));
+   }
+   await extension.query("update offer_capacity_allocations set expires_at=now()+interval '30 minutes' where booking_id=$1",[heldId]);
+   await extension.query("commit");
+   await expect(sweeping).resolves.toBe("sold_out");
+  }finally{extension.release();}
+  const state=await pool.query("select booking.status,allocation.status as allocation_status from bookings booking join offer_capacity_allocations allocation on allocation.booking_id=booking.id where booking.id=$1",[heldId]);
+  expect(state.rows[0]).toEqual({status:"pending",allocation_status:"held"});
   const counter=await pool.query("select allocated_count from offer_capacity_counters where offer_version_id=$1",[offerId]);
   expect(counter.rows[0].allocated_count).toBe(1);
  });

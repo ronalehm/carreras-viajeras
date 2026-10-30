@@ -102,6 +102,7 @@ describe("POST /api/bookings/checkout/prepare", () => {
     expect(json).toEqual({ code: "internal", requestId: expect.stringMatching(UUID) });
     const logged = JSON.stringify(error.mock.calls);
     expect(logged).toContain(json.requestId);
+    expect(error.mock.calls[0][1]).toMatchObject({ errorName: "Error" });
     expect(logged).not.toContain("select");
     expect(logged).not.toContain("runner@example.invalid");
   });

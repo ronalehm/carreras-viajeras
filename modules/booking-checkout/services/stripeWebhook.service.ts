@@ -1,7 +1,8 @@
 import "server-only";
 import Stripe from "stripe";
-import { getStripeCheckoutConfig, type StripeMode } from "@/lib/env";
+import { getStripeCheckoutConfig, stripeLivemodeFor, type StripeMode } from "@/lib/env";
 import { handleBookingStripeEvent, type BookingWebhookOutcome } from "./bookingWebhook.service";
+import { safeErrorName } from "../utils/checkoutResponse";
 
 const HEADERS = { "Cache-Control": "no-store" };
 const MAX_BODY_BYTES = 512 * 1024;
@@ -32,9 +33,9 @@ function logEvent(
 // Log the error name and an enum-like code only: Stripe and driver messages can carry
 // credentials, SQL or customer data, and the spec keeps stack traces out of logs.
 function errorDetails(error: unknown) {
-  const details = error as { name?: string; code?: string; statusCode?: number } | null;
+  const details = error as { code?: string; statusCode?: number } | null;
   return {
-    errorName: /^[A-Za-z]{1,80}$/.test(details?.name ?? "") ? details!.name : "Error",
+    errorName: safeErrorName(error),
     code: /^[a-z_]{1,60}$/.test(details?.code ?? "") && !/^(sk|rk|pk|whsec)_/.test(details!.code!) ? details!.code : undefined,
     statusCode: typeof details?.statusCode === "number" ? details.statusCode : undefined,
   };
@@ -69,7 +70,7 @@ export function createStripeWebhookHandler({ stripe, webhookSecret, mode, proces
       // The async variant works with Node crypto and with the Web Crypto of Workers.
       event = await stripe.webhooks.constructEventAsync(raw, signature, webhookSecret);
     } catch { return json({ error: "invalid_signature" }, 400); }
-    if (event.livemode !== (mode === "live")) {
+    if (event.livemode !== stripeLivemodeFor(mode)) {
       logEvent(event, "error");
       return json({ error: "mode_mismatch" }, 400);
     }

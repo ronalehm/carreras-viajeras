@@ -5,7 +5,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { SQL } from "drizzle-orm";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/env", () => ({ getEnv: vi.fn(), getStripeCheckoutConfig: vi.fn() }));
+vi.mock("@/lib/env", async (importOriginal) => ({ ...await importOriginal<typeof import("@/lib/env")>(), getEnv: vi.fn(), getStripeCheckoutConfig: vi.fn() }));
 vi.mock("./checkoutAttempts.service", () => ({ retireCheckoutAttempt: vi.fn() }));
 vi.mock("stripe", () => ({ default: vi.fn() }));
 import { getDb } from "@/lib/db";
@@ -56,8 +56,10 @@ function session(params: Partial<Stripe.Checkout.Session> & { metadata: Record<s
 }
 
 // Select results are consumed in call order; execute serves the initial-reservation extension.
-function fakeDb(selects: unknown[][], extension: unknown[] = []) {
+// `recorded` is what the final compare-and-set update of the attempt returns.
+function fakeDb(selects: unknown[][], extension: unknown[] = [], recorded: unknown[] = [{ id: attemptId }]) {
   const inserted: Record<string, unknown>[] = [];
+  const updateWhere = vi.fn((condition: SQL) => { void condition; return { returning: async () => recorded }; });
   const db = {
     select: vi.fn(() => {
       const result = selects.shift() ?? [];
@@ -75,10 +77,10 @@ function fakeDb(selects: unknown[][], extension: unknown[] = []) {
         }),
       }),
     })),
-    update: vi.fn(() => ({ set: () => ({ where: async () => undefined }) })),
+    update: vi.fn(() => ({ set: () => ({ where: updateWhere }) })),
   };
   vi.mocked(getDb).mockReturnValue(db as never);
-  return { db, inserted };
+  return { db, inserted, updateWhere };
 }
 function stripeWith(create = vi.fn(), retrieve = vi.fn()) {
   vi.mocked(Stripe).mockImplementation(function StripeMock() {
@@ -139,6 +141,41 @@ describe("checkout session service: configuration", () => {
     const statement = new PgDialect().sqlToQuery(db.execute.mock.calls[0][0] as SQL).sql;
     expect(statement).toContain("greatest(reservation_expires_at");
     expect(statement).toContain("created_at +");
+    // Only a booking that still holds its seat is extended.
+    expect(statement).toMatch(/extended_booking AS \([\s\S]*AND EXISTS \(\s*SELECT 1 FROM "offer_capacity_allocations" AS hold\s*WHERE hold\.booking_id = "bookings"\.id AND hold\.status = 'held'\s*\)\s*RETURNING/);
+  });
+
+  it("does not hand out a Session when the attempt stopped being pending, and logs its id for reconciliation", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const { updateWhere } = fakeDb([[booking()], [], []], [{ expires_at: new Date(Date.now() + 33 * MINUTE).toISOString() }], []);
+    stripeWith(echoCreate({ id: "cs_test_unrecorded" }));
+    await expect(createBookingCheckoutSession(bookingId, "runner", { requestId, kind: "initial", quoteHash: initialHash }))
+      .resolves.toBe("attempt_conflict");
+    const where = new PgDialect().sqlToQuery(updateWhere.mock.calls[0][0]);
+    expect(where.sql).toMatch(/"id" = \$1 and "booking_checkout_attempts"\."status" = \$2/);
+    expect(where.params).toEqual([attemptId, "pending"]);
+    expect(warn).toHaveBeenCalledWith("booking checkout: session not recorded", {
+      bookingId, attemptId, stripeSessionId: "cs_test_unrecorded", alert: true,
+    });
+    const logged = JSON.stringify(warn.mock.calls);
+    expect(logged).not.toContain("runner@example.test");
+    expect(logged).not.toContain("checkout.stripe.test");
+    warn.mockRestore();
+  });
+
+  it("uses test sessions in demo mode and refuses a live one", async () => {
+    vi.mocked(getStripeCheckoutConfig).mockReturnValue({ ...testConfig, mode: "demo" });
+    vi.mocked(getEnv).mockReturnValue({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" } as ReturnType<typeof getEnv>);
+    const live = fakeDb([[booking()], [], []], [{ expires_at: new Date(Date.now() + 33 * MINUTE) }]);
+    stripeWith(echoCreate({ livemode: true }));
+    await expect(createBookingCheckoutSession(bookingId, "runner", { requestId, kind: "initial", quoteHash: initialHash }))
+      .resolves.toBe("stripe_unavailable");
+    expect(live.db.update).not.toHaveBeenCalled();
+
+    fakeDb([[booking()], [], []], [{ expires_at: new Date(Date.now() + 33 * MINUTE) }]);
+    stripeWith(echoCreate({ livemode: false }));
+    await expect(createBookingCheckoutSession(bookingId, "runner", { requestId, kind: "initial", quoteHash: initialHash }))
+      .resolves.toMatchObject({ state: "created" });
   });
 
   it("refuses with reservation_expired when the bounded extension is not possible", async () => {
