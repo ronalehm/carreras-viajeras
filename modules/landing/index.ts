@@ -8,6 +8,7 @@ export { HeroCarousel } from "./components/HeroCarousel";
 export { MobileCta } from "./components/MobileCta";
 export { PackageSection } from "./components/PackageSection";
 export { RacePageContent } from "./components/RacePageContent";
+export { ScrollToHero } from "./components/ScrollToHero";
 export { SiteFooter } from "./components/SiteFooter";
 export { SiteBrand, SiteHeader } from "./components/SiteHeader";
 export { StorySection } from "./components/StorySection";

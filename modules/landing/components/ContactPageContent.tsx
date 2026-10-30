@@ -5,6 +5,7 @@ import { useCatalogTripOptions } from "../hooks/useCatalogTripOptions";
 import { attributionParams, searchParamsToRecord } from "../utils/inquiry";
 import { ContactSection } from "./ContactSection";
 import type { LeadCaptureAction } from "./LeadCaptureForm";
+import { ScrollToHero } from "./ScrollToHero";
 
 /** Brief loading state without the form: it is mounted once, with the trips already known. */
 export function ContactPageLoading() {
@@ -28,12 +29,16 @@ export function ContactPageContent({ action }: { action: LeadCaptureAction }) {
 
   const query = searchParamsToRecord(searchParams);
   return (
-    <ContactSection
-      action={action}
-      // Trips already loaded stay after a failed refetch, so the form keeps its key and what was typed.
-      trips={data ?? []}
-      destination={query.destino}
-      attribution={attributionParams(query)}
-    />
+    <>
+      {/* Once the form is mounted: the page opens at its hero, not where the previous one was. */}
+      <ScrollToHero />
+      <ContactSection
+        action={action}
+        // Trips already loaded stay after a failed refetch, so the form keeps its key and what was typed.
+        trips={data ?? []}
+        destination={query.destino}
+        attribution={attributionParams(query)}
+      />
+    </>
   );
 }

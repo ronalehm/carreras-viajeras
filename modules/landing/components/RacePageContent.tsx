@@ -6,6 +6,7 @@ import { useTripPageParams } from "../hooks/useTripPageParams";
 import { attributionParams, firstParam } from "../utils/inquiry";
 import type { LeadCaptureAction } from "./LeadCaptureForm";
 import { RaceRegistrationSection } from "./RaceRegistrationSection";
+import { ScrollToHero } from "./ScrollToHero";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
 import { TripPageState } from "./TripPageContent";
@@ -26,13 +27,17 @@ export function RacePageContent({ action }: { action: LeadCaptureAction }) {
   }, [title]);
 
   const content = data ? (
-    <RaceRegistrationSection
-      trip={data.trip}
-      action={action}
-      attribution={attributionParams(query)}
-      standMode={standMode}
-      offer={standMode ? null : data.offer}
-    />
+    <>
+      {/* Once the race is mounted: the page opens at its hero, not where the previous one was. */}
+      <ScrollToHero />
+      <RaceRegistrationSection
+        trip={data.trip}
+        action={action}
+        attribution={attributionParams(query)}
+        standMode={standMode}
+        offer={standMode ? null : data.offer}
+      />
+    </>
   ) : (
     <TripPageState notFound={data === null} failed={status === "error"} />
   );
