@@ -56,6 +56,8 @@ export const profiles = pgTable(
     }),
   },
   (table) => [
+    // Account lookup by email (welcome discount eligibility). Not unique: emails may repeat.
+    index("profiles_email_idx").on(table.email),
     check("profiles_email_lowercase_chk", sql`${table.email} = lower(${table.email})`),
     check("profiles_deleted_chk", sql`${table.deletedAt} IS NULL OR ${table.disabledAt} IS NOT NULL`),
   ],

@@ -134,6 +134,13 @@
       "when": 1793323998136,
       "tag": "0018_sales_cadence",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793324475699,
+      "tag": "0019_welcome_discount",
+      "breakpoints": true
     }
   ]
 }
