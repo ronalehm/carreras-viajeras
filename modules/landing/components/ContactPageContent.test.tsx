@@ -8,7 +8,7 @@ const { fetchCatalogTrips, registration, search } = vi.hoisted(() => ({
   search: { params: new URLSearchParams() },
 }));
 vi.mock("../services/catalogTrips.api", () => ({ fetchCatalogTrips }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => search.params }));
+vi.mock("next/navigation", () => ({ useSearchParams: () => search.params, usePathname: () => "/contacto" }));
 vi.mock("@/lib/registrationConsent", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/registrationConsent")>()),
   isRegistrationOpen: () => registration.open,
@@ -51,8 +51,13 @@ function hiddenValue(container: HTMLElement, name: string) {
 beforeEach(() => {
   fetchCatalogTrips.mockReset();
   registration.open = true;
+  // ScrollToHero resets the scroll: jsdom does not implement window.scrollTo.
+  vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 it("shows a brief accessible loading state without the form while the trips are pending", () => {
   fetchCatalogTrips.mockReturnValue(new Promise(() => {}));
