@@ -2,16 +2,24 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { can } from "@/lib/auth/permissions";
-import { getTodayDate } from "@/lib/dates";
 import { getDb } from "@/lib/db";
 import { clientEmails, staffRoleEnum, type leadSourceEnum } from "@/lib/db-schema";
 import { getClientEmailEnv, getEnv } from "@/lib/env";
-import { emailStageSchema, internalEmailKindSchema } from "../schemas/email.schema";
+// No import cycle: modules/trips imports no other module (unlike modules/landing, which imports crm,
+// which imports this module).
+import { getActiveOffer } from "@/modules/trips";
+import {
+  cadenceDuePayloadSchema,
+  emailStageSchema,
+  internalEmailKindSchema,
+} from "../schemas/email.schema";
 import type {
+  CadenceDuePayload,
   ClientEmailKind,
   ClientEmailSkipReason,
   OutboxEventType,
 } from "../types/integrations.types";
+import { cadenceEmailTemplate, type CadenceOffer } from "../utils/cadenceEmailTemplates";
 import {
   firstName,
   lifecycleEmailTemplate,
@@ -61,6 +69,11 @@ const STAGE_LABELS: Record<Stage, string> = {
   lost: "Perdido",
 };
 
+// WhatsApp of the sales cadence emails: wa.me link without prefilled text. Local on purpose: importing
+// WHATSAPP_NUMBER from @/modules/landing (modules/landing/utils/inquiry.ts) would create an import
+// cycle (landing imports crm, which imports this module). Keep it in line with that constant.
+const CADENCE_WHATSAPP_URL = "https://wa.me/51938127170";
+
 const STAGE_VALUES = sql.join(
   emailStageSchema.options.map((stage) => sql`${stage}`),
   sql`, `,
@@ -92,17 +105,46 @@ const activeOwnerEmail = sql`(SELECT p.email FROM profiles p WHERE p.user_id = l
   AND EXISTS (SELECT 1 FROM staff_assignments s WHERE s.user_id = p.user_id AND s.revoked_at IS NULL
     AND s.role::text IN (${sql.join(LEAD_OWNER_ROLES.map((role) => sql`${role}`), sql`, `)})))`;
 
+// Sales cadence (crm-sales-cadence.md, requirement 1). Episode: same definition as enqueueCadence in
+// cadence.service.ts. The activity that opens the lead's current stage episode is its last
+// stage_changed into the current stage or, for «new», the 'created' activity when there is no later
+// one. The episode of a lead.cadence_due (payload.episodeId) is still in force only while it is that
+// activity, so a stage change or a reopened stage leaves the queued steps obsolete. Compared as text:
+// the payload is never cast, and an id that does not match fails closed.
+const currentEpisodeId = sql`(SELECT a.id FROM lead_activities a WHERE a.lead_id = l.id
+  AND ((a.type = 'stage_changed' AND a.stage_to = l.stage) OR (l.stage = 'new' AND a.type = 'created'))
+  ORDER BY a.created_at DESC, a.id DESC LIMIT 1)`;
+const cadenceEpisodeCurrent = sql`COALESCE(${currentEpisodeId}::text = e.payload->>'episodeId', false)`;
+const cadenceEpisodeStart = sql`(SELECT a.created_at FROM lead_activities a
+  WHERE a.lead_id = l.id AND a.id::text = e.payload->>'episodeId')`;
+// «Respondió» registered at or after the start of the event's episode.
+const cadenceResponded = sql`EXISTS (SELECT 1 FROM lead_activities r WHERE r.lead_id = l.id
+  AND r.type = 'responded' AND r.created_at >= ${cadenceEpisodeStart})`;
+// Episodes that started before CRM_EMAIL_AUTOMATION_START_AT get no sequence.
+const cadenceEpisodeAfterCutoff = (env: EmailEnv) =>
+  sql`COALESCE(${cadenceEpisodeStart} >= ${env.startAt.toISOString()}::timestamptz, false)`;
+// Valid lead.cadence_due payloads, same rules as cadenceDuePayloadSchema. Filtered in SQL so an
+// invalid event is never read again on every preparation.
+const validCadencePayload = sql`COALESCE(
+    (e.payload->>'stage' = 'new' AND e.payload->>'step' IN ('proposal', 'r3', 'r5', 'r7'))
+    OR (e.payload->>'stage' IN ('contacted', 'quoted') AND e.payload->>'step' IN ('r3', 'r5', 'r7')), false)
+  AND COALESCE(e.payload->>'episodeId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', false)
+  AND jsonb_typeof(COALESCE(e.payload->'superseded', 'false'::jsonb)) = 'boolean'`;
+
 // Eligibility per kind (crm-lifecycle-emails.md, requirement 3), rechecked just before SMTP and on
 // retry. prepareEmails applies the same rules through skipReason() over the same SQL facts
-// (latestEvent, latestOwnerAssignment, activeOwnerEmail, next action due in Lima). Aliases m/e/l
+// (latestEvent, latestOwnerAssignment, activeOwnerEmail, cadence episode facts). Aliases m/e/l
 // are fixed internal SQL identifiers. No recipient/content comes from a request.
 // - Common: active (env), cutoff, payload version 1, server sender, lead not archived.
 // - Internal alerts: opt-out does not block them; recipient is the current team address or the
 //   current owner's address (active role), never a stale one. No "latest event" rule, except that an
 //   owner_alert yields to a later lead.owner_assigned of the same lead.
 // - Client emails: no opt-out, no import/bulk, recipient = leads.email. Welcomes only need the
-//   lead.created event; follow_up needs the same stage, a next action still due and no later stage
-//   event; booking_confirmed and stage keep the original rules (current event, same stage).
+//   lead.created event; booking_confirmed and stage keep the original rules (current event, same
+//   stage). follow_up is never sent any more (crm-sales-cadence.md replaces it): rows prepared before
+//   that change end skipped (ineligible) at authorization and a retry is rejected.
+// - Sales cadence (cadence_proposal, cadence_reminder): a lead.cadence_due not superseded, the same
+//   stage, its episode still in force and started after the cutoff, and no «Respondió» since then.
 function eligible(env: EmailEnv) {
   const teamRecipient = env.teamAlertEmail
     ? sql`m.recipient = ${env.teamAlertEmail}`
@@ -120,8 +162,9 @@ function eligible(env: EmailEnv) {
           WHEN 'welcome_registration' THEN e.type = 'lead.created'
           WHEN 'welcome_contact' THEN e.type = 'lead.created'
           WHEN 'welcome_account' THEN e.type = 'lead.created'
-          WHEN 'follow_up' THEN e.type = 'lead.follow_up_due' AND l.stage = m.stage
-            AND l.next_action_date <= ${getTodayDate()}::date AND ${latestEvent}
+          WHEN 'follow_up' THEN FALSE
+          WHEN 'cadence_proposal' THEN ${cadenceEligible(env)}
+          WHEN 'cadence_reminder' THEN ${cadenceEligible(env)}
           WHEN 'booking_confirmed' THEN e.type = 'lead.stage_changed' AND l.stage = m.stage
             AND ${latestEvent}
           ELSE e.type IN ('lead.created', 'lead.stage_changed') AND l.stage = m.stage
@@ -130,8 +173,14 @@ function eligible(env: EmailEnv) {
     END`;
 }
 
-// Reason stored when the recheck before SMTP fails: the specific internal-alert codes when they
-// apply, otherwise the generic "ineligible".
+function cadenceEligible(env: EmailEnv) {
+  return sql`e.type = 'lead.cadence_due' AND COALESCE(e.payload->>'superseded', 'false') <> 'true'
+    AND l.stage = m.stage AND ${cadenceEpisodeCurrent} AND NOT ${cadenceResponded}
+    AND ${cadenceEpisodeAfterCutoff(env)}`;
+}
+
+// Reason stored when the recheck before SMTP fails: the specific internal-alert and sales cadence
+// codes when they apply (same order as skipReason), otherwise the generic "ineligible".
 function ineligibleCode(env: EmailEnv) {
   const teamMissing = env.teamAlertEmail ? sql`FALSE` : sql`TRUE`;
   return sql`CASE
@@ -139,6 +188,13 @@ function ineligibleCode(env: EmailEnv) {
     WHEN l.archived_at IS NULL AND m.kind = 'owner_alert'
       AND (m.recipient IS DISTINCT FROM ${activeOwnerEmail} OR NOT ${latestOwnerAssignment})
       THEN 'owner_changed'
+    WHEN m.kind IN ('cadence_proposal', 'cadence_reminder') THEN CASE
+      WHEN l.contact_opt_out_at IS NOT NULL THEN 'opted_out'
+      WHEN l.archived_at IS NOT NULL THEN 'archived'
+      WHEN l.stage <> m.stage OR NOT ${cadenceEpisodeCurrent} THEN 'obsolete_event'
+      WHEN ${cadenceResponded} THEN 'responded'
+      WHEN l.email IS NULL THEN 'missing_email'
+      ELSE 'ineligible' END
     ELSE 'ineligible' END`;
 }
 
@@ -154,7 +210,6 @@ type Candidate = {
   archived: boolean;
   optedOut: boolean;
   current: boolean;
-  followUpDue: boolean;
   tripTitle: string | null;
   destinationText: string | null;
   bookingTripTitle: string | null;
@@ -164,6 +219,15 @@ type Candidate = {
   latestOwnerAssignment: boolean;
   // team_alert: current owner's address, informative only (no role required).
   currentOwnerEmail: string | null;
+  // Sales cadence: offer resolution and the public trip page (slug only while published).
+  tripId: string | null;
+  campaignId: string | null;
+  publishedTripSlug: string | null;
+  // lead.cadence_due only (null otherwise): episode in force, «Respondió» since its start, and
+  // episode started after the cutoff.
+  episodeCurrent: boolean | null;
+  responded: boolean | null;
+  episodeAfterCutoff: boolean | null;
 };
 
 const isBulk = (event: Candidate) =>
@@ -196,8 +260,12 @@ function emailKinds(event: Candidate): ClientEmailKind[] {
       return event.payload.trigger === "booking" && event.payload.stageTo === "reserved"
         ? ["booking_confirmed"]
         : ["stage"];
-    case "lead.follow_up_due":
-      return ["follow_up"];
+    // The step decides the kind; superseded steps get their row too, skipped (skipReason).
+    case "lead.cadence_due":
+      return event.payload.step === "proposal" ? ["cadence_proposal"] : ["cadence_reminder"];
+    // lead.follow_up_due no longer produces a client email (crm-sales-cadence.md replaces the
+    // follow_up email with the sales cadence) and is not read by prepareEmails. The internal notice
+    // of the overdue next action keeps reaching n8n through the generic outbox, unchanged.
     case "lead.owner_assigned":
       return ["owner_alert"];
     default:
@@ -212,7 +280,7 @@ function eventStage(event: Candidate): unknown {
       return "new";
     case "lead.stage_changed":
       return event.payload.stageTo;
-    case "lead.follow_up_due":
+    case "lead.cadence_due":
       return event.payload.stage;
     default:
       return event.currentStage;
@@ -240,23 +308,53 @@ function skipReason(
     if (kind === "team_alert") return recipient ? null : "missing_team_address";
     return recipient && event.latestOwnerAssignment ? null : "owner_changed";
   }
+  if (isCadence(kind) && event.payload.superseded === true) return "superseded";
   if (event.optedOut) return "opted_out";
   if (event.archived) return "archived";
   if (isBulk(event)) return "bulk_import";
   const sameEpisode = event.current && event.currentStage === stage;
-  if (kind === "follow_up" && !(sameEpisode && event.followUpDue))
-    return "obsolete_event";
   if ((kind === "stage" || kind === "booking_confirmed") && !sameEpisode)
     return "obsolete_event";
+  if (isCadence(kind)) {
+    if (!(event.episodeCurrent && event.currentStage === stage)) return "obsolete_event";
+    if (event.responded) return "responded";
+    if (!event.episodeAfterCutoff) return "ineligible";
+  }
   return recipient ? null : "missing_email";
 }
+
+const isCadence = (kind: ClientEmailKind) =>
+  kind === "cadence_proposal" || kind === "cadence_reminder";
+
+// In-force offer of the lead's trip (its campaign's when in force, else the general one), as
+// getActiveOffer resolves it, only with the fields the proposal shows. No trip or no offer: null.
+async function cadenceOffer(event: Candidate): Promise<CadenceOffer | null> {
+  if (!event.tripId) return null;
+  const offer = await getActiveOffer(event.tripId, event.campaignId);
+  return offer
+    ? {
+        finalPriceUsd: offer.finalPriceUsd,
+        depositOptionsUsd: offer.depositOptionsUsd,
+        balanceDueOn: offer.balanceDueOn,
+        bonusDescription: offer.bonusDescription,
+        validUntil: offer.validUntil,
+      }
+    : null;
+}
+
+type ContentContext = {
+  appOrigin: () => string;
+  cadence: CadenceDuePayload | null;
+  offer: CadenceOffer | null;
+};
 
 function emailContent(
   kind: ClientEmailKind,
   event: Candidate,
   stage: Stage,
-  leadUrl: () => string,
+  context: ContentContext,
 ) {
+  const leadUrl = () => `${context.appOrigin()}/crm/leads/${event.leadId}`;
   const tripTitle =
     kind === "booking_confirmed"
       ? (event.bookingTripTitle ?? event.tripTitle)
@@ -283,11 +381,23 @@ function emailContent(
         stageLabel: STAGE_LABELS[stage],
         leadUrl: leadUrl(),
       });
-    // Sales cadence (crm-sales-cadence.md): emailKinds does not produce these kinds yet; their
-    // templates and eligibility arrive with F1-T4.
+    // Sales cadence (crm-sales-cadence.md, requirement 3): link to the public trip page only while
+    // the trip is published; the offer only for the proposal.
     case "cadence_proposal":
-    case "cadence_reminder":
-      throw new Error(`Unsupported email kind: ${kind}`);
+    case "cadence_reminder": {
+      if (!context.cadence) throw new Error(`Missing cadence payload for ${kind}`);
+      return cadenceEmailTemplate({
+        stage: context.cadence.stage,
+        step: context.cadence.step,
+        fullName: event.fullName,
+        race: client.race,
+        tripUrl: event.publishedTripSlug
+          ? `${context.appOrigin()}/viajes/${event.publishedTripSlug}`
+          : null,
+        whatsappUrl: CADENCE_WHATSAPP_URL,
+        offer: context.offer,
+      });
+    }
     default:
       return lifecycleEmailTemplate(kind, client);
   }
@@ -304,7 +414,6 @@ async function prepareEmails(env: EmailEnv) {
       l.full_name AS "fullName", l.email, l.stage AS "currentStage", l.source,
       l.archived_at IS NOT NULL AS archived, l.contact_opt_out_at IS NOT NULL AS "optedOut",
       ${latestEvent} AS current,
-      COALESCE(l.next_action_date <= ${getTodayDate()}::date, false) AS "followUpDue",
       t.title AS "tripTitle", l.destination_text AS "destinationText",
       CASE WHEN e.type = 'lead.stage_changed' AND e.payload->>'trigger' = 'booking' THEN (
         SELECT bt.title FROM bookings b JOIN trips bt ON bt.id = b.trip_id
@@ -314,43 +423,64 @@ async function prepareEmails(env: EmailEnv) {
       ${latestOwnerAssignment} AS "latestOwnerAssignment",
       CASE WHEN e.type = 'lead.created' THEN (
         SELECT p.email FROM profiles p WHERE p.user_id = l.owner_user_id
-      ) END AS "currentOwnerEmail"
+      ) END AS "currentOwnerEmail",
+      l.trip_id AS "tripId", l.campaign_id AS "campaignId",
+      CASE WHEN t.status = 'published' THEN t.slug END AS "publishedTripSlug",
+      CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceEpisodeCurrent} END AS "episodeCurrent",
+      CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceResponded} END AS responded,
+      CASE WHEN e.type = 'lead.cadence_due' THEN ${cadenceEpisodeAfterCutoff(env)} END AS "episodeAfterCutoff"
     FROM outbox_events e JOIN leads l ON l.id = e.lead_id LEFT JOIN trips t ON t.id = l.trip_id
-    WHERE e.type IN ('lead.created', 'lead.stage_changed', 'lead.follow_up_due', 'lead.owner_assigned')
+    WHERE e.type IN ('lead.created', 'lead.stage_changed', 'lead.cadence_due', 'lead.owner_assigned')
       AND e.payload_version = 1
       AND CASE e.type
         WHEN 'lead.stage_changed' THEN COALESCE(e.payload->>'stageTo' IN (${STAGE_VALUES}), false)
-        WHEN 'lead.follow_up_due' THEN COALESCE(e.payload->>'stage' IN (${STAGE_VALUES}), false)
+        WHEN 'lead.cadence_due' THEN ${validCadencePayload}
         ELSE TRUE END
       AND e.created_at >= ${env.startAt.toISOString()}::timestamptz
       AND NOT EXISTS (SELECT 1 FROM client_emails m WHERE m.source_event_id = e.id)
     ORDER BY e.sequence LIMIT 100
   `);
-  let origin: string | undefined;
-  const rows = result.rows.flatMap((event) => {
+  const drafts = result.rows.flatMap((event) => {
+    const cadence =
+      event.type === "lead.cadence_due"
+        ? cadenceDuePayloadSchema.safeParse(event.payload)
+        : null;
     const parsedStage = emailStageSchema.safeParse(eventStage(event));
     // Unsupported payloads are never cast into a database enum or sent.
-    if (!parsedStage.success) return [];
+    if (!parsedStage.success || (cadence && !cadence.success)) return [];
     const stage = parsedStage.data;
-    // Built on the server only, and only when an internal alert needs it.
-    const leadUrl = () =>
-      `${(origin ??= getEnv().APP_ORIGIN)}/crm/leads/${event.leadId}`;
     return emailKinds(event).map((kind) => {
       const recipient = recipientFor(kind, event, env);
       const reason = skipReason(kind, event, stage, recipient);
-      return {
-        sourceEventId: event.eventId,
-        leadId: event.leadId,
-        kind,
-        stage,
-        recipient,
-        sender: env.from,
-        ...emailContent(kind, event, stage, leadUrl),
-        status: reason ? ("skipped" as const) : ("pending" as const),
-        lastErrorCode: reason,
-      };
+      return { event, kind, stage, recipient, reason, cadence: cadence?.data ?? null };
     });
   });
+  // The offer is read only for a proposal that will be sent.
+  const offers = new Map(
+    await Promise.all(
+      drafts
+        .filter((draft) => draft.kind === "cadence_proposal" && !draft.reason)
+        .map(async (draft) => [draft.event.eventId, await cadenceOffer(draft.event)] as const),
+    ),
+  );
+  let origin: string | undefined;
+  // Built on the server only, and only when an internal alert or a cadence email needs it.
+  const appOrigin = () => (origin ??= getEnv().APP_ORIGIN);
+  const rows = drafts.map(({ event, kind, stage, recipient, reason, cadence }) => ({
+    sourceEventId: event.eventId,
+    leadId: event.leadId,
+    kind,
+    stage,
+    recipient,
+    sender: env.from,
+    ...emailContent(kind, event, stage, {
+      appOrigin,
+      cadence,
+      offer: offers.get(event.eventId) ?? null,
+    }),
+    status: reason ? ("skipped" as const) : ("pending" as const),
+    lastErrorCode: reason,
+  }));
   if (rows.length)
     await db
       .insert(clientEmails)

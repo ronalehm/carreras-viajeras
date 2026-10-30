@@ -17,8 +17,18 @@ vi.mock("@/lib/env", () => ({
   getClientEmailEnv: vi.fn(),
   getEnv: vi.fn(() => ({ APP_ORIGIN: "https://carreras-viajeras.mentec.dev" })),
 }));
+// The real offer resolution (getActiveOffer) against the embedded database, without loading the rest
+// of the trips module (components and actions).
+vi.mock("@/modules/trips", async () => ({
+  getActiveOffer: (
+    await vi.importActual<typeof import("@/modules/trips/services/offers.service")>(
+      "@/modules/trips/services/offers.service",
+    )
+  ).getActiveOffer,
+}));
 import { getDb } from "@/lib/db";
 import { getClientEmailEnv } from "@/lib/env";
+import { cadenceEmailTemplate, type CadenceOffer } from "../utils/cadenceEmailTemplates";
 import { lifecycleEmailTemplate } from "../utils/lifecycleEmailTemplates";
 import {
   ackClientEmail,
@@ -102,15 +112,16 @@ describe("email engine against PostgreSQL", () => {
     ownerUserId?: string | null;
     nextActionDate?: string | null;
     nextActionNote?: string | null;
+    campaignId?: string | null;
   };
   // Manual sources need an author (leads_created_by_chk); system sources have none.
   async function insertLead(options: LeadOptions = {}) {
     const source = options.source ?? "web_form";
     const result = await pg.query<{ id: string }>(
       `INSERT INTO leads(full_name,phone,email,source,consent_version,contact_opt_out_at,stage,trip_id,
-        destination_text,owner_user_id,next_action_date,next_action_note,created_by)
+        destination_text,owner_user_id,next_action_date,next_action_note,created_by,campaign_id)
       VALUES ('Ana Vega','+51938127170',$1,$2::lead_source,'test-v1',CASE WHEN $3 THEN now() ELSE NULL END,
-        $4::lead_stage,$5::uuid,$6,$7,$8::date,$9,$10) RETURNING id`,
+        $4::lead_stage,$5::uuid,$6,$7,$8::date,$9,$10,$11::uuid) RETURNING id`,
       [
         options.email === undefined ? "ana@example.test" : options.email,
         source,
@@ -122,6 +133,7 @@ describe("email engine against PostgreSQL", () => {
         options.nextActionDate ?? null,
         options.nextActionNote ?? null,
         ["whatsapp", "other"].includes(source) ? "staff" : null,
+        options.campaignId ?? null,
       ],
     );
     return result.rows[0].id;
@@ -558,53 +570,49 @@ describe("email engine against PostgreSQL", () => {
       ]);
     });
 
-    it.each([
-      ["the stage changed", { stage: "quoted", nextActionDate: "2000-01-01" }, false],
-      ["the next action is no longer due", { stage: "contacted", nextActionDate: "2999-01-01" }, false],
-      ["the next action was cleared", { stage: "contacted", nextActionDate: null }, false],
-      ["a later stage event exists", { stage: "contacted", nextActionDate: "2000-01-01" }, true],
-    ] as const)(
-      "skips follow_up at preparation when %s",
-      async (_, lead, laterEvent) => {
-        const leadId = await insertLead(lead);
-        await addEvent("lead.follow_up_due", leadId, { stage: "contacted", dueOn: "2000-01-01" });
-        if (laterEvent)
-          await addEvent("lead.stage_changed", leadId, { stageFrom: "contacted", stageTo: "contacted" });
-        await claimAll();
-        expect((await summary()).find((row) => row.kind === "follow_up")).toEqual({
-          kind: "follow_up",
-          status: "skipped",
-          lastErrorCode: "obsolete_event",
-        });
-      },
-    );
+    it("lead.follow_up_due no longer creates a client email (the internal notice goes through the outbox)", async () => {
+      const leadId = await insertLead({
+        stage: "contacted",
+        nextActionDate: "2000-01-01",
+        destinationText: "Maratón de Lima",
+      });
+      await addEvent("lead.follow_up_due", leadId, { stage: "contacted", dueOn: "2000-01-01" });
+      expect((await claimAll()).messages).toEqual([]);
+      expect(await emails()).toEqual([]);
+      // The event itself is left untouched for the generic outbox (internal notice in n8n).
+      expect(
+        (await pg.query("SELECT type,status FROM outbox_events")).rows,
+      ).toEqual([{ type: "lead.follow_up_due", status: "pending" }]);
+    });
 
-    it.each([
-      ["nothing changed", null, "authorized"],
-      ["the stage changed", "UPDATE leads SET stage='quoted' WHERE id=$1", "skipped"],
-      ["the next action moved", "UPDATE leads SET next_action_date='2999-01-01' WHERE id=$1", "skipped"],
-    ] as const)(
-      "rechecks follow_up before SMTP when %s",
-      async (_, change, expected) => {
-        const leadId = await insertLead({
-          stage: "contacted",
-          nextActionDate: "2000-01-01",
-          destinationText: "Maratón de Lima",
-        });
-        await addEvent("lead.follow_up_due", leadId, { stage: "contacted", dueOn: "2000-01-01" });
-        const { messages } = await claimAll();
-        expect(await emails()).toMatchObject([
-          {
-            kind: "follow_up",
-            stage: "contacted",
-            status: "claimed",
-            subject: "¿Seguimos con tu viaje a Maratón de Lima?",
-          },
-        ]);
-        if (change) await pg.query(change, [leadId]);
-        expect(await authorizeAll(messages)).toEqual({ follow_up: expected });
-      },
-    );
+    it("a follow_up row prepared before the change is skipped before SMTP and cannot be retried", async () => {
+      const leadId = await insertLead({ stage: "contacted", nextActionDate: "2000-01-01" });
+      const eventId = await addEvent("lead.follow_up_due", leadId, {
+        stage: "contacted",
+        dueOn: "2000-01-01",
+      });
+      const second = await addEvent("lead.follow_up_due", leadId, {
+        stage: "contacted",
+        dueOn: "2000-01-01",
+      });
+      await pg.query(
+        `INSERT INTO client_emails(source_event_id,lead_id,kind,stage,recipient,sender,subject,body,status,attempts,last_error_code)
+        VALUES ($1,$3,'follow_up','contacted','ana@example.test','sender@example.test','Asunto','Cuerpo','pending',0,NULL),
+          ($2,$3,'follow_up','contacted','ana@example.test','sender@example.test','Asunto','Cuerpo','failed',1,'pre_send_failed')`,
+        [eventId, second, leadId],
+      );
+      const { messages } = await claimAll();
+      expect(messages).toHaveLength(1);
+      expect(await authorizeAll(messages)).toEqual({ follow_up: "skipped" });
+      const failed = await pg.query<{ id: string }>(
+        "SELECT id FROM client_emails WHERE status='failed'",
+      );
+      expect(await retryClientEmail(failed.rows[0].id, "staff")).toBeNull();
+      expect(await summary()).toEqual([
+        { kind: "follow_up", status: "skipped", lastErrorCode: "ineligible" },
+        { kind: "follow_up", status: "failed", lastErrorCode: "pre_send_failed" },
+      ]);
+    });
 
     it("booking_confirmed uses the linked booking's trip and replaces the «Reservado» stage email", async () => {
       const trips = await pg.query<{ id: string; slug: string }>(
@@ -721,6 +729,354 @@ describe("email engine against PostgreSQL", () => {
       );
       expect(await retryClientEmail(byKind.welcome_contact, "staff")).toBeNull();
       expect(await retryClientEmail(byKind.team_alert, "staff")).toBe(leadId);
+    });
+  });
+
+  describe("sales cadence", () => {
+    const WHATSAPP = "https://wa.me/51938127170";
+    const CREATED_AT = "2026-10-01T15:00:00Z";
+    const offer: CadenceOffer = {
+      finalPriceUsd: 1500,
+      depositOptionsUsd: [300, 500],
+      balanceDueOn: "2027-03-15",
+      bonusDescription: "Polo oficial de la carrera",
+      validUntil: "2999-12-31",
+    };
+
+    async function insertTrip(status = "published") {
+      const result = await pg.query<{ id: string }>(
+        `INSERT INTO trips(slug,title,city,country,race_date,distances,summary,status)
+        VALUES ('maraton-lima','Maratón de Lima','Lima','PE','2027-05-16','{42K}','Resumen',$1::trip_status)
+        RETURNING id`,
+        [status],
+      );
+      return result.rows[0].id;
+    }
+    // An active, in-force offer version (general, or of a campaign of the trip).
+    async function insertOffer(tripId: string, totalPriceUsd: number, campaignId: string | null = null) {
+      await pg.query(
+        `INSERT INTO trip_offers(trip_id,campaign_id,version,status,name,total_price_usd,discount_usd,
+          deposit_options_usd,balance_due_on,bonus_description,valid_from,valid_until,terms_version,conditions,
+          created_by,approved_by,approved_at,activated_by,activated_at)
+        VALUES ($1,$2::uuid,1,'active','Oferta de prueba',$3,100,'{500,300}','2027-03-15',
+          'Polo oficial de la carrera','2000-01-01','2999-12-31','terminos-v1','Condiciones de prueba',
+          'staff','staff',now(),'staff',now())`,
+        [tripId, campaignId, totalPriceUsd],
+      );
+    }
+    async function insertCampaign(tripId: string, closed = false) {
+      const result = await pg.query<{ id: string }>(
+        `INSERT INTO campaigns(code,trip_id,channel,name,status,created_by,closed_at,closed_by)
+        VALUES ('feria-lima',$1,'event','Feria de Lima',$2::campaign_status,'staff',
+          CASE WHEN $3 THEN now() END,CASE WHEN $3 THEN 'staff' END)
+        RETURNING id`,
+        [tripId, closed ? "closed" : "active", closed],
+      );
+      return result.rows[0].id;
+    }
+    async function addActivity(
+      leadId: string,
+      type: string,
+      at: string,
+      stageFrom: string | null = null,
+      stageTo: string | null = null,
+    ) {
+      const result = await pg.query<{ id: string }>(
+        `INSERT INTO lead_activities(lead_id,type,stage_from,stage_to,actor_user_id,created_at)
+        VALUES ($1,$2::lead_activity_type,$3::lead_stage,$4::lead_stage,'staff',$5) RETURNING id`,
+        [leadId, type, stageFrom, stageTo, at],
+      );
+      return result.rows[0].id;
+    }
+    // Moves the lead to stageTo (activity + current stage), as the CRM does. Returns the new episode.
+    async function changeStage(leadId: string, stageFrom: string, stageTo: string, at: string) {
+      const episodeId = await addActivity(leadId, "stage_changed", at, stageFrom, stageTo);
+      await pg.query("UPDATE leads SET stage=$2::lead_stage WHERE id=$1", [leadId, stageTo]);
+      return episodeId;
+    }
+    // A lead in «new» (episode: its 'created' activity) or moved to «contacted»/«quoted» a day later
+    // (episode: that stage_changed activity).
+    async function cadenceLead(stage = "new", options: LeadOptions = {}) {
+      const leadId = await insertLead({ destinationText: "Maratón de Lima", ...options });
+      let episodeId = await addActivity(leadId, "created", CREATED_AT);
+      if (stage !== "new")
+        episodeId = await changeStage(leadId, "new", stage, "2026-10-02T15:00:00Z");
+      return { leadId, episodeId };
+    }
+    const due = (leadId: string, payload: object) => addEvent("lead.cadence_due", leadId, payload);
+    const tripUrl = `${APP_ORIGIN}/viajes/maraton-lima`;
+
+    it("proposal with the in-force offer: price, deposit, balance, bonus, validity and links", async () => {
+      const tripId = await insertTrip();
+      await insertOffer(tripId, 1600);
+      const { leadId, episodeId } = await cadenceLead("new", { tripId });
+      await due(leadId, { stage: "new", step: "proposal", episodeId });
+      const { messages } = await claimAll();
+      const rows = await emails();
+      const expected = cadenceEmailTemplate({
+        stage: "new",
+        step: "proposal",
+        fullName: "Ana Vega",
+        race: "Maratón de Lima",
+        tripUrl,
+        whatsappUrl: WHATSAPP,
+        offer,
+      });
+      expect(rows).toMatchObject([
+        {
+          kind: "cadence_proposal",
+          stage: "new",
+          status: "claimed",
+          recipient: "ana@example.test",
+          subject: "Tu propuesta para Maratón de Lima",
+          body: expected.body,
+        },
+      ]);
+      for (const fragment of [
+        "Precio final: US$1,500.",
+        "Puedes separar tu cupo con US$300 y completar el saldo hasta el 15 de marzo de 2027.",
+        "Polo oficial de la carrera.",
+        "Esta oferta es válida hasta el 31 de diciembre de 2999.",
+        tripUrl,
+        WHATSAPP,
+      ])
+        expect(rows[0].body).toContain(fragment);
+      expect(await authorizeAll(messages)).toEqual({ cadence_proposal: "authorized" });
+    });
+
+    it.each([
+      ["active", "US$1,300"],
+      ["closed", "US$1,500"],
+    ] as const)("uses the lead's campaign offer while the campaign is %s, else the general one", async (status, price) => {
+      const tripId = await insertTrip();
+      const campaignId = await insertCampaign(tripId, status === "closed");
+      await insertOffer(tripId, 1600);
+      await insertOffer(tripId, 1400, campaignId);
+      const { leadId, episodeId } = await cadenceLead("new", { tripId, campaignId });
+      await due(leadId, { stage: "new", step: "proposal", episodeId });
+      await claimAll();
+      expect((await emails())[0].body).toContain(`Precio final: ${price}.`);
+    });
+
+    it("proposal without an in-force offer uses the variant without price", async () => {
+      const tripId = await insertTrip();
+      const { leadId, episodeId } = await cadenceLead("new", { tripId });
+      await due(leadId, { stage: "new", step: "proposal", episodeId });
+      await claimAll();
+      const [row] = await emails();
+      expect(row).toMatchObject({ kind: "cadence_proposal", status: "claimed" });
+      expect(row.body).toBe(
+        cadenceEmailTemplate({
+          stage: "new",
+          step: "proposal",
+          fullName: "Ana Vega",
+          race: "Maratón de Lima",
+          tripUrl,
+          whatsappUrl: WHATSAPP,
+          offer: null,
+        }).body,
+      );
+      expect(row.body).not.toContain("Precio final");
+    });
+
+    it("a trip that is not published gives no trip link and no offer", async () => {
+      const tripId = await insertTrip("draft");
+      await insertOffer(tripId, 1600);
+      const { leadId, episodeId } = await cadenceLead("new", { tripId });
+      await due(leadId, { stage: "new", step: "proposal", episodeId });
+      await claimAll();
+      const [row] = await emails();
+      expect(row.body).toBe(
+        cadenceEmailTemplate({
+          stage: "new",
+          step: "proposal",
+          fullName: "Ana Vega",
+          race: "Maratón de Lima",
+          tripUrl: null,
+          whatsappUrl: WHATSAPP,
+          offer: null,
+        }).body,
+      );
+      expect(row.body).not.toContain("/viajes/");
+      expect(row.body).not.toContain("Precio final");
+    });
+
+    it.each([
+      ["contacted", "r3", "Sobre tu viaje a Maratón de Lima"],
+      ["quoted", "r5", "Separa tu cupo para Maratón de Lima"],
+      ["new", "r7", "¿Seguimos con Maratón de Lima?"],
+    ] as const)("%s %s: reminder with the stage's own text", async (stage, step, subject) => {
+      const tripId = await insertTrip();
+      await insertOffer(tripId, 1600);
+      const { leadId, episodeId } = await cadenceLead(stage, { stage, tripId });
+      await due(leadId, { stage, step, episodeId });
+      const { messages } = await claimAll();
+      const rows = await emails();
+      expect(rows).toMatchObject([
+        {
+          kind: "cadence_reminder",
+          stage,
+          status: "claimed",
+          recipient: "ana@example.test",
+          subject,
+          body: cadenceEmailTemplate({
+            stage,
+            step,
+            fullName: "Ana Vega",
+            race: "Maratón de Lima",
+            tripUrl,
+            whatsappUrl: WHATSAPP,
+            offer: null,
+          }).body,
+        },
+      ]);
+      expect(rows[0].body).not.toContain("Precio final");
+      expect(await authorizeAll(messages)).toEqual({ cadence_reminder: "authorized" });
+    });
+
+    it("a superseded step is recorded as skipped and never claimed", async () => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId, superseded: true });
+      await due(leadId, { stage: "contacted", step: "r5", episodeId });
+      expect((await claimAll()).messages).toHaveLength(1);
+      expect(await summary()).toEqual([
+        { kind: "cadence_reminder", status: "skipped", lastErrorCode: "superseded" },
+        { kind: "cadence_reminder", status: "claimed", lastErrorCode: null },
+      ]);
+    });
+
+    it.each([
+      ["the proposal outside «new»", { stage: "contacted", step: "proposal" }],
+      ["an unknown stage", { stage: "reserved", step: "r3" }],
+      ["an unknown step", { stage: "new", step: "r9" }],
+      ["an invalid episode id", { stage: "new", step: "r3", episodeId: "not-a-uuid" }],
+      ["a non-boolean superseded", { stage: "new", step: "r3", superseded: "yes" }],
+    ])("ignores an invalid payload: %s", async (_, payload) => {
+      const { leadId, episodeId } = await cadenceLead("new");
+      await due(leadId, { episodeId, ...payload });
+      expect((await claimAll()).messages).toEqual([]);
+      expect(await emails()).toEqual([]);
+    });
+
+    // Changes applied between queuing and preparing (before) or between preparing and SMTP (after).
+    const phases = ["before preparing", "before SMTP"] as const;
+    async function expectStopped(
+      leadId: string,
+      phase: (typeof phases)[number],
+      change: () => Promise<unknown>,
+      code: string,
+    ) {
+      if (phase === "before preparing") {
+        await change();
+        expect((await claimAll()).messages).toEqual([]);
+      } else {
+        const { messages } = await claimAll();
+        expect(messages).toHaveLength(1);
+        await change();
+        expect(await authorizeAll(messages)).toEqual({ cadence_reminder: "skipped" });
+      }
+      expect(await summary()).toEqual([
+        { kind: "cadence_reminder", status: "skipped", lastErrorCode: code },
+      ]);
+      expect(leadId).toBeTruthy();
+    }
+
+    it.each(phases)("a stage change %s leaves the step obsolete", async (phase) => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      await expectStopped(
+        leadId,
+        phase,
+        () => changeStage(leadId, "contacted", "quoted", "2026-10-05T15:00:00Z"),
+        "obsolete_event",
+      );
+    });
+
+    it.each(phases)("a reopened stage episode %s leaves the old episode's step obsolete", async (phase) => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      await expectStopped(
+        leadId,
+        phase,
+        async () => {
+          await changeStage(leadId, "contacted", "quoted", "2026-10-05T15:00:00Z");
+          await changeStage(leadId, "quoted", "contacted", "2026-10-06T15:00:00Z");
+        },
+        "obsolete_event",
+      );
+    });
+
+    it.each(phases)("«Respondió» %s stops the step", async (phase) => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      await expectStopped(
+        leadId,
+        phase,
+        () => addActivity(leadId, "responded", "2026-10-04T15:00:00Z"),
+        "responded",
+      );
+    });
+
+    it.each(phases)("an opt-out %s stops the step", async (phase) => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      await expectStopped(
+        leadId,
+        phase,
+        () => pg.query("UPDATE leads SET contact_opt_out_at=now() WHERE id=$1", [leadId]),
+        "opted_out",
+      );
+    });
+
+    it.each(phases)("archiving the lead %s stops the step", async (phase) => {
+      const { leadId, episodeId } = await cadenceLead("contacted", { stage: "contacted" });
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      await expectStopped(
+        leadId,
+        phase,
+        () => pg.query("UPDATE leads SET archived_at=now(),archived_by='staff' WHERE id=$1", [leadId]),
+        "archived",
+      );
+    });
+
+    it("a «Respondió» of an earlier episode does not stop the current one", async () => {
+      const { leadId } = await cadenceLead("contacted", { stage: "contacted" });
+      await addActivity(leadId, "responded", "2026-10-03T15:00:00Z");
+      await changeStage(leadId, "contacted", "quoted", "2026-10-05T15:00:00Z");
+      const episodeId = await changeStage(leadId, "quoted", "contacted", "2026-10-06T15:00:00Z");
+      await due(leadId, { stage: "contacted", step: "r3", episodeId });
+      const { messages } = await claimAll();
+      expect(await authorizeAll(messages)).toEqual({ cadence_reminder: "authorized" });
+    });
+
+    it("skips a lead without email and an episode that started before the cutoff", async () => {
+      const noEmail = await cadenceLead("new", { email: null });
+      await due(noEmail.leadId, { stage: "new", step: "r3", episodeId: noEmail.episodeId });
+      expect((await claimAll()).messages).toEqual([]);
+      // The episode started on CREATED_AT; the event was queued after the new cutoff.
+      const early = await cadenceLead("new", { email: "early@example.test" });
+      await due(early.leadId, { stage: "new", step: "r3", episodeId: early.episodeId });
+      env.startAt = new Date("2026-10-15T00:00:00Z");
+      await pg.query("UPDATE outbox_events SET created_at='2026-10-16T15:00:00Z' WHERE lead_id=$1", [
+        early.leadId,
+      ]);
+      expect((await claimAll()).messages).toEqual([]);
+      expect(await summary()).toEqual([
+        { kind: "cadence_reminder", status: "skipped", lastErrorCode: "missing_email" },
+        { kind: "cadence_reminder", status: "skipped", lastErrorCode: "ineligible" },
+      ]);
+    });
+
+    it("a retry rechecks the cadence eligibility", async () => {
+      const { leadId, episodeId } = await cadenceLead("quoted", { stage: "quoted" });
+      await due(leadId, { stage: "quoted", step: "r7", episodeId });
+      const [message] = (await claimAll()).messages;
+      await failClientEmail(message.id, message.attemptToken, "before_send");
+      expect(await retryClientEmail(message.id, "staff")).toBe(leadId);
+      const [next] = (await claimAll()).messages;
+      await failClientEmail(next.id, next.attemptToken, "before_send");
+      await addActivity(leadId, "responded", "2026-10-04T15:00:00Z");
+      expect(await retryClientEmail(next.id, "staff")).toBeNull();
     });
   });
 
@@ -881,13 +1237,18 @@ describe("email processing", () => {
       archived: false,
       optedOut: false,
       current: true,
-      followUpDue: false,
       tripTitle: null,
       destinationText: "Maratón de Lima",
       bookingTripTitle: null,
       ownerEmail: null,
       latestOwnerAssignment: true,
       currentOwnerEmail: null,
+      tripId: null,
+      campaignId: null,
+      publishedTripSlug: null,
+      episodeCurrent: null,
+      responded: null,
+      episodeAfterCutoff: null,
     };
     const fake = fakeDb([
       [candidate, { ...candidate, eventId: token, optedOut: true }],

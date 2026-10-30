@@ -7,6 +7,7 @@ import type {
   leadStageEnum,
   outboxEventTypeEnum,
 } from "@/lib/db-schema";
+import type { cadenceDuePayloadSchema } from "../schemas/email.schema";
 import type { createIntegrationLeadSchema } from "../schemas/integrations.schema";
 
 type LeadStage = (typeof leadStageEnum.enumValues)[number];
@@ -18,7 +19,9 @@ export type OutboxEventType = (typeof outboxEventTypeEnum.enumValues)[number];
 export type ClientEmailKind = (typeof clientEmailKindEnum.enumValues)[number];
 
 // Fixed codes stored in client_emails.last_error_code when a message is skipped (client_emails_error_chk:
-// ^[a-z0-9_]{1,40}$). ineligible: generic result of the recheck just before SMTP.
+// ^[a-z0-9_]{1,40}$). ineligible: generic result of the recheck just before SMTP. Sales cadence
+// (crm-sales-cadence.md): superseded, a step overtaken by a later one of the same episode; responded,
+// the commercial marked «Respondió» in the episode.
 export type ClientEmailSkipReason =
   | "opted_out"
   | "archived"
@@ -27,10 +30,15 @@ export type ClientEmailSkipReason =
   | "missing_email"
   | "missing_team_address"
   | "owner_changed"
+  | "superseded"
+  | "responded"
   | "ineligible";
 
 // Only open sales stages get an automatic reminder (decision P2): from reserved on, follow-up is personal.
 export type FollowUpStage = Extract<LeadStage, "new" | "contacted" | "quoted">;
+
+// lead.cadence_due: { stage, step, episodeId, superseded? }, no personal data.
+export type CadenceDuePayload = z.infer<typeof cadenceDuePayloadSchema>;
 
 // Payload version 1: minimal, never personal data.
 export type OutboxEventPayload =
@@ -38,6 +46,7 @@ export type OutboxEventPayload =
   | { stageFrom: LeadStage; stageTo: LeadStage; trigger?: "booking" } // lead.stage_changed (trigger: confirmed booking, from F5)
   | { stage: FollowUpStage; dueOn: string } // lead.follow_up_due (dueOn: YYYY-MM-DD next action date)
   | { stageFrom: LeadStage } // lead.opted_out (stage before the opt-out)
+  | CadenceDuePayload // lead.cadence_due
   | Record<string, never>; // lead.owner_assigned (the owner is read from the lead, never the payload)
 
 // Contract of POST /api/integrations/n8n/events/claim.

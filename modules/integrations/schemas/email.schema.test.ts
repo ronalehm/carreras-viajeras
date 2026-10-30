@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  cadenceDuePayloadSchema,
   clientEmailKindSchema,
   emailAckSchema,
   emailAttemptSchema,
@@ -64,5 +65,26 @@ describe("email integration contracts", () => {
     ))
       expect(internalEmailKindSchema.safeParse(kind).success).toBe(false);
     expect(clientEmailKindSchema.safeParse("campaign").success).toBe(false);
+  });
+  it("accepts only coherent lead.cadence_due payloads", () => {
+    const episodeId = "c0000000-0000-4000-8000-000000000001";
+    for (const payload of [
+      { stage: "new", step: "proposal", episodeId },
+      { stage: "new", step: "r7", episodeId },
+      { stage: "contacted", step: "r3", episodeId, superseded: true },
+      { stage: "quoted", step: "r5", episodeId, superseded: false },
+    ])
+      expect(cadenceDuePayloadSchema.parse(payload)).toEqual(payload);
+    for (const payload of [
+      { stage: "contacted", step: "proposal", episodeId },
+      { stage: "quoted", step: "proposal", episodeId },
+      { stage: "reserved", step: "r3", episodeId },
+      { stage: "new", step: "r9", episodeId },
+      { stage: "new", step: "r3", episodeId: "not-a-uuid" },
+      { stage: "new", step: "r3" },
+      { stage: "new", step: "r3", episodeId, superseded: "yes" },
+      { stage: "new", step: "r3", episodeId, superseded: null },
+    ])
+      expect(cadenceDuePayloadSchema.safeParse(payload).success).toBe(false);
   });
 });
