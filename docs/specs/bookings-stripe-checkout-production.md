@@ -197,7 +197,7 @@ Cada fase tiene hasta cinco tareas y unos quince archivos. Paquetes, schema, `li
 
 - [ ] 3.1 `RunnerCheckout` y el bloque de oferta de la landing: textos de producción, estados con acción, referencia de error y enlace evaluado por petición.
 - [ ] 3.2 `getBookingBalance` en bookings, usado por el portal y el CRM de reservas, con indicador «Stripe» y «en revisión».
-- [ ] 3.3 0021 y `lib/db-schema.ts`. Aplicar 0000–0021 en PostgreSQL desechable y comprobar que no hay diferencias en `db:generate`.
+- [x] 3.3 0021 y `lib/db-schema.ts`. Aplicar 0000–0021 en PostgreSQL desechable y comprobar que no hay diferencias en `db:generate`.
 
 ### Fase 4: validación y documentación
 
