@@ -5,7 +5,16 @@ import { can } from "@/lib/auth/permissions";
 import { BookingRewardsPanel } from "@/modules/rewards";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { getCrmAccess } from "@/modules/accounts";
-import { BookingForm, BookingStatusBadge, changeBookingStatusAction, getBookingById, listBookingPayments, PaymentForm, PaymentTable } from "@/modules/bookings";
+import {
+  BookingForm,
+  BookingStatusBadge,
+  changeBookingStatusAction,
+  getBookingById,
+  listBookingPayments,
+  PaymentForm,
+  PaymentTable,
+  SimulatedBookingBadge,
+} from "@/modules/bookings";
 import { formatTripPrice } from "@/modules/trips";
 
 export const metadata: Metadata = { title: "Reserva" };
@@ -24,10 +33,10 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
     );
   }
   const { id } = await params;
-  const booking = await getBookingById(id);
+  // listBookingPayments returns [] without a query for a non-UUID id, so both load in parallel.
+  const [booking, payments] = await Promise.all([getBookingById(id), listBookingPayments(id)]);
   if (!booking) notFound();
   const cancelled = booking.status === "cancelled";
-  const payments = await listBookingPayments(id);
 
   return (
     <section className="flex flex-col gap-6">
@@ -36,7 +45,14 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-xl font-semibold">{booking.participantName}</h1>
             <BookingStatusBadge status={booking.status} />
+            <SimulatedBookingBadge simulated={booking.simulated} />
           </div>
+          {booking.simulated && (
+            <p className="text-sm text-muted-foreground">
+              Reserva simulada del checkout de demostración (Stripe en modo de prueba): sin cargo real. No cuenta en
+              totales ni informes comerciales, y confirmarla no mueve el lead ni avisa a la automatización.
+            </p>
+          )}
           <p className="text-sm text-muted-foreground">
             Cuenta: {booking.linked ? "Vinculada" : "Sin vincular"} · {booking.trip.title}
           </p>
@@ -92,10 +108,17 @@ export default async function BookingPage({ params }: PageProps<"/crm/reservas/[
       )}
       <section className="grid gap-4" aria-labelledby="payments-heading">
         <h2 id="payments-heading" className="text-lg font-semibold">Pagos</h2>
-        <PaymentTable payments={payments} totalUsd={booking.totalUsd} editable={!cancelled} />
-        {!cancelled && <PaymentForm bookingId={booking.id} />}
+        <PaymentTable payments={payments} balance={booking} editable={!cancelled} />
+        {/* A simulated booking never takes manual payments or rewards; the services reject them too. */}
+        {booking.simulated ? (
+          <p className="text-sm text-muted-foreground">Reserva simulada: sin pagos manuales ni recompensas.</p>
+        ) : (
+          !cancelled && <PaymentForm bookingId={booking.id} />
+        )}
       </section>
-      <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
+      {!booking.simulated && (
+        <BookingRewardsPanel bookingId={booking.id} canManage={can(access.user.staffRoles, "rewards.manage")} />
+      )}
     </section>
   );
 }

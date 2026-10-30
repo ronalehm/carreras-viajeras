@@ -4,6 +4,11 @@
 interface __BaseEnv_CloudflareEnv {
 	ASSETS: Fetcher;
 	WORKER_SELF_REFERENCE: Fetcher /* carreras-viajeras */;
+	// wrangler.jsonc vars, added by hand: `npm run cf-typegen` (wrangler 4.151) also augments
+	// NodeJS.ProcessEnv with required vars and imports .open-next/worker, which breaks tsc.
+	STRIPE_CHECKOUT_ENABLED: string;
+	STRIPE_DEMO_MODE: string;
+	STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS: string;
 }
 declare namespace Cloudflare {
 	interface Env extends __BaseEnv_CloudflareEnv {}

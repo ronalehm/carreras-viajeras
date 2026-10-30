@@ -13,8 +13,11 @@ export const config = {
   matcher: [
     "/crm/:path*",
     "/api/crm/:path*",
+    "/api/bookings/:path*",
     "/cuenta",
     "/cuenta/perfil/:path*",
     "/mis-carreras/:path*",
+    // Demo checkout reads the Clerk session to check the demo participant (bookings-stripe-checkout-demo B).
+    "/viajes/:slug/checkout",
   ],
 };

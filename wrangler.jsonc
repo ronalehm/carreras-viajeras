@@ -22,7 +22,14 @@
 	"vars": {
 		"APP_ORIGIN": "https://carreras-viajeras.mentec.dev",
 		// Public by design (Clerk production instance). CLERK_SECRET_KEY is a Cloudflare Secret, never here.
-		"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVudGVjLmRldiQ"
+		"NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsubWVudGVjLmRldiQ",
+		// Stripe Checkout (bookings-stripe-checkout-demo.md): public on/off flags, "false" by default.
+		// Turning them on needs its own authorized PR. STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are
+		// Cloudflare Secrets, never here.
+		"STRIPE_CHECKOUT_ENABLED": "false",
+		"STRIPE_DEMO_MODE": "false",
+		// Draft contracts (santiago-2027-v1) only in test/demo mode; never accepted in live mode.
+		"STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS": "false"
 	},
 	// Workers Logs, enabled from the dashboard; declared here so each deploy keeps them on.
 	"observability": {

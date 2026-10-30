@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import type { OfferView } from "../utils/catalogOffer";
 import type { TripLanding } from "../utils/catalogTrip";
 import { CampaignVisitBeacon } from "./CampaignVisitBeacon";
+import { CheckoutAccessLink } from "./CheckoutAccessLink";
 import {
   GENERAL_INQUIRY_MESSAGE,
   WHATSAPP_NUMBER,
@@ -22,6 +23,7 @@ type RaceRegistrationSectionProps = {
   attribution: LeadAttributionParams;
   standMode: boolean;
   offer: OfferView | null; // resolved by the server from the slug and ?c= only
+  checkoutHref?: string; // shown only if GET /api/bookings/checkout/access allows it
 };
 
 /**
@@ -35,6 +37,7 @@ export function RaceRegistrationSection({
   attribution,
   standMode,
   offer,
+  checkoutHref,
 }: RaceRegistrationSectionProps) {
   const whatsAppUrl = buildWhatsAppUrl(WHATSAPP_NUMBER, GENERAL_INQUIRY_MESSAGE);
   // Gate P-L: in production with the placeholder legal text the form is not shown.
@@ -60,6 +63,13 @@ export function RaceRegistrationSection({
             {trip.title}
           </h1>
           {form}
+          {checkoutHref && offer && (
+            <CheckoutAccessLink
+              href={checkoutHref}
+              description="Continúa con la oferta que estás viendo y confirma tu reserva en el checkout."
+              className="border-night/15"
+            />
+          )}
         </div>
       </section>
     );
@@ -144,6 +154,13 @@ export function RaceRegistrationSection({
               </p>
             </div>
             <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:bg-background lg:p-6">
+              {checkoutHref && offer && (
+                <CheckoutAccessLink
+                  href={checkoutHref}
+                  description="Confirma tu reserva con la oferta vigente en el checkout."
+                  className="mb-6"
+                />
+              )}
               {form}
             </div>
           </div>

@@ -15,6 +15,7 @@ Aplicación de Carreras Viajeras: sitio público, captación omnicanal y CRM de 
 | Identidad | Clerk (`@clerk/nextjs`); un solo proveedor. Roles y permisos en Neon |
 | Validación | Zod; Turnstile opcional en la captura pública |
 | Automatización | Outbox persistente en Neon, API privada y n8n Community local |
+| Pagos | Stripe Checkout de reservas, apagado por defecto; la demostración usa solo Stripe TEST (ver [Stripe Checkout (modo demo TEST)](#stripe-checkout-modo-demo-test)) |
 | Contacto inicial | WhatsApp Business App manual; API oficial posterior |
 
 No se utiliza D1 ni Hyperdrive. PostHog queda desactivado por defecto y Gemini es opcional, fuera de esta fase. Ya existen las tablas de staff (`profiles`, `staff_assignments`, `staff_invitations`), `/crm/acceso` (el `<SignIn>` de Clerk: iniciar sesión, crear cuenta, verificar el correo y recuperar la contraseña con código), `/crm` protegido y `GET /api/crm/me` (ver [Acceso al CRM](#acceso-al-crm)). El catálogo de viajes tiene su tabla `trips` (ya creada en `production`) y su contrato de lectura para la landing; su gestión en `/crm/viajes` está implementada en la Fase 2 de [`trips-catalog.md`](docs/specs/trips-catalog.md) (ver [Catálogo de viajes](#catálogo-de-viajes)); la migración `0004` le añade los campos de la landing por carrera (`/viajes/<slug>`, ver [`landing-race-pages.md`](docs/specs/landing-race-pages.md)). Las tablas de leads (`leads`, `lead_activities`) llegan con la migración `0002` ([`crm-leads-pipeline.md`](docs/specs/crm-leads-pipeline.md)), y la captura del formulario web y el outbox para n8n (`outbox_events`), con la migración `0005` ([`crm-leads-capture.md`](docs/specs/crm-leads-capture.md)). En `production` ya existen `trips` y las tablas de leads y reservas; faltan `0005` y `0006` (ver [Leads (CRM comercial)](#leads-crm-comercial)). Las organizaciones de colaboradores siguen pendientes de su spec.
@@ -42,8 +43,10 @@ Copiar `.env.example` a `.env.local` para Next.js y completar los valores **solo
 | `N8N_API_TOKEN` | Opcional. Token de la API privada para n8n (al menos 32 caracteres), solo servidor. Ver [Secretos de integraciones](#secretos-de-integraciones) |
 | `TURNSTILE_SECRET_KEY` | Opcional. Secret Key de Turnstile (antispam del formulario), solo servidor. Ver [Activar la protección antispam (Turnstile)](#activar-la-protección-antispam-turnstile) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Opcional. Site Key de Turnstile: es pública y se incrusta al compilar; solo en `.env.local` y en las variables de build |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Opcionales. Clave de Stripe y secreto del webhook, solo servidor: `.env.local` y Cloudflare **Secret**. En desarrollo, solo claves test |
+| `STRIPE_CHECKOUT_ENABLED`, `STRIPE_DEMO_MODE`, `STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS` | Interruptores de texto, `"false"` por defecto. En producción viven en `vars` de `wrangler.jsonc`. Ver [Stripe Checkout (modo demo TEST)](#stripe-checkout-modo-demo-test) |
 
-Las tres variables opcionales se validan solo cuando se usan: si faltan, el CRM y el acceso siguen funcionando, y compilar no las exige.
+Las variables opcionales se validan solo cuando se usan: si faltan, el CRM y el acceso siguen funcionando, y compilar no las exige.
 
 El origen previsto de producción es `https://carreras-viajeras.mentec.dev`. Para desarrollo, usar el origen local con las dos claves de la **instancia de desarrollo** de Clerk (admite localhost); las claves `pk_live_…`/`sk_live_…` son de la instancia de producción y solo sirven en el dominio previsto (ver [Ajustes de Clerk](#ajustes-de-clerk)). `getEnv()` exige `DATABASE_URL`, `CLERK_SECRET_KEY` y `APP_ORIGIN` y se valida al usarla en una petición; compilar no debe conectarse a Neon ni exigir secretos: un clon sin claves compila (sin clave publicable, las páginas no cargan el script de Clerk).
 
@@ -66,7 +69,7 @@ npm run build:worker
 
 `npm run preview` compila con `NODE_ENV=production` y ejecuta el Worker localmente: exige `APP_ORIGIN=https://carreras-viajeras.mentec.dev`, no localhost. Usarlo como smoke test local: antes de desplegar Clerk, comprueba además que `/crm/acceso` muestra el `<SignIn>` y que `GET /api/crm/me` sin sesión responde 401, no 500 (paso 5 de [Puesta en producción de Clerk](#puesta-en-producción-de-clerk)). El inicio de sesión completo con la instancia de producción de Clerk solo se valida en el dominio previsto. Solo `npm run dev`, en modo development, admite `http://localhost:3000` o `http://localhost:8787` como `APP_ORIGIN`. `npm run cf-typegen` regenera los tipos de bindings. El Worker conserva `ASSETS` y `WORKER_SELF_REFERENCE`; `workers.dev` y las URLs de preview remotas permanecen desactivadas. El dominio personalizado se activará solo después de autorizar el despliegue.
 
-Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay dieciocho migraciones (`0000`–`0017`) y todas se aplican a mano. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **actualización del 2026-10-29 (verificado por el usuario en `production`): también están aplicadas `0016_dusty_venom` y `0017_wild_moonstone`**, que se aplicaron con los números provisionales `0015` y `0016` (tabla `role_requests` con su índice y las cuatro columnas de baja de `profiles` con sus tres restricciones); `0015_client_email_kinds` (de `main`) es otra migración, con su propio procedimiento en dos bloques, y también está aplicada en `production`; **actualización del 2026-10-30 (verificado por el usuario en `production`): `0013_client_stage_emails` y `0015_client_email_kinds` también están aplicadas** (existen `client_emails` con la columna `kind` y el índice `client_emails_event_kind_uq`, sin el índice antiguo `client_emails_event_uq`, los valores `lead_source.runner_account` y `outbox_event_type.lead.owner_assigned`, y `leads_created_by_chk` admite `runner_account`). Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)) y `drizzle/0016_dusty_venom.sql` crea las solicitudes de rol (ya aplicada en `production`; en otras ramas, después de `0015`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 2 de `accounts-role-requests.md`; ver [Solicitudes del rol Admin (`0016`)](#solicitudes-del-rol-admin-0016)) y `drizzle/0017_wild_moonstone.sql` añade a `profiles` las columnas de baja de cuentas (ya aplicada en `production`; en otras ramas, después de `0016`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 3 de `accounts-role-requests.md`; ver [Desactivar y eliminar cuentas (`0017`)](#desactivar-y-eliminar-cuentas-0017)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
+Con `npm run db:generate`, Drizzle genera SQL revisable localmente sin conexión ni migraciones automáticas al iniciar o compilar. Hay veintidós migraciones (`0000`–`0021`) y todas se aplican a mano. `0018` y `0019` describen su procedimiento en la cabecera de su SQL; `0020` y `0021` (Stripe Checkout) se aplican, en ese orden y antes del merge, según el [procedimiento de la demo](#procedimiento-de-la-demo). Este README no registra el estado de `0018`–`0021` en `production`: comprobarlo con la consulta previa de ese procedimiento. **Estado verificado en `production` el 2026-10-29 (lista de tablas):** ya están aplicadas `0000`–`0004` y también la `0005` antigua de `main` (`0005_abnormal_gladiator`, el outbox del #8 que esta rama retira), así que en `production` **solo faltaban `0005_supreme_pepper_potts`, `0006` y `0007`, en ese orden y cada una en dos bloques**, y después `0008`, en un solo bloque, y `0009` (rama de Clerk); detrás van `0010`–`0014`, en orden y siguiendo sus secciones. **Actualización del 2026-10-29 (consulta del usuario en `production`):** existen `outbox_events` (`0005_supreme_pepper_potts`), `campaigns` (`0007`), `trip_offers` (`0008`) y `campaign_visit_days` (la migración de visitas, que se aplicó con el número provisional `0013` y en el merge pasó a ser `0014_cute_nebula`), verificada en `production` y en la rama de desarrollo (sus tres restricciones, la tabla vacía y los casos de rechazo). Como exige `0012` (su comprobación previa busca `cv_reconcile_rewards(text)`), `production` tiene aplicadas `0000`–`0012` y la `0014`; **actualización del 2026-10-29 (verificado por el usuario en `production`): también están aplicadas `0016_dusty_venom` y `0017_wild_moonstone`**, que se aplicaron con los números provisionales `0015` y `0016` (tabla `role_requests` con su índice y las cuatro columnas de baja de `profiles` con sus tres restricciones); `0015_client_email_kinds` (de `main`) es otra migración, con su propio procedimiento en dos bloques, y también está aplicada en `production`; **actualización del 2026-10-30 (verificado por el usuario en `production`): `0013_client_stage_emails` y `0015_client_email_kinds` también están aplicadas** (existen `client_emails` con la columna `kind` y el índice `client_emails_event_kind_uq`, sin el índice antiguo `client_emails_event_uq`, los valores `lead_source.runner_account` y `outbox_event_type.lead.owner_assigned`, y `leads_created_by_chk` admite `runner_account`). Antes de aplicar cualquier migración, confirma el estado con la comprobación previa de su sección. Las tablas `automation_events` y `automation_event_redrives` y el tipo `automation_event_status` que dejó esa `0005` antigua quedan huérfanos: el código ya no los usa y no estorban a las migraciones nuevas. Borrarlos es una operación aparte que exige comprobar antes que están vacíos y una autorización expresa. Las migraciones: `drizzle/0000_tough_thor.sql` crea las tablas de staff (ya aplicada en `production`; ver [Migración de las tablas de staff](#migración-de-las-tablas-de-staff)), `drizzle/0001_young_korvac.sql` crea la tabla de viajes (ya aplicada en `production`; ver [Migración de la tabla de viajes](#migración-de-la-tabla-de-viajes)), `drizzle/0002_tough_warpath.sql` crea las tablas de leads (ya aplicada en `production`; ver [Migración de la tabla de leads](#migración-de-la-tabla-de-leads)), `drizzle/0003_talented_skin.sql` crea las tablas de reservas (ya aplicada en `production`; ver [Migración de las tablas de reservas](#migración-de-las-tablas-de-reservas)), `drizzle/0004_sloppy_bushwacker.sql` añade a `trips` los campos de la landing por carrera (ya aplicada en `production`; ver [Migración de los campos de carrera](#migración-de-los-campos-de-carrera)), `drizzle/0005_supreme_pepper_potts.sql` prepara la captura y el outbox (pendiente, después de `0004` y **en dos bloques**; ver [Migración de captura y outbox](#migración-de-captura-y-outbox)) y `drizzle/0006_flashy_bastion.sql` añade el origen de los leads, el seguimiento con baja y el vínculo reserva ↔ lead (pendiente, después de `0005` y **en dos bloques**; ver [Migración de origen, seguimiento y reservas (`0006`)](#migración-de-origen-seguimiento-y-reservas-0006)) y `drizzle/0007_awesome_dust.sql` añade las campañas, el consentimiento de promociones y el registro repetido (número provisional hasta el turno de merge; pendiente, después de `0006` y **en dos bloques**; ver [Migración de campañas y registro](#migración-de-campañas-y-registro)) y `drizzle/0008_moaning_roulette.sql` crea las ofertas comerciales versionadas y el tipo de cambio (número provisional hasta el turno de merge; pendiente, después de `0007` y **en un solo bloque** y tal cual; ver [Migración de ofertas comerciales (`0008`)](#migración-de-ofertas-comerciales-0008)) y `drizzle/0009_chilly_patriot.sql` añade los roles `super_admin` y `organizer` y `trips.organizer_id` (pendiente, después de `0008` y **antes** de desplegar el código de la Fase 3 de `accounts-clerk-rbac.md`; ver [Migración de roles y organizador](#migración-de-roles-y-organizador-0009)), `drizzle/0010_runner_profiles_sponsors.sql` crea los perfiles de corredor y las marcas patrocinadoras y añade el rol `sponsor` (pendiente, después de `0009`; ver [Migración incremental de la integración](#migración-incremental-de-la-integración)), `drizzle/0011_runner_rewards_content.sql` y `drizzle/0012_reward_operations.sql` añaden las recompensas y el contenido público (pendientes, después de `0010` y cada una en su propia transacción; ver [Mi cuenta, recompensas y noticias](#mi-cuenta-recompensas-y-noticias)) y `drizzle/0014_cute_nebula.sql` crea el contador de visitas por campaña (número provisional hasta el turno de merge; pendiente, después de `0012` y **en un solo bloque**; ver [Migración de visitas por campaña (`0013`)](#migración-de-visitas-por-campaña-0014)) y `drizzle/0016_dusty_venom.sql` crea las solicitudes de rol (ya aplicada en `production`; en otras ramas, después de `0015`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 2 de `accounts-role-requests.md`; ver [Solicitudes del rol Admin (`0016`)](#solicitudes-del-rol-admin-0016)) y `drizzle/0017_wild_moonstone.sql` añade a `profiles` las columnas de baja de cuentas (ya aplicada en `production`; en otras ramas, después de `0016`, **en un solo bloque** y **antes** del merge o despliegue de la Fase 3 de `accounts-role-requests.md`; ver [Desactivar y eliminar cuentas (`0017`)](#desactivar-y-eliminar-cuentas-0017)). `DATABASE_MIGRATION_URL` es la credencial administrativa para operaciones manuales (psql y `scripts/sql/`); es distinta de `DATABASE_URL` y nunca se entrega al Worker ni a n8n. La configuración de generación no consume esa credencial. No modificar tablas internas de `neon_auth`. No aplicar migraciones contra `production` como parte del setup; antes se requiere revisión y autorización de la operación remota.
 
 ### Caché estática en Workers Free
 
@@ -88,7 +91,7 @@ Workers Free limita cada petición a 10 ms de CPU, y renderizar una página en e
 
 1. Neon ya tiene proyecto `carreras-viajeras`, rama `production`, región AWS São Paulo y base `neondb`. La identidad la da Clerk; los ajustes están en [Ajustes de Clerk](#ajustes-de-clerk) y el paso desde Neon Auth en [Puesta en producción de Clerk](#puesta-en-producción-de-clerk).
 2. Clerk tiene una instancia de desarrollo (localhost) y otra de producción para `https://carreras-viajeras.mentec.dev`.
-3. `DATABASE_URL`, `CLERK_SECRET_KEY` y, cuando se usen, `N8N_API_TOKEN` y `TURNSTILE_SECRET_KEY` (ver [Secretos de integraciones](#secretos-de-integraciones)) se cargan en Cloudflare como **Secret** (nunca como texto). `APP_ORIGIN` y `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` no son secretos y viven en `vars` de `wrangler.jsonc`: cada despliegue automático ejecuta `wrangler deploy`, que borra las variables de texto creadas en el panel y no declaradas ahí. Por eso aparecen en el panel como variables de texto: no borrarlas ni duplicarlas como Secret; se cambian en `wrangler.jsonc`. La clave publicable también es **variable de build** de Workers Builds, porque se incrusta al compilar. Nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
+3. `DATABASE_URL`, `CLERK_SECRET_KEY` y, cuando se usen, `N8N_API_TOKEN`, `TURNSTILE_SECRET_KEY` (ver [Secretos de integraciones](#secretos-de-integraciones)), `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET` (ver [Stripe Checkout (modo demo TEST)](#stripe-checkout-modo-demo-test)) se cargan en Cloudflare como **Secret** (nunca como texto). `APP_ORIGIN`, `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` y los interruptores `STRIPE_CHECKOUT_ENABLED` y `STRIPE_DEMO_MODE` no son secretos y viven en `vars` de `wrangler.jsonc`: cada despliegue automático ejecuta `wrangler deploy`, que borra las variables de texto creadas en el panel y no declaradas ahí. Por eso aparecen en el panel como variables de texto: no borrarlas ni duplicarlas como Secret; se cambian en `wrangler.jsonc`. La clave publicable también es **variable de build** de Workers Builds, porque se incrusta al compilar. Nunca poner credenciales en `wrangler.jsonc`, variables `NEXT_PUBLIC_*` ni el repositorio.
 4. El CRM exige correo verificado y una asignación de staff activa por ID de usuario, con denegación por defecto (ver [Acceso al CRM](#acceso-al-crm)); Access puede ser una defensa adicional.
 5. Revisar el PR y pedir autorización antes de push, merge, despliegue, DNS, migraciones remotas o asignación de roles. `npm run deploy` modifica Cloudflare y no forma parte de estas comprobaciones locales.
 
@@ -1651,6 +1654,354 @@ El CRM no permite cambiar la cuenta vinculada. Si el equipo escribió mal el cor
   ```
 
 Si el correo nuevo ya tiene otra reserva no cancelada en ese viaje, el `UPDATE` falla por `bookings_trip_email_active_uq`: revisar cuál de las dos es la buena y cancelar la otra desde el CRM. El cambio se aplica en la siguiente petición: la cuenta anterior deja de ver la reserva, porque la autorización se lee de la base en cada carga. No se tocan tablas de `neon_auth` ni filas de `profiles` o `staff_*`.
+
+## Stripe Checkout (modo demo TEST)
+
+Especificado en [`bookings-stripe-checkout-production.md`](docs/specs/bookings-stripe-checkout-production.md) y su enmienda [`bookings-stripe-checkout-demo.md`](docs/specs/bookings-stripe-checkout-demo.md). El corredor con correo verificado reserva desde la ficha de la carrera (`/viajes/<slug>/checkout`): elige pago total o anticipo, acepta la versión exacta del contrato y paga en Stripe Checkout, en PEN y a la tasa vigente. El webhook `POST <APP_ORIGIN>/api/webhooks/stripe` confirma la reserva y registra la liquidación (detalle en [`docs/stripe-sandbox-webhook.md`](docs/stripe-sandbox-webhook.md)).
+
+La demostración académica usa el sitio publicado con Stripe **solo en modo TEST**: nunca una clave `sk_live_`/`rk_live_` ni pagos reales. El modo **demo** exige `NODE_ENV=production`, `STRIPE_DEMO_MODE="true"`, una clave `sk_test_`/`rk_test_`, el secreto del webhook, el `APP_ORIGIN` de producción y `STRIPE_CHECKOUT_ENABLED="true"`. Además, solo lo usan las **cuentas de demostración activas** (ver [Participantes de la demo](#participantes-de-la-demo)), y lo que crea queda marcado como simulado: `bookings.is_simulated = true` y `stripe_mode = 'test'` en intentos y liquidaciones. Las reservas simuladas no consumen cupos, no bloquean una reserva real con el mismo correo, no suman en los totales del CRM y no emiten eventos comerciales a n8n. El camino live sigue en el código, pero esta demo no lo configura ni lo habilita.
+
+### Estado (2026-10-30)
+
+- **Implementado en la rama `claude/blissful-davinci-pfjo58` (PR #53), sin mergear:**
+  - webhook propio en `modules/booking-checkout` y retirada de `modules/stripe-demo` (Fase 1);
+  - puertas por configuración, intentos vencidos, `expires_at` recalculado y errores `{ code, requestId }` (Fase 2);
+  - migración `0021` y `lib/db-schema.ts` (tarea 3.3);
+  - modo demo en `getStripeCheckoutConfig()`, participantes, `is_simulated`/`stripe_mode`, cupos omitidos, metadata `environment=demo`/`simulated=true` y cotejo de `stripe_mode` con `livemode` en el webhook (D.1–D.3);
+  - textos y estados del checkout y de la ficha, con el botón decidido por petición mediante `GET /api/bookings/checkout/access` (3.1); saldo común del portal y del CRM (3.2); distintivo "SIMULADA", exclusión de totales, sección "Demo de checkout" en `/crm/contratos` y sin avance de lead ni outbox comercial para reservas simuladas (D.4); esta sección (D.5 y 4.3).
+- **Pendiente:**
+  - prueba funcional en modo test con Clerk y Neon de desarrollo (4.2);
+  - el fallo de Workers Builds en las ramas, que necesita el log de Cloudflare (bloqueo 2 de la spec demo);
+  - todos los pasos del [procedimiento](#procedimiento-de-la-demo).
+- **Operaciones remotas:**
+  - **`0020` y `0021` aplicadas en `production` el 2026-10-30** (autorización del usuario: «Sí, apruebo la migración»), desde el SQL Editor de Neon. Verificado por el usuario en `production` con la consulta de verificación del paso 3.4 en una sola fila: 8 tablas, las columnas de `0020` y `0021`, el enum `stripe_mode` `{test,live}`, los índices parciales con `NOT is_simulated`, los índices nuevos, las FK renombradas, el check trivial eliminado y 0 reservas simuladas. Ambas son compatibles con el código de `main`; el siguiente paso es el merge (paso 7).
+  - **SQL Editor de Neon:** la rama se elige en el **primer** selector de la barra superior; "Primary" es el *compute*, no la rama. Antes de cada *Run*, comprobar la rama y que no haya texto seleccionado (si lo hay, solo se ejecuta la selección). Sin `BEGIN;`/`COMMIT;`, el editor ejecuta las instrucciones una a una y un fallo deja la migración a medias: en `production` hay que usar una transacción.
+  - No consta que haya secretos de Stripe cargados en Cloudflare ni un endpoint registrado en Stripe. Cada operación productiva necesita su propio «Sí, apruebo».
+- **Fuera de la demo:** las puertas del go-live live de la spec base (elegibilidad de la cuenta Stripe, contrato aprobado por legal y comercial, obligaciones fiscales) siguen abiertas. La demo no las resuelve.
+
+### Variables
+
+| Nombre | Tipo | Valor en producción (demo) | Dónde se configura |
+|---|---|---|---|
+| `STRIPE_SECRET_KEY` | **Secret** | Clave restringida `rk_test_…` (o `sk_test_…`) de la cuenta Stripe en modo test | Cloudflare → Worker `carreras-viajeras` → Settings → Variables and Secrets, tipo **Secret** (o `npx wrangler secret put STRIPE_SECRET_KEY`). En local, `.env.local` |
+| `STRIPE_WEBHOOK_SECRET` | **Secret** | `whsec_…` del endpoint **test** `https://carreras-viajeras.mentec.dev/api/webhooks/stripe`, exclusivo de ese endpoint | Igual que la anterior. En local, el secreto de `stripe listen` |
+| `STRIPE_CHECKOUT_ENABLED` | var de texto | `"false"` hasta la activación; `"true"` durante la demo | `vars` de `wrangler.jsonc`, con un PR |
+| `STRIPE_DEMO_MODE` | var de texto | `"false"` hasta la activación; `"true"` durante la demo | `vars` de `wrangler.jsonc`, con un PR |
+| `STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS` | var de texto | Ausente o `"false"`. `"true"` solo si la demo usa el borrador `santiago-2027-v1` | `vars` de `wrangler.jsonc`, declarada en `"false"`; se pone en `"true"` en el PR de activación |
+| `APP_ORIGIN` | var de texto | `https://carreras-viajeras.mentec.dev` (sin cambios) | `vars` de `wrangler.jsonc` |
+| `STRIPE_CHECKOUT_ORIGIN` | — | **No se usa.** Las URLs de retorno salen de `APP_ORIGIN`. No crearla en Cloudflare | — |
+
+- Los Secrets nunca van en `wrangler.jsonc`, en variables `NEXT_PUBLIC_*` ni en el repositorio. Las vars de texto sí van en `wrangler.jsonc`: cada despliegue borra las variables de texto creadas en el panel que no estén declaradas ahí.
+- Modo resultante:
+
+  | Entorno | Clave | Modo |
+  |---|---|---|
+  | Desarrollo (`NODE_ENV≠production`) | test | `test` |
+  | Producción, `STRIPE_DEMO_MODE` ausente o `"false"` | live | `live` (no se usa en la demo) |
+  | Producción, `STRIPE_DEMO_MODE="true"` | test | `demo` |
+  | Producción, `STRIPE_DEMO_MODE="true"` | live | **apagado**, también el webhook (`demo_requires_test_key`) |
+  | Producción, `STRIPE_DEMO_MODE` ausente o `"false"` | test | **apagado**, también el webhook |
+
+- El webhook funciona aunque `STRIPE_CHECKOUT_ENABLED` sea `"false"`, siempre que el modo de la clave esté admitido. En producción, una clave test solo se admite con `STRIPE_DEMO_MODE="true"`.
+- `/crm/contratos` muestra el modo efectivo ("Checkout: apagado", "demo (Stripe TEST)", "test" o "live"), sin motivos ni valores. Si queda apagado por una configuración incompleta, Workers Logs registra una vez por proceso `stripe-checkout: disabled` con el motivo (`missing_webhook_secret`, `demo_requires_test_key`…), nunca con valores.
+- El borrador `santiago-2027-v1` solo se acepta en modo test o demo, con `STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS="true"` y si su texto empieza por `BORRADOR DE PRUEBA SANDBOX`. En modo live solo valen versiones aprobadas.
+
+### Participantes de la demo
+
+En `/crm/contratos`, sección **Demo de checkout** (permiso `offers.manage`: `admin` y `super_admin`):
+
+- **Alta:** se escribe el correo primario verificado de la cuenta Clerk. La persona debe haber iniciado sesión una vez en el sitio, porque se busca en `profiles`. Solo se guarda su `userId`, con la nota, quién dio el alta (la sesión, nunca el formulario) y cuándo. Una cuenta desactivada o eliminada no se puede dar de alta, y si dos cuentas comparten el correo no se da de alta ninguna.
+- **Baja:** fija `revoked_at`. Desde la siguiente petición, esa cuenta recibe 404 en el checkout y no ve el botón.
+- **Alta de nuevo:** sobre una fila dada de baja, borra `revoked_at` y registra el nuevo responsable y la nueva fecha.
+
+La lista solo tiene efecto con el modo demo activo. La autorización se lee en Neon en cada petición; metadata, cookies y formularios no la conceden. Consulta de solo lectura:
+
+```sql
+SELECT p.email, d.note, g.email AS alta_por, d.granted_at, d.revoked_at
+FROM checkout_demo_participants d
+JOIN profiles p ON p.user_id = d.user_id
+JOIN profiles g ON g.user_id = d.granted_by
+ORDER BY d.revoked_at IS NOT NULL, d.granted_at DESC;
+```
+
+### Procedimiento de la demo
+
+El orden es obligatorio. Cada «Sí, apruebo» es una autorización independiente del usuario para ese paso; la de uno no autoriza los demás. Ningún agente aplica SQL en `production`, hace merge, carga secretos ni activa flags por su cuenta.
+
+1. **Código.** Terminar las tareas pendientes de las dos specs, con lint, Vitest, typegen, `tsc`, `npm run build:worker` y revisión.
+2. **Workers Builds.** Diagnosticar y corregir el fallo actual de las builds de rama. Hace falta el texto del error del panel de Cloudflare o un token de solo lectura (bloqueo 2 de la spec).
+3. **Ensayo en una rama Neon desechable** creada desde `production` (Neon → Branches → Create branch, padre `production`). Su URL de conexión se usa solo en tu equipo, como `REHEARSAL_URL`.
+   1. Comprobación previa. Debe devolver `t` en las cuatro columnas; si no, detenerse:
+
+      ```sql
+      SELECT to_regclass('public.welcome_discount_codes') IS NOT NULL AS hay_0019,
+             'lead.cadence_due' = ANY (enum_range(NULL::outbox_event_type)::text[]) AS hay_0018,
+             to_regclass('public.booking_checkout_attempts') IS NULL AS falta_0020,
+             to_regtype('public.stripe_mode') IS NULL AS falta_0021;
+      ```
+
+   2. Guardar el estado de `neon_auth`: `SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema = 'neon_auth' ORDER BY 1, 2;`.
+   3. Aplicar 0020 y después 0021, cada una en su propia transacción. `-1` la envuelve en `BEGIN; … COMMIT;` y cualquier error la revierte entera:
+
+      ```sh
+      psql "$REHEARSAL_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0020_stripe_booking_checkout.sql
+      psql "$REHEARSAL_URL" -1 -v ON_ERROR_STOP=1 -f drizzle/0021_stripe_checkout_demo.sql
+      ```
+
+      Alternativa: en el SQL Editor de Neon, con la rama correcta en el **primer** selector ("Primary" es el *compute*, no la rama) y sin texto seleccionado, pegar cada archivo entre `BEGIN;` y `COMMIT;`. Sin la transacción, un fallo deja la migración a medias. Las líneas `--> statement-breakpoint` son comentarios. No usar `drizzle-kit migrate` ni insertar historial ficticio.
+   4. Consultas de verificación, todas de solo lectura:
+
+      ```sql
+      -- 1. Tablas de la 0020 y la 0021: 8 filas, todas con existe = t.
+      SELECT tabla, to_regclass('public.' || tabla) IS NOT NULL AS existe
+      FROM unnest(ARRAY[
+        'booking_checkout_attempts', 'booking_contract_acceptances', 'booking_stripe_event_receipts',
+        'booking_stripe_settlements', 'contract_versions', 'offer_capacity_counters',
+        'offer_capacity_allocations', 'checkout_demo_participants'
+      ]) AS tabla;
+
+      -- 2. Columnas de la 0021: 3 filas con is_nullable = NO y DEFAULT false o 'test'::stripe_mode.
+      SELECT table_name, column_name, udt_name, is_nullable, column_default
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND (table_name, column_name) IN (('bookings', 'is_simulated'),
+             ('booking_checkout_attempts', 'stripe_mode'), ('booking_stripe_settlements', 'stripe_mode'))
+      ORDER BY 1;
+
+      -- 3. Las 14 columnas de checkout de la 0020 en bookings: 14.
+      SELECT count(*) AS columnas_checkout
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'bookings' AND column_name IN (
+        'offer_version_id', 'offer_version', 'offer_campaign_id', 'offer_terms_version', 'offer_conditions_snapshot',
+        'trip_includes_snapshot', 'trip_excludes_snapshot', 'initial_payment_usd', 'checkout_rate_id',
+        'checkout_rate_usd_pen', 'checkout_amount_pen_cents', 'checkout_request_id', 'checkout_input_hash',
+        'reservation_expires_at');
+
+      -- 4. Enum nuevo: {test,live}.
+      SELECT enum_range(NULL::stripe_mode) AS stripe_mode;
+
+      -- 5. Índices: 4 filas. bookings_trip_email_active_uq y bookings_lead_active_uq terminan en
+      --    WHERE ((status <> 'cancelled'::booking_status) AND (NOT is_simulated)).
+      SELECT indexname, indexdef
+      FROM pg_indexes
+      WHERE schemaname = 'public' AND indexname IN ('bookings_trip_email_active_uq', 'bookings_lead_active_uq',
+        'booking_stripe_settlements_booking_idx', 'booking_checkout_attempts_active_uq')
+      ORDER BY 1;
+
+      -- 6. FK hacia booking_checkout_attempts, ya renombradas: exactamente
+      --    booking_stripe_event_receipts_attempt_id_fk y booking_stripe_settlements_attempt_id_fk.
+      SELECT conrelid::regclass AS tabla, conname
+      FROM pg_constraint
+      WHERE contype = 'f' AND confrelid = 'public.booking_checkout_attempts'::regclass
+      ORDER BY 1, 2;
+
+      -- 7. checkout_demo_participants: la PK y sus dos FK hacia profiles (3 filas).
+      SELECT conname, contype
+      FROM pg_constraint
+      WHERE conrelid = 'public.checkout_demo_participants'::regclass
+      ORDER BY 1;
+
+      -- 8. Check trivial eliminado: 0.
+      SELECT count(*) AS check_trivial
+      FROM pg_constraint
+      WHERE conrelid = 'public.bookings'::regclass AND conname = 'bookings_created_by_or_runner_chk';
+
+      -- 9. Sin datos de Stripe ni simulados todavía: todo 0.
+      SELECT
+        (SELECT count(*) FROM bookings WHERE is_simulated) AS reservas_simuladas,
+        (SELECT count(*) FROM booking_checkout_attempts) AS intentos,
+        (SELECT count(*) FROM booking_stripe_settlements) AS liquidaciones,
+        (SELECT count(*) FROM booking_stripe_event_receipts) AS recibos,
+        (SELECT count(*) FROM checkout_demo_participants) AS participantes_demo;
+      ```
+
+   5. Repetir la consulta de `neon_auth` y comparar: la salida debe ser idéntica.
+   6. Arrancar la app contra la rama sin desplegar: `npm run preview` con `DATABASE_URL` de la rama en `.dev.vars`. La preview usa la instancia de producción de Clerk y solo acredita que el Worker arranca y que las páginas sin sesión no fallan. Para las pantallas con sesión (`/mis-carreras`, CRM de reservas, `/crm/admin/usuarios` y `/crm/contratos`), usar `npm run dev` con la instancia de desarrollo de Clerk contra la misma rama.
+   7. Borrar la rama de ensayo al terminar.
+4. **«Sí, apruebo» (migración).** Los mismos pasos 3.1 a 3.5 en `production`, con `DATABASE_MIGRATION_URL` desde el equipo del usuario. Esa credencial no se guarda en entornos de agente. Registrar en este README la fecha y el resultado de las consultas de verificación.
+5. **Stripe TEST**, en el Dashboard del usuario con el interruptor de modo test activado:
+   1. Clave restringida `rk_test_` con estos permisos: Checkout Sessions (escritura) y PaymentIntents, Charges y Events (lectura).
+   2. Endpoint `https://carreras-viajeras.mentec.dev/api/webhooks/stripe` en **modo test** con los eventos `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `payment_intent.succeeded`, `charge.refunded` y `charge.dispute.created`. Su `whsec_` es exclusivo de ese endpoint.
+6. **Cloudflare.**
+   1. Cargar `STRIPE_SECRET_KEY` y `STRIPE_WEBHOOK_SECRET` como **Secret**, desde el panel o con `npx wrangler secret put <NOMBRE>` (pide el valor sin mostrarlo). No pegarlos en un chat.
+   2. `wrangler.jsonc` ya declara `"STRIPE_CHECKOUT_ENABLED": "false"` y `"STRIPE_DEMO_MODE": "false"`.
+7. **«Sí, apruebo» (merge).** Workers Builds despliega con el checkout apagado. Verificar:
+   - `/api/health` responde 200;
+   - el login de Clerk, `/mis-carreras` y el CRM de reservas funcionan;
+   - `/crm/contratos` muestra "Checkout: apagado";
+   - el checkout responde 404: `curl -s -o /dev/null -w '%{http_code}\n' -X POST https://carreras-viajeras.mentec.dev/api/bookings/checkout/prepare` devuelve `404`, y `/viajes/maraton-santiago-2027/checkout` muestra la página de no encontrado.
+8. **Contenido y cuentas.**
+   1. En `/crm/contratos`, crear el borrador `santiago-2027-v1` con el texto de [`docs/contracts/santiago-2027-v1.md`](docs/contracts/santiago-2027-v1.md), que empieza por `BORRADOR DE PRUEBA SANDBOX`. **No aprobarlo:** una versión aprobada es inmutable y quedaría como contrato real. No se copian filas de la rama `dev-stripe`. Comprobar que la oferta vigente de la carrera usa esa versión:
+
+      ```sql
+      SELECT t.slug, o.version, o.status, o.terms_version
+      FROM trip_offers o JOIN trips t ON t.id = o.trip_id
+      WHERE t.slug = 'maraton-santiago-2027'
+      ORDER BY o.version DESC;
+      ```
+
+   2. Dar de alta las cuentas de demostración (ver [Participantes de la demo](#participantes-de-la-demo)).
+   3. "Send test event" desde el endpoint del Dashboard. **Con `STRIPE_DEMO_MODE="false"`, el código responde 503 `webhook_unavailable`** y registra `stripe-webhook: not configured`, porque en producción una clave test solo se admite en modo demo. Esa respuesta confirma que el evento llega firmado al Worker, pero no es el 200 `ignored` que prevé la spec. El 200 `ignored` se comprueba tras el paso 9. Comprobarlo antes requiere un PR intermedio solo con `STRIPE_DEMO_MODE: "true"` (webhook activo y checkout apagado), que la spec no prevé y necesitaría su propia aprobación.
+9. **«Sí, apruebo» (activación).** PR con `"STRIPE_DEMO_MODE": "true"` y `"STRIPE_CHECKOUT_ENABLED": "true"`, y, para usar el borrador, `"STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS": "true"`, seguido de su merge. Tras el despliegue, `/crm/contratos` debe mostrar "Checkout: demo (Stripe TEST)". Si muestra "apagado", buscar `stripe-checkout: disabled` en Workers Logs.
+10. **Validación final del flujo:**
+    1. Abrir el sitio publicado.
+    2. Iniciar sesión en Clerk con una cuenta demo activa.
+    3. Abrir la ficha del Maratón Santiago 2027: debe verse el botón del checkout. Con una cuenta que no es participante, no se ve.
+    4. Preparar la reserva: el checkout muestra el distintivo "SIMULADA".
+    5. Ir al Checkout de Stripe en modo TEST: el producto se describe como "SIMULACIÓN – sin cargo real".
+    6. Pagar el anticipo de US$300, cobrado en PEN a la tasa vigente (S/1.035 a 3,4500), con la tarjeta `4242 4242 4242 4242`, cualquier fecha futura y cualquier CVC.
+    7. Ver el pago en el Dashboard en modo test.
+    8. Ver el evento entregado con 200 en el endpoint del Dashboard.
+    9. En Neon, de solo lectura: la reserva `confirmed` con `is_simulated = t`, la liquidación `applied` con `stripe_mode = test` y un saldo de US$10.700:
+
+       ```sql
+       SELECT b.id, b.status, b.is_simulated, b.total_usd, s.status AS liquidacion, s.stripe_mode, s.amount_usd,
+              b.total_usd
+                - coalesce((SELECT sum(x.amount_usd) FROM booking_stripe_settlements x
+                            WHERE x.booking_id = b.id AND x.status = 'applied'), 0)
+                - coalesce((SELECT sum(p.amount_usd) FROM booking_payments p
+                            WHERE p.booking_id = b.id AND p.voided_at IS NULL), 0) AS saldo_usd
+       FROM bookings b JOIN booking_stripe_settlements s ON s.booking_id = b.id
+       WHERE b.is_simulated
+       ORDER BY b.created_at DESC
+       LIMIT 5;
+       ```
+
+    10. El evento tiene `livemode=false` y el Dashboard en modo live no muestra ningún cargo.
+
+    Registrar las evidencias redactadas: ids de evento y de sesión, estados y saldos. Sin secretos, correos ni otros datos personales.
+11. **Desactivación.** PR con `"STRIPE_CHECKOUT_ENABLED": "false"` y `"STRIPE_DEMO_MODE": "false"`, quitando también `STRIPE_CHECKOUT_SANDBOX_DRAFT_CONTRACTS` o dejándola en `"false"`. Después:
+    - comprobar "Checkout: apagado" y el 404;
+    - desactivar el endpoint test en el Dashboard y revocar la clave `rk_test_`;
+    - dar de baja a los participantes;
+    - si se desea, borrar los Secrets con `npx wrangler secret delete <NOMBRE>`.
+
+    La [limpieza de las filas simuladas](#limpieza-de-reservas-simuladas) es una operación aparte y solo se hace con autorización.
+
+### Limpieza de reservas simuladas
+
+Manual, revisable y solo con autorización expresa. Nada la ejecuta automáticamente. Primero se ensaya en una rama desechable de `production` y después se aplica en `production`.
+
+- **Precondición:** el checkout está desactivado (paso 11) y desplegado, así que no se crean reservas simuladas nuevas.
+- **No se borran:**
+  - los leads vinculados (`bookings.lead_id`);
+  - el borrador del contrato;
+  - los contadores de cupo, que las reservas simuladas no tocan;
+  - los participantes, que quedan dados de baja como registro.
+
+Se ejecuta en una sesión interactiva, `psql "$DATABASE_MIGRATION_URL" -v ON_ERROR_STOP=1`. El SQL Editor ejecuta todo de una vez y no permite revisar antes de decidir. Se pega el bloque, se revisan los conteos y se termina con `COMMIT;` o `ROLLBACK;`:
+
+```sql
+BEGIN;
+
+-- A. Reservas simuladas (bloqueadas hasta el final) y sus intentos.
+CREATE TEMP TABLE simulated_bookings ON COMMIT DROP AS
+  SELECT id FROM bookings WHERE is_simulated FOR UPDATE;
+CREATE TEMP TABLE simulated_attempts ON COMMIT DROP AS
+  SELECT id, stripe_session_id FROM booking_checkout_attempts
+  WHERE booking_id IN (SELECT id FROM simulated_bookings);
+
+-- B. Conteos previos: anotarlos. eventos_outbox debe ser 0 (las simuladas no emiten outbox comercial);
+--    si no lo es, revisar esos eventos en n8n antes de seguir. con_lead es informativo.
+SELECT
+  (SELECT count(*) FROM simulated_bookings) AS reservas,
+  (SELECT count(*) FROM simulated_attempts) AS intentos,
+  (SELECT count(*) FROM booking_stripe_settlements WHERE booking_id IN (SELECT id FROM simulated_bookings)) AS liquidaciones,
+  (SELECT count(*) FROM booking_stripe_event_receipts
+    WHERE attempt_id IN (SELECT id FROM simulated_attempts)
+       OR stripe_session_id IN (SELECT stripe_session_id FROM simulated_attempts)) AS recibos,
+  (SELECT count(*) FROM booking_contract_acceptances WHERE booking_id IN (SELECT id FROM simulated_bookings)) AS aceptaciones,
+  (SELECT count(*) FROM offer_capacity_allocations WHERE booking_id IN (SELECT id FROM simulated_bookings)) AS cupos,
+  (SELECT count(*) FROM itinerary_items WHERE booking_id IN (SELECT id FROM simulated_bookings)) AS hitos,
+  (SELECT count(*) FROM bookings WHERE id IN (SELECT id FROM simulated_bookings) AND lead_id IS NOT NULL) AS con_lead,
+  (SELECT count(*) FROM outbox_events o
+    WHERE EXISTS (SELECT 1 FROM simulated_bookings s WHERE o.payload::text LIKE '%' || s.id::text || '%')) AS eventos_outbox;
+
+-- C. Se detiene, y aborta la transacción, si algo ajeno a la demo depende de una reserva simulada.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM booking_checkout_attempts WHERE booking_id IN (SELECT id FROM simulated_bookings) AND stripe_mode <> 'test')
+    OR EXISTS (SELECT 1 FROM booking_stripe_settlements WHERE booking_id IN (SELECT id FROM simulated_bookings) AND stripe_mode <> 'test')
+    OR EXISTS (SELECT 1 FROM booking_payments WHERE booking_id IN (SELECT id FROM simulated_bookings))
+    OR EXISTS (SELECT 1 FROM booking_benefits WHERE booking_id IN (SELECT id FROM simulated_bookings))
+    OR EXISTS (SELECT 1 FROM reward_redemptions WHERE booking_id IN (SELECT id FROM simulated_bookings))
+    OR EXISTS (SELECT 1 FROM runner_referrals WHERE credited_booking_id IN (SELECT id FROM simulated_bookings))
+    OR EXISTS (SELECT 1 FROM welcome_discount_codes WHERE booking_id IN (SELECT id FROM simulated_bookings))
+  THEN
+    RAISE EXCEPTION 'Limpieza detenida: hay datos live, pagos manuales, beneficios, canjes, referidos o códigos ligados a reservas simuladas.';
+  END IF;
+END $$;
+
+-- D. Borrado, de dependientes a reservas. Cada DELETE informa sus filas: deben coincidir con B.
+DELETE FROM booking_stripe_event_receipts
+WHERE attempt_id IN (SELECT id FROM simulated_attempts)
+   OR stripe_session_id IN (SELECT stripe_session_id FROM simulated_attempts);
+DELETE FROM booking_stripe_settlements WHERE booking_id IN (SELECT id FROM simulated_bookings);
+DELETE FROM booking_checkout_attempts WHERE booking_id IN (SELECT id FROM simulated_bookings);
+DELETE FROM booking_contract_acceptances WHERE booking_id IN (SELECT id FROM simulated_bookings);
+DELETE FROM offer_capacity_allocations WHERE booking_id IN (SELECT id FROM simulated_bookings);
+DELETE FROM itinerary_items WHERE booking_id IN (SELECT id FROM simulated_bookings);
+DELETE FROM bookings WHERE id IN (SELECT id FROM simulated_bookings) AND is_simulated;
+
+-- E. Comprobación: todo 0.
+SELECT
+  (SELECT count(*) FROM bookings WHERE is_simulated) AS reservas_simuladas,
+  (SELECT count(*) FROM booking_checkout_attempts WHERE id IN (SELECT id FROM simulated_attempts)) AS intentos,
+  (SELECT count(*) FROM booking_stripe_settlements WHERE booking_id IN (SELECT id FROM simulated_bookings)) AS liquidaciones;
+
+-- Revisar: los DELETE coinciden con B y E es 0 → COMMIT;   cualquier diferencia → ROLLBACK;
+```
+
+Si el bloque C se detiene, no forzar el borrado: revisar cada dependencia con el equipo. Los recibos de eventos que Stripe envió sin intento local (`ignored`) no se pueden atribuir a una reserva y se conservan. No contienen datos personales.
+
+Ensayado el 2026-10-30 en un PostgreSQL 16 local desechable, con `0000`–`0021` aplicadas y una reserva simulada con intento, liquidación, dos recibos y aceptación, junto a una reserva real del mismo viaje y correo. Resultados:
+
+- borra solo lo simulado;
+- conserva la reserva real y el recibo ajeno;
+- un intento con `stripe_mode = 'live'` detiene la transacción sin borrar nada.
+
+### Operación
+
+- **Logs.** En Workers Logs, filtrar por `stripe-webhook:`. Las líneas llevan el id y el tipo del evento, el id del intento y de la reserva y el resultado, sin PII, importes ni payload:
+
+  | Mensaje | Nivel | Significado |
+  |---|---|---|
+  | `event processed` | info | Resultado `applied`, `expired`, `failed`, `ignored` o `duplicate` |
+  | `settlement needs review` | warn | Lleva `alert: true`: liquidación en `needs_review`. Hay que revisarla |
+  | `event failed` | error | Error al procesar o `livemode` distinto del modo. Respuesta 5xx (Stripe reintenta) o 400 `mode_mismatch` |
+  | `not configured` | error | Respuesta 503 `webhook_unavailable`: falta la clave o el secreto, o el modo de la clave no está admitido |
+
+  Los errores del checkout se registran como `booking checkout: request rejected` o `request failed`, con el mismo `requestId` que recibe el navegador.
+- **`needs_review`.** Hay tres causas:
+  - el importe o la moneda recibidos no coinciden con lo esperado;
+  - el pago llegó después del vencimiento de la reserva;
+  - un `charge.refunded` o `charge.dispute.created`.
+
+  No revierte la reserva ni cuenta como pagado. Para revisarla, buscar el PaymentIntent en el Dashboard y decidir con el equipo. No se registra una copia manual del pago, y cambiar estados en la base es una operación manual autorizada aparte. Pendientes, de solo lectura:
+
+  ```sql
+  SELECT s.id, s.booking_id, s.status, s.stripe_mode, s.payment_intent_id, s.expected_amount_pen_cents,
+         s.received_amount_pen_cents, s.currency, s.paid_at, b.status AS reserva, b.is_simulated
+  FROM booking_stripe_settlements s JOIN bookings b ON b.id = s.booking_id
+  WHERE s.status = 'needs_review'
+  ORDER BY s.recorded_at DESC;
+  ```
+
+- **Conciliación.** Comparar por día los pagos del Dashboard, en el modo que corresponda, con las liquidaciones. En la demo, todo es `test` y simulado, y el CRM lo lista aparte de los totales:
+
+  ```sql
+  SELECT s.stripe_mode, b.is_simulated, (s.paid_at AT TIME ZONE 'America/Lima')::date AS dia, s.status,
+         count(*) AS pagos, sum(s.received_amount_pen_cents) AS recibido_pen_cents, sum(s.amount_usd) AS usd
+  FROM booking_stripe_settlements s JOIN bookings b ON b.id = s.booking_id
+  GROUP BY 1, 2, 3, 4
+  ORDER BY 3 DESC, 1, 2, 4;
+  ```
+
+  Los últimos eventos recibidos: `SELECT event_id, event_type, outcome, received_at FROM booking_stripe_event_receipts ORDER BY received_at DESC LIMIT 20;`.
+- **Reversión.**
+  1. El paso inmediato es un PR con `STRIPE_CHECKOUT_ENABLED: "false"` y `STRIPE_DEMO_MODE: "false"`.
+  2. Si el código desplegado falla, volver a la versión anterior del Worker en Cloudflare → Worker → Deployments, o con `npx wrangler rollback`. El siguiente despliegue desde `main` deshace ese rollback, así que el PR con los flags en `"false"` se mergea igualmente.
+  3. No se borran tablas ni datos de pago. `0020` y `0021` son compatibles con el código anterior.
 
 ## Automatización (outbox y n8n)
 

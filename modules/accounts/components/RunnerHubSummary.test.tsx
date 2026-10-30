@@ -26,8 +26,8 @@ describe("RunnerHubSummary", () => {
 
   it("links each own race to its canonical detail and keeps cancelled distinct from finished", () => {
     const bookings: RunnerBookingSummary[] = [
-      { id: "own-1", status: "confirmed", trip },
-      { id: "own-2", status: "cancelled", trip: { ...trip, title: "Lima 2025", raceDate: "2025-10-12" } },
+      { id: "own-1", status: "confirmed", simulated: false, trip },
+      { id: "own-2", status: "cancelled", simulated: false, trip: { ...trip, title: "Lima 2025", raceDate: "2025-10-12" } },
     ];
     render(<RunnerHubSummary state={{ status: "ok", today: "2026-10-29", bookings }} />);
     expect(screen.getByRole("link", { name: "Ver mi reserva: Santiago 2027" }).getAttribute("href")).toBe("/mis-carreras?reserva=own-1");

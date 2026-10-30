@@ -89,6 +89,17 @@ export async function getPublishedTripBySlug(slug: string): Promise<PublicTrip |
   return trip ?? null;
 }
 
+// Checkout needs the trip's internal id in its authenticated server request. Keep it out of the
+// public catalog DTO and resolve it separately on the server-rendered checkout page.
+export async function getPublishedTripIdBySlug(slug: string): Promise<string | null> {
+  await connection();
+  const parsed = tripSlugSchema.safeParse(slug);
+  if (!parsed.success || parsed.data !== slug) return null;
+  const [trip] = await getDb().select({ id: trips.id }).from(trips)
+    .where(and(eq(trips.slug, slug), eq(trips.status, "published"))).limit(1);
+  return trip?.id ?? null;
+}
+
 // CRM list: archived trips last, then by race date and slug.
 export async function listTrips(scope: TripScope): Promise<Trip[]> {
   return getDb()

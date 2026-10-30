@@ -19,7 +19,8 @@ import { TripPageState } from "./TripPageContent";
 export function RacePageContent({ action }: { action: LeadCaptureAction }) {
   const { slug, query } = useTripPageParams();
   const standMode = firstParam(query.modo) === "stand";
-  const { data, status } = useCatalogTrip(slug, standMode ? null : (firstParam(query.c) ?? null));
+  const campaignCode = firstParam(query.c) ?? null;
+  const { data, status } = useCatalogTrip(slug, standMode ? null : campaignCode);
   const title = data?.trip.title;
 
   useEffect(() => {
@@ -36,6 +37,10 @@ export function RacePageContent({ action }: { action: LeadCaptureAction }) {
         attribution={attributionParams(query)}
         standMode={standMode}
         offer={standMode ? null : data.offer}
+        // Whether the link is shown is asked per request: this page is a static, cached shell.
+        checkoutHref={!standMode && data.offer
+          ? `/viajes/${slug}/checkout${campaignCode ? `?c=${encodeURIComponent(campaignCode)}` : ""}`
+          : undefined}
       />
     </>
   ) : (

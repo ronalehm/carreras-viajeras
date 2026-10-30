@@ -72,6 +72,7 @@ describe("addPayment", () => {
     expect(fake.queries).toHaveLength(1);
     const statement = normalize(fake.queries[0].sql);
     expect(statement).toContain("FOR UPDATE");
+    expect(statement).toContain("WHERE id = $1::uuid AND status <> 'cancelled' AND NOT is_simulated FOR UPDATE");
     expect(statement).toContain("ON CONFLICT (booking_id, request_key) DO UPDATE");
     expect(statement).toContain("booking_payments.voided_at IS NULL");
     expect(statement).toContain("booking_payments.recorded_by = EXCLUDED.recorded_by");
@@ -93,6 +94,11 @@ describe("addPayment", () => {
 
   it("returns not_found when the booking is missing or cancelled", async () => {
     useFakeDb([[]]);
+    await expect(addPayment(input, ACTOR)).resolves.toBe("not_found");
+  });
+
+  it("answers not_found for a simulated booking: the locked target is empty, so nothing is inserted", async () => {
+    useFakeDb([[{ added: false, booking_ok: false }]]);
     await expect(addPayment(input, ACTOR)).resolves.toBe("not_found");
   });
 });

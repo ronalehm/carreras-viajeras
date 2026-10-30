@@ -20,7 +20,8 @@ describe("WelcomeDiscountForm", () => {
     expect(screen.getByText("Cada cambio crea una versión nueva; los códigos ya emitidos conservan su importe y caducidad.")).toBeTruthy();
     fireEvent.change(amount(), { target: { value: "75" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
-    expect((await screen.findByRole("status")).textContent).toBe("Descuento de bienvenida guardado.");
+    // The live region renders empty before the action resolves; wait for its message, not its presence.
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Descuento de bienvenida guardado."));
     const data = action.mock.calls[0][1];
     expect(Object.fromEntries(data)).toEqual({ amountUsd: "75", validityDays: "30", active: "on" });
     expect(amount().value).toBe("75");

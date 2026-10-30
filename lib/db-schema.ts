@@ -935,6 +935,22 @@ export const bookings = pgTable(
     // At most one non-cancelled booking per lead (bookings_lead_active_uq).
     leadId: uuid("lead_id").references(() => leads.id, { onDelete: "restrict" }),
     status: bookingStatusEnum("status").notNull().default("pending"),
+    offerVersionId: uuid("offer_version_id").references(() => tripOffers.id, { onDelete: "restrict" }),
+    offerVersion: integer("offer_version"),
+    offerCampaignId: uuid("offer_campaign_id").references(() => campaigns.id, { onDelete: "restrict" }),
+    offerTermsVersion: text("offer_terms_version"),
+    offerConditionsSnapshot: text("offer_conditions_snapshot"),
+    tripIncludesSnapshot: text("trip_includes_snapshot").array(),
+    tripExcludesSnapshot: text("trip_excludes_snapshot").array(),
+    initialPaymentUsd: integer("initial_payment_usd"),
+    checkoutRateId: uuid("checkout_rate_id").references(() => exchangeRates.id, { onDelete: "restrict" }),
+    checkoutRateUsdPen: numeric("checkout_rate_usd_pen", { precision: 10, scale: 4 }),
+    checkoutAmountPenCents: integer("checkout_amount_pen_cents"),
+    checkoutRequestId: uuid("checkout_request_id"),
+    checkoutInputHash: text("checkout_input_hash"),
+    reservationExpiresAt: timestamp("reservation_expires_at", { withTimezone: true }),
+    // Demo checkout (Stripe TEST in production): kept apart from real bookings, capacity and totals.
+    isSimulated: boolean("is_simulated").notNull().default(false),
     packageLabel: text("package_label").notNull(),
     distance: text("distance"),
     totalUsd: integer("total_usd").notNull(),
@@ -951,14 +967,16 @@ export const bookings = pgTable(
       .defaultNow(),
   },
   (table) => [
+    unique("bookings_checkout_request_uq").on(table.checkoutRequestId),
     // Target of the itinerary_items (booking_id, trip_id) composite FK.
     unique("bookings_id_trip_uq").on(table.id, table.tripId),
+    // Simulated bookings never block a real booking with the same email.
     uniqueIndex("bookings_trip_email_active_uq")
       .on(table.tripId, table.participantEmail)
-      .where(sql`${table.status} <> 'cancelled'`),
+      .where(sql`${table.status} <> 'cancelled' AND NOT ${table.isSimulated}`),
     uniqueIndex("bookings_lead_active_uq")
       .on(table.leadId)
-      .where(sql`${table.status} <> 'cancelled'`),
+      .where(sql`${table.status} <> 'cancelled' AND NOT ${table.isSimulated}`),
     index("bookings_runner_user_idx").on(table.runnerUserId),
     index("bookings_unlinked_email_idx")
       .on(table.participantEmail)
@@ -974,6 +992,10 @@ export const bookings = pgTable(
     check("bookings_package_label_chk", sql`char_length(${table.packageLabel}) BETWEEN 1 AND 80`),
     check("bookings_distance_chk", sql`${table.distance} IS NULL OR char_length(${table.distance}) <= 20`),
     check("bookings_total_usd_chk", sql`${table.totalUsd} >= 0`),
+    check(
+      "bookings_checkout_snapshot_chk",
+      sql`(${table.offerVersionId} IS NULL) = (${table.offerVersion} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.offerTermsVersion} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.offerConditionsSnapshot} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.tripIncludesSnapshot} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.tripExcludesSnapshot} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.initialPaymentUsd} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.checkoutInputHash} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.reservationExpiresAt} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.checkoutRateId} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.checkoutRateUsdPen} IS NULL) AND (${table.offerVersionId} IS NULL) = (${table.checkoutAmountPenCents} IS NULL) AND (${table.initialPaymentUsd} IS NULL OR ${table.initialPaymentUsd} BETWEEN 1 AND ${table.totalUsd}) AND (${table.checkoutInputHash} IS NULL OR ${table.checkoutInputHash} ~ '^[a-f0-9]{64}$') AND (${table.checkoutRateUsdPen} IS NULL OR ${table.checkoutRateUsdPen} > 0) AND (${table.checkoutAmountPenCents} IS NULL OR ${table.checkoutAmountPenCents} > 0)`,
+    ),
     check(
       "bookings_internal_note_chk",
       sql`${table.internalNote} IS NULL OR char_length(${table.internalNote}) <= 2000`,
@@ -1201,3 +1223,176 @@ export const runnerProfiles = pgTable(
     ),
   ],
 );
+
+export const contractVersionStatusEnum = pgEnum("contract_version_status", ["draft", "approved"]);
+
+export const contractVersions = pgTable(
+  "contract_versions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    versionKey: text("version_key").notNull().unique(),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    status: contractVersionStatusEnum("status").notNull().default("draft"),
+    documentHash: text("document_hash"),
+    createdBy: text("created_by").notNull().references(() => profiles.userId, { onDelete: "restrict" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    approvedBy: text("approved_by").references(() => profiles.userId, { onDelete: "restrict" }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+  },
+  (table) => [
+    check("contract_versions_key_chk", sql`char_length(${table.versionKey}) BETWEEN 3 AND 60 AND ${table.versionKey} ~ '^[a-z0-9]+(-[a-z0-9]+)*$'`),
+    check("contract_versions_title_chk", sql`char_length(${table.title}) BETWEEN 2 AND 140`),
+    check("contract_versions_body_chk", sql`char_length(${table.body}) BETWEEN 20 AND 50000`),
+    check("contract_versions_approval_chk", sql`(${table.status} = 'approved') = (${table.approvedBy} IS NOT NULL) AND (${table.status} = 'approved') = (${table.approvedAt} IS NOT NULL) AND (${table.status} = 'approved') = (${table.documentHash} IS NOT NULL) AND (${table.documentHash} IS NULL OR ${table.documentHash} ~ '^[a-f0-9]{64}$')`),
+  ],
+);
+
+export const bookingContractAcceptances = pgTable(
+  "booking_contract_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id").notNull().unique().references(() => bookings.id, { onDelete: "restrict" }),
+    runnerUserId: text("runner_user_id").notNull(),
+    contractVersionKey: text("contract_version_key").notNull().references(() => contractVersions.versionKey, { onDelete: "restrict" }),
+    contractDocumentHash: text("contract_document_hash").notNull(),
+    documentSnapshot: text("document_snapshot").notNull(),
+    documentHash: text("document_hash").notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("booking_contract_acceptances_hash_chk", sql`${table.contractDocumentHash} ~ '^[a-f0-9]{64}$' AND ${table.documentHash} ~ '^[a-f0-9]{64}$'`),
+    check("booking_contract_acceptances_snapshot_chk", sql`char_length(${table.documentSnapshot}) BETWEEN 20 AND 100000`),
+  ],
+);
+
+// Stripe mode of the key that created an attempt or settlement; the webhook requires it to match livemode.
+export const stripeModeEnum = pgEnum("stripe_mode", ["test", "live"]);
+export const bookingCheckoutAttemptKindEnum = pgEnum("booking_checkout_attempt_kind", ["initial", "balance"]);
+export const bookingCheckoutAttemptStatusEnum = pgEnum("booking_checkout_attempt_status", ["pending", "created", "completed", "expired", "failed"]);
+export const bookingCheckoutAttempts = pgTable(
+  "booking_checkout_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    requestId: uuid("request_id").notNull(),
+    kind: bookingCheckoutAttemptKindEnum("kind").notNull(),
+    status: bookingCheckoutAttemptStatusEnum("status").notNull().default("pending"),
+    quoteHash: text("quote_hash").notNull(),
+    amountUsd: integer("amount_usd").notNull(),
+    amountPenCents: integer("amount_pen_cents").notNull(),
+    idempotencyKey: text("idempotency_key").notNull().unique(),
+    stripeSessionId: text("stripe_session_id").unique(),
+    checkoutUrl: text("checkout_url"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    stripeMode: stripeModeEnum("stripe_mode").notNull().default("test"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    unique("booking_checkout_attempts_request_uq").on(table.bookingId, table.requestId),
+    uniqueIndex("booking_checkout_attempts_active_uq").on(table.bookingId, table.kind).where(sql`${table.status} IN ('pending', 'created')`),
+    check("booking_checkout_attempts_quote_hash_chk", sql`${table.quoteHash} ~ '^[a-f0-9]{64}$'`),
+    check("booking_checkout_attempts_amount_chk", sql`${table.amountUsd} > 0 AND ${table.amountPenCents} > 0`),
+    check("booking_checkout_attempts_session_chk", sql`${table.status} <> 'created' OR (${table.stripeSessionId} IS NOT NULL AND ${table.checkoutUrl} IS NOT NULL)`),
+  ],
+);
+
+export const bookingStripeEventReceipts = pgTable(
+  "booking_stripe_event_receipts",
+  {
+    eventId: text("event_id").primaryKey(),
+    eventType: text("event_type").notNull(),
+    attemptId: uuid("attempt_id"),
+    stripeSessionId: text("stripe_session_id"),
+    outcome: text("outcome").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Explicit name: the generated one exceeds PostgreSQL's 63-character limit.
+    foreignKey({
+      name: "booking_stripe_event_receipts_attempt_id_fk",
+      columns: [table.attemptId],
+      foreignColumns: [bookingCheckoutAttempts.id],
+    }).onDelete("restrict"),
+  ],
+);
+
+export const bookingStripeSettlementStatusEnum = pgEnum("booking_stripe_settlement_status", ["applied", "needs_review"]);
+export const bookingStripeSettlements = pgTable(
+  "booking_stripe_settlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id").notNull().references(() => bookings.id, { onDelete: "restrict" }),
+    attemptId: uuid("attempt_id").notNull().unique(),
+    stripeSessionId: text("stripe_session_id").notNull().unique(),
+    paymentIntentId: text("payment_intent_id").notNull().unique(),
+    expectedAmountPenCents: integer("expected_amount_pen_cents").notNull(),
+    receivedAmountPenCents: integer("received_amount_pen_cents").notNull(),
+    amountUsd: integer("amount_usd").notNull(),
+    currency: text("currency").notNull(),
+    status: bookingStripeSettlementStatusEnum("status").notNull(),
+    paidAt: timestamp("paid_at", { withTimezone: true }).notNull(),
+    stripeMode: stripeModeEnum("stripe_mode").notNull().default("test"),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    // Explicit name: the generated one exceeds PostgreSQL's 63-character limit.
+    foreignKey({
+      name: "booking_stripe_settlements_attempt_id_fk",
+      columns: [table.attemptId],
+      foreignColumns: [bookingCheckoutAttempts.id],
+    }).onDelete("restrict"),
+    // Paid balance per booking (portal and CRM).
+    index("booking_stripe_settlements_booking_idx").on(table.bookingId),
+    check("booking_stripe_settlements_amount_chk", sql`${table.expectedAmountPenCents} > 0 AND ${table.receivedAmountPenCents} >= 0 AND ${table.amountUsd} > 0`),
+    check("booking_stripe_settlements_currency_chk", sql`${table.currency} ~ '^[a-z]{3}$'`),
+  ],
+);
+
+export const offerCapacityAllocationStatusEnum = pgEnum("offer_capacity_allocation_status", ["held", "confirmed", "released"]);
+export const offerCapacityCounters = pgTable(
+  "offer_capacity_counters",
+  {
+    offerVersionId: uuid("offer_version_id").primaryKey().references(() => tripOffers.id, { onDelete: "restrict" }),
+    capacityLimit: integer("capacity_limit"),
+    allocatedCount: integer("allocated_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check("offer_capacity_counters_limit_chk", sql`${table.capacityLimit} IS NULL OR ${table.capacityLimit} BETWEEN 1 AND 10000`),
+    check("offer_capacity_counters_count_chk", sql`${table.allocatedCount} >= 0 AND (${table.capacityLimit} IS NULL OR ${table.allocatedCount} <= ${table.capacityLimit})`),
+  ],
+);
+export const offerCapacityAllocations = pgTable(
+  "offer_capacity_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    bookingId: uuid("booking_id").notNull().unique().references(() => bookings.id, { onDelete: "restrict" }),
+    offerVersionId: uuid("offer_version_id").notNull().references(() => tripOffers.id, { onDelete: "restrict" }),
+    status: offerCapacityAllocationStatusEnum("status").notNull().default("held"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("offer_capacity_allocations_offer_status_idx").on(table.offerVersionId, table.status),
+    check("offer_capacity_allocations_release_chk", sql`(${table.status} = 'released') = (${table.releasedAt} IS NOT NULL)`),
+  ],
+);
+
+// Accounts allowed to use the demo checkout (Stripe TEST in production). user_id is the Clerk user id;
+// active = revoked_at IS NULL. Read from Neon on every request: metadata, cookies and forms grant nothing.
+export const checkoutDemoParticipants = pgTable("checkout_demo_participants", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => profiles.userId, { onDelete: "restrict" }),
+  note: text("note"),
+  grantedBy: text("granted_by")
+    .notNull()
+    .references(() => profiles.userId, { onDelete: "restrict" }),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+});

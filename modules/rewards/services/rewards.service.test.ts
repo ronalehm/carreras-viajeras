@@ -39,9 +39,25 @@ describe("transactional reward commands", () => {
     expect(query().sql).not.toContain(code);
   });
   it("applies through one transaction with the server actor and booking", async () => {
-    await applyRewardToBooking("admin", ID, ID);
+    const BOOKING = "0b7c8a2e-6a55-4d55-9b0e-1c2d3e4f5a6b";
+    await expect(applyRewardToBooking("admin", ID, BOOKING)).resolves.toEqual({ status: "success", code: "ok", id: ID });
     expect(query().sql).toContain("cv_apply_booking_reward");
-    expect(query().params).toEqual(["admin", ID, ID]);
+    expect(query().params).toEqual([BOOKING, "admin", ID, BOOKING]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+  it.each([
+    ["applying a redemption", () => applyRewardToBooking("admin", ID, ID), "cv_apply_booking_reward"],
+    ["assigning a benefit", () => assignBookingBenefit("admin", { bookingId: ID, title: "Hotel", description: "Tres noches." }), "cv_assign_booking_benefit"],
+  ] as const)("rejects a simulated booking in the same statement before %s", async (_label, run, fn) => {
+    const { sql: text, params } = (await run(), query());
+    const normalized = text.replace(/\s+/g, " ");
+    // The check guards the call: the function only runs in the ELSE branch of the same SELECT.
+    expect(normalized).toMatch(new RegExp(
+      `^ SELECT CASE WHEN EXISTS \\(SELECT 1 FROM bookings WHERE id=\\$1::uuid AND is_simulated\\) THEN '\\{"status":"error","code":"booking_not_eligible"\\}'::jsonb ELSE ${fn}\\(`,
+    ));
+    expect(params[0]).toBe(ID);
+    execute.mockResolvedValue({ rows: [{ result: { status: "error", code: "booking_not_eligible" } }] });
+    await expect(run()).resolves.toEqual({ status: "error", code: "booking_not_eligible" });
   });
   it("cancels only by the owning user and fulfills non-monetary rewards by actor", async () => {
     await cancelOwnRedemption(USER, ID);
@@ -64,7 +80,7 @@ describe("transactional reward commands", () => {
   it("records contractual benefits using only the explicit booking and evidence", async () => {
     await assignBookingBenefit("admin", { bookingId: ID, title: "Hotel", description: "Tres noches incluidas." });
     expect(query().sql).toContain("cv_assign_booking_benefit");
-    expect(query().params).toEqual(["admin", ID, "Hotel", "Tres noches incluidas."]);
+    expect(query().params).toEqual([ID, "admin", ID, "Hotel", "Tres noches incluidas."]);
   });
 });
 
@@ -118,6 +134,8 @@ describe("private views and reconciliation", () => {
     expect(query().params).toEqual([USER]);
     await reconcileBookingRewards(ID);
     expect(query().sql).toContain("JOIN bookings");
+    // A simulated booking selects no referrer, so nothing is reconciled for it.
+    expect(query().sql).toMatch(/WHERE b\.id=\$1::uuid AND NOT b\.is_simulated\s*$/);
     expect(query().params).toEqual([ID]);
     await reconcileReferralEligibility(USER);
     expect(query().params).toEqual([USER]);

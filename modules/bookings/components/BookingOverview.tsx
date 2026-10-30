@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { buildWhatsAppUrl, WHATSAPP_NUMBER } from "@/modules/landing";
@@ -9,7 +9,7 @@ import { formatTripDate, formatTripDateRange, formatTripPrice } from "@/modules/
 import type { RunnerBookingDetail } from "../types/bookings.types";
 import { formatShortDate } from "../utils/bookingDisplay";
 import { getPaymentSummary, isTripFinished } from "../utils/runnerBookings";
-import { BookingStatusBadge } from "./BookingTable";
+import { BookingStatusBadge, SimulatedBookingBadge } from "./BookingTable";
 
 const SECTION_TITLE = "mb-4 text-xs font-bold tracking-[0.2em] uppercase";
 const LINK = "inline-flex items-center gap-0.5 font-bold underline underline-offset-4";
@@ -45,11 +45,11 @@ export function BookingOverview({
   today,
   className,
 }: {
-  detail: Pick<RunnerBookingDetail, "status" | "trip">;
+  detail: Pick<RunnerBookingDetail, "status" | "trip" | "simulated">;
   today: string;
   className?: string;
 }) {
-  const { trip, status } = detail;
+  const { trip, status, simulated } = detail;
   const cancelled = status === "cancelled";
   const finished = !cancelled && isTripFinished(trip, today);
 
@@ -59,13 +59,16 @@ export function BookingOverview({
         <h2 id="booking-trip-title" className="display-title text-3xl leading-none lg:text-4xl">
           {trip.title}
         </h2>
-        {finished ? (
-          <Badge variant="outline" className="border-highlight bg-highlight/15">
-            Viaje terminado
-          </Badge>
-        ) : (
-          <BookingStatusBadge status={status} />
-        )}
+        <div className="flex flex-wrap gap-2">
+          {finished ? (
+            <Badge variant="outline" className="border-highlight bg-highlight/15">
+              Viaje terminado
+            </Badge>
+          ) : (
+            <BookingStatusBadge status={status} />
+          )}
+          <SimulatedBookingBadge simulated={simulated} />
+        </div>
       </div>
       <div className="space-y-0.5 text-sm">
         <p className="font-bold">
@@ -77,6 +80,9 @@ export function BookingOverview({
         {trip.startDate && trip.endDate && <p>Viaje: {formatTripDateRange(trip.startDate, trip.endDate)}</p>}
       </div>
 
+      {simulated && (
+        <p className="text-sm">Reserva de demostración con Stripe en modo de prueba: no hubo cargo real.</p>
+      )}
       {status === "pending" && (
         <Alert role="status">
           <AlertDescription>
@@ -150,10 +156,10 @@ export function BookingPayments({
   detail,
   className,
 }: {
-  detail: Pick<RunnerBookingDetail, "totalUsd" | "payments" | "balanceDueOn">;
+  detail: Pick<RunnerBookingDetail, "totalUsd" | "paidUsd" | "paymentInReview" | "payments" | "balanceDueOn">;
   className?: string;
 }) {
-  const summary = getPaymentSummary(detail.totalUsd, detail.payments, detail.balanceDueOn);
+  const summary = getPaymentSummary(detail.totalUsd, detail.paidUsd, detail.balanceDueOn);
   return (
     <section aria-labelledby="booking-payments-title" className={cn("text-primary", className)}>
       <h2 id="booking-payments-title" className={SECTION_TITLE}>
@@ -171,6 +177,15 @@ export function BookingPayments({
           </Row>
         )}
       </dl>
+      {detail.paymentInReview && (
+        <Alert role="status" className="mt-3">
+          <AlertTitle>Pago en revisión</AlertTitle>
+          <AlertDescription>
+            Estamos verificando un pago con tarjeta. Aún no se refleja en tu saldo; te avisaremos cuando quede
+            confirmado.
+          </AlertDescription>
+        </Alert>
+      )}
       {detail.payments.length > 0 && (
         <details className="mt-3 text-sm">
           <summary className="cursor-pointer font-bold">Pagos confirmados ({detail.payments.length})</summary>

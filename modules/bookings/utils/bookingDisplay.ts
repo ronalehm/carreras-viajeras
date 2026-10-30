@@ -14,6 +14,13 @@ export const BOOKING_STATUS_LABELS: Record<BookingStatus, string> = {
   cancelled: "Cancelada",
 };
 
+// Distinctive of a demo-checkout booking (bookings-stripe-checkout-demo.md, C) in the portal and the CRM.
+export const SIMULATED_BOOKING_LABEL = "SIMULADA";
+// ?tipo= value of the CRM list that shows simulated bookings apart; anything else shows real ones.
+export const BOOKING_KIND_SIMULATED = "simuladas";
+// Concept of a Stripe settlement in the portal and CRM payment histories.
+export const STRIPE_PAYMENT_CONCEPT = "Stripe - tarjeta";
+
 export const ITINERARY_STATUS_LABELS: Record<ItineraryStatus, string> = {
   pending: "Pendiente",
   provisional: "Provisional",

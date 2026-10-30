@@ -16,11 +16,13 @@ describe("Clerk middleware coverage", () => {
     "/cuenta/perfil/editar",
     "/mis-carreras",
     "/mis-carreras?reserva=booking-1",
+    "/viajes/maraton-santiago-2027/checkout",
+    "/api/bookings/checkout/prepare",
   ])("makes the Clerk session available on %s", (path) => {
     expect(unstable_doesMiddlewareMatch({ config, url: `https://example.test${path}` })).toBe(true);
   });
 
-  it.each(["/", "/cuentas", "/contacto", "/api/health", "/cuenta/perfil-otro"])(
+  it.each(["/", "/cuentas", "/contacto", "/api/health", "/cuenta/perfil-otro", "/viajes/maraton-santiago-2027", "/viajes/ficha_viaje/registro"])(
     "keeps public liveness, static pages and unrelated segments outside the matcher: %s",
     (path) => {
       expect(unstable_doesMiddlewareMatch({ config, url: `https://example.test${path}` })).toBe(false);

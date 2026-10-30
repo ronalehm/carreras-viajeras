@@ -4,12 +4,23 @@ import { getDb } from "@/lib/db";
 import { bookingPayments, bookings, itineraryItems, trips, tripUpdates } from "@/lib/db-schema";
 import type { RunnerBookingDetail, RunnerPortalData, ScheduleEdge } from "../types/bookings.types";
 import { orderRunnerBookings } from "../utils/runnerBookings";
+import { STRIPE_PAYMENT_CONCEPT } from "../utils/bookingDisplay";
+import { getBookingBalance } from "./bookingBalance.service";
+
+// A self-service checkout booking (offer snapshot set) that was cancelled without any payment —
+// no non-voided manual payment and no Stripe settlement, applied or in review — is an abandoned
+// checkout: the portal hides it (bookings-stripe-checkout-production.md, Pantallas).
+const abandonedCheckout = sql`(${bookings.status} = 'cancelled' and ${bookings.offerVersionId} is not null
+  and not exists (select 1 from booking_payments p where p.booking_id = ${bookings.id} and p.voided_at is null)
+  and not exists (select 1 from booking_stripe_settlements s where s.booking_id = ${bookings.id}))`;
 
 // Columns that may leave the database for the runner. Never participant_email, participant_name,
 // internal_note, created_by, recorded_by or voided_by.
 const summaryColumns = {
   id: bookings.id,
   status: bookings.status,
+  // The race selector marks a demo-checkout booking, not only the selected one.
+  simulated: bookings.isSimulated,
   trip: {
     title: trips.title,
     city: trips.city,
@@ -48,7 +59,7 @@ export async function loadRunnerPortal(
       .select(summaryColumns)
       .from(bookings)
       .innerJoin(trips, eq(trips.id, bookings.tripId))
-      .where(eq(bookings.runnerUserId, userId)),
+      .where(and(eq(bookings.runnerUserId, userId), sql`not ${abandonedCheckout}`)),
   ]);
 
   const ordered = orderRunnerBookings(rows, today);
@@ -59,7 +70,9 @@ export async function loadRunnerPortal(
   const chosen = ordered.find((b) => b.id === bookingParam) ?? ordered[0];
   const owned = and(eq(bookings.id, chosen.id), eq(bookings.runnerUserId, userId));
 
-  const [details, payments, items, updates] = await db.batch([
+  // The balance is read in parallel: chosen.id already belongs to the user, and a booking unlinked
+  // in between yields no detail below, so its balance is never shown.
+  const [[details, manualPayments, items, updates], balances] = await Promise.all([db.batch([
     db
       .select({
         packageLabel: bookings.packageLabel,
@@ -117,15 +130,24 @@ export async function loadRunnerPortal(
       .innerJoin(bookings, eq(bookings.tripId, tripUpdates.tripId))
       .where(owned)
       .orderBy(desc(tripUpdates.publishedAt)),
-  ]);
+  ]), getBookingBalance([chosen.id])]);
 
   const [detail] = details;
+  const balance = balances.get(chosen.id);
   // Unlinked between the two batches (manual SQL): show the list without a detail.
-  if (!detail) return { bookings: ordered, selected: null };
+  if (!detail || !balance) return { bookings: ordered, selected: null };
+
+  // Stable sort: same-day manual payments keep their order, then Stripe ones.
+  const payments = [
+    ...manualPayments,
+    ...balance.stripePayments.map((payment) => ({ ...payment, concept: STRIPE_PAYMENT_CONCEPT })),
+  ].sort((a, b) => a.paidOn.localeCompare(b.paidOn));
 
   const selected: RunnerBookingDetail = {
     ...chosen,
     ...detail,
+    paidUsd: balance.paidUsd,
+    paymentInReview: balance.needsReview.length > 0,
     payments,
     items: items.map((i) => ({
       id: i.id,

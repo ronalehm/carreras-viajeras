@@ -32,6 +32,7 @@ function summary(id: string): RunnerBookingSummary {
   return {
     id,
     status: "confirmed",
+    simulated: false,
     trip: {
       title: "Maratón de Santiago 42K 2027",
       city: "Santiago",
@@ -50,6 +51,9 @@ function detail(id: string): RunnerBookingDetail {
     packageLabel: "Paquete corredor",
     distance: "42K",
     totalUsd: 1499,
+    paidUsd: 0,
+    paymentInReview: false,
+    simulated: false,
     balanceDueOn: null,
     createdAt: new Date("2027-03-03T15:00:00Z"),
     payments: [],

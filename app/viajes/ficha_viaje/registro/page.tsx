@@ -11,7 +11,8 @@ export const metadata: Metadata = {
 
 // Static (○) shell of /viajes/<slug>/registro, reached through a rewrite in next.config.ts. The
 // trip, the offer, ?modo=stand and the attribution are read in the browser; the header and footer
-// too, because stand mode hides them.
+// too, because stand mode hides them. The checkout link is decided per request in the browser
+// (GET /api/bookings/checkout/access), never at prerender.
 export default function RaceRegistrationShellPage() {
   return (
     // useSearchParams in RacePageContent: the prerendered HTML carries this fallback.
