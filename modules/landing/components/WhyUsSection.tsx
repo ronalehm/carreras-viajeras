@@ -105,7 +105,7 @@ export function WhyUsSection() {
         </summary>
         <ul className="grid gap-x-10 md:grid-cols-2 lg:grid-cols-3">
           {CARDS.map(({ icon: Icon, title, summary, detail }) => (
-            <li key={title} className="border rounded-lg border-primary/20 py-6 px-4 flex flex-col items-center group-hover:border-primary/35 transition-colors">
+            <li key={title} className="border rounded-lg border-primary/20 py-6 px-4 flex flex-col items-center mb-4 group-hover:border-primary/35 transition-colors">
               <article className="group-hover:pb-6 transition-colors w-full">
                 <Icon aria-hidden className="mb-4 size-7 stroke-[1.5] text-highlight" />
                 <h3 className="mb-2 display-title text-3xl leading-none text-center">{title}</h3>
