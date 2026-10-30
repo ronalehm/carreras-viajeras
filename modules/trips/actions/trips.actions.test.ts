@@ -169,8 +169,8 @@ it("edita pasando el id separado de los campos editables", async () => {
 it.each([
   ["slug_taken", "Ese identificador ya está en uso."],
   ["slug_locked", "Solo se puede cambiar en borrador."],
-  ["not_found", "El viaje ya no existe. Recarga la página."],
-  ["archived", "Este viaje está archivado y no se puede editar."],
+  ["not_found", "La carrera ya no existe. Recarga la página."],
+  ["archived", "Esta carrera está archivada y no se puede editar."],
 ] as const)("edición: maneja %s y conserva el formulario", async (code, message) => {
   vi.mocked(updateTrip).mockResolvedValue(code);
   const result = await updateTripAction(IDLE, form({ ...VALID, id: ID }));
@@ -183,9 +183,9 @@ it.each([
 });
 
 it.each([
-  ["published", "Viaje publicado. Ya aparece en la web."],
-  ["draft", "Viaje despublicado. Ya no aparece en la web."],
-  ["archived", "Viaje archivado."],
+  ["published", "Carrera publicada. Ya aparece en la web."],
+  ["draft", "Carrera despublicada. Ya no aparece en la web."],
+  ["archived", "Carrera archivada."],
 ] as const)("cambia a %s", async (status, message) => {
   expect(await changeTripStatusAction(IDLE, form({ id: ID, status }))).toEqual({ status: "success", message });
   expect(setTripStatus).toHaveBeenCalledExactlyOnceWith(ID, status, ALL);
@@ -195,7 +195,7 @@ it.each([
 it("rechaza una transición obsoleta sin revalidar", async () => {
   vi.mocked(setTripStatus).mockResolvedValue("invalid_transition");
   expect(await changeTripStatusAction(IDLE, form({ id: ID, status: "published" }))).toMatchObject({
-    code: "invalid_transition", message: "El viaje ya no está en ese estado. Recarga la página.",
+    code: "invalid_transition", message: "La carrera ya no está en ese estado. Recarga la página.",
   });
   expect(revalidatePath).not.toHaveBeenCalled();
 });
@@ -204,7 +204,7 @@ it("organizer: editar un viaje ajeno devuelve not_found sin revalidar", async ()
   signIn(["organizer"], true, "organizer-7");
   vi.mocked(updateTrip).mockResolvedValue("not_found");
   expect(await updateTripAction(IDLE, form({ ...VALID, id: ID }))).toMatchObject({
-    code: "not_found", message: "El viaje ya no existe. Recarga la página.",
+    code: "not_found", message: "La carrera ya no existe. Recarga la página.",
   });
   expect(updateTrip).toHaveBeenCalledExactlyOnceWith(ID, tripFormSchema.parse(VALID), { kind: "own", organizerId: "organizer-7" });
   expect(revalidatePath).not.toHaveBeenCalled();
@@ -217,7 +217,7 @@ it.each(["published", "draft", "archived"] as const)(
     signIn(["organizer"], true, "organizer-7");
     vi.mocked(setTripStatus).mockResolvedValue("invalid_transition");
     expect(await changeTripStatusAction(IDLE, form({ id: ID, status }))).toMatchObject({
-      code: "invalid_transition", message: "El viaje ya no está en ese estado. Recarga la página.",
+      code: "invalid_transition", message: "La carrera ya no está en ese estado. Recarga la página.",
     });
     expect(setTripStatus).toHaveBeenCalledExactlyOnceWith(ID, status, { kind: "own", organizerId: "organizer-7" });
     expect(revalidatePath).not.toHaveBeenCalled();
@@ -225,9 +225,9 @@ it.each(["published", "draft", "archived"] as const)(
 );
 
 it.each([
-  ["published", "Viaje publicado. Ya aparece en la web."],
-  ["draft", "Viaje despublicado. Ya no aparece en la web."],
-  ["archived", "Viaje archivado."],
+  ["published", "Carrera publicada. Ya aparece en la web."],
+  ["draft", "Carrera despublicada. Ya no aparece en la web."],
+  ["archived", "Carrera archivada."],
 ] as const)("organizer: cambia su propio viaje a %s", async (status, message) => {
   signIn(["organizer"], true, "organizer-7");
   expect(await changeTripStatusAction(IDLE, form({ id: ID, status }))).toEqual({ status: "success", message });

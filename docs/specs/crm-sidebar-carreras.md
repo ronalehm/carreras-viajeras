@@ -37,9 +37,9 @@ Pedido: «mejorar la vista del sidebar, para que se vea más profesional, usar A
 - **Accesibilidad.** Contraste AA, foco visible (anillo de enfoque), objetivos táctiles de al menos 44 px en móvil y respeto de `prefers-reduced-motion`.
 
 ## Plan
-- [ ] S.1 `CrmShell`/`CrmSidebar`: quitar los enlaces "Mis pendientes" y "Configuraciones", renombrar "Viajes" a "Carreras" y crear el menú de cuenta. Tests de `CrmSidebar` actualizados.
-- [ ] S.2 Textos de las vistas `/crm/viajes`, `TripForm` y `TripTable`, con sus tests.
-- [ ] S.3 Estilo de la barra lateral y del menú de cuenta según el punto 4, en escritorio y móvil, con prueba visual (capturas) en escritorio y móvil.
+- [x] S.1 `CrmShell`/`CrmSidebar`: quitar los enlaces "Mis pendientes" y "Configuraciones", renombrar "Viajes" a "Carreras" y crear el menú de cuenta. Tests de `CrmSidebar` actualizados.
+- [x] S.2 Textos de las vistas `/crm/viajes`, `TripForm` y `TripTable`, con sus tests.
+- [x] S.3 Estilo de la barra lateral y del menú de cuenta según el punto 4, en escritorio y móvil, con prueba visual (capturas) en escritorio y móvil.
 
 ## Aceptación
 - La barra lateral no muestra "Mis pendientes" ni "Configuraciones" y muestra "Carreras" en lugar de "Viajes". `/crm/viajes` sigue funcionando.

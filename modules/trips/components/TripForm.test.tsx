@@ -21,13 +21,13 @@ it("conserva lo escrito después de dos errores sucesivos y muestra errores acce
   fireEvent.change(title, { target: { value: "Mi viaje" } });
   fireEvent.change(slug, { target: { value: "santiago" } });
   fireEvent.change(includes, { target: { value: "Hotel\nTraslado" } });
-  fireEvent.click(screen.getByRole("button", { name: "Crear viaje" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear carrera" }));
   await waitFor(() => expect(slug.getAttribute("aria-invalid")).toBe("true"));
   expect(title.value).toBe("Mi viaje");
   expect(includes.value).toBe("Hotel\nTraslado");
   expect(slug.getAttribute("aria-describedby")).toContain("trip-slug-error");
   fireEvent.change(title, { target: { value: "Mi viaje revisado" } });
-  fireEvent.click(screen.getByRole("button", { name: "Crear viaje" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear carrera" }));
   await waitFor(() => expect(createTripAction).toHaveBeenCalledTimes(2));
   expect(title.value).toBe("Mi viaje revisado");
   expect(includes.value).toBe("Hotel\nTraslado");
@@ -78,7 +78,7 @@ it("pinta los campos nuevos con los valores del viaje, excludes uno por línea, 
   expect(value("Web oficial de la carrera")).toBe("https://maratondesantiago.cl/");
   expect(value("Qué no incluye")).toBe("Vuelos internos\nGastos personales");
   expect(value("Detalles por confirmar")).toBe("Horario por confirmar.");
-  expect(screen.getByText("Lo que aún falta confirmar del viaje.")).toBeTruthy();
+  expect(screen.getByText("Lo que aún falta confirmar de la carrera.")).toBeTruthy();
   for (const label of PRICE_LABELS) expect(screen.queryByLabelText(label)).toBeNull();
   for (const name of PRICE_FIELDS) expect(document.querySelector(`[name="${name}"]`)).toBeNull();
   expect(screen.queryByText(/1799|1300|Reserva con US\$/)).toBeNull();
@@ -88,7 +88,7 @@ it("no envía campos de precio al guardar un viaje", async () => {
   vi.mocked(createTripAction).mockResolvedValue({ status: "error", code: "invalid_input", message: "Revisa los campos marcados." });
   render(<TripForm />);
   for (const label of PRICE_LABELS) expect(screen.queryByLabelText(label)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Crear viaje" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear carrera" }));
   await waitFor(() => expect(createTripAction).toHaveBeenCalledOnce());
   const sent = vi.mocked(createTripAction).mock.calls[0][1];
   for (const name of PRICE_FIELDS) expect(sent.has(name)).toBe(false);
@@ -105,7 +105,7 @@ it("muestra el error de un campo nuevo y conserva lo escrito", async () => {
   const excludes = screen.getByLabelText<HTMLTextAreaElement>("Qué no incluye");
   fireEvent.change(officialUrl, { target: { value: "http://maratondesantiago.cl/" } });
   fireEvent.change(excludes, { target: { value: "Vuelos internos\nGastos personales" } });
-  fireEvent.click(screen.getByRole("button", { name: "Crear viaje" }));
+  fireEvent.click(screen.getByRole("button", { name: "Crear carrera" }));
   await waitFor(() => expect(officialUrl.getAttribute("aria-invalid")).toBe("true"));
   expect(officialUrl.getAttribute("aria-describedby")).toBe("trip-officialUrl-error");
   expect(screen.getByText("Indica una URL que empiece por https://.").id).toBe("trip-officialUrl-error");

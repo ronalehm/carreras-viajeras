@@ -7,18 +7,18 @@ import { changeTripStatusAction } from "../actions/trips.actions";
 import type { Trip } from "../types/trips.types";
 import { formatTripDate } from "../utils/tripDisplay";
 
-const STATUS_LABELS = { draft: "Borrador", published: "Publicado", archived: "Archivado" };
+const STATUS_LABELS = { draft: "Borrador", published: "Publicada", archived: "Archivada" };
 const STATUS_VARIANTS = { draft: "secondary", published: "default", archived: "outline" } as const;
 
 export function TripTable({ trips }: { trips: Trip[] }) {
   if (trips.length === 0) {
-    return <p className="text-muted-foreground">Aún no hay viajes. Crea el primero con «Nuevo viaje».</p>;
+    return <p className="text-muted-foreground">Aún no hay carreras. Crea la primera con «Nueva carrera».</p>;
   }
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          {["Viaje", "Destino", "Carrera", "Estado", "Acciones"].map((title) => (
+          {["Carrera", "Destino", "Fecha", "Estado", "Acciones"].map((title) => (
             <TableHead key={title}>{title}</TableHead>
           ))}
         </TableRow>
@@ -47,7 +47,7 @@ export function TripTable({ trips }: { trips: Trip[] }) {
                       fields={{ id: trip.id, status: published ? "draft" : "published" }}
                       label={label} title={`¿${label} «${trip.title}»?`} confirmLabel={label} variant="outline"
                       description={published
-                        ? "Dejará de aparecer en la web pública. Podrás volver a publicarlo."
+                        ? "Dejará de aparecer en la web pública. Podrás volver a publicarla."
                         : "Aparecerá en la web pública con sus datos actuales."}
                     />
                     <ConfirmActionButton

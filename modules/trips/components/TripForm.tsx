@@ -36,7 +36,7 @@ const FIELDS: TripField[] = [
   { name: "includes", label: "Qué incluye", rows: 5, hint: "Un elemento por línea, hasta 20 elementos." },
   { name: "excludes", label: "Qué no incluye", rows: 4, hint: "Un elemento por línea, hasta 20 elementos." },
   { name: "notes", label: "Detalles por confirmar", rows: 3, maxLength: 1000,
-    hint: "Lo que aún falta confirmar del viaje." },
+    hint: "Lo que aún falta confirmar de la carrera." },
   { name: "capacity", label: "Cupos totales", type: "number", min: 1, max: 10_000,
     hint: "Cantidad informativa; no calcula disponibilidad." },
   { name: "imageUrl", label: "URL de la imagen", type: "url", maxLength: 2048,
@@ -71,7 +71,7 @@ export function TripForm({ trip }: { trip?: Trip }) {
         <p role="alert" className="text-sm text-destructive">{state.message}</p>
       )}
       <fieldset disabled={pending} className="grid gap-5 sm:grid-cols-2">
-        <legend className="sr-only">Datos del viaje</legend>
+        <legend className="sr-only">Datos de la carrera</legend>
         {FIELDS.map(({ name, label, hint, rows, type = "text", ...constraints }) => {
           const id = `trip-${name}`;
           const locked = name === "slug" && !!trip && trip.status !== "draft";
@@ -100,9 +100,9 @@ export function TripForm({ trip }: { trip?: Trip }) {
       </fieldset>
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={pending}>
-          {pending ? "Guardando…" : trip ? "Guardar cambios" : "Crear viaje"}
+          {pending ? "Guardando…" : trip ? "Guardar cambios" : "Crear carrera"}
         </Button>
-        <Link href="/crm/viajes" className={buttonVariants({ variant: "outline" })}>Volver a viajes</Link>
+        <Link href="/crm/viajes" className={buttonVariants({ variant: "outline" })}>Volver a carreras</Link>
       </div>
     </form>
   );
