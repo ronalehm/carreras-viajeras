@@ -209,7 +209,7 @@ Las fases siguen el límite de `docs/SETUP.md`: hasta cinco tareas y unos quince
 
 #### Diagnóstico de acceso a Connect y Accounts v2
 
-Caso observado el 2026-10-30 en el sandbox: `GET /v2/core/accounts/acct_…` devolvió `403 forbidden` con el mensaje *«API Key does not have permission to access account acct_… In some cases, you may also need to supply an Account ID in the Stripe-Context header»*. En la misma prueba, la lectura v1 de la cuenta (`GET /v1/account`) funcionó.
+Caso observado el 2026-10-30 en el sandbox: `GET /v2/core/accounts/acct_…` devolvió `403 forbidden` con el mensaje *«API Key does not have permission to access account acct_… In some cases, you may also need to supply an Account ID in the Stripe-Context header»*. En la misma prueba, la lectura v1 de la cuenta (`GET /v1/account`) funcionó. El registro de la petición muestra una clave secreta estándar `sk_test_` (no restringida) y la versión de API `2026-09-30.endive`, así que se descarta que la causa sean los permisos de una clave restringida.
 
 Ese mensaje se refiere al **recurso consultado**, no al endpoint: dice que la clave no puede acceder a *esa cuenta*. Si la cuenta consultada es la propia plataforma (el id que devuelve `/v1/account`), no sirve como prueba de acceso a Connect. Accounts v2 gestiona las cuentas conectadas a la plataforma, y la plataforma no es una cuenta conectada de sí misma [verificar]. Para diagnosticar, todo en modo test, con lecturas y sin mostrar la clave:
 
