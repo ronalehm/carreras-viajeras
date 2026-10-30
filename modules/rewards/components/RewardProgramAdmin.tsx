@@ -1,16 +1,48 @@
 import { requirePermission } from "@/lib/auth/guards";
 import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { createCatalogVersionAction, createRewardRuleAction, deactivateCatalogVersionAction, deactivateRewardRuleAction } from "../actions/rewards.actions";
+import { saveWelcomeDiscountAction } from "../actions/welcomeDiscount.actions";
 import { listProgramConfiguration } from "../services/rewards.service";
-import { RewardCatalogDetails, RewardRuleDetails } from "./RewardDetails";
+import type { ActiveWelcomeDiscount, WelcomeDiscountVersion } from "../services/welcomeDiscount.service";
+import { RewardCatalogDetails, RewardRuleDetails, rewardInstant, rewardMoney } from "./RewardDetails";
 import { RewardMutationForm, type RewardFormField } from "./RewardMutationForm";
+import { WelcomeDiscountForm } from "./WelcomeDiscountForm";
 
 const DATE_FIELDS: RewardFormField[] = [
   { name: "validFrom", label: "Fecha de inicio (Lima)", type: "date", required: true },
   { name: "validUntil", label: "Fecha final (Lima)", type: "date", hint: "Opcional. Deja vacío para no fijar una fecha final." },
 ];
 
-export async function RewardProgramAdmin() {
+// Read by the page's Server Component. null means the welcome discount could not be loaded.
+export type WelcomeDiscountAdminData = { active: ActiveWelcomeDiscount | null; versions: WelcomeDiscountVersion[] };
+
+function days(value: number) { return `${value} ${value === 1 ? "día" : "días"}`; }
+
+function WelcomeDiscountSection({ data }: { data: WelcomeDiscountAdminData | null }) {
+  return <section className="grid gap-4 rounded-xl border p-5" aria-labelledby="welcome-discount-heading">
+    <h2 id="welcome-discount-heading" className="text-lg font-semibold">Descuento de bienvenida</h2>
+    {data === null ? <p role="alert">No se pudo cargar el descuento de bienvenida. Vuelve a intentarlo.</p> : <>
+      <p className="text-sm font-medium">{data.active ? `Activo: ${rewardMoney(data.active.amountUsd)}, válido ${days(data.active.validityDays)}` : "Desactivado"}</p>
+      <WelcomeDiscountForm action={saveWelcomeDiscountAction} current={data.active} />
+      <div className="grid gap-2">
+        <h3 className="font-medium">Últimas versiones</h3>
+        {data.versions.length === 0 ? <p className="text-sm text-muted-foreground">Todavía no hay versiones guardadas.</p> : <Table>
+          <TableHeader><TableRow><TableHead>Fecha (Lima)</TableHead><TableHead>Importe</TableHead><TableHead>Vigencia</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader>
+          <TableBody>{data.versions.slice(0, 5).map((version) => <TableRow key={version.id}>
+            <TableCell>{rewardInstant(version.createdAt)}</TableCell>
+            <TableCell>{rewardMoney(version.amountUsd)}</TableCell>
+            <TableCell>{days(version.validityDays)}</TableCell>
+            <TableCell><Badge variant={version.active ? "default" : "outline"}>{version.active ? "Activa" : "Inactiva"}</Badge></TableCell>
+          </TableRow>)}</TableBody>
+        </Table>}
+      </div>
+    </>}
+  </section>;
+}
+
+export async function RewardProgramAdmin({ welcomeDiscount }: { welcomeDiscount: WelcomeDiscountAdminData | null }) {
   let configuration;
   try {
     await requirePermission("rewards.manage");
@@ -20,6 +52,7 @@ export async function RewardProgramAdmin() {
   }
   const families = [...new Map(configuration.catalog.map((item) => [item.catalogKey, { value: item.catalogKey, label: item.title }])).values()];
   return <div className="grid gap-8">
+    <WelcomeDiscountSection data={welcomeDiscount} />
     <p className="text-sm text-muted-foreground">Cada cambio crea una versión. Los referidos y canjes existentes conservan sus condiciones. Las versiones desactivadas siguen en el historial. Las fechas usan la zona horaria de Lima.</p>
     <div className="grid items-start gap-6 xl:grid-cols-2">
       <section className="grid gap-4 rounded-xl border p-5" aria-labelledby="new-rule-heading"><h2 id="new-rule-heading" className="text-lg font-semibold">Nueva versión de regla</h2>
