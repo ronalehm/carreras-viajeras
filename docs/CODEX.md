@@ -32,7 +32,7 @@ Este control del flujo en Codex es una instrucción explícita, no un hook técn
 
 `.github/workflows/ci.yml` instala con lockfile y ejecuta lint, Vitest, generación de tipos, TypeScript y `build:worker`. Este último compila Next y ejecuta la limpieza de secretos del proyecto. Las acciones oficiales están fijadas a commits y el token tiene solo `contents: read`; checkout no persiste credenciales. No se ejecutan migraciones ni despliegues, no se aportan secretos de producción y no se usa `pull_request_target`.
 
-El workflow debe ejecutarse en GitHub para verificarlo allí. Un parseo local correcto no acredita permisos, conectividad, disponibilidad del runner ni que los checks hayan pasado. La compilación requiere acceso a Google Fonts; los errores de red deben conservar su estado de fallo.
+El workflow debe ejecutarse en GitHub para verificarlo allí. Un parseo local correcto no acredita permisos, conectividad, disponibilidad del runner ni que los checks hayan pasado. Las fuentes se sirven desde `app/fonts/` con `next/font/local`, así que la compilación no depende de Google Fonts; los errores de red deben conservar su estado de fallo.
 
 La revisión de Codex se activa mediante la integración nativa de GitHub en los ajustes de Codex para este repositorio. Tras habilitarla y verificar su acceso, el equipo puede solicitar una revisión en un PR con `@codex review` o configurar la revisión automática desde esa integración. Habilitar revisión, añadir el comentario o modificar permisos de GitHub son acciones externas distintas: los archivos del repositorio no las ejecutan. No se necesita una acción de IA con acceso de escritura al código del PR para el workflow de CI anterior.
 
