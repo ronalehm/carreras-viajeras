@@ -38,7 +38,7 @@ it("shows the cards returned by the endpoint", async () => {
   fetchHomeNews.mockResolvedValue([post]);
   renderSection();
 
-  expect((await screen.findByRole("link", { name: "Leer: Nueva carrera" })).getAttribute("href")).toBe("/noticias/nueva-carrera");
+  expect((await screen.findByRole("link", { name: "Leer: Nueva carrera" })).getAttribute("href")).toBe("/noticias/nueva-carrera#noticias");
   expect(screen.getAllByRole("article")).toHaveLength(1);
   expect(screen.queryByRole("status")).toBeNull();
 });

@@ -27,6 +27,6 @@ it("shows different loading, empty and error states with no fabricated news", ()
 });
 it("shows publication links and explicit image descriptions", () => {
   render(<NewsSection news={{ status: "ok", posts: [{ ...post, imageUrl: "https://example.com/race.webp", imageAlt: "Corredores en una carrera" }] }} />);
-  expect(screen.getByRole("link", { name: "Leer: Nueva carrera" }).getAttribute("href")).toBe("/noticias/nueva-carrera");
+  expect(screen.getByRole("link", { name: "Leer: Nueva carrera" }).getAttribute("href")).toBe("/noticias/nueva-carrera#noticias");
   expect(screen.getByRole("img", { name: "Corredores en una carrera" })).toBeTruthy();
 });
