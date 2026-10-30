@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { CommunityReferralInvite } from "./CommunityReferralInvite";
 
 /** A sequence, so it keeps its numbering (Requisito 4). */
 const STEPS = [
@@ -21,7 +22,7 @@ const STEPS = [
   },
 ];
 
-/** Static community block: no persistence, only a CTA to /cuenta. */
+/** Static community block: no persistence; the referral invitation adapts to the session on the client. */
 export function CommunitySection() {
   return (
     <section
@@ -76,19 +77,7 @@ export function CommunitySection() {
       </ol>
 
       <div className="mt-6 border-t border-primary-foreground/20 pt-8 md:grid md:grid-cols-[1fr_1.4fr] md:gap-[6%]">
-        <h3 className="mb-3 display-title text-3xl leading-none lg:text-4xl">
-          Invita a tu próximo compañero de carrera.
-        </h3>
-        <div>
-          <p className="mb-5 max-w-[60ch] text-sm leading-relaxed text-primary-foreground/75 sm:text-base">
-            Comparte tu enlace desde Mi cuenta. Consulta allí las reglas vigentes, las estrellas
-            por referido y los premios disponibles antes de participar. Las recompensas
-            dependen de las condiciones publicadas por administración.
-          </p>
-          <span className="inline-block rounded-full border border-primary-foreground/35 px-3.5 py-1.5 text-sm font-medium">
-            Consulta las condiciones en Mi cuenta
-          </span>
-        </div>
+        <CommunityReferralInvite />
       </div>
     </section>
   );
