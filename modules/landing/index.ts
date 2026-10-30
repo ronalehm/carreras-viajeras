@@ -10,6 +10,7 @@ export { PackageSection } from "./components/PackageSection";
 export { RacePageContent } from "./components/RacePageContent";
 export { ScrollToHero } from "./components/ScrollToHero";
 export { SiteFooter } from "./components/SiteFooter";
+export { MazBackingSection } from "./components/MazBackingSection";
 export { SiteBrand, SiteHeader } from "./components/SiteHeader";
 export { StorySection } from "./components/StorySection";
 export { TripFacts } from "./components/TripFacts";
