@@ -53,7 +53,12 @@ export async function verifyTurnstileToken(input: {
   remoteIp: string | null;
   idempotencyKey: string;
 }): Promise<TurnstileResult> {
-  if (input.token === "" || input.token.length > MAX_TOKEN_LENGTH) return "invalid";
+  if (input.token === "") {
+    // The widget never rendered: usually NEXT_PUBLIC_TURNSTILE_SITE_KEY was missing when the site was built.
+    console.warn("turnstile: empty token, the widget did not render (check the NEXT_PUBLIC_TURNSTILE_SITE_KEY build variable)");
+    return "invalid";
+  }
+  if (input.token.length > MAX_TOKEN_LENGTH) return "invalid";
 
   let secret: string;
   let isTestSecret: boolean;
