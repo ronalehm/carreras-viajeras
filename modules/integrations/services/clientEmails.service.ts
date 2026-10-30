@@ -75,6 +75,15 @@ const latestEvent = sql`NOT EXISTS (
     AND newer.sequence > e.sequence
 )`;
 
+// Only "later event" rule of internal alerts: an owner_alert is stale once the same lead has a later
+// lead.owner_assigned, so two quick reassignments never send two alerts to the last owner.
+const latestOwnerAssignment = sql`NOT EXISTS (
+  SELECT 1 FROM outbox_events newer
+  WHERE newer.lead_id = e.lead_id
+    AND newer.type = 'lead.owner_assigned'
+    AND newer.sequence > e.sequence
+)`;
+
 // Current owner's address, only while the owner holds an active role with leads.manage. Same
 // criterion as isActiveOwner in modules/crm/services/leads.service.ts, replicated here as SQL
 // because importing modules/crm from this module would create an import cycle.
@@ -85,11 +94,12 @@ const activeOwnerEmail = sql`(SELECT p.email FROM profiles p WHERE p.user_id = l
 
 // Eligibility per kind (crm-lifecycle-emails.md, requirement 3), rechecked just before SMTP and on
 // retry. prepareEmails applies the same rules through skipReason() over the same SQL facts
-// (latestEvent, activeOwnerEmail, next action due in Lima). Aliases m/e/l are fixed internal SQL
-// identifiers. No recipient/content comes from a request.
+// (latestEvent, latestOwnerAssignment, activeOwnerEmail, next action due in Lima). Aliases m/e/l
+// are fixed internal SQL identifiers. No recipient/content comes from a request.
 // - Common: active (env), cutoff, payload version 1, server sender, lead not archived.
 // - Internal alerts: opt-out does not block them; recipient is the current team address or the
-//   current owner's address (active role), never a stale one. No "latest event" rule.
+//   current owner's address (active role), never a stale one. No "latest event" rule, except that an
+//   owner_alert yields to a later lead.owner_assigned of the same lead.
 // - Client emails: no opt-out, no import/bulk, recipient = leads.email. Welcomes only need the
 //   lead.created event; follow_up needs the same stage, a next action still due and no later stage
 //   event; booking_confirmed and stage keep the original rules (current event, same stage).
@@ -103,6 +113,7 @@ function eligible(env: EmailEnv) {
     AND CASE m.kind
       WHEN 'team_alert' THEN e.type = 'lead.created' AND ${teamRecipient}
       WHEN 'owner_alert' THEN e.type = 'lead.owner_assigned' AND m.recipient = ${activeOwnerEmail}
+        AND ${latestOwnerAssignment}
       ELSE l.contact_opt_out_at IS NULL AND l.source <> 'import'
         AND COALESCE(e.payload->>'bulk', 'false') <> 'true' AND m.recipient = l.email
         AND CASE m.kind
@@ -126,7 +137,8 @@ function ineligibleCode(env: EmailEnv) {
   return sql`CASE
     WHEN l.archived_at IS NULL AND m.kind = 'team_alert' AND ${teamMissing} THEN 'missing_team_address'
     WHEN l.archived_at IS NULL AND m.kind = 'owner_alert'
-      AND m.recipient IS DISTINCT FROM ${activeOwnerEmail} THEN 'owner_changed'
+      AND (m.recipient IS DISTINCT FROM ${activeOwnerEmail} OR NOT ${latestOwnerAssignment})
+      THEN 'owner_changed'
     ELSE 'ineligible' END`;
 }
 
@@ -146,7 +158,12 @@ type Candidate = {
   tripTitle: string | null;
   destinationText: string | null;
   bookingTripTitle: string | null;
+  // owner_alert: current owner's address while it holds an active leads.manage role.
   ownerEmail: string | null;
+  // owner_alert: no later lead.owner_assigned of the same lead.
+  latestOwnerAssignment: boolean;
+  // team_alert: current owner's address, informative only (no role required).
+  currentOwnerEmail: string | null;
 };
 
 const isBulk = (event: Candidate) =>
@@ -220,9 +237,8 @@ function skipReason(
 ): ClientEmailSkipReason | null {
   if (isInternal(kind)) {
     if (event.archived) return "archived";
-    if (!recipient)
-      return kind === "team_alert" ? "missing_team_address" : "owner_changed";
-    return null;
+    if (kind === "team_alert") return recipient ? null : "missing_team_address";
+    return recipient && event.latestOwnerAssignment ? null : "owner_changed";
   }
   if (event.optedOut) return "opted_out";
   if (event.archived) return "archived";
@@ -258,6 +274,7 @@ function emailContent(
       return lifecycleEmailTemplate(kind, {
         ...client,
         sourceLabel: SOURCE_LABELS[event.source] ?? SOURCE_LABELS.other,
+        ownerEmail: validEmail(event.currentOwnerEmail),
         leadUrl: leadUrl(),
       });
     case "owner_alert":
@@ -288,7 +305,11 @@ async function prepareEmails(env: EmailEnv) {
         SELECT bt.title FROM bookings b JOIN trips bt ON bt.id = b.trip_id
         WHERE b.lead_id = l.id AND b.status <> 'cancelled' LIMIT 1
       ) END AS "bookingTripTitle",
-      CASE WHEN e.type = 'lead.owner_assigned' THEN ${activeOwnerEmail} END AS "ownerEmail"
+      CASE WHEN e.type = 'lead.owner_assigned' THEN ${activeOwnerEmail} END AS "ownerEmail",
+      ${latestOwnerAssignment} AS "latestOwnerAssignment",
+      CASE WHEN e.type = 'lead.created' THEN (
+        SELECT p.email FROM profiles p WHERE p.user_id = l.owner_user_id
+      ) END AS "currentOwnerEmail"
     FROM outbox_events e JOIN leads l ON l.id = e.lead_id LEFT JOIN trips t ON t.id = l.trip_id
     WHERE e.type IN ('lead.created', 'lead.stage_changed', 'lead.follow_up_due', 'lead.owner_assigned')
       AND e.payload_version = 1

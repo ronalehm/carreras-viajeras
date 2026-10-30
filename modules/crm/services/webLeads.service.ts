@@ -43,8 +43,8 @@ function resolveDestination(destination: string): { tripSlug: string | null; des
 // - same_person: a non-archived lead with the same normalized email and the same race (trip_id, or
 //   destination_text for rio/roma). Never by phone. In that case the lead is not touched: only a
 //   're_registered' activity with the submission key (unique: a retry inserts nothing) and a note.
-// - new lead: the lead, its 'created' activity and its 'lead.created' event { source }. The repeated
-//   registration emits no event (decision 6).
+// - new lead: the lead, its 'created' activity and its 'lead.created' event { source, form } (form
+//   only chooses the email text; no personal data). The repeated registration emits no event.
 // Never written here: stage (default 'new'), owner and author (NULL: assigned in the CRM),
 // referral_permission (default false) and consented_at (default now()).
 // Under concurrency, two simultaneous submissions of the same person with different keys can both
@@ -117,7 +117,7 @@ export async function createWebLead(
     ),
     event AS (
       INSERT INTO outbox_events (type, lead_id, payload)
-      SELECT 'lead.created', id, jsonb_build_object('source', source) FROM new_lead
+      SELECT 'lead.created', id, jsonb_build_object('source', source, 'form', ${input.form}::text) FROM new_lead
     ),
     repeat AS (
       INSERT INTO lead_activities (lead_id, type, body, submission_id)

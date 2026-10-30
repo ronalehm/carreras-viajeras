@@ -64,7 +64,7 @@ Esa spec aprobada excluye las «bienvenidas» y cualquier mensaje automático al
 
 ### 1. Entradas al embudo
 
-- **Formulario web.** `LeadCaptureForm` envía un campo oculto `form` con valor `registration` en `/viajes/[slug]/registro` y `contact` en `/contacto`. El schema lo valida como enum; si falta o no es válido, se usa `contact`. `createWebLead` lo añade al payload de `lead.created` (`{ source, form }`), sin datos personales. El campo solo elige el texto del correo: no concede permisos ni cambia el destinatario.
+- **Formulario web.** `LeadCaptureForm` envía un campo oculto `form`. Vale `registration` cuando lo monta `RaceRegistrationSection` (registro de una carrera) y `contact` cuando lo monta `ContactSection` (`/contacto` y portada). El schema lo valida como enum; si falta o no es válido, se usa `contact`. `createWebLead` lo añade al payload de `lead.created` (`{ source, form }`), sin datos personales. El campo solo elige el texto del correo: no concede permisos ni cambia el destinatario.
 - **Perfil del runner.** `saveRunnerProfile` pasa a un solo statement:
   - Primer guardado del perfil (inserción, no actualización) y ningún lead **sin archivar** con ese correo (en minúsculas): crea el lead con estos datos.
     - `full_name`, `phone`, `email`: los del perfil.
@@ -116,6 +116,7 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
   - se envían aunque el cliente haya pedido no seguir; se omiten si el lead está archivado;
   - `team_alert` va a `CRM_TEAM_ALERT_EMAIL`, y sin esa variable se omite (`missing_team_address`);
   - `owner_alert` va al correo del responsable **actual**; se omite si ya no hay responsable o es otra persona (`owner_changed`), o si el responsable no tiene un rol activo con `leads.manage`;
+  - `owner_alert` también se omite (`owner_changed`) si existe un `lead.owner_assigned` posterior del mismo lead. Así, dos reasignaciones seguidas no envían dos avisos al último responsable. Esta es la única regla de «evento posterior» que se aplica a los avisos internos;
   - no aplican la regla «evento vigente» de las etapas.
 - Los destinatarios, el remitente y el contenido se resuelven siempre en el servidor. n8n no puede elegirlos.
 
@@ -123,6 +124,8 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 - Texto plano, firmado como «Equipo de Carreras Viajeras». `{nombre}` es el nombre de pila. `{carrera}` es el título del viaje del lead, o su destino, o «tu próxima carrera». En `booking_confirmed` se usa el viaje de la reserva activa vinculada, si existe.
 - No se inventan precios, pagos, plazos, cupos ni servicios confirmados.
+- El asunto se normaliza a una sola línea: cualquier secuencia de espacios o saltos de línea pasa a un espacio. `{carrera}` puede venir del texto libre `destination_text`.
+- En `team_alert`, «Responsable» muestra el correo del responsable actual del lead, o «sin asignar» si no lo hay. El alta manual siempre tiene responsable.
 - **Avisos internos:** solo nombre, carrera, vía de entrada y un enlace a la ficha (`{APP_ORIGIN}/crm/leads/{id}`). Nunca teléfono, documentos, notas médicas ni notas internas.
 - `template_version` = 1 para los tipos nuevos. El correo de etapa conserva sus textos y su versión.
 
@@ -147,7 +150,7 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 | `welcome_account` | Te damos la bienvenida a Carreras Viajeras | Hola {nombre}, tu cuenta y tu perfil de runner ya están listos. Desde tu cuenta podrás ver tus carreras y mantener tus datos al día. Una persona de nuestro equipo te escribirá para ayudarte a elegir tu próximo viaje. Si tienes una consulta, responde este correo. |
 | `follow_up` | ¿Seguimos con tu viaje a {carrera}? | Hola {nombre}, queríamos saber cómo vas con tu decisión sobre {carrera}. Si tienes dudas o necesitas más información, responde este correo y te ayudamos. |
 | `booking_confirmed` | Tu separación para {carrera} está confirmada | Hola {nombre}, confirmamos tu separación para {carrera}. Nuestro equipo te escribirá para coordinar los siguientes pasos. Si tienes una consulta, responde este correo. |
-| `team_alert` | Nuevo registro: {nombre} · {carrera} | Entró un registro nuevo al embudo. Nombre: {nombre completo}. Carrera: {carrera}. Vía de entrada: {vía}. Responsable: sin asignar. Ficha: {enlace}. |
+| `team_alert` | Nuevo registro: {nombre} · {carrera} | Entró un registro nuevo al embudo. Nombre: {nombre completo}. Carrera: {carrera}. Vía de entrada: {vía}. Responsable: {correo del responsable o «sin asignar»}. Ficha: {enlace}. |
 | `owner_alert` | Te asignaron un lead: {nombre} | Te asignaron un lead en el CRM. Nombre: {nombre completo}. Carrera: {carrera}. Etapa: {etapa}. Ficha: {enlace}. |
 
 ## Criterios de aceptación
@@ -228,11 +231,14 @@ Se aplica al preparar el correo y otra vez al autorizarlo, justo antes de SMTP, 
 
 ### Fase 2 — Entradas al embudo (5 tareas, ~14 archivos)
 
-- [ ] T1 — Marca de formulario · archivos: `modules/landing/components/LeadCaptureForm.tsx`, `app/viajes/[slug]/registro/page.tsx`, `app/contacto/page.tsx`, `modules/crm/schemas/webLeads.schema.ts` y su test · depende de: F1 · paralelo
-- [ ] T2 — Payload del registro web · archivos: `modules/crm/services/webLeads.service.ts` y su test · depende de: F2 T1
-- [ ] T3 — Lead desde el perfil del runner · archivos: `modules/accounts/services/runnerProfile.service.ts` y su test · depende de: F1 · paralelo con T1
-- [ ] T4 — Evento de responsable · archivos: `modules/crm/services/leads.service.ts` y su test · depende de: F1 · paralelo con T1 y T3
-- [ ] T5 — Etiqueta «Cuenta web» · archivos: `modules/crm/utils/leadDisplay.ts` y su test · depende de: F1 · paralelo · se adelantó a F1-T5; aquí solo queda comprobar que la etiqueta aparece en filtros e informes.
+- [x] T1 — Marca de formulario · archivos: `modules/landing/components/LeadCaptureForm.tsx`, `modules/landing/components/RaceRegistrationSection.tsx`, `modules/landing/components/ContactSection.tsx`, `modules/crm/schemas/webLeads.schema.ts` y su test · depende de: F1 · paralelo
+- [x] T2 — Payload del registro web · archivos: `modules/crm/services/webLeads.service.ts` y su test · depende de: F2 T1
+- [x] T3 — Lead desde el perfil del runner · archivos: `modules/accounts/services/runnerProfile.service.ts` y su test · depende de: F1 · paralelo con T1
+- [x] T4 — Evento de responsable · archivos: `modules/crm/services/leads.service.ts` y su test · depende de: F1 · paralelo con T1 y T3
+- [x] T5 — Ajustes del motor · depende de: F1 · paralelo con T1–T4. Archivos y cambios:
+  - `modules/integrations/services/clientEmails.service.ts` y su test: responsable real en `team_alert`, y `owner_alert` omitido si hay un `lead.owner_assigned` posterior.
+  - `modules/integrations/utils/lifecycleEmailTemplates.ts` y su test: campo «Responsable» y asunto normalizado.
+  - La etiqueta «Cuenta web» ya se hizo en F1-T5.
 
 ### Fase 3 — CRM, n8n y activación (5 tareas, ~12 archivos)
 

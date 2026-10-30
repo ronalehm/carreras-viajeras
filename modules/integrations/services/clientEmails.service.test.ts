@@ -487,6 +487,77 @@ describe("email engine against PostgreSQL", () => {
       });
     });
 
+    it("two owner assignments before preparing: only the last one gets a sendable owner_alert", async () => {
+      const leadId = await insertLead({ ownerUserId: "owner" });
+      // Assigned to «other», then reassigned to «owner» before the engine runs.
+      await addEvent("lead.owner_assigned", leadId);
+      await addEvent("lead.owner_assigned", leadId);
+      const { messages } = await claimAll();
+      expect(messages).toHaveLength(1);
+      expect(
+        (await emails()).map(({ kind, status, recipient, lastErrorCode }) => ({
+          kind,
+          status,
+          recipient,
+          lastErrorCode,
+        })),
+      ).toEqual([
+        { kind: "owner_alert", status: "skipped", recipient: "owner@example.test", lastErrorCode: "owner_changed" },
+        { kind: "owner_alert", status: "claimed", recipient: "owner@example.test", lastErrorCode: null },
+      ]);
+      expect(await authorizeClientEmail(messages[0].id, messages[0].attemptToken)).toMatchObject({
+        status: "authorized",
+        message: { to: "owner@example.test" },
+      });
+    });
+
+    it("a reassignment after preparing and before SMTP skips the earlier owner_alert with owner_changed", async () => {
+      const leadId = await insertLead({ ownerUserId: "owner" });
+      await addEvent("lead.owner_assigned", leadId);
+      const first = (await claimAll()).messages;
+      // Reassigned away and back: same owner at authorization, but a later assignment exists.
+      await addEvent("lead.owner_assigned", leadId);
+      expect(await authorizeAll(first)).toEqual({ owner_alert: "skipped" });
+      expect((await summary())[0]).toEqual({
+        kind: "owner_alert",
+        status: "skipped",
+        lastErrorCode: "owner_changed",
+      });
+      const second = (await claimAll()).messages;
+      expect(second).toHaveLength(1);
+      expect(await authorizeAll(second)).toEqual({ owner_alert: "authorized" });
+    });
+
+    it("a retry of an owner_alert is rejected once a later owner assignment exists", async () => {
+      const leadId = await insertLead({ ownerUserId: "owner" });
+      await addEvent("lead.owner_assigned", leadId);
+      const [message] = (await claimAll()).messages;
+      await failClientEmail(message.id, message.attemptToken, "before_send");
+      await addEvent("lead.owner_assigned", leadId);
+      expect(await retryClientEmail(message.id, "staff")).toBeNull();
+    });
+
+    it.each([
+      ["a web lead without owner", { source: "web_form" }, "sin asignar"],
+      ["a manual lead with an owner", { source: "whatsapp", ownerUserId: "owner" }, "owner@example.test"],
+      ["an owner without an active role", { source: "other", ownerUserId: "staff" }, "staff@example.test"],
+    ] as const)("team_alert shows the current owner for %s", async (_, lead, owner) => {
+      await seed(lead);
+      await claimAll();
+      const team = (await emails()).find((row) => row.kind === "team_alert");
+      expect(team?.recipient).toBe("team@example.test");
+      expect(team?.body.split("\n")).toContain(`Responsable: ${owner}`);
+    });
+
+    it("keeps every subject on a single line when destination_text has line breaks", async () => {
+      await seed({ destinationText: "Maratón\nde\r\n  Lima" }, { form: "registration" });
+      await claimAll();
+      expect((await emails()).map(({ kind, subject }) => ({ kind, subject }))).toEqual([
+        { kind: "welcome_registration", subject: "Recibimos tu registro para Maratón de Lima" },
+        { kind: "team_alert", subject: "Nuevo registro: Ana · Maratón de Lima" },
+      ]);
+    });
+
     it.each([
       ["the stage changed", { stage: "quoted", nextActionDate: "2000-01-01" }, false],
       ["the next action is no longer due", { stage: "contacted", nextActionDate: "2999-01-01" }, false],
@@ -815,6 +886,8 @@ describe("email processing", () => {
       destinationText: "Maratón de Lima",
       bookingTripTitle: null,
       ownerEmail: null,
+      latestOwnerAssignment: true,
+      currentOwnerEmail: null,
     };
     const fake = fakeDb([
       [candidate, { ...candidate, eventId: token, optedOut: true }],

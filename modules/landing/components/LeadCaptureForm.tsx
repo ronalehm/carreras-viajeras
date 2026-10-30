@@ -25,6 +25,8 @@ export type LeadCaptureDestination =
 
 type LeadCaptureFormProps = {
   action: LeadCaptureAction;
+  // Which section mounts it (webLeadFormSchema validates it): only chooses the email text.
+  form: "registration" | "contact";
   destination: LeadCaptureDestination;
   attribution: LeadAttributionParams;
   standMode: boolean;
@@ -67,6 +69,7 @@ export function RegistrationClosedNotice({ whatsAppUrl }: { whatsAppUrl: string 
  */
 export function LeadCaptureForm({
   action,
+  form,
   destination,
   attribution,
   standMode,
@@ -231,6 +234,8 @@ export function LeadCaptureForm({
               </NativeSelect>,
             )
           )}
+
+          <input type="hidden" name="form" value={form} />
 
           {Object.entries(attribution).map(([key, value]) => (
             <input key={key} type="hidden" name={key} value={value} />

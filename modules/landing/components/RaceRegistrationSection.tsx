@@ -41,6 +41,7 @@ export function RaceRegistrationSection({
   const form = isRegistrationOpen() ? (
     <LeadCaptureForm
       action={action}
+      form="registration"
       destination={{ kind: "fixed", value: trip.slug }}
       attribution={attribution}
       standMode={standMode}

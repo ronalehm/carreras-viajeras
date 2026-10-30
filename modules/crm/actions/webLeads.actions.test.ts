@@ -39,9 +39,10 @@ const TRIP_UNAVAILABLE = {
   code: "trip_unavailable",
   message: "Esta carrera ya no está disponible para registrarse.",
 };
-// Without marketing or attribution parameters, the schema hands these defaults to createWebLead.
+// Without marketing, form or attribution parameters, the schema hands these defaults to createWebLead.
 const NO_EXTRAS = {
   marketingOptIn: false,
+  form: "contact",
   campaignCode: null,
   utmSource: null,
   utmMedium: null,
@@ -222,10 +223,11 @@ describe("submitWebLeadAction", () => {
     expect(isRegistrationOpen).toHaveBeenCalledOnce();
   });
 
-  it("passes promotions and the normalized attribution, and drops any other key of the form", async () => {
+  it("passes promotions, the form mark and the normalized attribution, and drops any other key of the form", async () => {
     const manipulated = {
       ...VALID,
       marketing: "on",
+      form: "registration",
       c: " MML26 ",
       utm_source: "Instagram",
       utm_medium: "social",
@@ -249,6 +251,7 @@ describe("submitWebLeadAction", () => {
       destination: "rio",
       submissionId: SUBMISSION_ID,
       marketingOptIn: true,
+      form: "registration",
       campaignCode: "mml26",
       utmSource: "instagram",
       utmMedium: "social",

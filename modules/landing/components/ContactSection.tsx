@@ -55,6 +55,7 @@ export function ContactSection({ action, trips, destination, attribution }: Cont
           <LeadCaptureForm
             key={defaultValue}
             action={action}
+            form="contact"
             destination={{ kind: "select", options, defaultValue }}
             attribution={attribution}
             standMode={false}

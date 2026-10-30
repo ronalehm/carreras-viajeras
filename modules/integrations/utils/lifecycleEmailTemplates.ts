@@ -5,9 +5,13 @@ import type { clientEmailKindEnum } from "@/lib/db-schema";
 export type LifecycleEmailKind = Exclude<(typeof clientEmailKindEnum.enumValues)[number], "stage">;
 
 type ClientEmailData = { fullName: string; race: string };
-// Internal alerts only carry name, race, entry channel/stage and the lead link: never phone,
-// documents, medical or internal notes.
-type TeamAlertData = ClientEmailData & { sourceLabel: string; leadUrl: string };
+// Internal alerts only carry name, race, entry channel/stage, the current owner's address (team
+// alert) and the lead link: never phone, documents, medical or internal notes.
+type TeamAlertData = ClientEmailData & {
+  sourceLabel: string;
+  ownerEmail: string | null;
+  leadUrl: string;
+};
 type OwnerAlertData = ClientEmailData & { stageLabel: string; leadUrl: string };
 
 export type LifecycleEmailData = {
@@ -22,7 +26,8 @@ export type LifecycleEmailData = {
 
 export type LifecycleEmail = { subject: string; body: string; templateVersion: 1 };
 
-// client_emails_content_chk: subject 1–200 and body 1–4000 characters (code points).
+// client_emails_content_chk: subject 1–200 and body 1–4000 characters (code points). The subject is
+// a single line: {carrera} can come from the free text destination_text.
 const SUBJECT_MAX = 200;
 const BODY_MAX = 4000;
 const SIGNATURE = "\n\nEquipo de Carreras Viajeras";
@@ -73,14 +78,14 @@ const BUILDERS: Builders = {
     subject: `Tu separación para ${race} está confirmada`,
     body: `Hola ${firstName(fullName)}, confirmamos tu separación para ${race}. Nuestro equipo te escribirá para coordinar los siguientes pasos. Si tienes una consulta, responde este correo.`,
   }),
-  team_alert: ({ fullName, race, sourceLabel, leadUrl }) => ({
+  team_alert: ({ fullName, race, sourceLabel, ownerEmail, leadUrl }) => ({
     subject: `Nuevo registro: ${firstName(fullName)} · ${race}`,
     body: [
       "Entró un registro nuevo al embudo.",
       `Nombre: ${fullName.trim()}`,
       `Carrera: ${race}`,
       `Vía de entrada: ${sourceLabel}`,
-      "Responsable: sin asignar",
+      `Responsable: ${clean(ownerEmail) ?? "sin asignar"}`,
       `Ficha: ${leadUrl}`,
     ].join("\n"),
   }),
@@ -102,7 +107,7 @@ export function lifecycleEmailTemplate<K extends LifecycleEmailKind>(
 ): LifecycleEmail {
   const { subject, body } = BUILDERS[kind](data);
   return {
-    subject: truncate(subject, SUBJECT_MAX),
+    subject: truncate(subject.replace(/\s+/g, " ").trim(), SUBJECT_MAX),
     body: `${truncate(body, BODY_MAX - SIGNATURE.length)}${SIGNATURE}`,
     templateVersion: 1,
   };
