@@ -100,7 +100,7 @@ it("renders the registration with the offer of ?c=, the attribution, header and 
   expect(screen.getAllByText(/US\$ 1,799/).length).toBeGreaterThan(0);
   expect(container.querySelector("header")).not.toBeNull();
   expect(container.querySelector("footer")).not.toBeNull();
-  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Reservar mi lugar/ })).toBeNull();
   await waitFor(() => expect(document.title).toBe("Registro · Maratón de Santiago | Carreras Viajeras"));
 });
 
@@ -110,7 +110,7 @@ it("shows the checkout link when the per-request endpoint allows it and preserve
   clerk.userId = "user_demo";
   renderContent("/viajes/maraton-santiago-2027/registro?c=abc&c=ignored");
 
-  const checkoutLink = await screen.findByRole("link", { name: /Continuar al checkout/ });
+  const checkoutLink = await screen.findByRole("link", { name: /Reservar mi lugar/ });
   expect(checkoutLink.getAttribute("href")).toBe("/viajes/maraton-santiago-2027/checkout?c=abc");
   expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1);
   expect(screen.queryByText(/sandbox/i)).toBeNull();
@@ -122,7 +122,7 @@ it("hides the checkout link when the endpoint denies it", async () => {
 
   await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
   await waitFor(() => expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1));
-  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Reservar mi lugar/ })).toBeNull();
 });
 
 it("shows nothing while the endpoint answers or after it fails, without retrying", async () => {
@@ -130,14 +130,14 @@ it("shows nothing while the endpoint answers or after it fails, without retrying
   fetchCheckoutAvailable.mockReturnValue(new Promise(() => {}));
   const pending = renderContent("/viajes/maraton-santiago-2027/registro");
   await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
-  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Reservar mi lugar/ })).toBeNull();
   pending.unmount();
 
   fetchCheckoutAvailable.mockReset().mockRejectedValue(new Error("Request failed with status code 500"));
   renderContent("/viajes/maraton-santiago-2027/registro");
   await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
   await waitFor(() => expect(fetchCheckoutAvailable).toHaveBeenCalledTimes(1));
-  expect(screen.queryByRole("link", { name: /Continuar al checkout/ })).toBeNull();
+  expect(screen.queryByRole("link", { name: /Reservar mi lugar/ })).toBeNull();
   expect(screen.queryByRole("alert")).toBeNull();
 });
 

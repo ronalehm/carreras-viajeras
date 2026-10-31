@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { formatPenCents } from "@/lib/currency";
 import type { OfferView } from "@/modules/landing/utils/catalogOffer";
 
@@ -253,8 +254,9 @@ export function RunnerCheckout({
       <div className="lg:sticky lg:top-32 lg:row-span-6">
         <p className="text-sm font-semibold tracking-wide text-muted-foreground">CARRERAS VIAJERAS · CHECKOUT</p>
         <h1 className="mt-2 text-3xl font-bold lg:text-4xl">{tripTitle}</h1>
-        <p className="mt-2">Tu reserva queda pendiente hasta que Stripe confirme el pago.</p>
-        <p className="mt-2 text-sm">Solo aceptamos tarjetas. El pago se completa en Stripe.</p>
+        <p className="mt-3 text-lg">Asegura tu lugar en 3 pasos.</p>
+        <CheckoutSteps current={returnMode ? 3 : prepared ? 2 : 1} />
+        <p className="mt-6 text-sm text-muted-foreground">Solo aceptamos tarjetas. El pago se completa en Stripe, con conexión segura.</p>
       </div>
       {returnMode && (
         <div role="status" className="flex flex-col gap-3 rounded-lg bg-sky p-4">
@@ -325,5 +327,42 @@ export function RunnerCheckout({
       )}
       <p className="text-sm text-muted-foreground">El pago se confirma cuando Stripe lo informa a nuestro servidor, no desde esta página.</p>
     </section>
+  );
+}
+
+const STEPS = [
+  { title: "Elige cómo pagar", text: "Pago completo o un pago inicial para reservar hoy." },
+  { title: "Revisa y acepta", text: "Confirma el importe en soles y acepta el contrato de tu reserva." },
+  { title: "Paga y listo", text: "Pagas con tarjeta en Stripe y tu reserva queda confirmada en Mis carreras." },
+];
+
+/** The three steps of the checkout; `current` highlights where the runner is. */
+function CheckoutSteps({ current }: { current: 1 | 2 | 3 }) {
+  return (
+    <ol className="mt-6 grid gap-4">
+      {STEPS.map((step, index) => {
+        const number = index + 1;
+        const state = number < current ? "done" : number === current ? "current" : "next";
+        return (
+          <li key={step.title} aria-current={state === "current" ? "step" : undefined} className="flex gap-3">
+            <span
+              aria-hidden
+              className={cn(
+                "flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-bold",
+                state === "current" && "border-primary bg-primary text-primary-foreground",
+                state === "done" && "border-highlight bg-highlight text-night",
+                state === "next" && "border-night/25 text-night/60",
+              )}
+            >
+              {state === "done" ? "✓" : number}
+            </span>
+            <span className={cn(state === "next" && "text-night/70")}>
+              <span className="block font-semibold">{step.title}</span>
+              <span className="block text-sm">{step.text}</span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

@@ -206,6 +206,17 @@ describe("RunnerCheckout", () => {
     expect(screen.queryByRole("note")).toBeNull();
   });
 
+  it("guides the runner through three steps and highlights the current one", async () => {
+    vi.mocked(fetch).mockResolvedValue(ok(prepared) as Response);
+    renderStart();
+    const steps = () => screen.getAllByRole("listitem").filter((item) => /Elige cómo pagar|Revisa y acepta|Paga y listo/.test(item.textContent ?? ""));
+    expect(steps()).toHaveLength(3);
+    expect(steps()[0].getAttribute("aria-current")).toBe("step");
+    fireEvent.click(screen.getByRole("button", { name: "Preparar reserva" }));
+    await screen.findByText("Documento único");
+    expect(steps()[1].getAttribute("aria-current")).toBe("step");
+  });
+
   it("makes card-only payment clear to the runner", () => {
     render(<RunnerCheckout tripId="trip" tripTitle="Maratón" campaignCode={null} offer={null}
       returned={false} cancelled={false} bookingId={null} attemptId={null} simulated={false} />);
