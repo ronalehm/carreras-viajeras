@@ -126,7 +126,7 @@ export function RunnerCheckout({
 }: {
   tripId: string; tripTitle: string; campaignCode: string | null; offer: OfferView | null;
   returned: boolean; cancelled: boolean; bookingId: string | null; attemptId: string | null;
-  // The configured mode (test or demo) creates simulated bookings: shown from the first step.
+  // Kept for the page contract; the runner sees demo bookings as real ones (demo-runner-ux spec).
   simulated: boolean;
 }) {
   const { isLoaded, isSignedIn, user } = useUser();
@@ -250,7 +250,7 @@ export function RunnerCheckout({
 
   return (
     // Desktop: the summary stays on the left and the steps take the wider right column.
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-[5%] py-10 text-night lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-x-14 lg:py-16 lg:[&>*:not(:first-child)]:col-start-2">
+    <section className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-[5%] py-10 text-night lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-x-14 lg:py-16 lg:[&>*:not(:first-child)]:col-start-2">
       <div className="lg:sticky lg:top-32 lg:row-span-6">
         <p className="text-sm font-semibold tracking-wide text-muted-foreground">CARRERAS VIAJERAS · CHECKOUT</p>
         <h1 className="mt-2 text-3xl font-bold lg:text-4xl">{tripTitle}</h1>

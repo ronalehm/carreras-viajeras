@@ -57,7 +57,7 @@ export function RunnerRewardsView({ rewards, referrals, referralUrl }: { rewards
         ]} /> : null}
       </div>
       <div className="grid gap-3"><h3 className="font-semibold">Movimientos de estrellas</h3>
-        {rewards.ledger.length === 0 ? <p className="text-sm text-muted-foreground">Aún no hay movimientos.</p> : <ul className="grid gap-3">{rewards.ledger.map((entry) => <li key={entry.id} className="rounded-xl border p-4 text-sm"><p>{entry.description}</p><p className="font-medium">{entry.delta > 0 ? "+" : ""}{entry.delta} estrellas</p><p className="text-muted-foreground">{rewardInstant(entry.createdAt)}</p></li>)}</ul>}
+        {rewards.ledger.length === 0 ? <p className="text-sm text-muted-foreground">Aún no hay movimientos.</p> : <ul className="grid gap-3 sm:grid-cols-2">{rewards.ledger.map((entry) => <li key={entry.id} className="rounded-xl border p-4 text-sm"><p>{entry.description}</p><p className="font-medium">{entry.delta > 0 ? "+" : ""}{entry.delta} estrellas</p><p className="text-muted-foreground">{rewardInstant(entry.createdAt)}</p></li>)}</ul>}
         {rewards.ledger.length === 100 && <p className="text-sm text-muted-foreground">Se muestran los 100 movimientos más recientes.</p>}
       </div>
     </section>
