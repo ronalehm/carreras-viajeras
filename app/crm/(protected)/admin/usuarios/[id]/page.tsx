@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { CrmPageHeader } from "@/components/shared/CrmPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { canManageRole, canRemoveAccounts, manageableRoles } from "@/lib/auth/permissions";
+import { can, canManageRole, canRemoveAccounts, manageableRoles } from "@/lib/auth/permissions";
 import {
   AccountStatusSection,
   formatAssignmentLabel,
@@ -14,10 +15,19 @@ import {
   StaffTable,
   USER_ROLE_FILTER_LABELS,
 } from "@/modules/accounts";
+import {
+  getCheckoutStatus,
+  grantDemoParticipantAction,
+  listDemoParticipants,
+  revokeDemoParticipantAction,
+} from "@/modules/booking-checkout";
 import { listSponsors } from "@/modules/sponsors";
 
 // Fixed title: no name or email in the browser history or shared tabs.
 export const metadata: Metadata = { title: "Usuario" };
+
+const CHECKOUT_LABELS = { off: "apagado", demo: "demo (Stripe TEST)", test: "test", live: "live" } as const;
+const ACCOUNT_STATUS_LABELS = { active: "Activa", disabled: "Desactivada", deleted: "Eliminada" } as const;
 
 // Next passes the segment still percent-encoded, so the page decodes it.
 function decodeUserId(rawId: string): string | null {
@@ -68,6 +78,11 @@ export default async function UserDetailPage({ params }: PageProps<"/crm/admin/u
   // R17: never on the own account nor on a super_admin; the actions check it again.
   const showAccount =
     canRemove && detail.userId !== access.user.id && !roles.includes("super_admin");
+  // "Pago en línea" needs offers.manage, the permission the demo actions re-check on the server.
+  const canManageCheckout = !deleted && can(access.user.staffRoles, "offers.manage");
+  const paymentEnabled = canManageCheckout
+    ? (await listDemoParticipants()).some((item) => item.userId === detail.userId && !item.revokedAt)
+    : false;
 
   // Sections are kept in fixed positions (null when hidden), so a status change re-renders the
   // "Cuenta" card in place and it keeps its message.
@@ -102,6 +117,39 @@ export default async function UserDetailPage({ params }: PageProps<"/crm/admin/u
           {detail.sponsor ? <p className="text-sm">Marca: {detail.sponsor.name}</p> : null}
         </div>
       )}
+      {deleted ? null : (
+        <Card className="gap-5 overflow-hidden shadow-none">
+          <CardHeader className="border-b pb-5">
+            <CardTitle>Datos</CardTitle>
+            <CardDescription>Solo lectura: los datos personales los gestiona la persona desde su cuenta.</CardDescription>
+          </CardHeader>
+          <CardContent className="min-w-0">
+            <dl className="grid gap-4 text-sm sm:grid-cols-3">
+              <div><dt className="text-muted-foreground">Nombre</dt><dd className="font-medium">{detail.name ?? "—"}</dd></div>
+              <div><dt className="text-muted-foreground">Correo</dt><dd className="font-medium break-all">{detail.email}</dd></div>
+              <div><dt className="text-muted-foreground">Cuenta</dt><dd className="font-medium">{ACCOUNT_STATUS_LABELS[detail.status]}</dd></div>
+            </dl>
+          </CardContent>
+        </Card>
+      )}
+      {canManageCheckout ? (
+        <Card className="gap-5 overflow-hidden shadow-none">
+          <CardHeader className="border-b pb-5">
+            <CardTitle>Pago en línea</CardTitle>
+            <CardDescription>Modo actual: {CHECKOUT_LABELS[getCheckoutStatus()]}.</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-center gap-3">
+            {paymentEnabled ? <Badge>Habilitado</Badge> : <Badge variant="outline">No habilitado</Badge>}
+            {detail.status !== "active" ? null : paymentEnabled ? (
+              <ConfirmActionButton action={revokeDemoParticipantAction} fields={{ userId: detail.userId }} label="Quitar pago"
+                title="Quitar el pago en línea" description="Esta cuenta dejará de ver y usar el checkout." confirmLabel="Quitar pago" variant="outline" />
+            ) : (
+              <ConfirmActionButton action={grantDemoParticipantAction} fields={{ email: detail.email, note: "" }} label="Habilitar pago"
+                title="Habilitar el pago en línea" description="Esta cuenta podrá ver y usar el checkout (demo con Stripe TEST y reservas simuladas)." confirmLabel="Habilitar pago" variant="outline" />
+            )}
+          </CardContent>
+        </Card>
+      ) : null}
       {deleted ? null : (
         <Card className="gap-5 overflow-hidden shadow-none">
           <CardHeader className="border-b pb-5">

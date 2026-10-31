@@ -18,6 +18,12 @@ const GRANT_MESSAGES: Record<GrantDemoParticipantResult, ConfirmActionState> = {
   account_not_found: { status: "error", message: "No hay ninguna cuenta activa con ese correo verificado. La persona debe iniciar sesión una vez en el sitio." },
   ambiguous_account: { status: "error", message: "Hay más de una cuenta con ese correo. Revísalo en Usuarios antes de darla de alta." },
 };
+// The demo list lives in /crm/contratos, the user list and each user's page (Pago en línea).
+function revalidateDemoPages() {
+  revalidatePath("/crm/contratos");
+  revalidatePath("/crm/admin/usuarios");
+  revalidatePath("/crm/admin/usuarios/[id]", "page");
+}
 const failure = (message: string): ConfirmActionState => ({ status: "error", message });
 const text = (value: FormDataEntryValue | null) => (typeof value === "string" ? value : "");
 
@@ -39,7 +45,7 @@ export async function grantDemoParticipantAction(_previous: ConfirmActionState, 
   if (!parsed.success) return failure(parsed.error.issues[0]?.message ?? "Revisa el correo.");
   try {
     const result = await grantDemoParticipant(parsed.data, access.actorId);
-    if (GRANT_MESSAGES[result].status === "success") revalidatePath("/crm/contratos");
+    if (GRANT_MESSAGES[result].status === "success") revalidateDemoPages();
     return GRANT_MESSAGES[result];
   } catch {
     // Driver errors carry statements and parameters; never send their cause to the browser.
@@ -54,7 +60,7 @@ export async function revokeDemoParticipantAction(_previous: ConfirmActionState,
   if (!parsed.success) return failure("El participante no existe. Recarga la página.");
   try {
     if (await revokeDemoParticipant(parsed.data) === "not_active") return failure("El participante ya estaba dado de baja. Recarga la página.");
-    revalidatePath("/crm/contratos");
+    revalidateDemoPages();
     return { status: "success", message: "Participante dado de baja." };
   } catch {
     return failure("No pudimos guardar la baja. Inténtalo de nuevo.");
