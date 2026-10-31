@@ -1,6 +1,6 @@
 # Landing: un solo formulario de datos
 
-- Estado: borrador
+- Estado: aprobado
 - Módulos: landing (`/contacto` y `/viajes/[slug]/registro`).
 - Pedido del usuario (2026-10-31): «la página contacto o regístrate es lo mismo y están en varios lados duplicados, solicitando la misma información, corregir para que menos es más y sea entendible». El usuario eligió la opción «Un solo formulario».
 
@@ -25,7 +25,7 @@ Sin cambios:
 - los valores de `source` en BD (los leads antiguos con origen de contacto siguen siendo válidos), el CRM y `/cuenta`.
 
 ## Plan
-- [ ] F.1 `/contacto` sin formulario (lista de maratones y WhatsApp) con redirección de `?destino=`; el título de la maratón pasa a «Pide información»; tests.
+- [x] F.1 `/contacto` sin formulario (lista de maratones y WhatsApp) con redirección de `?destino=`; el título de la maratón pasa a «Pide información»; tests.
 
 ## Aceptación
 - `/contacto` no muestra ningún formulario: muestra las maratones publicadas, con sus enlaces de registro, y WhatsApp.

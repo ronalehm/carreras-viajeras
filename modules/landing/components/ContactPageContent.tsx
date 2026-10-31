@@ -1,44 +1,48 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCatalogTripOptions } from "../hooks/useCatalogTripOptions";
-import { attributionParams, searchParamsToRecord } from "../utils/inquiry";
+import { attributionParams, registrationHref, resolveDestination, searchParamsToRecord } from "../utils/inquiry";
 import { ContactSection } from "./ContactSection";
-import type { LeadCaptureAction } from "./LeadCaptureForm";
 import { ScrollToHero } from "./ScrollToHero";
 
-/** Brief loading state without the form: it is mounted once, with the trips already known. */
+/** Brief loading state while the published trips arrive (or while an old link redirects). */
 export function ContactPageLoading() {
   return (
     <section className="bg-sky px-4 py-12 text-night sm:px-[8%] sm:py-16">
       <p role="status" aria-busy="true" className="text-base text-asphalt">
-        Cargando el formulario de contacto…
+        Cargando las carreras…
       </p>
     </section>
   );
 }
 
 /**
- * /contacto in the browser: ?destino= and the attribution come from the URL, and the published
- * trips from GET /api/viajes. If the endpoint fails, the form keeps the destinations without catalog.
+ * /contacto in the browser: the published trips from GET /api/viajes and the attribution from the
+ * URL. An old `?destino=` link of a published trip (or its alias) goes to that trip's registration
+ * page with the same attribution, so campaigns keep working.
  */
-export function ContactPageContent({ action }: { action: LeadCaptureAction }) {
+export function ContactPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const { status, data } = useCatalogTripOptions();
-  if (status === "pending") return <ContactPageLoading />;
-
   const query = searchParamsToRecord(searchParams);
+  const attribution = attributionParams(query);
+  const trips = data ?? [];
+  const target = resolveDestination(query.destino, trips.map((trip) => trip.slug));
+  const redirectTo = target ? registrationHref(target, attribution) : null;
+
+  useEffect(() => {
+    if (redirectTo) router.replace(redirectTo);
+  }, [redirectTo, router]);
+
+  if (status === "pending" || redirectTo) return <ContactPageLoading />;
   return (
     <>
-      {/* Once the form is mounted: the page opens at its hero, not where the previous one was. */}
+      {/* The page opens at its hero, not where the previous one was. */}
       <ScrollToHero />
-      <ContactSection
-        action={action}
-        // Trips already loaded stay after a failed refetch, so the form keeps its key and what was typed.
-        trips={data ?? []}
-        destination={query.destino}
-        attribution={attributionParams(query)}
-      />
+      <ContactSection trips={trips} attribution={attribution} />
     </>
   );
 }

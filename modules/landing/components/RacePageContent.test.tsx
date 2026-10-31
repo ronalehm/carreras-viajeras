@@ -123,7 +123,7 @@ it("shows a signed-in runner the reservation instead of the registration form", 
   renderContent("/viajes/maraton-santiago-2027/registro");
 
   expect(await screen.findByRole("heading", { name: "Reserva tu lugar" })).toBeTruthy();
-  expect(screen.queryByRole("heading", { name: "Regístrate" })).toBeNull();
+  expect(screen.queryByRole("heading", { name: "Pide información" })).toBeNull();
   expect(screen.queryByRole("button", { name: /Enviar mis datos/ })).toBeNull();
   expect(await screen.findAllByRole("link", { name: /Reservar mi lugar/ })).toHaveLength(1);
 });

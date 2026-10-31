@@ -1,34 +1,24 @@
-import { INQUIRY_DESTINATIONS, INQUIRY_DESTINATION_IDS } from "@/lib/inquiryDestinations";
-import { isRegistrationOpen } from "@/lib/registrationConsent";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 import {
   GENERAL_INQUIRY_MESSAGE,
   WHATSAPP_NUMBER,
   buildWhatsAppUrl,
-  resolveDestination,
+  registrationHref,
   type LeadAttributionParams,
 } from "../utils/inquiry";
-import { LeadCaptureForm, RegistrationClosedNotice, type LeadCaptureAction } from "./LeadCaptureForm";
+import { WhatsAppLink } from "./LeadCaptureForm";
 
 type ContactSectionProps = {
-  action: LeadCaptureAction;
   trips: { slug: string; title: string }[];
-  destination?: string | string[];
   attribution: LeadAttributionParams;
 };
 
-/** /contacto: the same lead form with a race selector (published trips, then destinations without catalog). */
-export function ContactSection({ action, trips, destination, attribution }: ContactSectionProps) {
-  const options = [
-    ...trips.map((trip) => ({ value: trip.slug, label: trip.title })),
-    ...INQUIRY_DESTINATION_IDS.map((id) => ({
-      value: id,
-      label: `${INQUIRY_DESTINATIONS[id].name} · Quiero novedades`,
-    })),
-  ];
-  const defaultValue = resolveDestination(
-    destination,
-    options.map((option) => option.value),
-  );
+/**
+ * /contacto without a form: the only data form is each race's "Pide información". This page lists
+ * the published races (keeping the URL attribution) and offers WhatsApp for anything else.
+ */
+export function ContactSection({ trips, attribution }: ContactSectionProps) {
   const whatsAppUrl = buildWhatsAppUrl(WHATSAPP_NUMBER, GENERAL_INQUIRY_MESSAGE);
 
   return (
@@ -43,27 +33,33 @@ export function ContactSection({ action, trips, destination, attribution }: Cont
           Tu próxima historia empieza aquí.
         </h1>
         <p className="text-base leading-relaxed text-asphalt">
-          Cuéntanos qué carrera tienes en mente y te escribiremos por WhatsApp.
-          <br />
-          Sin pagos. Sin compromiso de reserva.
+          Elige tu carrera y pide información: te escribiremos por WhatsApp. Sin pagos. Sin compromiso
+          de reserva.
         </p>
       </div>
-      <div className="w-full max-w-md lg:max-w-xl">
-        {/* Gate P-L: in production with the placeholder legal text the form is not shown. */}
-        {isRegistrationOpen() ? (
-          // key: navigating to another ?destino= without unmounting resets the form to its new default.
-          <LeadCaptureForm
-            key={defaultValue}
-            action={action}
-            form="contact"
-            destination={{ kind: "select", options, defaultValue }}
-            attribution={attribution}
-            standMode={false}
-            turnstileSiteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || null}
-            whatsAppUrl={whatsAppUrl}
-          />
-        ) : (
-          <RegistrationClosedNotice whatsAppUrl={whatsAppUrl} />
+      <div className="grid content-start gap-6">
+        {trips.length > 0 && (
+          <ul aria-label="Carreras disponibles" className="grid gap-3">
+            {trips.map((trip) => (
+              <li key={trip.slug}>
+                <Link
+                  href={registrationHref(trip.slug, attribution)}
+                  className="flex items-center justify-between gap-4 rounded-xl border border-primary/15 bg-background p-5 font-semibold no-underline transition-colors hover:border-primary"
+                >
+                  {trip.title}
+                  <span className="flex items-center gap-1 text-sm text-primary">
+                    Pide información <ArrowUpRight aria-hidden className="size-4" />
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {whatsAppUrl && (
+          <p className="text-base">
+            ¿Otra carrera o una duda?{" "}
+            <WhatsAppLink href={whatsAppUrl}>Escríbenos por WhatsApp</WhatsAppLink>
+          </p>
         )}
       </div>
     </section>
