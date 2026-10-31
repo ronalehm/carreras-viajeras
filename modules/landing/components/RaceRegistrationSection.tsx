@@ -152,7 +152,7 @@ export function RaceRegistrationSection({
           <div className="mx-auto flex max-w-md flex-col gap-6 lg:contents">
             <div className="lg:col-start-1 lg:row-start-1">
               <h2 id="registro-title" className="display-title text-display-section">
-                {signedIn ? "Reserva tu lugar" : "Regístrate"}
+                {signedIn ? "Reserva tu lugar" : "Pide información"}
               </h2>
               <p className="mt-4 text-base leading-relaxed">
                 {signedIn
