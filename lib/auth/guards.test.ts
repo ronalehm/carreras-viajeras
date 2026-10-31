@@ -283,6 +283,32 @@ describe("roles from the database", () => {
     logError.mockRestore();
   });
 
+  it("reports only the SQLSTATE of a wrapped database error", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    const pgError = Object.assign(new Error('column "sponsor_id" does not exist'), { code: "42703" });
+    accept.mockRejectedValue(Object.assign(new Error("Failed query: select secret"), { cause: pgError }));
+
+    const error = await requireCrmUser().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(ForbiddenError);
+    expect((error as ForbiddenError).reason).toBe("role_lookup_failed");
+    expect((error as ForbiddenError).detail).toBe("42703");
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed (SQLSTATE 42703)");
+    expect(JSON.stringify(logError.mock.calls)).not.toMatch(/sponsor_id|secret/);
+    logError.mockRestore();
+  });
+
+  it("ignores a code that is not a SQLSTATE", async () => {
+    const logError = vi.spyOn(console, "error").mockImplementation(() => {});
+    signedInAs(clerkUser());
+    accept.mockRejectedValue(Object.assign(new Error("fetch failed"), { code: "ECONNREFUSED" }));
+
+    const error = await requireCrmUser().catch((caught: unknown) => caught);
+    expect((error as ForbiddenError).detail).toBeUndefined();
+    expect(logError).toHaveBeenCalledWith("auth: role lookup failed");
+    logError.mockRestore();
+  });
+
   it("maps database errors to ForbiddenError for unverified accounts too", async () => {
     signedInAs(clerkUser({ emailAddresses: [emailAddress("idn_primary", "ana@example.com", "unverified")] }));
     load.mockRejectedValue(new Error("connection refused"));

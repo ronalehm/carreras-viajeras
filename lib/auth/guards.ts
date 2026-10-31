@@ -86,13 +86,25 @@ async function loadRoles(id: string, email: string, emailVerified: boolean) {
   } catch (error) {
     // Fail closed without exposing the original database message, but leave a trace. A
     // misconfigured secret (e.g. pasted with spaces) names the field, never its value.
-    console.error(
-      error instanceof Error && error.name === "InvalidEnvironmentError"
-        ? `auth: role lookup failed (${error.message})`
-        : "auth: role lookup failed",
-    );
-    throw new ForbiddenError("role_lookup_failed");
+    if (error instanceof Error && error.name === "InvalidEnvironmentError") {
+      console.error(`auth: role lookup failed (${error.message})`);
+      throw new ForbiddenError("role_lookup_failed", "configuration");
+    }
+    const sqlState = findSqlState(error);
+    console.error(sqlState ? `auth: role lookup failed (SQLSTATE ${sqlState})` : "auth: role lookup failed");
+    throw new ForbiddenError("role_lookup_failed", sqlState);
   }
+}
+
+// PostgreSQL error class (e.g. 42703 undefined column, 28P01 bad password) from the Neon error,
+// which Drizzle wraps in `cause`. Only the 5-character code, never the message.
+function findSqlState(error: unknown): string | undefined {
+  for (let current = error, depth = 0; current && depth < 5; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)) return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
 }
 
 // cache() only memoizes within one RSC render; route handlers and actions query every call.

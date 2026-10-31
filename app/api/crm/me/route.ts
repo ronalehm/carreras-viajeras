@@ -13,7 +13,7 @@ export async function GET() {
     // Self-check for a signed-in account: a fixed reason code, never the underlying error.
     if (error instanceof ForbiddenError && error.reason) {
       return Response.json(
-        { error: "forbidden", reason: error.reason },
+        { error: "forbidden", reason: error.reason, ...(error.detail ? { detail: error.detail } : {}) },
         { status: 403, headers: { "Cache-Control": "no-store" } },
       );
     }
