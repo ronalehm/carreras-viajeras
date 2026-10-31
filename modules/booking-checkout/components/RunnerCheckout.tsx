@@ -248,10 +248,11 @@ export function RunnerCheckout({
   const notice = checkoutState ? returnNotice(checkoutState, cancelled) : null;
 
   return (
-    <section className="mx-auto flex w-full max-w-2xl flex-col gap-6 px-4 py-10 text-night">
-      <div>
+    // Desktop: the summary stays on the left and the steps take the wider right column.
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-[5%] py-10 text-night lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-start lg:gap-x-14 lg:py-16 lg:[&>*:not(:first-child)]:col-start-2">
+      <div className="lg:sticky lg:top-32 lg:row-span-6">
         <p className="text-sm font-semibold tracking-wide text-muted-foreground">CARRERAS VIAJERAS · CHECKOUT</p>
-        <h1 className="mt-2 text-3xl font-bold">{tripTitle}</h1>
+        <h1 className="mt-2 text-3xl font-bold lg:text-4xl">{tripTitle}</h1>
         <p className="mt-2">Tu reserva queda pendiente hasta que Stripe confirme el pago.</p>
         <p className="mt-2 text-sm">Solo aceptamos tarjetas. El pago se completa en Stripe.</p>
       </div>
