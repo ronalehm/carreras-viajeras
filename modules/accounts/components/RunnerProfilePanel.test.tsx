@@ -20,9 +20,9 @@ describe("RunnerProfilePanel hub", () => {
       </RunnerProfilePanel>,
     );
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Mi cuenta");
-    expect(screen.getByRole("navigation", { name: "Mi cuenta" })).toBeTruthy();
-    for (const [label, href] of [["Mis carreras", "#mis-carreras"], ["Beneficios", "#beneficios"], ["Referidos", "#referidos"], ["Mi perfil", "#mi-perfil"]]) {
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Mi perfil");
+    expect(screen.getByRole("navigation", { name: "Mi perfil" })).toBeTruthy();
+    for (const [label, href] of [["Mis carreras", "#mis-carreras"], ["Beneficios", "#beneficios"], ["Referidos", "#referidos"], ["Mis datos", "#mis-datos"]]) {
       expect(screen.getByRole("link", { name: label }).getAttribute("href")).toBe(href);
     }
     expect(screen.getByRole("form", { name: "Editar mi perfil" })).toBeTruthy();
@@ -40,6 +40,6 @@ describe("RunnerProfilePanel hub", () => {
     expect(screen.queryByText("Private race data")).toBeNull();
     expect(screen.queryByText("Private reward data")).toBeNull();
     expect(screen.queryByRole("form")).toBeNull();
-    expect(screen.queryByRole("navigation", { name: "Mi cuenta" })).toBeNull();
+    expect(screen.queryByRole("navigation", { name: "Mi perfil" })).toBeNull();
   });
 });

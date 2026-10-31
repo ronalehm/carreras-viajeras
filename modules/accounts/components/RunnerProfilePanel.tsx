@@ -19,8 +19,8 @@ type RunnerProfilePanelProps = {
 export function RunnerProfilePanel({ state, careers, children }: RunnerProfilePanelProps) {
   return (
     <div className="mx-auto w-full max-w-7xl px-[6%] pt-9 pb-14 text-primary md:py-14 lg:px-[5%]">
-      <p className="mb-6 text-xs font-bold tracking-[0.2em]">MI CUENTA</p>
-      <h1 className="mb-6 text-3xl font-semibold">Mi cuenta</h1>
+      <p className="mb-4 text-xs font-bold tracking-[0.2em]">COMUNIDAD CARRERAS VIAJERAS</p>
+      <h1 className="mb-8 text-3xl font-semibold lg:text-4xl">Mi perfil</h1>
 
       {state.status === "unverified" && (
         <div className="flex flex-col items-start gap-4">
@@ -48,7 +48,7 @@ export function RunnerProfilePanel({ state, careers, children }: RunnerProfilePa
       {state.status === "ok" && (
         <div className="lg:grid lg:grid-cols-[12rem_minmax(0,1fr)] lg:gap-12">
           {/* Desktop: the section index becomes a sticky side column. */}
-          <nav aria-label="Mi cuenta" className="mb-8 border-b border-border pb-4 lg:sticky lg:top-32 lg:mb-0 lg:self-start lg:border-r lg:border-b-0 lg:pr-6 lg:pb-0">
+          <nav aria-label="Mi perfil" className="mb-8 border-b border-border pb-4 lg:sticky lg:top-32 lg:mb-0 lg:self-start lg:border-r lg:border-b-0 lg:pr-6 lg:pb-0">
             <ul className="flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold lg:flex-col lg:gap-y-4">
               {careers && <li><a href="#mis-carreras" className="underline underline-offset-4">Mis carreras</a></li>}
               {children && (
@@ -57,14 +57,14 @@ export function RunnerProfilePanel({ state, careers, children }: RunnerProfilePa
                   <li><a href="#referidos" className="underline underline-offset-4">Referidos</a></li>
                 </>
               )}
-              <li><a href="#mi-perfil" className="underline underline-offset-4">Mi perfil</a></li>
+              <li><a href="#mis-datos" className="underline underline-offset-4">Mis datos</a></li>
             </ul>
           </nav>
           <div className="space-y-12">
             {careers}
             {children}
-            <section id="mi-perfil" aria-labelledby="my-profile-title" className="scroll-mt-6 space-y-5 border-t border-border pt-8">
-              <h2 id="my-profile-title" className="text-2xl font-semibold">Mi perfil</h2>
+            <section id="mis-datos" aria-labelledby="my-profile-title" className="scroll-mt-32 space-y-5 border-t border-border pt-8">
+              <h2 id="my-profile-title" className="text-2xl font-semibold">Mis datos</h2>
               <ProfileEditor {...state} />
             </section>
           </div>
