@@ -3,6 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { esMX } from "@clerk/localizations";
 import "./globals.css";
 import localFont from "next/font/local";
+import { ClarityAnalytics } from "@/components/shared/ClarityAnalytics";
 import { cn } from "@/lib/utils";
 import { Providers } from "./providers";
 
@@ -43,7 +44,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body>
         <ClerkProvider localization={esMX}>
-          <Providers>{children}</Providers>
+          <Providers>
+            {children}
+            <ClarityAnalytics />
+          </Providers>
         </ClerkProvider>
       </body>
     </html>

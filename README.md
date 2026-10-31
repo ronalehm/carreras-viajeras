@@ -2349,6 +2349,35 @@ reconciliar su esquema real antes de aplicar `0010`: no reaplicar objetos, edita
 migraciones ya ejecutadas ni asumir que la numeración histórica sigue disponible.
 La aplicación de esta migración en Neon no se ha realizado durante la integración.
 
+## Analítica con Microsoft Clarity
+
+Spec: [`analytics-clarity.md`](docs/specs/analytics-clarity.md). Mide clics, desplazamientos y grabaciones de las páginas públicas solo con consentimiento previo. Sin dependencias nuevas: el tag oficial se carga con `next/script`.
+
+**Configuración de build.** `NEXT_PUBLIC_CLARITY_PROJECT_ID` es pública y opcional (producción: `z63dn24o7t`). Al ser `NEXT_PUBLIC_*`, Next la incorpora al compilar: hay que definirla como variable de **build** en Workers Builds/CI; ponerla solo en `wrangler.jsonc` no cambia un bundle ya construido. Vacía, ausente o no alfanumérica deja Clarity apagado: sin banner, sin botón y sin script. Además solo se activa en un build de producción servido en `carreras-viajeras.mentec.dev` exacto; localhost, previews y otros dominios nunca envían datos.
+
+**A comprobar en producción.** La cola se guarda como arrays (el snippet oficial usa `arguments`): confirmar en el panel que `consentv2` se aplica y que `identify` aparece. Clarity registra por sí mismo la URL de cada página pública, query incluida (por ejemplo `?c=`): no son etiquetas nuestras y las rutas con tokens están denegadas.
+
+**Consentimiento.**
+- Banner pequeño, no modal, por encima de la barra móvil fija, con «Aceptar analítica» y «Rechazar». La navegación y el registro no dependen de aceptar.
+- La decisión se guarda en `localStorage["cv:analytics-consent:v1"]` (`{ version: 1, analytics, updatedAt }`) y dura 180 días desde que se tomó. Si el valor es corrupto o `localStorage` está bloqueado, queda pendiente y no se carga nada.
+- Al aceptar se pone en la cola `consentv2` (analítica concedida, publicidad denegada) antes de insertar un único tag.
+- «Preferencias de analítica», en el pie de las páginas públicas, vuelve a abrir el banner. Rechazar con el tag cargado envía `consentv2` denegado, borra solo `_clck`/`_clsk` (host, dominio y dominio padre, ruta `/`) y recarga la página.
+
+**Rutas.** Solo `/`, `/noticias`, `/noticias/<slug>`, `/viajes/<slug>` (no `ficha_viaje`) y `/contacto`. Todo lo demás (CRM, API, cuenta, `/mis-carreras`, `/r/*`, registro y checkout) queda excluido. Un documento con el tag sale hacia una ruta excluida con una navegación completa (los enlaces se interceptan; la redirección antigua de `/contacto?destino=` usa `window.location.replace`). Si aun así la ruta cambia a una excluida (atrás/adelante, redirección de Clerk), la página se recarga al momento; ese instante es un riesgo residual documentado en la spec. El formulario de leads y el contenido personal del menú de cuenta llevan `data-clarity-mask="true"`.
+
+**Identidad.** Con sesión, consentimiento y ruta permitida se envía `clarity("identify", <userId de Clerk>)`, nunca correo, nombre ni roles. Al cerrar sesión o cambiar de cuenta en la misma pestaña se borran `_clck`/`_clsk` y, si el tag estaba cargado, se recarga.
+
+**Panel de Clarity (paso posterior, con autorización).** En la configuración del proyecto, activar que Clarity **requiera consentimiento** (no dejar cookies activadas por defecto) y revisar las máscaras. Después de un despliegue autorizado, comprobar en el dominio real, con una sesión limpia:
+1. Rechazar: no hay petición a `clarity.ms`.
+2. Aceptar: una sola carga de `https://www.clarity.ms/tag/z63dn24o7t` y peticiones `/collect`.
+3. Desde una página pública, ir al CRM, a la cuenta y al checkout: cada uno abre un documento sin el tag.
+4. Retirar el consentimiento desde el pie: se recarga y no vuelve a cargar.
+5. Panel → Grabaciones (los datos pueden tardar hasta dos horas) y, con sesión en una página pública, el filtro por id de Clerk.
+
+«Código instalado», «peticiones recibidas» y «datos visibles en el panel» son evidencias distintas. Los checks locales (`npx vitest run lib/clarity.test.ts components/shared/ClarityAnalytics.test.tsx`) usan un SDK simulado y no envían nada.
+
+**Retirar la integración.** Basta con vaciar `NEXT_PUBLIC_CLARITY_PROJECT_ID` en el build y redesplegar: no hay banner ni script. Para quitar el código: `<ClarityAnalytics />` en `app/layout.tsx`, `AnalyticsPreferencesButton` en `SiteFooter`, `components/shared/ClarityAnalytics*`, `components/shared/AnalyticsPreferencesButton.tsx` y `lib/clarity*`; las máscaras `data-clarity-mask` pueden quedarse. Borrar también el proyecto o sus datos en el panel de Clarity si procede.
+
 ## Reglas de colaboración
 
 Leer [`docs/SETUP.md`](docs/SETUP.md) antes de modificar código. El negocio vive en `modules/<domain>/` y `app/` compone rutas. Reutilizar componentes y validar fronteras con Zod. El flujo SDD requiere spec aprobada, implementación y revisión; solo el usuario puede aprobar y ningún agente modifica el registro de aprobaciones.

@@ -55,6 +55,7 @@ export function AccountMenu({ fallback = <span aria-hidden className="size-10" /
     <DropdownMenu>
       <DropdownMenuTrigger
         aria-label="Abrir menú de la cuenta"
+        data-clarity-mask="true"
         className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary text-sm font-semibold text-primary-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
         {user.hasImage ? (
@@ -71,7 +72,8 @@ export function AccountMenu({ fallback = <span aria-hidden className="size-10" /
         )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64 rounded-xl p-2">
-        <div className="px-3 py-2 text-primary">
+        {/* Rendered in Base UI's portal: the mask travels with the personal content. */}
+        <div data-clarity-mask="true" className="px-3 py-2 text-primary">
           {name && <p className="truncate text-sm font-semibold">{name}</p>}
           {email && email !== name && (
             <p className="truncate text-xs text-muted-foreground">{email}</p>

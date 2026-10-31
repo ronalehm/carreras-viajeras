@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useCatalogTripOptions } from "../hooks/useCatalogTripOptions";
 import { attributionParams, registrationHref, resolveDestination, searchParamsToRecord } from "../utils/inquiry";
 import { ContactSection } from "./ContactSection";
@@ -21,10 +21,10 @@ export function ContactPageLoading() {
 /**
  * /contacto in the browser: the published trips from GET /api/viajes and the attribution from the
  * URL. An old `?destino=` link of a published trip (or its alias) goes to that trip's registration
- * page with the same attribution, so campaigns keep working.
+ * page with the same attribution, so campaigns keep working. It is a full document navigation:
+ * registration is excluded from Clarity, so it must never inherit this page's analytics tag.
  */
 export function ContactPageContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const { status, data } = useCatalogTripOptions();
   const query = searchParamsToRecord(searchParams);
@@ -34,8 +34,8 @@ export function ContactPageContent() {
   const redirectTo = target ? registrationHref(target, attribution) : null;
 
   useEffect(() => {
-    if (redirectTo) router.replace(redirectTo);
-  }, [redirectTo, router]);
+    if (redirectTo) window.location.replace(redirectTo);
+  }, [redirectTo]);
 
   if (status === "pending" || redirectTo) return <ContactPageLoading />;
   return (
