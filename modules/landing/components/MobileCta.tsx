@@ -10,7 +10,7 @@ export function MobileCta() {
       {/* In-flow spacer: reserves the bar's height after the footer, only where the bar shows. */}
       <div aria-hidden className={`${BAR_HEIGHT} bg-night sm:hidden`} />
       <Link
-        href="/contacto?destino=santiago-2027"
+        href="/viajes/maraton-santiago-2027/registro"
         className={`fixed inset-x-0 bottom-0 z-30 flex ${BAR_HEIGHT} items-center justify-between gap-3 bg-night/95 px-[5%] pb-[env(safe-area-inset-bottom)] text-primary-foreground no-underline shadow-[0_-10px_30px_-12px_color-mix(in_oklab,var(--night)_60%,transparent)] backdrop-blur-sm sm:hidden`}
       >
         <span className="flex items-baseline gap-1.5">
