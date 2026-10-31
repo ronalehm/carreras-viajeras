@@ -136,6 +136,13 @@ export function RaceRegistrationSection({
           // z-10: painted above the transparent #registro subgrid that also covers this cell.
           <div className="bg-background px-4 py-12 text-night sm:py-16 lg:z-10 lg:col-start-1 lg:row-start-2 lg:min-w-0 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:p-6">
             <OfferSummary offer={offer} className="mx-auto max-w-md lg:mx-0 lg:max-w-none" />
+            {checkoutHref && (
+              <CheckoutAccessLink
+                href={checkoutHref}
+                description="Confirma tu reserva con la oferta vigente en el checkout."
+                className="mx-auto mt-8 max-w-md lg:mx-0 lg:max-w-none"
+              />
+            )}
           </div>
         )}
 
@@ -154,13 +161,6 @@ export function RaceRegistrationSection({
               </p>
             </div>
             <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start lg:rounded-xl lg:border lg:border-primary/15 lg:bg-background lg:p-6">
-              {checkoutHref && offer && (
-                <CheckoutAccessLink
-                  href={checkoutHref}
-                  description="Confirma tu reserva con la oferta vigente en el checkout."
-                  className="mb-6"
-                />
-              )}
               {form}
             </div>
           </div>

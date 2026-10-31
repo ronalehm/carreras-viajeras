@@ -48,7 +48,7 @@ export function ContactSection({ action, trips, destination, attribution }: Cont
           Sin pagos. Sin compromiso de reserva.
         </p>
       </div>
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md lg:max-w-xl">
         {/* Gate P-L: in production with the placeholder legal text the form is not shown. */}
         {isRegistrationOpen() ? (
           // key: navigating to another ?destino= without unmounting resets the form to its new default.
