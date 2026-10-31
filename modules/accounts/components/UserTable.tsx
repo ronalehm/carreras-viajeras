@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,12 +9,15 @@ type UserTableProps = {
   users: UserListItem[];
   truncated: boolean;
   filtered: boolean;
+  // Optional Checkout column, composed by the page (accounts does not import booking-checkout).
+  checkoutCell?: (user: UserListItem) => ReactNode;
 };
 
 const COLUMNS = ["Usuario", "Roles", "Reservas activas"];
 
 // Read-only list: role changes live in the user detail page.
-export function UserTable({ users, truncated, filtered }: UserTableProps) {
+export function UserTable({ users, truncated, filtered, checkoutCell }: UserTableProps) {
+  const columns = checkoutCell ? [...COLUMNS, "Checkout"] : COLUMNS;
   if (users.length === 0) {
     return (
       <p className="text-muted-foreground">
@@ -26,7 +30,7 @@ export function UserTable({ users, truncated, filtered }: UserTableProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            {COLUMNS.map((title) => <TableHead key={title}>{title}</TableHead>)}
+            {columns.map((title) => <TableHead key={title}>{title}</TableHead>)}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -57,6 +61,7 @@ export function UserTable({ users, truncated, filtered }: UserTableProps) {
                 )}
               </TableCell>
               <TableCell>{user.activeBookings}</TableCell>
+              {checkoutCell ? <TableCell>{checkoutCell(user)}</TableCell> : null}
             </TableRow>
           ))}
         </TableBody>

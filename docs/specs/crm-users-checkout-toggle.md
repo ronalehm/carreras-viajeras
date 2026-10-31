@@ -1,6 +1,6 @@
 # CRM: habilitar el checkout desde la lista de usuarios
 
-- Estado: borrador
+- Estado: aprobado
 - Módulos: accounts (lista de usuarios del CRM) y booking-checkout (participantes de la demo).
 - Spec base: [bookings-stripe-checkout-demo.md](bookings-stripe-checkout-demo.md), aprobada. Esta enmienda solo añade otra forma de dar el alta y la baja.
 - Pedido del usuario (2026-10-31): «debo habilitar desde los usuarios que son runners quienes pueden tener la opción de pago. de forma rápida y en una lista para saber qué está habilitado… de la lista de usuarios, en el CRM».
@@ -26,8 +26,8 @@ Sin cambios:
 - quién puede abrir `/crm/admin/usuarios` (`staff.manage`).
 
 ## Plan
-- [ ] U.1 Servicio: ids de participantes activos, exportado por `booking-checkout`. Las acciones revalidan también `/crm/admin/usuarios`. Tests.
-- [ ] U.2 `/crm/admin/usuarios`: línea de estado, columna Checkout con Habilitar/Quitar y filtro Habilitados, solo con `offers.manage`. Tests de la tabla y del filtro.
+- [x] U.1 Servicio: ids de participantes activos, exportado por `booking-checkout`. Las acciones revalidan también `/crm/admin/usuarios`. Tests.
+- [x] U.2 `/crm/admin/usuarios`: línea de estado, columna Checkout con Habilitar/Quitar y filtro Habilitados, solo con `offers.manage`. Tests de la tabla y del filtro.
 
 ## Aceptación
 - Un administrador con `offers.manage` habilita o quita a un runner desde la lista de usuarios, y el cambio se ve en la fila y en `/crm/contratos`.
