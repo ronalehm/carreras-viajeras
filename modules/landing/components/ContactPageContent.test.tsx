@@ -2,16 +2,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const { fetchCatalogTrips, search, replace } = vi.hoisted(() => ({
+const { fetchCatalogTrips, search, replace, routerReplace } = vi.hoisted(() => ({
   fetchCatalogTrips: vi.fn(),
   search: { params: new URLSearchParams() },
   replace: vi.fn(),
+  routerReplace: vi.fn(),
 }));
 vi.mock("../services/catalogTrips.api", () => ({ fetchCatalogTrips }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => search.params,
   usePathname: () => "/contacto",
-  useRouter: () => ({ replace }),
+  useRouter: () => ({ replace: routerReplace }),
 }));
 
 import { ContactPageContent } from "./ContactPageContent";
@@ -31,12 +32,16 @@ function renderContent(query = "") {
 beforeEach(() => {
   fetchCatalogTrips.mockReset();
   replace.mockReset();
+  routerReplace.mockReset();
+  // jsdom cannot navigate: the full document navigation is observed on a stubbed location.
+  vi.stubGlobal("location", { ...window.location, replace });
   // ScrollToHero resets the scroll: jsdom does not implement window.scrollTo.
   vi.spyOn(window, "scrollTo").mockImplementation(() => {});
 });
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 it("shows a brief accessible loading state while the trips are pending", () => {
@@ -55,11 +60,14 @@ it("lists the published races with their registration links and WhatsApp, withou
   expect(container.querySelector("form")).toBeNull();
 });
 
-it("sends an old ?destino= alias link to the race registration page with its attribution", async () => {
+it("sends an old ?destino= alias link to the race registration page with a full navigation", async () => {
   fetchCatalogTrips.mockResolvedValue([santiago]);
   renderContent("destino=santiago-2027&c=abc");
 
   await waitFor(() => expect(replace).toHaveBeenCalledWith("/viajes/maraton-santiago-2027/registro?c=abc"));
+  expect(replace).toHaveBeenCalledTimes(1);
+  // Not a client navigation: the registration page must start in a new document (analytics-clarity).
+  expect(routerReplace).not.toHaveBeenCalled();
 });
 
 it("keeps WhatsApp when the catalog fails or the destination is not a published race", async () => {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
+import { AnalyticsPreferencesButton } from "@/components/shared/AnalyticsPreferencesButton";
 import { SiteBrand } from "./SiteHeader";
 
 const SOCIAL_LINKS = [
@@ -77,6 +78,7 @@ export function SiteFooter() {
         <small className="text-sm">
           Vista privada de demostración. Sin ventas ni pagos habilitados.
         </small>
+        <AnalyticsPreferencesButton className="text-sm" />
       </div>
     </footer>
   );

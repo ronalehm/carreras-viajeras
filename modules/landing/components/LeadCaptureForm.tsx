@@ -159,7 +159,8 @@ export function LeadCaptureForm({
     ));
 
   return (
-    <div>
+    // Clarity masks the fields, the confirmation and the errors: they may hold the person's data.
+    <div data-clarity-mask="true">
       {state.status !== "success" && (
         <form
           key={formKey}
