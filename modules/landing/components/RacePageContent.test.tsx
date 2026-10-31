@@ -116,8 +116,31 @@ it("shows the checkout link when the per-request endpoint allows it and preserve
   expect(screen.queryByText(/sandbox/i)).toBeNull();
 });
 
+it("shows a signed-in runner the reservation instead of the registration form", async () => {
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  fetchCheckoutAvailable.mockResolvedValue(true);
+  clerk.userId = "user_demo";
+  renderContent("/viajes/maraton-santiago-2027/registro");
+
+  expect(await screen.findByRole("heading", { name: "Reserva tu lugar" })).toBeTruthy();
+  expect(screen.queryByRole("heading", { name: "Regístrate" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Enviar mis datos/ })).toBeNull();
+  expect(await screen.findAllByRole("link", { name: /Reservar mi lugar/ })).toHaveLength(1);
+});
+
+it("points a signed-in runner without online checkout to WhatsApp", async () => {
+  fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  fetchCheckoutAvailable.mockResolvedValue(false);
+  clerk.userId = "user_other";
+  renderContent("/viajes/maraton-santiago-2027/registro");
+
+  expect(await screen.findByRole("link", { name: "Escribir por WhatsApp" })).toBeTruthy();
+  expect(screen.queryByRole("link", { name: /Reservar mi lugar/ })).toBeNull();
+});
+
 it("hides the checkout link when the endpoint denies it", async () => {
   fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  clerk.userId = "user_demo";
   renderContent("/viajes/maraton-santiago-2027/registro");
 
   await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
@@ -127,6 +150,7 @@ it("hides the checkout link when the endpoint denies it", async () => {
 
 it("shows nothing while the endpoint answers or after it fails, without retrying", async () => {
   fetchCatalogTrip.mockResolvedValue({ trip, offer });
+  clerk.userId = "user_demo";
   fetchCheckoutAvailable.mockReturnValue(new Promise(() => {}));
   const pending = renderContent("/viajes/maraton-santiago-2027/registro");
   await screen.findByRole("heading", { level: 1, name: "Maratón de Santiago" });
