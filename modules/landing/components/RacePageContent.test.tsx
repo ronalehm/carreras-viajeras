@@ -10,7 +10,10 @@ const { fetchCatalogTrip, fetchCheckoutAvailable, location, clerk } = vi.hoisted
 }));
 vi.mock("../services/catalogTrips.api", () => ({ fetchCatalogTrip }));
 vi.mock("../services/checkoutAccess.api", () => ({ fetchCheckoutAvailable }));
-vi.mock("@clerk/nextjs", () => ({ useAuth: () => clerk }));
+vi.mock("@clerk/nextjs", () => ({
+  useAuth: () => clerk,
+  useUser: () => ({ isLoaded: clerk.isLoaded, isSignedIn: false, user: null }),
+}));
 vi.mock("next/navigation", () => ({
   usePathname: () => location.pathname,
   useSearchParams: () => location.params,

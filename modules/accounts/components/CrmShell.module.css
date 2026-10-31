@@ -74,11 +74,15 @@
   min-height: 2.75rem;
 }
 
+/* macOS-like sidebar material shared by the desktop sidebar and the mobile drawer. */
+.material {
+  background: var(--card);
+  border-inline-end: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
 /* This menu is button-operated; native transitions can reverse from the current position. */
 .drawer {
-  background: var(--card);
-  border-inline-end: 1px solid var(--border);
-  box-shadow: 1rem 0 4rem color-mix(in srgb, var(--foreground) 12%, transparent);
+  box-shadow: 0 0 2.5rem color-mix(in srgb, var(--foreground) 10%, transparent);
   opacity: 1;
   transform: translateX(0);
   transition:
@@ -114,9 +118,14 @@
     backdrop-filter: blur(20px) saturate(140%);
   }
 
+  .material {
+    background: color-mix(in srgb, var(--card) 82%, transparent);
+    backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  /* Over the dark scrim the drawer needs more opacity to keep secondary text at AA contrast. */
   .drawer {
     background: color-mix(in srgb, var(--card) 96%, transparent);
-    backdrop-filter: blur(24px);
   }
 }
 
@@ -159,7 +168,7 @@
 
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
   .chrome,
-  .drawer {
+  .material {
     background: var(--card);
     backdrop-filter: none;
     border-color: var(--foreground);
@@ -180,7 +189,7 @@
 
 @media (forced-colors: active) {
   .chrome,
-  .drawer {
+  .material {
     background: Canvas;
     color: CanvasText;
     backdrop-filter: none;

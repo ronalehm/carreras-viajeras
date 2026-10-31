@@ -19,11 +19,10 @@ const trip = {
 };
 
 describe("BookingOverview", () => {
-  it("shows the SIMULADA distinctive only for a simulated booking", () => {
-    const { rerender } = render(<BookingOverview detail={{ status: "confirmed", trip, simulated: false }} today="2026-10-30" />);
+  it("shows a simulated booking to the runner as a real one", () => {
+    render(<BookingOverview detail={{ status: "confirmed", trip }} today="2026-10-30" />);
     expect(screen.queryByText("SIMULADA")).toBeNull();
-    rerender(<BookingOverview detail={{ status: "confirmed", trip, simulated: true }} today="2026-10-30" />);
-    expect(screen.getByText("SIMULADA")).toBeTruthy();
+    expect(screen.queryByText(/demostración/)).toBeNull();
   });
 });
 

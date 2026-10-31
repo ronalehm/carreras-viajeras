@@ -1,4 +1,4 @@
-import type { AnchorHTMLAttributes } from "react";
+import type { AnchorHTMLAttributes, ReactElement } from "react";
 import {
   cleanup,
   fireEvent,
@@ -29,14 +29,26 @@ vi.mock("next/link", () => ({
     />
   ),
 }));
-vi.mock("./SignOutButton", () => ({
-  SignOutButton: () => <button>Cerrar sesión</button>,
-}));
+const signOut = vi.hoisted(() => vi.fn());
+vi.mock("@clerk/nextjs", async () => {
+  const { cloneElement } = await import("react");
+  return {
+    // Same contract as Clerk: the child receives the sign-out click handler.
+    SignOutButton: ({
+      children,
+      redirectUrl,
+    }: {
+      children: ReactElement<{ onClick?: () => void }>;
+      redirectUrl: string;
+    }) => cloneElement(children, { onClick: () => signOut(redirectUrl) }),
+  };
+});
 
 import { CrmShell } from "./CrmShell";
 import type { StaffRole } from "@/lib/auth/permissions";
 
 beforeEach(() => {
+  signOut.mockClear();
   location.pathname = "/crm";
   location.search = "";
   vi.stubGlobal(
@@ -72,26 +84,30 @@ function selected() {
     .map((link) => link.textContent);
 }
 
+function sidebar() {
+  return within(screen.getByRole("complementary", { name: "Panel del CRM" }));
+}
+
+async function openAccountMenu(scope: ReturnType<typeof within> = sidebar()) {
+  fireEvent.click(scope.getByRole("button", { name: /Menú de cuenta/ }));
+  return screen.findByRole("menu");
+}
+
 describe("CRM navigation", () => {
   it.each([
     ["/crm", "", "Dashboard"],
     ["/crm/leads", "", "Leads"],
     ["/crm/leads/nuevo", "", "Leads"],
     ["/crm/leads/un-lead/editar", "", "Leads"],
-    [
-      "/crm/leads",
-      "seguimiento=pendientes&pagina=2&responsable=mios",
-      "Mis pendientes",
-    ],
-    ["/crm/leads", "responsable=mios&seguimiento=vencidos", "Leads"],
-    ["/crm/viajes/un-viaje", "", "Viajes"],
+    ["/crm/leads", "seguimiento=pendientes&pagina=2&responsable=mios", "Leads"],
+    ["/crm/viajes", "", "Carreras"],
+    ["/crm/viajes/un-viaje", "", "Carreras"],
     ["/crm/ofertas/nueva", "", "Ofertas"],
     ["/crm/contratos", "", "Contratos"],
     ["/crm/contenidos/nuevo", "", "Contenidos"],
     ["/crm/recompensas", "", "Recompensas"],
     ["/crm/admin/usuarios", "", "Usuarios"],
     ["/crm/admin/patrocinadores/una-marca", "", "Patrocinadores"],
-    ["/crm/configuraciones", "", "Configuraciones"],
   ])(
     "selects only the appropriate item on %s?%s",
     (pathname, search, label) => {
@@ -102,13 +118,26 @@ describe("CRM navigation", () => {
     },
   );
 
-  it("does not match a different route by a partial segment", () => {
-    location.pathname = "/crm/viajes-otro";
-    shell();
-    expect(selected()).toEqual([]);
+  it.each(["/crm/viajes-otro", "/crm/configuraciones"])(
+    "selects no navigation item on %s",
+    (pathname) => {
+      location.pathname = pathname;
+      shell();
+      expect(selected()).toEqual([]);
+    },
+  );
+
+  it("removes «Mis pendientes», «Configuraciones» and «Viajes» from the navigation", () => {
+    shell(["super_admin"]);
+    const nav = within(screen.getByRole("navigation", { name: "CRM" }));
+    for (const name of ["Mis pendientes", "Configuraciones", "Viajes"])
+      expect(nav.queryByRole("link", { name })).toBeNull();
+    expect(nav.getByRole("link", { name: "Carreras" }).getAttribute("href")).toBe(
+      "/crm/viajes",
+    );
   });
 
-  it("exposes management links for admins and preserves the account and logout", () => {
+  it("exposes management links for admins", () => {
     shell();
     expect(screen.getByRole("link", { name: "Contenidos" }).getAttribute("href")).toBe("/crm/contenidos");
     expect(screen.getByRole("link", { name: "Recompensas" }).getAttribute("href")).toBe("/crm/recompensas");
@@ -117,16 +146,8 @@ describe("CRM navigation", () => {
       screen.getByRole("link", { name: "Usuarios" }).getAttribute("href"),
     ).toBe("/crm/admin/usuarios");
     expect(
-      screen
-        .getByRole("link", { name: "Configuraciones" })
-        .getAttribute("href"),
-    ).toBe("/crm/configuraciones");
-    expect(
       screen.getByRole("link", { name: "Patrocinadores" }).getAttribute("href"),
     ).toBe("/crm/admin/patrocinadores");
-    expect(screen.getByText("equipo@example.test")).toBeTruthy();
-    expect(screen.getByText("Admin")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Cerrar sesión" })).toBeTruthy();
   });
 
   it("keeps commercial destinations and excludes admin-only navigation", () => {
@@ -136,13 +157,11 @@ describe("CRM navigation", () => {
     expect(screen.queryByRole("link", { name: "Contratos" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Configuraciones" })).toBeNull();
     for (const name of [
       "Dashboard",
       "Leads",
-      "Mis pendientes",
       "Campañas",
-      "Viajes",
+      "Carreras",
       "Ofertas",
       "Reservas",
     ])
@@ -151,7 +170,7 @@ describe("CRM navigation", () => {
 
   it("preserves organizer destinations without exposing staff or sponsor management", () => {
     shell(["organizer"]);
-    expect(screen.getByRole("link", { name: "Viajes" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Carreras" })).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Patrocinadores" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Usuarios" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Reservas" })).toBeNull();
@@ -171,9 +190,7 @@ describe("CRM navigation", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "Carreras Viajeras · CRM",
     });
-    expect(
-      within(dialog).getByRole("link", { name: "Configuraciones" }),
-    ).toBeTruthy();
+    expect(within(dialog).getByRole("link", { name: "Carreras" })).toBeTruthy();
     fireEvent.keyDown(document.activeElement ?? dialog, {
       key: "Escape",
       code: "Escape",
@@ -195,5 +212,82 @@ describe("CRM navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Abrir menú del CRM" }));
     fireEvent.click(await screen.findByRole("button", { name: "Cerrar menú" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+});
+
+describe("CRM account menu", () => {
+  it("shows the avatar initial, email and roles on a single trigger", () => {
+    shell(["admin", "commercial"]);
+    const trigger = sidebar().getByRole("button", { name: /Menú de cuenta/ });
+    expect(trigger.textContent).toContain("E");
+    expect(trigger.textContent).toContain("equipo@example.test");
+    expect(trigger.textContent).toContain("Admin, Comercial");
+    expect(sidebar().queryByRole("button", { name: "Cerrar sesión" })).toBeNull();
+  });
+
+  it("lists the account header, profile, settings and sign-out for staff managers", async () => {
+    shell(["admin"]);
+    const menu = within(await openAccountMenu());
+    expect(menu.getByText("equipo@example.test")).toBeTruthy();
+    expect(menu.getByText("Admin")).toBeTruthy();
+    expect(
+      menu.getAllByRole("menuitem").map((item) => item.textContent),
+    ).toEqual(["Ver perfil", "Configuraciones", "Cerrar sesión"]);
+    expect(menu.getByRole("menuitem", { name: "Ver perfil" }).getAttribute("href")).toBe(
+      "/cuenta/perfil",
+    );
+    expect(
+      menu.getByRole("menuitem", { name: "Configuraciones" }).getAttribute("href"),
+    ).toBe("/crm/configuraciones");
+  });
+
+  it.each([["commercial"], ["organizer"]] as const)(
+    "hides settings without the staff management permission (%s)",
+    async (role) => {
+      shell([role]);
+      const menu = within(await openAccountMenu());
+      expect(menu.getAllByRole("menuitem").map((item) => item.textContent)).toEqual([
+        "Ver perfil",
+        "Cerrar sesión",
+      ]);
+    },
+  );
+
+  it("signs out with Clerk towards the CRM access page", async () => {
+    shell();
+    const menu = within(await openAccountMenu());
+    fireEvent.click(menu.getByRole("menuitem", { name: "Cerrar sesión" }));
+    expect(signOut).toHaveBeenCalledWith("/crm/acceso");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  });
+
+  it("closes with Escape and returns focus to the avatar", async () => {
+    shell();
+    const trigger = sidebar().getByRole("button", { name: /Menú de cuenta/ });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const menu = await screen.findByRole("menu");
+    fireEvent.keyDown(document.activeElement ?? menu, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("works inside the mobile drawer and closes it when opening the profile", async () => {
+    shell();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú del CRM" }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const menu = within(await openAccountMenu(dialog));
+    fireEvent.click(menu.getByRole("menuitem", { name: "Ver perfil" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("closes only the account menu with Escape inside the mobile drawer", async () => {
+    shell();
+    fireEvent.click(screen.getByRole("button", { name: "Abrir menú del CRM" }));
+    const dialog = within(await screen.findByRole("dialog"));
+    const menu = await openAccountMenu(dialog);
+    fireEvent.keyDown(document.activeElement ?? menu, { key: "Escape", code: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@ import {
   DestinationsSection,
   FaqSection,
   HeroCarousel,
+  MazBackingSection,
   MobileCta,
   PackageSection,
   SiteFooter,
@@ -40,6 +41,7 @@ export default function HomePage() {
         <BlogSection />
         <DestinationsSection />
         <FaqSection />
+        <MazBackingSection />
       </main>
       <SiteFooter />
       <MobileCta />

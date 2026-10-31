@@ -15,19 +15,19 @@ type ErrorCode = Extract<TripActionState, { status: "error" }>["code"];
 
 const ERROR_MESSAGES: Record<ErrorCode, string> = {
   unauthorized: "Tu sesión no es válida. Vuelve a iniciar sesión.",
-  forbidden: "No tienes permiso para gestionar viajes.",
+  forbidden: "No tienes permiso para gestionar carreras.",
   invalid_input: "Revisa los campos marcados.",
   slug_taken: "Ese identificador ya está en uso.",
   slug_locked: "Solo se puede cambiar en borrador.",
-  not_found: "El viaje ya no existe. Recarga la página.",
-  archived: "Este viaje está archivado y no se puede editar.",
-  invalid_transition: "El viaje ya no está en ese estado. Recarga la página.",
+  not_found: "La carrera ya no existe. Recarga la página.",
+  archived: "Esta carrera está archivada y no se puede editar.",
+  invalid_transition: "La carrera ya no está en ese estado. Recarga la página.",
 };
 
 const STATUS_MESSAGES: Record<TripStatus, string> = {
-  published: "Viaje publicado. Ya aparece en la web.",
-  draft: "Viaje despublicado. Ya no aparece en la web.",
-  archived: "Viaje archivado.",
+  published: "Carrera publicada. Ya aparece en la web.",
+  draft: "Carrera despublicada. Ya no aparece en la web.",
+  archived: "Carrera archivada.",
 };
 
 function failure(
@@ -54,7 +54,7 @@ function fieldErrors(error: z.ZodError): Record<string, string[]> {
   const result: Record<string, string[]> = {};
   for (const issue of error.issues) {
     const field = String(issue.path[0]);
-    const message = field === "id" ? "El viaje no es válido."
+    const message = field === "id" ? "La carrera no es válida."
       : field === "status" ? "El estado no es válido." : issue.message;
     (result[field] ??= []).push(message);
   }
@@ -101,7 +101,7 @@ export async function createTripAction(
       const result = await createTrip(input, scope);
       return result === "slug_taken"
         ? failure(result, values, { slug: [ERROR_MESSAGES[result]] })
-        : { status: "success", message: "Viaje creado." };
+        : { status: "success", message: "Carrera creada." };
     });
   // Next's redirect throws; it must stay outside the mutation's catch.
   if (state.status === "success") redirect(TRIPS_PATH);
@@ -115,7 +115,7 @@ export async function updateTripAction(
   const state = await runTripAction(formData, updateTripSchema, Object.keys(updateTripSchema.shape),
     async ({ id, ...input }, values, scope) => {
       const result = await updateTrip(id, input, scope);
-      if (result === "updated") return { status: "success", message: "Viaje actualizado." };
+      if (result === "updated") return { status: "success", message: "Carrera actualizada." };
       return failure(result, values,
         result === "slug_taken" || result === "slug_locked"
           ? { slug: [ERROR_MESSAGES[result]] } : undefined);

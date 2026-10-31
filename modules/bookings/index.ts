@@ -16,7 +16,7 @@ export { changeBookingStatusAction } from "./actions/bookings.actions";
 export { BookingFilters } from "./components/BookingFilters";
 export { BookingForm } from "./components/BookingForm";
 export { BookingStatusBadge, BookingTable, SimulatedBookingBadge } from "./components/BookingTable";
-export { BOOKING_KIND_SIMULATED, BOOKING_STATUS_LABELS, SIMULATED_BOOKING_LABEL } from "./utils/bookingDisplay";
+export { BOOKING_KIND_REAL, BOOKING_KIND_SIMULATED, BOOKING_STATUS_LABELS, SIMULATED_BOOKING_LABEL } from "./utils/bookingDisplay";
 export type { BookingBalance, CrmBooking, CrmBookingListItem, StripePayment } from "./types/bookings.types";
 
 export { getRunnerPortal } from "./utils/runnerPortal";

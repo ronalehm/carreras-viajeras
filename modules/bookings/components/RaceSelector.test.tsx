@@ -16,13 +16,13 @@ const bookings: RunnerBookingSummary[] = [
 ];
 
 describe("RaceSelector", () => {
-  it("marks only the simulated booking as SIMULADA", () => {
+  it("lists a simulated booking to the runner like a real one", () => {
     render(<RaceSelector bookings={bookings} selectedId="real" today="2026-10-30" />);
     const [real, demo] = screen.getAllByRole("link");
     expect(real.getAttribute("href")).toBe("/mis-carreras?reserva=real");
     expect(within(real).queryByText("SIMULADA")).toBeNull();
     expect(demo.getAttribute("href")).toBe("/mis-carreras?reserva=demo");
-    expect(within(demo).getByText("SIMULADA")).toBeTruthy();
+    expect(within(demo).queryByText("SIMULADA")).toBeNull();
   });
 
   it("renders nothing for a single booking", () => {

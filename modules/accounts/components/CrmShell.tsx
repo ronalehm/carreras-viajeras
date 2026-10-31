@@ -23,12 +23,6 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
     items.push(
       { label: "Leads", href: "/crm/leads", icon: "leads", group: "sales" },
       {
-        label: "Mis pendientes",
-        href: "/crm/leads?responsable=mios&seguimiento=pendientes",
-        icon: "pending",
-        group: "sales",
-      },
-      {
         label: "Campañas",
         href: "/crm/campanas",
         icon: "campaigns",
@@ -38,7 +32,7 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
   }
   if (can(roles, "trips.manage"))
     items.push({
-      label: "Viajes",
+      label: "Carreras",
       href: "/crm/viajes",
       icon: "trips",
       group: "sales",
@@ -75,22 +69,15 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
     items.push({ label: "Contenidos", href: "/crm/contenidos", icon: "content", group: "admin" });
   if (can(roles, "rewards.manage"))
     items.push({ label: "Recompensas", href: "/crm/recompensas", icon: "rewards", group: "admin" });
-  if (can(roles, "staff.manage")) {
-    items.push(
-      {
-        label: "Usuarios",
-        href: "/crm/admin/usuarios",
-        icon: "users",
-        group: "admin",
-      },
-      {
-        label: "Configuraciones",
-        href: "/crm/configuraciones",
-        icon: "settings",
-        group: "admin",
-      },
-    );
-  }
+  // The same permission that used to show the sidebar link now shows it in the account menu.
+  const canOpenSettings = can(roles, "staff.manage");
+  if (canOpenSettings)
+    items.push({
+      label: "Usuarios",
+      href: "/crm/admin/usuarios",
+      icon: "users",
+      group: "admin",
+    });
 
   return (
     <div className={cn(styles.workspace, "min-h-svh bg-muted/30")}>
@@ -104,6 +91,7 @@ export function CrmShell({ email, roles, children }: CrmShellProps) {
         email={email}
         roleLabels={roles.map((role) => STAFF_ROLE_LABELS[role])}
         items={items}
+        canOpenSettings={canOpenSettings}
       />
       <div className="min-w-0 lg:pl-64">
         <div

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatPenCents } from "@/lib/currency";
 import type { OfferView } from "@/modules/landing/utils/catalogOffer";
@@ -122,7 +121,7 @@ function returnNotice(state: CheckoutState, cancelled: boolean): { message: stri
 }
 
 export function RunnerCheckout({
-  tripId, tripTitle, campaignCode, offer, returned, cancelled, bookingId, attemptId, simulated: simulatedMode,
+  tripId, tripTitle, campaignCode, offer, returned, cancelled, bookingId, attemptId,
 }: {
   tripId: string; tripTitle: string; campaignCode: string | null; offer: OfferView | null;
   returned: boolean; cancelled: boolean; bookingId: string | null; attemptId: string | null;
@@ -155,7 +154,6 @@ export function RunnerCheckout({
   }, [bookingId, attemptId, stateRequest]);
 
   const emailVerified = user?.primaryEmailAddress?.verification?.status === "verified";
-  const simulated = simulatedMode || prepared?.simulated === true || checkoutState?.simulated === true;
 
   async function prepare() {
     const fallback = "No se pudo preparar la reserva.";
@@ -256,12 +254,6 @@ export function RunnerCheckout({
         <h1 className="mt-2 text-3xl font-bold">{tripTitle}</h1>
         <p className="mt-2">Tu reserva queda pendiente hasta que Stripe confirme el pago.</p>
         <p className="mt-2 text-sm">Solo aceptamos tarjetas. El pago se completa en Stripe.</p>
-        {simulated && (
-          <p role="note" className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-highlight bg-sky p-3 text-sm font-semibold">
-            <Badge className="bg-highlight text-night">SIMULADA</Badge>
-            Pago de prueba: no se realiza ningún cargo real.
-          </p>
-        )}
       </div>
       {returnMode && (
         <div role="status" className="flex flex-col gap-3 rounded-lg bg-sky p-4">
