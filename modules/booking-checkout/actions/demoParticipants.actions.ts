@@ -18,10 +18,11 @@ const GRANT_MESSAGES: Record<GrantDemoParticipantResult, ConfirmActionState> = {
   account_not_found: { status: "error", message: "No hay ninguna cuenta activa con ese correo verificado. La persona debe iniciar sesión una vez en el sitio." },
   ambiguous_account: { status: "error", message: "Hay más de una cuenta con ese correo. Revísalo en Usuarios antes de darla de alta." },
 };
-// The demo list lives in /crm/contratos and in the Checkout column of /crm/admin/usuarios.
+// The demo list lives in /crm/contratos, the user list and each user's page (Pago en línea).
 function revalidateDemoPages() {
   revalidatePath("/crm/contratos");
   revalidatePath("/crm/admin/usuarios");
+  revalidatePath("/crm/admin/usuarios/[id]", "page");
 }
 const failure = (message: string): ConfirmActionState => ({ status: "error", message });
 const text = (value: FormDataEntryValue | null) => (typeof value === "string" ? value : "");

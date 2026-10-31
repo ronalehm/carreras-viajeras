@@ -1,6 +1,6 @@
 # Enmienda: el pago en línea se habilita desde la ficha del usuario
 
-- Estado: borrador
+- Estado: aprobado
 - Spec base: [crm-users-checkout-toggle.md](crm-users-checkout-toggle.md), aprobada.
 - Pedido del usuario (2026-10-31): «la opción de poder pagar debe estar en la misma opción del módulo de usuario, ahí mismo debemos editar las opciones del usuario y entre ellas que permita pagar para cada usuario… los datos personales solo se pueden visualizar ya que corresponden al usuario. Debe ser más simple para habilitarle la opción de pago».
 
@@ -19,7 +19,7 @@ Sin cambios:
 - base de datos, checkout y `/crm/contratos`.
 
 ## Plan
-- [ ] E.1 Tarjetas «Pago en línea» y «Datos» en la ficha; columna de solo lectura en la lista; revalidación de la ficha; tests.
+- [x] E.1 Tarjetas «Pago en línea» y «Datos» en la ficha; columna de solo lectura en la lista; revalidación de la ficha; tests.
 
 ## Aceptación
 - En la ficha, un administrador con `offers.manage` habilita o quita el pago con un botón, y el cambio se ve en la ficha y en la lista.

@@ -44,6 +44,7 @@ describe("demo participant server actions", () => {
     expect(grantDemoParticipant).toHaveBeenCalledWith({ email: "demo@example.test", note: "Jurado" }, "trusted-admin");
     expect(revalidatePath).toHaveBeenCalledWith("/crm/contratos");
     expect(revalidatePath).toHaveBeenCalledWith("/crm/admin/usuarios");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/admin/usuarios/[id]", "page");
   });
   it("asks for a first sign-in when no account has that verified email", async () => {
     vi.mocked(grantDemoParticipant).mockResolvedValue("account_not_found");
@@ -72,6 +73,7 @@ describe("demo participant server actions", () => {
     expect(revokeDemoParticipant).toHaveBeenCalledWith({ userId: "user_demo" });
     expect(revalidatePath).toHaveBeenCalledWith("/crm/contratos");
     expect(revalidatePath).toHaveBeenCalledWith("/crm/admin/usuarios");
+    expect(revalidatePath).toHaveBeenCalledWith("/crm/admin/usuarios/[id]", "page");
     vi.mocked(revalidatePath).mockClear();
     vi.mocked(revokeDemoParticipant).mockResolvedValue("not_active");
     expect(await revokeDemoParticipantAction(idle, form({ userId: "user_demo" }))).toMatchObject({ status: "error" });

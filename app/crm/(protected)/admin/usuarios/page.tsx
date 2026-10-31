@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { MailCheck, UsersRound } from "lucide-react";
-import { ConfirmActionButton } from "@/components/shared/ConfirmActionButton";
 import { CrmPageHeader } from "@/components/shared/CrmPageHeader";
 import { SummaryCard } from "@/components/shared/SummaryCard";
 import {
@@ -26,12 +25,7 @@ import {
   userListFilterSchema,
   UserTable,
 } from "@/modules/accounts";
-import {
-  getCheckoutStatus,
-  grantDemoParticipantAction,
-  listDemoParticipants,
-  revokeDemoParticipantAction,
-} from "@/modules/booking-checkout";
+import { getCheckoutStatus, listDemoParticipants } from "@/modules/booking-checkout";
 
 export const metadata: Metadata = { title: "Usuarios" };
 
@@ -136,8 +130,8 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
           <UserFilters q={filter.q} role={filter.role} />
           {canManageCheckout && (
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-              <span>Checkout: {CHECKOUT_LABELS[getCheckoutStatus()]}</span>
-              <nav aria-label="Filtro de checkout" className="flex gap-3 font-medium">
+              <span>Pago en línea: {CHECKOUT_LABELS[getCheckoutStatus()]}</span>
+              <nav aria-label="Filtro de pago en línea" className="flex gap-3 font-medium">
                 <Link href={filterHref()} aria-current={onlyEnabled ? undefined : "page"} className={onlyEnabled ? "underline-offset-4 hover:underline" : "underline underline-offset-4"}>Todos</Link>
                 <Link href={filterHref(ENABLED_FILTER)} aria-current={onlyEnabled ? "page" : undefined} className={onlyEnabled ? "underline underline-offset-4" : "underline-offset-4 hover:underline"}>Habilitados ({enabledIds.size})</Link>
               </nav>
@@ -147,22 +141,10 @@ export default async function UsersAdminPage({ searchParams }: PageProps<"/crm/a
             users={users}
             truncated={truncated}
             filtered={Boolean(filter.q || filter.role || onlyEnabled)}
-            checkoutCell={canManageCheckout ? (user) => {
-              if (enabledIds.has(user.userId)) {
-                return (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge>Habilitado</Badge>
-                    <ConfirmActionButton action={revokeDemoParticipantAction} fields={{ userId: user.userId }} label="Quitar"
-                      title="Quitar el checkout" description={`${user.email} dejará de ver y usar el checkout de la demo.`} confirmLabel="Quitar" variant="outline" />
-                  </div>
-                );
-              }
-              if (user.status === "disabled") return <span className="text-muted-foreground">—</span>;
-              return (
-                <ConfirmActionButton action={grantDemoParticipantAction} fields={{ email: user.email, note: "" }} label="Habilitar"
-                  title="Habilitar el checkout" description={`${user.email} podrá ver y usar el checkout de la demo, con Stripe TEST y reservas simuladas.`} confirmLabel="Habilitar" variant="outline" />
-              );
-            } : undefined}
+            // Read only: enabling and removing live on each user's page.
+            checkoutCell={canManageCheckout ? (user) =>
+              enabledIds.has(user.userId) ? <Badge>Habilitado</Badge> : <span className="text-muted-foreground">—</span>
+            : undefined}
           />
         </CardContent>
       </Card>

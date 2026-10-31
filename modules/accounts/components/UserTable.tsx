@@ -9,7 +9,7 @@ type UserTableProps = {
   users: UserListItem[];
   truncated: boolean;
   filtered: boolean;
-  // Optional Checkout column, composed by the page (accounts does not import booking-checkout).
+  // Optional "Pago en línea" column, composed by the page (accounts does not import booking-checkout).
   checkoutCell?: (user: UserListItem) => ReactNode;
 };
 
@@ -17,7 +17,7 @@ const COLUMNS = ["Usuario", "Roles", "Reservas activas"];
 
 // Read-only list: role changes live in the user detail page.
 export function UserTable({ users, truncated, filtered, checkoutCell }: UserTableProps) {
-  const columns = checkoutCell ? [...COLUMNS, "Checkout"] : COLUMNS;
+  const columns = checkoutCell ? [...COLUMNS, "Pago en línea"] : COLUMNS;
   if (users.length === 0) {
     return (
       <p className="text-muted-foreground">

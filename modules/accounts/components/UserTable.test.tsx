@@ -10,14 +10,14 @@ const user: UserListItem = {
 
 afterEach(cleanup);
 
-it("shows no Checkout column unless the page composes one", () => {
+it("shows no Pago en línea column unless the page composes one", () => {
   render(<UserTable users={[user]} truncated={false} filtered={false} />);
-  expect(screen.queryByRole("columnheader", { name: "Checkout" })).toBeNull();
+  expect(screen.queryByRole("columnheader", { name: "Pago en línea" })).toBeNull();
 });
 
-it("renders the Checkout cell the page provides for each row", () => {
+it("renders the Pago en línea cell the page provides for each row", () => {
   render(<UserTable users={[user]} truncated={false} filtered={false} checkoutCell={(row) => <span>Estado de {row.email}</span>} />);
-  expect(screen.getByRole("columnheader", { name: "Checkout" })).toBeTruthy();
+  expect(screen.getByRole("columnheader", { name: "Pago en línea" })).toBeTruthy();
   const row = screen.getByRole("row", { name: /Ana Pérez/ });
   expect(within(row).getByText("Estado de ana@example.com")).toBeTruthy();
 });
