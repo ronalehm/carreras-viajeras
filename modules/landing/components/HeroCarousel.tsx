@@ -33,7 +33,7 @@ const SLIDES: Slide[] = [
         maratón de Santiago.
       </>
     ),
-    cta: { href: "/contacto?destino=santiago-2027", label: "Quiero vivir esta carrera" },
+    cta: { href: "/viajes/maraton-santiago-2027/registro", label: "Quiero vivir esta carrera" },
   },
   {
     image: "/images/hero-patagonia.webp",
